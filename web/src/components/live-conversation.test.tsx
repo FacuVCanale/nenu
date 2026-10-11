@@ -283,4 +283,26 @@ describe("LiveConversation — pending bubbles", () => {
     await waitFor(() => expect(screen.getAllByText("after this turn")).toHaveLength(1));
     expect(screen.getAllByText("Working…")).toHaveLength(1);
   });
+
+  // Measured on the bench: the journal read that takes the bubble over often lands before the read
+  // that says the agent works, and Working… went out for 50-900 ms in between.
+  it("keeps Working… while the journal has the message and the agent's state has not caught up", async () => {
+    const scope = localSendScope("w1:p3", undefined);
+    const answered: TranscriptEntry[] = [fixtureTranscript[0]!, { ...fixtureTranscript[1]!, phase: "final_answer" }];
+    const asked = [...answered, { uuid: "t9", ts: "", role: "user" as const, parts: [{ kind: "text" as const, text: "check the logs" }] }];
+    const view = (entries: TranscriptEntry[], activityStatus: "idle" | "working") =>
+      <LiveConversation paneId="w1:p3" history={{ paneId: "w1:p3", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false }}
+        activityStatus={activityStatus} loading={false} error={false} />;
+    const { rerender } = render(view(answered, "idle"));
+    act(() => { updateLocalSend(scope, addLocalSend(scope, "check the logs"), { state: "sent" }); });
+    expect(await screen.findByText("Working…")).toBeInTheDocument();
+
+    rerender(view(asked, "idle"));
+    await waitFor(() => expect(screen.getAllByText("check the logs")).toHaveLength(1));
+    expect(screen.getAllByText("Working…")).toHaveLength(1);
+    rerender(view(asked, "working"));
+    expect(screen.getAllByText("Working…")).toHaveLength(1);
+    rerender(view(asked, "idle"));
+    expect(screen.queryByText("Working…")).not.toBeInTheDocument();
+  });
 });
