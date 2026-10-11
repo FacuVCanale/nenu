@@ -16,6 +16,7 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
 //   bun scripts/e2e/run.ts stop     [--port 8797] [--out DIR]   Stop a working Claude, then what the queue holds
+//   bun scripts/e2e/run.ts stop-state [--port 8797] [--out DIR] Stop from the session file, under a custom statusline
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -636,6 +637,96 @@ async function stop(): Promise<void> {
   if (result.failed.length) process.exit(1);
 }
 
+/**
+ * Stop decided by the CLI's own state (ADR 0067). The working Claude pane draws a custom statusline,
+ * so its screen never says "esc to interrupt", and its session file (`<profile>/sessions/<pid>.json`)
+ * says busy. Phone: Stop shows and presses Escape once, confirmed when the file goes idle. Then the
+ * file stays busy while the transcript says the main turn ended (a background agent): Herdr still
+ * says working, Stop must not show, and a forced Stop must press nothing.
+ */
+async function stopState(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const fake = bridge.fake!;
+    const pane = bridge.herd!.working;
+    const pid = 424242;
+    const sessionId = "6f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+    const sessions = join(bridge.dir, "journals", "sessions");
+    const transcript = join(bridge.dir, "journals", "claude", "-bench-stop-state", `${sessionId}.jsonl`);
+    await mkdir(sessions, { recursive: true });
+    await mkdir(join(transcript, ".."), { recursive: true });
+    const writeSession = (status: string, statusUpdatedAt: number) =>
+      writeFile(join(sessions, `${pid}.json`), JSON.stringify({ pid, sessionId, kind: "interactive", version: "2.1.296", status, statusUpdatedAt, updatedAt: statusUpdatedAt }));
+    const busyAt = Date.now();
+    await writeFile(transcript, JSON.stringify({ type: "user", timestamp: new Date(busyAt + 5).toISOString(), message: { role: "user", content: "write an essay" } }) + "\n");
+    await writeSession("busy", busyAt);
+    fake.customStatusline.add(pane);
+    fake.processes.set(pane, [{ pid, argv: ["claude"] }]);
+    fake.interruptMs = 300;
+    fake.setStatus(pane, "working");
+    // A real Claude flips its session file idle 12-21 ms after Escape (measured); the fake pane goes idle after interruptMs.
+    const stopWatch = setInterval(() => {
+      if (fake.interrupted.length > 0 && !idleWritten) { idleWritten = true; void writeSession("idle", Date.now()); }
+    }, 20);
+    let idleWritten = false;
+    const run: Record<string, unknown> = {};
+    const shots: string[] = [];
+    try {
+      const context = await browser.newContext({ ...PHONE, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
+      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+      const stopButton = page.getByRole("button", { name: "Stop", exact: true });
+      run.hintOnScreen = fake.screen(pane).includes("esc to interrupt");
+      run.stopShown = await stopButton.waitFor({ timeout: 5000 }).then(() => true, () => false);
+      const shot = async (name: string) => { const path = join(outDir, `stop-state-${name}-phone.png`); await page.screenshot({ path, animations: "disabled" }); shots.push(path); };
+      await shot("working");
+      if (run.stopShown) await stopButton.click();
+      await page.waitForTimeout(1500);
+      await shot("stopped");
+      run.escapes = fake.interrupted.length;
+      run.turnAfter = await page.evaluate(async (id: string) => {
+        const snapshot = await (await fetch("/api/snapshot")).json() as { agents: Array<{ paneId: string; turn?: unknown }> };
+        return snapshot.agents.find((agent) => agent.paneId === id)?.turn ?? null;
+      }, pane);
+      run.stopAfterIdle = await stopButton.isVisible();
+
+      // Background only: busy, but the main turn's turn_duration landed inside this busy spell.
+      clearInterval(stopWatch);
+      const bgAt = Date.now();
+      await writeSession("busy", bgAt);
+      await writeFile(transcript, [
+        { type: "user", timestamp: new Date(bgAt + 5).toISOString(), message: { role: "user", content: "launch a background agent" } },
+        { type: "assistant", timestamp: new Date(bgAt + 50).toISOString(), message: { role: "assistant", content: [] } },
+        { type: "system", subtype: "turn_duration", durationMs: 90, timestamp: new Date(bgAt + 100).toISOString() },
+      ].map((row) => JSON.stringify(row)).join("\n") + "\n");
+      fake.setStatus(pane, "working");
+      await page.waitForTimeout(2500);
+      run.backgroundStopShown = await stopButton.isVisible();
+      await shot("background");
+      run.backgroundForced = await page.evaluate(async (id: string) => (await fetch(`/api/pane/${encodeURIComponent(id)}/interrupt`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json(), pane);
+      run.escapesAfterBackground = fake.interrupted.length;
+      await context.close();
+    } finally {
+      clearInterval(stopWatch);
+    }
+    const turnAfter = run.turnAfter as { running?: boolean; source?: string } | null;
+    const forced = run.backgroundForced as { ok?: boolean; code?: string } | null;
+    const failed = [
+      run.hintOnScreen ? "the screen showed the hint; the test proves nothing" : null,
+      run.stopShown ? null : "Stop not shown for a busy session",
+      turnAfter?.source === "claude-session" && turnAfter.running === false && !run.stopAfterIdle ? null : "the session file's idle did not reach the button",
+      run.escapes === 1 ? null : `expected 1 Escape, got ${run.escapes}`,
+      run.backgroundStopShown ? "Stop shown while only background work runs" : null,
+      forced?.code === "not_running" && run.escapesAfterBackground === 1 ? null : "a forced Stop on background work pressed or answered wrongly",
+    ].filter(Boolean);
+    return { run, shots, failed };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "stop-state.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.failed.length) process.exit(1);
+}
+
 async function baseline(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const windowMs = Number(values.seconds) * 1000;
@@ -797,9 +888,10 @@ else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "layout") await layout();
 else if (command === "stop") await stop();
+else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|stop-state|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
