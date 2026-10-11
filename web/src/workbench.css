@@ -207,10 +207,10 @@
 .workbench-chat-menu { width: 44px; height: 44px; flex-shrink: 0; justify-content: center; margin-inline: 0; padding: 0; }
 .workbench-chat-menu > span { width: 28px; height: 28px; background: transparent; box-shadow: none; }
 .workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
-.workbench-composer { width: calc(100% - 16px); margin-bottom: 8px; max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
+/* The home indicator's inset IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
+.workbench-composer { width: calc(100% - 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
 /* The composer: one rounded box (draft + a single round action), then a thin row of quiet controls. */
-.composer-surface { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
 .composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
 .composer-box { display: flex; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: 16px; transition: border-color 150ms ease-out; }
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
@@ -258,7 +258,7 @@
   .workbench-expand { width: 44px; height: 44px; margin-bottom: 8px; }
   /* Every header is the same bar on a desk, whatever its right side holds and whatever route draws it. */
   .workbench-app-header { min-height: 52px; gap: 8px; padding: 0 8px 0 var(--page-gutter); background: var(--background); }
-  .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: 16px; }
+  .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
   .workbench-composer > button[aria-label="Switch pane"] { display: none; }
   .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }
 }
@@ -302,4 +302,6 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   .workbench-main:has(:is(input, textarea, [contenteditable="true"]):focus) > .bottom-tab-bar { display: none; }
   .workbench-chat[data-keyboard-open] [data-workbench-navigation-band] { display: none; }
+  /* The keyboard covers the home indicator, whose inset iOS still reports; the composer sits on the keys. */
+  .workbench-chat[data-keyboard-open] .workbench-composer { margin-bottom: 8px; }
 }
