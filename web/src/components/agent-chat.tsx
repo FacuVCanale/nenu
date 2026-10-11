@@ -1,7 +1,7 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
-import { hasCodexInterruptCue } from "@/lib/harness/codex/interrupt";
+import { agentBusy, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
@@ -1164,7 +1164,8 @@ export function AgentChat({
             agent={agent?.agent}
             isShell={isShell}
             placeholder={project && COMPOSER_PLACEHOLDER[project.role]}
-            working={agent?.status === "working" || (agent?.agent === "codex" && hasCodexInterruptCue(modelSource.text))}
+            working={agentBusy(agent, modelSource.text)}
+            turnRunning={turnRunning(agent, modelSource.text)}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}

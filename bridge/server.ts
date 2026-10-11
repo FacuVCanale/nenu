@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { AgentStates } from "./agent-state.ts";
 import { ClaudeHooks } from "./claude-hooks.ts";
 import { ClaudeTelemetry } from "./claude-telemetry.ts";
 import { isLoopbackBindHost, type Config } from "./config.ts";
@@ -50,6 +51,15 @@ export function startServer(opts: ServerDeps) {
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
   const input = new PaneWrites();
+  // Each Claude and Codex pane's turn from the CLI's own files (ADR 0067): followed on every herd
+  // change, attached to the snapshot, and read fresh by Stop.
+  const agentStates = new AgentStates({
+    claudeRoots: cfg.journalRoots.claude,
+    codexRoots: cfg.journalRoots.codex,
+    live,
+    claudeTranscript: async (sessionId) => (journals ? await adapterFor(journals, "claude")?.source.resolve({ kind: "id", value: sessionId }) ?? null : null),
+    codexTranscript: async (ref) => (journals ? await adapterFor(journals, "codex")?.source.resolve(ref) ?? null : null),
+  });
   const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
     const rt = registry.get(session);
     if (!rt) return null;
@@ -62,7 +72,7 @@ export function startServer(opts: ServerDeps) {
       const ref = live.agent_session;
       original = { ...original, status: live.agent_status, agentSession: ref?.kind === "id" && typeof ref.value === "string" && (!ref.agent || ref.agent === original.agent) ? { kind: "id", value: ref.value } : undefined };
     }
-    return { pane: await conversations.resolve(original, rt.herdr, session), herdr: rt.herdr, connected: snapshot.bridge === "connected" };
+    return { pane: agentStates.attach(session, await conversations.resolve(original, rt.herdr, session)), herdr: rt.herdr, connected: snapshot.bridge === "connected" };
   }, async (row, text, submit, requestId, paste) => {
     const rt = registry.get(row.session);
     if (!rt) return { ok: false, error: "Session unavailable." };
@@ -86,6 +96,10 @@ export function startServer(opts: ServerDeps) {
   });
   // A herd change can make a waiting pane ready; deliver now instead of on the fallback tick.
   live.subscribe((event) => {
+    if (event.topic === "snapshot") {
+      const rt = registry.get(event.session);
+      if (rt) agentStates.sync(rt.name, rt.herdr, rt.engine.current().agents);
+    }
     if (event.topic === "snapshot" || event.topic === "journal") queue.kick();
   });
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -111,10 +125,11 @@ export function startServer(opts: ServerDeps) {
     pullRequests: new PullRequestRegistry({ live }),
     orgRun: defaultOrgRun(),
     hasJournal: (agent) => adapterFor(journals ?? {}, agent) !== undefined,
-    interactions: new Interactions(live),
+    interactions: new Interactions(live, { waiting: (session, paneId) => agentStates.get(session, paneId)?.waiting !== undefined }),
     paneWatcher: new PaneWatcher(live),
     journalWatch: new JournalWatch(live),
-    claudeHooks: new ClaudeHooks(live),
+    claudeHooks: new ClaudeHooks(live, (session, paneId) => agentStates.poke(session, paneId)),
+    agentStates,
     fileGrants: new FileGrants(),
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.

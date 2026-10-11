@@ -46,6 +46,10 @@ export class CodexTurnTracker extends TurnTracker {
     this.turns.set(turnId, turn);
     if (this.current === turnId) this.current = undefined;
   }
+  /** The turn a `task_started` (or `turn_context`) opened and nothing closed yet. */
+  openTurn(): string | undefined {
+    return this.current !== undefined && this.turns.get(this.current)?.status === "running" ? this.current : undefined;
+  }
 }
 
 /** Claude has no work-turn id. Anchor a group to an actual human uuid (or the first assistant uuid

@@ -92,7 +92,9 @@ export interface HarnessAdapter {
    *
    * OPTIONAL, and absence means Nenu offers no Stop for this agent. A key that only usually
    * interrupts is not enough: pressed at an idle screen, Claude's and Codex's Escape opens their
-   * rewind on the second press, so the bridge presses it only while `read` says a turn runs.
+   * rewind on the second press, so the bridge presses it only while a turn runs. The CLI's own state
+   * (bridge/agent-state.ts, ADR 0067) says that when the bridge has it; `read` is the fallback, and
+   * still the only source for what the key does to Codex's own queue.
    */
   interrupt?: TurnInterrupt;
 }

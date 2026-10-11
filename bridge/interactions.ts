@@ -351,6 +351,8 @@ export interface FollowedSession {
 }
 
 interface Options {
+  /** The CLI's own state says a dialog owns the pane (ADR 0067): read it even before Herdr says blocked. */
+  waiting?: (session: string, paneId: string) => boolean;
   lines?: number;
   now?: () => number;
   sleep?: Sleep;
@@ -374,8 +376,10 @@ export class Interactions {
   private readonly lines: number;
   private readonly now: () => number;
   private readonly sleep: Sleep;
+  private readonly waiting: (session: string, paneId: string) => boolean;
 
   constructor(readonly live: LivePublisher, opts: Options = {}) {
+    this.waiting = opts.waiting ?? (() => false);
     this.lines = opts.lines ?? 200;
     this.now = opts.now ?? Date.now;
     this.sleep = opts.sleep ?? defaultSleep;
@@ -412,7 +416,7 @@ export class Interactions {
     const now = this.now();
     const eligible = agents.filter((a) => {
       const matchedAt = this.matched.get(paneKey(session, a.paneId));
-      return a.status === "blocked" || (matchedAt !== undefined && now - matchedAt <= OUTPUT_MATCH_WINDOW_MS);
+      return a.status === "blocked" || this.waiting(session, a.paneId) || (matchedAt !== undefined && now - matchedAt <= OUTPUT_MATCH_WINDOW_MS);
     });
     const live = new Set(eligible.map((a) => a.paneId));
     if (only === undefined) {

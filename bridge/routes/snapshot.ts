@@ -12,15 +12,19 @@ export const snapshotRoutes: Route[] = [
     path: "/api/snapshot",
     access: "read",
     session: true,
-    async handle({ cfg, activity, hasJournal, projects, pullRequests, registry, snooze, updateMonitor }, { req, rt }) {
+    async handle({ cfg, activity, agentStates, hasJournal, projects, pullRequests, registry, snooze, updateMonitor }, { req, rt }) {
       const { agents, shellPanes, workspaces, tabs, bridge } = rt.engine.current();
+      // The CLIs' own turn state (ADR 0067), attached like the activity timestamps: the engine stays a
+      // Herdr poller, and Stop's button reads the same entry Stop's press re-reads.
+      agentStates.sync(rt.name, rt.herdr, agents);
       const device = deviceAuth(req, cfg);
       // Attach each pane's activity timestamps. Done here rather than in the state engine so the
       // engine stays a pure Herdr-poller with no knowledge of the ledger — and so the two numbers
       // are read at serialise time, i.e. as fresh as the request.
       const withActivity = (p: AgentView): AgentView => {
         const a = activity.get(rt.name, p.paneId);
-        return a ? { ...p, lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : p;
+        const withTurn = agentStates.attach(rt.name, p);
+        return a ? { ...withTurn, lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : withTurn;
       };
       const projectViews = projects.list(rt.name, rt.isPrimary, [...agents, ...shellPanes]);
       const view: Omit<SnapshotResponse, "ts"> & { looseWorkspaceIds: string[] } = {

@@ -1,0 +1,199 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { appendFile, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { AgentStates, type WatchFn } from "./agent-state.ts";
+import type { AgentView, LiveEvent } from "./types.ts";
+
+// The service over real files in a temp dir, with the watcher and the process lookups injected so a
+// test fires the change events itself.
+
+const PID = 4242;
+const SESSION_ID = "86629802-eb8f-4a01-abec-13644095ba48";
+const T0 = Date.parse("2026-10-11T13:00:00.000Z");
+const iso = (ms: number) => new Date(ms).toISOString();
+
+let dir: string;
+let claudeProjects: string;
+let sessions: string;
+let codexRoot: string;
+let transcript: string;
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "nenu-agent-state-"));
+  claudeProjects = join(dir, "claude", "projects");
+  sessions = join(dir, "claude", "sessions");
+  codexRoot = join(dir, "codex", "sessions");
+  transcript = join(claudeProjects, "-w", `${SESSION_ID}.jsonl`);
+  await mkdir(join(claudeProjects, "-w"), { recursive: true });
+  await mkdir(sessions, { recursive: true });
+  await mkdir(join(codexRoot, "2026", "10", "11"), { recursive: true });
+});
+afterEach(async () => rm(dir, { recursive: true, force: true }));
+
+/** A watcher registry the test fires by path. */
+function watches() {
+  const listeners = new Map<string, (event: string, filename: string | null) => void>();
+  const watch: WatchFn = (path, onChange) => {
+    listeners.set(path, onChange);
+    return { close: () => listeners.delete(path) };
+  };
+  return { watch, fire: (path: string, filename: string | null = null) => listeners.get(path)?.("change", filename), paths: () => [...listeners.keys()] };
+}
+
+const pane = (agent: string, extra: Partial<AgentView> = {}): AgentView => ({
+  paneId: "w1:p1", workspaceId: "w1", workspaceLabel: "w", workspaceNumber: 1, tabId: "w1:t1", agent, status: "idle", cwd: "/w", focused: false, ...extra,
+});
+const herdr = (pids: number[]) => ({ processInfo: async () => ({ foreground_processes: pids.map((pid) => ({ pid })) }) });
+const sessionFile = (status: string, statusUpdatedAt: number, extra: object = {}) =>
+  JSON.stringify({ pid: PID, sessionId: SESSION_ID, kind: "interactive", version: "2.1.296", procStart: "Sun Oct 11 12:59:42 2026", status, statusUpdatedAt, ...extra });
+const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+function states(w: ReturnType<typeof watches>, extra: Partial<ConstructorParameters<typeof AgentStates>[0]> = {}) {
+  const events: LiveEvent[] = [];
+  const service = new AgentStates({
+    claudeRoots: [claudeProjects],
+    codexRoots: [codexRoot],
+    live: { publish: (event) => void events.push(event) },
+    claudeTranscript: async (id) => (id === SESSION_ID ? transcript : null),
+    procStart: async () => Date.parse("Sun Oct 11 12:59:42 2026 UTC"),
+    openFiles: async () => [],
+    watch: w.watch,
+    ...extra,
+  });
+  return { service, events };
+}
+
+describe("Claude panes", () => {
+  test("follow the session file and the busy transcript, and publish only real changes", async () => {
+    const w = watches();
+    const { service, events } = states(w);
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+    expect(events).toEqual([{ session: "s", topic: "snapshot" }, { session: "s", topic: "pane", paneId: "w1:p1" }]);
+
+    // A turn starts: the file flips busy and the transcript gets the prompt.
+    await writeFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0 + 20), message: { content: "write an essay" } }) + "\n");
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: true, queued: null, source: "claude-session" });
+    expect(w.paths()).toContain(transcript);
+
+    // The main turn ends but a background agent keeps the session busy.
+    events.length = 0;
+    await appendFile(transcript, JSON.stringify({ type: "system", subtype: "turn_duration", durationMs: 900, timestamp: iso(T0 + 950) }) + "\n");
+    w.fire(transcript);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, background: true, source: "claude-session" });
+    expect(events.map((e) => e.topic)).toEqual(["snapshot", "pane"]);
+
+    // Idle: the transcript watch closes, the directory watch stays.
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0 + 2_000));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+    expect(w.paths()).toEqual([sessions]);
+    service.close();
+    expect(w.paths()).toEqual([]);
+  });
+
+  test("a dialog reads as waiting, and the transcript is not followed for it", async () => {
+    const w = watches();
+    const { service } = states(w);
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("waiting", T0, { waitingFor: "permission prompt" }));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, waiting: "permission prompt", source: "claude-session" });
+    expect(w.paths()).toEqual([sessions]);
+  });
+
+  test("a file left by another process with the same pid is not trusted", async () => {
+    const w = watches();
+    const { service } = states(w, { procStart: async () => Date.parse("Sun Oct 11 09:00:00 2026 UTC") });
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toBeUndefined();
+  });
+
+  test("fresh() reads the file even when no watch event came", async () => {
+    const w = watches();
+    const { service } = states(w);
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    expect(await service.fresh("s", pane("claude"), herdr([PID]))).toMatchObject({ running: true });
+  });
+
+  test("a session file created after the pane was seen is picked up by the directory watch", async () => {
+    const w = watches();
+    const { service } = states(w);
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toBeUndefined();
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    expect(service.get("s", "w1:p1")).toMatchObject({ running: false });
+  });
+
+  test("a closed pane is dropped with its watchers", async () => {
+    const w = watches();
+    const { service } = states(w);
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    service.sync("s", herdr([PID]), []);
+    expect(service.get("s", "w1:p1")).toBeUndefined();
+    expect(w.paths()).toEqual([]);
+  });
+});
+
+describe("Codex panes", () => {
+  const rollout = () => join(codexRoot, "2026", "10", "11", "rollout-2026-10-11T15-04-38-01a12b10-b86b-7781-9182-b55f713c7ee2.jsonl");
+  const event = (type: string, turnId: string) => JSON.stringify({ type: "event_msg", payload: { type, turn_id: turnId } }) + "\n";
+
+  test("follow the rollout the process holds open", async () => {
+    const w = watches();
+    await writeFile(rollout(), event("task_started", "t1"));
+    const outside = join(dir, "elsewhere-rollout-2026-10-11T15-04-38-01a12b10-b86b-7781-9182-b55f713c7ee3.jsonl");
+    await writeFile(outside, event("task_started", "x"));
+    const { service } = states(w, { openFiles: async () => [rollout(), outside] });
+    service.sync("s", herdr([7]), [pane("codex", { status: "working" })]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: true, source: "codex-rollout" });
+    await appendFile(rollout(), event("turn_aborted", "t1"));
+    // Watched by its real path (containment resolves symlinks such as macOS's /var → /private/var).
+    w.fire(await realpath(rollout()));
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "codex-rollout" });
+  });
+
+  test("a rollout outside the Codex roots is never read", async () => {
+    const w = watches();
+    const outside = join(dir, "rollout-2026-10-11T15-04-38-01a12b10-b86b-7781-9182-b55f713c7ee3.jsonl");
+    await writeFile(outside, event("task_started", "x"));
+    const { service } = states(w, { openFiles: async () => [outside] });
+    service.sync("s", herdr([7]), [pane("codex")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toBeUndefined();
+  });
+
+  test("fresh() re-resolves an idle Codex, so a turn in a /new thread is found", async () => {
+    const w = watches();
+    const old = join(codexRoot, "2026", "10", "11", "rollout-2026-10-11T15-03-30-01a12b0f-ada4-7d12-b0d2-30807b9fe152.jsonl");
+    await writeFile(old, event("task_started", "a") + event("turn_aborted", "a"));
+    let open = [old];
+    const { service } = states(w, { openFiles: async () => open });
+    service.sync("s", herdr([7]), [pane("codex")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toMatchObject({ running: false });
+    await writeFile(rollout(), event("task_started", "b"));
+    open = [old, rollout()];
+    expect(await service.fresh("s", pane("codex"), herdr([7]))).toEqual({ running: true, source: "codex-rollout" });
+  });
+});
