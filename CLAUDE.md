@@ -218,6 +218,11 @@ the unit name; the Herdr action runs from anywhere.
   Feedback is sent as a verified sequence, never a keystroke — the ground truth for every state is
   [`PLAN_FEEDBACK_NOTES.md`](./web/src/lib/grammar/PLAN_FEEDBACK_NOTES.md); re-walk it before touching
   `harness/claude/prompt-select.ts` or `lib/prompt-action.ts`.
+- **Stop presses the adapter's interrupt key once, and only while the live screen shows a running
+  turn**, re-read inside the pane's write lock, then a two-second cooldown per pane. A second Escape
+  at an idle Claude or Codex opens its rewind. Agents without a measured key get no Stop, a Stop that
+  would send the CLI's own queue asks first, and Nenu's queued rows are held until the operator sends
+  them ([ADR 0065](./.adr/0065-stop-presses-the-clis-interrupt-key-once.md)).
 - **A generically-detected menu emits only the keys the screen printed** — the footer's
   `<key> to <verb>` hints plus the arrows it advertised. Never synthesise a digit from a numbered row:
   in the `/model` picker a digit confirms *and* persists the user's default. The generic grammar

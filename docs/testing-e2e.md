@@ -23,6 +23,7 @@ revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
 | `bun scripts/e2e/bridge.ts --port 8797 --fake` | Runs `bridge/index.ts` on 8797 against a FakeHerdr, until Ctrl-C |
 | `bun scripts/e2e/bridge.ts --port 8797 --socket <path>` | Same, against a disposable real Herdr session |
 | `bun scripts/e2e/run.ts smoke` | Home screenshots in WebKit at 390x844 (iPhone, @3x) and at 1440x900 |
+| `bun scripts/e2e/run.ts stop` | Stop on the working Claude, phone and desk: captures, Escapes sent, a queued message held |
 | `bun scripts/e2e/run.ts baseline [--seconds 60] [--sends 5]` | Measures the baselines below |
 | `bun scripts/e2e/run.ts compare A.png B.png` | Share of differing pixels between two captures |
 
@@ -77,7 +78,8 @@ also logs the call as a write. It reports version `0.9.1-fake`, protocol 22.
 Panes render a Claude-shaped screen (rule, `❯ draft`, rule, footer). Typed text appears after
 `echoMs`, Enter submits the draft, and a working pane repaints its spinner every `tickMs` (250 ms).
 `setDialog` shows a dialog that swallows text, and a digit, Enter or Escape answers it.
-`setStatus` emits `pane_agent_status_changed` to subscribers. The demo herd
+`setStatus` emits `pane_agent_status_changed` to subscribers. A working pane names `esc to interrupt`
+in its statusline, as Claude 2.1.296 does, and Escape sets it idle after `interruptMs` (0 by default). The demo herd
 (`scripts/e2e/scenario.ts`) has these panes:
 
 - a working Claude whose journal grows every 2 s
