@@ -44,7 +44,7 @@ export function busyChoiceFor(agent: string | null | undefined): BusyChoice | nu
   return (agent && BUSY_CHOICES[agent]) || null;
 }
 
-function agentName(agent: string | null | undefined): string {
+export function agentName(agent: string | null | undefined): string {
   return busyChoiceFor(agent)?.name ?? "The agent";
 }
 
@@ -84,7 +84,7 @@ export function queueRowStatus(
   }
   // "Send now" lifts the wait for the turn; a row already going as soon as it can has nothing to lift.
   // A dialog, a draft in the box or a lost pane still holds it after the tap, so the button would do nothing.
-  const holds = (row.deliveryMode === undefined || row.deliveryMode === "afterTurn") && !blockedBeyondTurn(row.waitingFor);
+  const holds = row.waitingFor === "stopped" || ((row.deliveryMode === undefined || row.deliveryMode === "afterTurn") && !blockedBeyondTurn(row.waitingFor));
   return { tone: "waiting", label: waitingLabel(name, row), actions: holds ? ["sendNow", "edit", "remove"] : ["edit", "remove"] };
 }
 
@@ -100,6 +100,8 @@ function waitingLabel(name: string, row: QueueRowView): string {
       return "Waiting. The terminal's input box holds a draft.";
     case "disconnected":
       return "Waiting for the pane to reconnect.";
+    case "stopped":
+      return "Held: you stopped the turn. It goes when you send it.";
     case "turn-start":
       return `Waiting for ${name} to start on the previous message.`;
     case "working":

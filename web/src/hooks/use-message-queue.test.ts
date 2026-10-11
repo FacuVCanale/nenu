@@ -345,6 +345,16 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     expect(queueRowStatus("claude", { state: "queued", deliveryMode: "afterTurn", waitingFor }).actions).toEqual(["edit", "remove"]);
   });
 
+  it("a row a Stop held says so and is sent only by the operator, whatever its mode", () => {
+    for (const deliveryMode of ["afterTurn", "asap", "steer"] as const) {
+      expect(queueRowStatus("claude", { state: "queued", deliveryMode, waitingFor: "stopped" })).toEqual({
+        tone: "waiting",
+        label: "Held: you stopped the turn. It goes when you send it.",
+        actions: ["sendNow", "edit", "remove"],
+      });
+    }
+  });
+
   it("a stranded row says why and offers only Send here or Remove", () => {
     const status = queueRowStatus("claude", { state: "queued", stranded: { reason: "The conversation in this pane changed. Send it here or remove it.", since: 1 } });
     expect(status).toEqual({ tone: "problem", label: "The conversation in this pane changed. Send it here or remove it.", actions: ["sendNow", "remove"] });
