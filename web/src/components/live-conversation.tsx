@@ -7,6 +7,8 @@ import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
+import { atTail } from "@/hooks/use-auto-scroll";
+import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 
 interface LiveConversationProps {
@@ -53,6 +55,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  // Where the list last stood, set by every pin: only a move up from here is the reader leaving the
+  // tail (see useAutoScroll for why geometry alone can't tell).
+  const lastTop = useRef(0);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
   const anchor = useRef<{ height: number; top: number } | null>(null);
@@ -76,6 +81,33 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   }, [sendScope, liveEntries, localSends]);
   // A new bubble is the operator's own action: bring the tail into view even if they had scrolled up.
   const localSendCount = localSends.length;
+  // A message the agent received starts its turn, as Stop already counts it in the composer: Working…
+  // shows at once and holds until the agent's state has reported the turn and then its end. The
+  // journal row and that state arrive on separate reads, in either order. Gives up like Stop does if
+  // nothing ever reports the turn.
+  const handed = localSends.at(-1);
+  const delivered = handed?.state === "sent" && !handed.native && !handed.unverified ? handed.id : null;
+  const [starting, setStarting] = useState<{ id: string; ran: boolean } | null>(null);
+  useEffect(() => {
+    if (delivered) setStarting((current) => current?.id === delivered ? current : { id: delivered, ran: false });
+  }, [delivered]);
+  useEffect(() => {
+    if (!starting) return;
+    if (activityStatus === "working") {
+      if (!starting.ran) setStarting({ ...starting, ran: true });
+      return;
+    }
+    if (starting.ran) {
+      setStarting(null);
+      return;
+    }
+    const timer = setTimeout(() => setStarting(null), TURN_PENDING_MS);
+    return () => clearTimeout(timer);
+  }, [starting, activityStatus]);
+  const activity = error || frozen ? undefined : starting ? "working" : activityStatus;
+  // Under this client's bubble while the journal does not show it yet; the transcript's own after that.
+  const labelUnderSend = activity === "working" && delivered !== null;
+  const startingLabel = labelUnderSend && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
   const previousSendCount = useRef(localSendCount);
   useEffect(() => { onMatchCount?.(matches.length); }, [matches.length, onMatchCount]);
   useEffect(() => {
@@ -98,6 +130,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     request.current = null;
   }, []);
 
+  const pin = useCallback((el: HTMLElement) => {
+    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    lastTop.current = el.scrollTop;
+  }, []);
+
   const followLatest = useCallback(() => {
     cancelOlder();
     anchor.current = null;
@@ -108,8 +145,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     setOlderError(false);
     setOlderStopped(false);
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-  }, [cancelOlder]);
+    if (el) pin(el);
+  }, [cancelOlder, pin]);
 
   useEffect(() => {
     if (localSendCount > previousSendCount.current) followLatest();
@@ -147,9 +184,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
       restoreFrame.current = requestAnimationFrame(() => { restoring.current = false; });
     } else if (following.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      pin(el);
     }
-  }, [entries]);
+  }, [entries, pin]);
 
   // Follow viewport/content resizing (including the mobile keyboard) only while at the live tail.
   useEffect(() => {
@@ -157,12 +194,12 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const content = contentRef.current;
     if (!el || !content || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
-      if (following.current) el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      if (following.current) pin(el);
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
-  }, []);
+  }, [pin]);
 
   const onWorkToggle = useCallback((target: HTMLElement) => {
     const el = scrollRef.current;
@@ -182,14 +219,18 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
 
   function onScroll() {
     const el = scrollRef.current;
-    if (!el || restoring.current) return;
-    const atBottom = Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) <= 24;
-    if (atBottom) {
+    if (!el) return;
+    const up = el.scrollTop < lastTop.current;
+    lastTop.current = el.scrollTop;
+    if (restoring.current) return;
+    if (atTail(el)) {
       if (!following.current) followLatest();
-    } else {
+    } else if (up) {
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);
+    } else if (following.current) {
+      pin(el);
     }
   }
 
@@ -272,10 +313,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               </div>}
               <TranscriptView entries={entries} query={query}
                 focusedUuid={searching ? entries[matches[currentMatch] ?? -1]?.uuid : undefined}
-                activityStatus={!error && !frozen ? activityStatus : undefined} onWorkToggle={onWorkToggle} />
+                activityStatus={activity} activityLabel={!labelUnderSend} onWorkToggle={onWorkToggle} />
               <PendingTurns sends={localSends} actions={localSendActions} />
+              {startingLabel}
               {footer}
-            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && recovery}

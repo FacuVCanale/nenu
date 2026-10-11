@@ -8,7 +8,7 @@ import { setStatus } from "@/lib/status";
 import type { InterruptResponse } from "@/lib/types";
 
 // Stop stays offered this long after a send for the turn to show up (the bridge waits 4 s for it).
-const TURN_PENDING_MS = 8_000;
+export const TURN_PENDING_MS = 8_000;
 // "Stopping…" gives the button back if Herdr never reports the pane idle.
 const STOPPING_MS = 8_000;
 

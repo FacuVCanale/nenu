@@ -7,7 +7,7 @@ import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { LiveConversation } from "./live-conversation";
 import { fetchHistory } from "@/lib/api";
 import { TranscriptView } from "./transcript-view";
-import { addLocalSend, localSendScope } from "@/lib/local-sends";
+import { addLocalSend, localSendScope, updateLocalSend } from "@/lib/local-sends";
 
 vi.mock("@/lib/api", () => ({ fetchHistory: vi.fn() }));
 vi.mock("@/components/transcript-view", async (original) => {
@@ -69,9 +69,11 @@ describe("LiveConversation", () => {
     const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
     const view = (history: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>;
     const { container, rerender } = render(view(initial));
-    const scroller = container.querySelector(".overflow-y-auto")!;
-    Object.defineProperties(scroller, { scrollHeight: { value: 1000 }, clientHeight: { value: 100 } });
-    fireEvent.scroll(scroller, { target: { scrollTop: 0 } });
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 300;
+    fireEvent.scroll(scroller);
     rerender(view({ ...initial, entries: [{ uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "New latest turn" }] }] }));
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();
@@ -79,7 +81,59 @@ describe("LiveConversation", () => {
     expect(screen.getByText("New latest turn")).toBeInTheDocument();
     expect(screen.queryByText("what changed today?")).not.toBeInTheDocument();
   });
+
+  // Measured on the e2e bench with a real transcript: a new turn slid the 60-entry window (the list
+  // shrank and the browser moved scrollTop up to the new bottom), then "Working…" arrived (+44 px)
+  // before the scroll event that the first move queued was dispatched. That event read a gap of 44 px.
+  it("keeps following when the list grows between a move and its scroll event", () => {
+    const first: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const asked: PaneHistoryResponse = { ...first, entries: [fixtureTranscript[1]!, { uuid: "t3", ts: "", role: "user", parts: [{ kind: "text", text: "and now?" }] }] };
+    const view = (history: PaneHistoryResponse, activityStatus?: "working") => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} activityStatus={activityStatus} loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(first));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    box.height = 820;
+    rerender(view(asked));
+    expect(box.top).toBe(720);
+    box.height = 864;
+    rerender(view(asked, "working"));
+    fireEvent.scroll(scroller);
+
+    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.getByText("Working…")).toBeInTheDocument();
+    expect(box.top).toBe(764);
+    rerender(view({ ...asked, entries: [...asked.entries, { uuid: "t4", ts: "", role: "assistant", parts: [{ kind: "text", text: "Looking." }] }] }, "working"));
+    expect(screen.getByText("Looking.")).toBeInTheDocument();
+  });
+
+  // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
+  it("counts a bounce past the bottom as the bottom", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    for (const top of [960, 940, 900]) {
+      box.top = top;
+      fireEvent.scroll(scroller);
+    }
+    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+  });
 });
+
+/** Scroll geometry jsdom lacks: `top` clamps like a browser's, and scrollTo moves it. */
+function scrollBox(el: HTMLElement, size: { height: number; client: number }) {
+  const box = { ...size, top: 0 };
+  Object.defineProperties(el, {
+    scrollHeight: { configurable: true, get: () => box.height },
+    clientHeight: { configurable: true, get: () => box.client },
+    scrollTop: { configurable: true, get: () => box.top, set: (value: number) => { box.top = Math.max(0, Math.min(value, box.height - box.client)); } },
+  });
+  el.scrollTo = ((options: ScrollToOptions) => { el.scrollTop = options.top ?? 0; }) as HTMLElement["scrollTo"];
+  return box;
+}
 
 
 const initialHistory: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: true, total: 100, fileTruncated: false };
@@ -208,5 +262,47 @@ describe("LiveConversation — pending bubbles", () => {
     rerender(<LiveConversation paneId="w1:p1" history={history([...fixtureTranscript, { uuid: "t9", ts: "2026-07-25T06:30:00.000Z", role: "user", parts: [{ kind: "text", text: "ship it" }] }])} loading={false} error={false} />);
     await waitFor(() => expect(screen.queryByText("Sending…")).not.toBeInTheDocument());
     expect(screen.getAllByText("ship it")).toHaveLength(1);
+  });
+
+  // Stop already counts a delivered message as a turn (use-stop-turn's awaitingTurn); the chat waited
+  // for the journal row AND Herdr's status before it said Working….
+  it("says Working… under a message the agent received, before the journal or Herdr shows the turn", async () => {
+    const scope = localSendScope("w1:p2", undefined);
+    const answered: TranscriptEntry[] = [fixtureTranscript[0]!, { ...fixtureTranscript[1]!, phase: "final_answer" }];
+    const view = (entries: TranscriptEntry[], activityStatus: "idle" | "working") =>
+      <LiveConversation paneId="w1:p2" history={{ paneId: "w1:p2", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false }}
+        activityStatus={activityStatus} loading={false} error={false} />;
+    const { rerender } = render(view(answered, "idle"));
+    let queued = "";
+    act(() => { queued = addLocalSend(scope, "after this turn", "queued"); });
+    expect(screen.queryByText("Working…")).not.toBeInTheDocument();
+    act(() => { updateLocalSend(scope, queued, { state: "sent" }); });
+    expect(await screen.findByText("Working…")).toBeInTheDocument();
+
+    rerender(view([...answered, { uuid: "t9", ts: "", role: "user", parts: [{ kind: "text", text: "after this turn" }] }], "working"));
+    await waitFor(() => expect(screen.getAllByText("after this turn")).toHaveLength(1));
+    expect(screen.getAllByText("Working…")).toHaveLength(1);
+  });
+
+  // Measured on the bench: the journal read that takes the bubble over often lands before the read
+  // that says the agent works, and Working… went out for 50-900 ms in between.
+  it("keeps Working… while the journal has the message and the agent's state has not caught up", async () => {
+    const scope = localSendScope("w1:p3", undefined);
+    const answered: TranscriptEntry[] = [fixtureTranscript[0]!, { ...fixtureTranscript[1]!, phase: "final_answer" }];
+    const asked = [...answered, { uuid: "t9", ts: "", role: "user" as const, parts: [{ kind: "text" as const, text: "check the logs" }] }];
+    const view = (entries: TranscriptEntry[], activityStatus: "idle" | "working") =>
+      <LiveConversation paneId="w1:p3" history={{ paneId: "w1:p3", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false }}
+        activityStatus={activityStatus} loading={false} error={false} />;
+    const { rerender } = render(view(answered, "idle"));
+    act(() => { updateLocalSend(scope, addLocalSend(scope, "check the logs"), { state: "sent" }); });
+    expect(await screen.findByText("Working…")).toBeInTheDocument();
+
+    rerender(view(asked, "idle"));
+    await waitFor(() => expect(screen.getAllByText("check the logs")).toHaveLength(1));
+    expect(screen.getAllByText("Working…")).toHaveLength(1);
+    rerender(view(asked, "working"));
+    expect(screen.getAllByText("Working…")).toHaveLength(1);
+    rerender(view(asked, "idle"));
+    expect(screen.queryByText("Working…")).not.toBeInTheDocument();
   });
 });
