@@ -1,5 +1,5 @@
 import { useState, type ComponentProps } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -49,13 +49,22 @@ function setup(overrides: Partial<Props> = {}) {
 
 const stopButton = () => screen.queryByRole("button", { name: "Stop" });
 
-it("takes Send's place while Claude works, and sits beside Send once a draft exists", async () => {
+it("is the one round button while Claude works; a draft turns it into Send and moves Stop to the Working row", async () => {
   const { user } = setup();
   expect(stopButton()).toBeVisible();
   expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
   await user.type(screen.getByRole("textbox"), "and the tests");
-  expect(stopButton()).toBeVisible();
   expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  const row = screen.getByRole("group", { name: "Agent working" });
+  expect(within(row).getByText(/^Working/)).toBeVisible();
+  // Exactly one Stop, and it is the row's small one, not a second button beside Send.
+  expect(screen.getAllByRole("button", { name: "Stop" })).toHaveLength(1);
+  expect(within(row).getByRole("button", { name: "Stop" })).toBeVisible();
+  await user.click(within(row).getByRole("button", { name: "Stop" }));
+  await waitFor(() => expect(bodies).toEqual([{}]));
+  await user.clear(screen.getByRole("textbox"));
+  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
 });
 
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {

@@ -1,13 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "@/test/setup";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import fixture from "./activity.fixture.json";
 import type { ActivityResponse, ActivityWorkflow, WorkflowDetailResponse } from "@/lib/activity";
 import { ActivityPanel } from "./activity-panel";
 import { ArtifactList } from "./artifact-list";
-import { RunningWorkflows } from "./running-workflows";
-import { WorkflowCard } from "./workflow-card";
 import { WorkflowAgentList, WorkflowDetail } from "./workflow-detail";
 
 // The fixture is what the bridge reader answers for this repo's own (redacted) Claude session:
@@ -16,31 +12,6 @@ const list = fixture.list as ActivityResponse & { available: true };
 const detail = fixture.detail as WorkflowDetailResponse;
 const now = fixture.now;
 const running = list.workflows.find((w) => w.status === "running")!;
-const finished = list.workflows.find((w) => w.status === "completed")!;
-
-describe("WorkflowCard", () => {
-  test("a running run shows progress without totals that only exist at the end", () => {
-    const onOpen = vi.fn();
-    render(<WorkflowCard workflow={running} now={now} onOpen={onOpen} />);
-    const card = screen.getByRole("region", { name: "Workflow nenu-wave" });
-    expect(within(card).getByText("running")).toBeInTheDocument();
-    expect(within(card).getByText("0 of 3 agents")).toBeInTheDocument();
-    expect(within(card).queryByText(/tool calls/)).toBeNull();
-    expect(within(card).getAllByText("Bash · Keep waiting for gate")).toHaveLength(3);
-    expect(within(card).getByText(/Claude gets the result when it finishes/)).toBeInTheDocument();
-    fireEvent.click(within(card).getByRole("button", { name: /View workflow/ }));
-    expect(onOpen).toHaveBeenCalledOnce();
-  });
-
-  test("a finished run shows its totals and phases", () => {
-    render(<WorkflowCard workflow={finished} now={now} />);
-    expect(screen.getByText("done")).toBeInTheDocument();
-    expect(screen.getByText("114 tool calls")).toBeInTheDocument();
-    expect(screen.getByText("17m 23s")).toBeInTheDocument();
-    expect(screen.getByText("Research")).toBeInTheDocument();
-    expect(screen.getByText("2/2")).toBeInTheDocument();
-  });
-});
 
 describe("ActivityPanel", () => {
   test("groups running work, finished work and artifacts", () => {
@@ -103,7 +74,7 @@ describe("ArtifactList", () => {
 });
 
 describe("WorkflowDetail", () => {
-  test("shows totals, phases and a timeline row per agent", () => {
+  test("shows totals, phases and a row per agent", () => {
     render(<WorkflowDetail workflow={detail.workflow} results={detail.results} now={now} />);
     expect(screen.getByRole("heading", { name: "nenu-workflows-view-design" })).toBeInTheDocument();
     expect(screen.getByText("3/3")).toBeInTheDocument();
@@ -144,36 +115,5 @@ describe("WorkflowAgentList", () => {
     expect(screen.getAllByText("Bash · Keep waiting for gate").length).toBeGreaterThan(0);
     fireEvent.click(rows[0]!);
     expect(onSelectAgent).toHaveBeenCalledWith(running.phases[0]!.agents[0]!.id);
-  });
-});
-
-describe("RunningWorkflows", () => {
-  test("shows a card per running workflow in the chat, and View workflow opens it full screen", async () => {
-    server.use(
-      http.get(/\/api\/pane\/[^/]+\/activity$/, ({ request }) =>
-        HttpResponse.json(new URL(request.url).searchParams.get("run") ? detail : list),
-      ),
-    );
-    render(<RunningWorkflows paneId="w1:p1" />);
-    const card = await screen.findByRole("region", { name: "Workflow nenu-wave" });
-    expect(screen.getAllByRole("region", { name: /^Workflow / })).toHaveLength(list.workflows.filter((w) => w.status === "running").length);
-    expect(screen.queryByRole("region", { name: `Workflow ${finished.name}` })).toBeNull();
-    fireEvent.click(within(card).getByRole("button", { name: /View workflow/ }));
-    const dialog = await screen.findByRole("dialog", { name: detail.workflow.name });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  test("renders nothing when no workflow runs", async () => {
-    let served = false;
-    server.use(
-      http.get(/\/api\/pane\/[^/]+\/activity$/, () => {
-        served = true;
-        return HttpResponse.json({ ...list, workflows: [finished] });
-      }),
-    );
-    const { container } = render(<RunningWorkflows paneId="w1:p1" />);
-    await waitFor(() => expect(served).toBe(true));
-    expect(container).toBeEmptyDOMElement();
   });
 });

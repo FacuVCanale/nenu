@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-10-11
+
+### Changed
+- Whether a turn runs comes from the CLI's own state, not the screen: Claude's `sessions/<pid>.json` plus its transcript, Codex's rollout, watched per pane and attached to the snapshot; Stop's button and press read the same entry, so Stop works under a custom statusline and while a workflow runs (ADR 0067). (#60)
+- Background work lives in one chip under the composer ("● N running", "1 waiting on you", quiet "N done"): a compact list with expandable rows and a side panel or in-sheet details, never full screen; the ⋯ menu drops to the rows it alone owns. (#59)
+- One primary button: Stop when the composer is empty and the agent works, Send otherwise; while typing, Stop sits in the "Working for…" row. (#59)
+
+### Added
+- A note above the composer when only background work runs ("Stop doesn't reach it"). (#60)
+- An idempotent, reversible installer for Nenu's Claude observer hooks (optional; Nenu works without them). (#60)
+
 ## [0.63.0] - 2026-10-11
 
 ### Added

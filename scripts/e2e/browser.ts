@@ -8,6 +8,7 @@ import { join } from "node:path";
 // already in Playwright's cache (webkit-2287 for 1.60.0).
 
 export interface Request { url(): string; method(): string }
+export interface Route { request(): Request; fulfill(opts: { json?: unknown; status?: number }): Promise<void> }
 export interface Locator {
   click(opts?: { timeout?: number }): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
@@ -32,6 +33,7 @@ export interface Page {
   evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<T>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   clock: { install(opts: { time: number }): Promise<void> };
+  route(url: string, handler: (route: Route) => unknown): Promise<void>;
   keyboard: { press(key: string): Promise<void> };
   waitForTimeout(ms: number): Promise<void>;
   close(): Promise<void>;

@@ -1,0 +1,249 @@
+import type { ComponentProps } from "react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { createMemoryRouter, RouterProvider } from "react-router";
+
+import { server } from "@/test/setup";
+import { fixtureAgents } from "@/test/handlers";
+import { setLocked } from "@/lib/idle";
+import type { ActivityResponse, WorkflowDetailResponse } from "@/lib/activity";
+import fixture from "./activity/activity.fixture.json";
+import { AgentChat } from "./agent-chat";
+import { SubagentConversation } from "./subagent-conversation";
+
+// The processes chip as the operator meets it in a working Claude's chat: one chip in the composer
+// row, a list whose rows open in place, and details that never cover the whole screen.
+
+const list = fixture.list as ActivityResponse & { available: true };
+const detail = fixture.detail as WorkflowDetailResponse;
+const runningRun = list.workflows.find((w) => w.status === "running")!;
+const reviewer = { id: "a1", parentId: "", name: "reviewer", task: "Review the diff", status: "waiting", model: "claude-opus-5-5" };
+const explorer = { id: "a2", parentId: "", name: "explorer", task: "Explore the repo", status: "running" };
+const subagents = (agents: unknown[]) => ({ available: true, sessionKey: "parent-key", agents, truncated: false });
+
+let subagentList: object | number = subagents([reviewer, explorer]);
+let activityList: object = list;
+let subagentCalls = 0;
+beforeAll(() => { if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {}; });
+beforeEach(() => {
+  subagentList = subagents([reviewer, explorer]);
+  activityList = list;
+  subagentCalls = 0;
+  server.use(
+    http.get(/\/api\/pane\/[^/]+\/subagents$/, () => { subagentCalls++; return typeof subagentList === "number" ? new HttpResponse(null, { status: subagentList }) : HttpResponse.json(subagentList); }),
+    http.get(/\/api\/pane\/[^/]+\/activity$/, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("run")) return HttpResponse.json(params.get("run") === detail.workflow.runId ? detail : { sessionKey: "s", workflow: runningRun, results: {} });
+      if (params.get("task")) return HttpResponse.json({ sessionKey: "s", id: params.get("task"), text: "412 pass", truncated: false, updatedAt: 0 });
+      return HttpResponse.json(activityList);
+    }),
+    http.get(/\/api\/pane\/[^/]+\/subagent-history$/, () => HttpResponse.json({ sessionKey: "parent-key", agent: reviewer,
+      entries: [{ uuid: "child", ts: "", role: "assistant", parts: [{ kind: "text", text: "Child result" }] }], truncated: false })),
+  );
+});
+
+function setDesktop(desktop: boolean) {
+  window.matchMedia = ((query: string) => ({ matches: desktop && query === "(min-width: 1024px)", media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+}
+const originalMatchMedia = window.matchMedia;
+afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
+  const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
+  const props: ComponentProps<typeof AgentChat> = {
+    paneId: agent.paneId, agent, agents: [agent], shellPanes: [], tabs: [], text: "", onBack: vi.fn(), onSelect: vi.fn(), ...overrides,
+  };
+  render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <AgentChat {...props} /> }])} />);
+  return { user: userEvent.setup() };
+}
+
+const chip = () => screen.findByRole("button", { name: /^Processes/ });
+
+it("shows one chip that names who waits on you, and lists waiting, then running, then a folded Done", async () => {
+  const { user } = renderChat();
+  const button = await chip();
+  expect(button).toHaveTextContent("1 waiting on you");
+  expect(button).toHaveAccessibleName(/1 waiting on you, \d+ running/);
+  await user.click(button);
+  const sheet = screen.getByRole("dialog", { name: "Processes" });
+  const rows = within(within(sheet).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / });
+  expect(rows[0]).toHaveAccessibleName("Expand reviewer");
+  expect(rows.map((r) => r.getAttribute("aria-label"))).toContain(`Expand ${runningRun.name}`);
+  expect(within(sheet).queryByRole("list", { name: "Done" })).not.toBeInTheDocument();
+  await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
+  expect(within(sheet).getByRole("list", { name: "Done" })).toBeVisible();
+  // What the session published on claude.ai stays reachable from the same list.
+  await user.click(within(sheet).getByRole("button", { name: "Published (1)" }));
+  expect(within(sheet).getByRole("link", { name: /Rediseño Nenu sobre Herdr/ })).toHaveAttribute("target", "_blank");
+  // The cards that used to duplicate this list inside the chat are gone.
+  expect(screen.queryByRole("region", { name: /^Workflow / })).not.toBeInTheDocument();
+});
+
+it("keeps finished work one tap away once nothing waits or runs", async () => {
+  activityList = { ...list, workflows: list.workflows.filter((w) => w.status !== "running"), tasks: [] };
+  subagentList = subagents([{ ...explorer, status: "completed" }]);
+  const { user } = renderChat();
+  const button = await chip();
+  expect(button).toHaveTextContent(/^\d+ done$/);
+  expect(button).not.toHaveTextContent(/running|waiting/);
+  await user.click(button);
+  const sheet = screen.getByRole("dialog", { name: "Processes" });
+  expect(within(sheet).getByText("Nothing running in the background.")).toBeVisible();
+  await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
+  expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
+});
+
+it("shows no chip when the session has nothing at all", async () => {
+  activityList = { ...list, workflows: [], tasks: [], artifacts: [] };
+  subagentList = subagents([]);
+  renderChat();
+  await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
+  await act(async () => {});
+  expect(screen.queryByRole("button", { name: /^Processes/ })).not.toBeInTheDocument();
+});
+
+it("on a desk, the list stays open while you read it when the last process ends", async () => {
+  setDesktop(true);
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: /^Done \(\d+\)$/ }));
+  activityList = { ...list, workflows: list.workflows.map((w) => ({ ...w, status: w.status === "running" ? "completed" : w.status, durationMs: w.durationMs ?? 1 })), tasks: [] };
+  subagentList = subagents([]);
+  act(() => { window.dispatchEvent(new Event("online")); });
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent(/done$/));
+  expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
+  expect(screen.getByRole("list", { name: "Done" })).toBeVisible();
+});
+
+it("on a desk, Esc closes the details panel instead of stopping the turn", async () => {
+  setDesktop(true);
+  const keys: string[] = [];
+  server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => { keys.push(JSON.stringify(await request.json())); return HttpResponse.json({ ok: true }); }));
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
+  await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
+  await screen.findByRole("complementary", { name: `Details: ${runningRun.name}` });
+  await user.click(screen.getByRole("textbox"));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("complementary", { name: /^Details/ })).not.toBeInTheDocument();
+  expect(keys).toEqual([]);
+  // Focus inside the panel: Esc closes it too.
+  await user.click(screen.getByRole("button", { name: /^Processes/ }));
+  await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
+  await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
+  const panel = await screen.findByRole("complementary", { name: `Details: ${runningRun.name}` });
+  within(panel).getByRole("button", { name: "Close details" }).focus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("complementary", { name: /^Details/ })).not.toBeInTheDocument();
+});
+
+it("keeps the last known subagents while the pane reconnects", async () => {
+  activityList = { ...list, workflows: [], tasks: [] };
+  const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
+  const props: ComponentProps<typeof AgentChat> = { paneId: agent.paneId, agent, agents: [agent], shellPanes: [], tabs: [], text: "", onBack: vi.fn(), onSelect: vi.fn() };
+  const view = (bridge: ComponentProps<typeof AgentChat>["bridge"]) => <RouterProvider router={createMemoryRouter([{ path: "/", element: <AgentChat {...props} bridge={bridge} /> }])} />;
+  const { rerender } = render(view("connected"));
+  expect(await chip()).toHaveTextContent("1 waiting on you");
+  rerender(view("disconnected"));
+  await act(async () => {});
+  expect(screen.queryByText("Couldn’t refresh. Showing last known activity.")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent("1 waiting on you");
+});
+
+it("on a phone, details replace the sheet's content with Back: one sheet, never two", async () => {
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
+  await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  const sheet = screen.getByRole("dialog", { name: runningRun.name });
+  expect(await within(sheet).findByRole("heading", { name: runningRun.name })).toBeVisible();
+  await user.click(within(sheet).getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
+});
+
+it("on a desk, details open in a side panel and the chat stays usable", async () => {
+  setDesktop(true);
+  const { user } = renderChat();
+  await user.click(await chip());
+  expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
+  await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
+  const panel = screen.getByRole("complementary", { name: `Details: ${runningRun.name}` });
+  expect(await within(panel).findByRole("heading", { name: runningRun.name })).toBeVisible();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  const box = screen.getByRole("textbox");
+  await user.type(box, "still typing");
+  expect(box).toHaveValue("still typing");
+  await user.click(within(panel).getByRole("button", { name: "Close details" }));
+  expect(screen.queryByRole("complementary", { name: /^Details/ })).not.toBeInTheDocument();
+});
+
+it("a command's output opens as details, not a second sheet", async () => {
+  activityList = { ...list, tasks: [{ id: "b1", kind: "bash", title: "bun test --watch", status: "running", at: 0, hasOutput: true }] };
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: "Expand bun test --watch" }));
+  await user.click(screen.getByRole("button", { name: "Details of bun test --watch" }));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(await screen.findByText("412 pass")).toBeVisible();
+});
+
+it("opens a subagent's conversation in place of the chat, and Back to Main returns", async () => {
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
+  expect(screen.getByText("Review the diff")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
+  expect(await screen.findByText("Child result")).toBeVisible();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Back to Main" }));
+  expect(screen.queryByText("Child result")).not.toBeInTheDocument();
+});
+
+it("does not present a stale subagent as running after a refresh fails", async () => {
+  activityList = { ...list, workflows: [], tasks: [] };
+  renderChat();
+  await chip();
+  subagentList = 503;
+  act(() => { window.dispatchEvent(new Event("online")); });
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Processes/ })).not.toHaveTextContent(/running|waiting/));
+});
+
+it("discards a child's cached transcript when access is revoked", async () => {
+  let denied = false;
+  server.use(http.get(/\/api\/pane\/[^/]+\/subagent-history$/, () => denied ? new HttpResponse(null, { status: 403 })
+    : HttpResponse.json({ sessionKey: "parent-key", agent: reviewer, entries: [{ uuid: "c", ts: "", role: "assistant", parts: [{ kind: "text", text: "Private child" }] }], truncated: false })));
+  render(<SubagentConversation paneId="parent" selection={{ parentKey: "parent-key", agent: { ...reviewer, status: "running" } }} onMain={() => {}} />);
+  await screen.findByText("Private child");
+  denied = true;
+  act(() => { window.dispatchEvent(new Event("online")); });
+  await waitFor(() => expect(screen.queryByText("Private child")).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+});
+
+it("does not read subagents behind the idle cover and reads again on resume", async () => {
+  setLocked(true);
+  try {
+    renderChat();
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    expect(subagentCalls).toBe(0);
+    await act(async () => setLocked(false));
+    await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
+  } finally { setLocked(false); }
+});
+
+it("keeps a run's details open on a phone when the last process ends, and the chip goes quiet", async () => {
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
+  await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
+  activityList = { ...list, workflows: [{ ...runningRun, status: "completed", durationMs: 1 }], tasks: [] };
+  subagentList = subagents([]);
+  act(() => { window.dispatchEvent(new Event("online")); });
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent(/done$/));
+  expect(screen.getByRole("dialog", { name: runningRun.name })).toBeVisible();
+});

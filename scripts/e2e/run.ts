@@ -16,6 +16,7 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
 //   bun scripts/e2e/run.ts stop     [--port 8797] [--out DIR]   Stop a working Claude, then what the queue holds
+//   bun scripts/e2e/run.ts processes [--port 8797] [--out DIR]  A working Claude's background work: chip, list, details, ⋯
 //   bun scripts/e2e/run.ts stop-state [--port 8797] [--out DIR] Stop from the session file, under a custom statusline
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
@@ -638,6 +639,154 @@ async function stop(): Promise<void> {
 }
 
 /**
+ * A working Claude with background work: a running workflow, a subagent waiting on you, one running,
+ * a background command and a monitor. The bridge's activity and subagent readers are unit-tested over
+ * real (redacted) session files, so here their answers are fixed (web/src/components/activity
+ * fixture, shifted to the capture instant) and the bench looks at how the chat shows them: the chat,
+ * the processes list, a row expanded, a workflow's details, the ⋯ menu and the composer typing while
+ * the agent works, then everything finished: the quiet chip and its Done list. On a desk it also
+ * checks that Esc in the empty composer closes the details panel without sending anything. Run on a build without the chip, it captures the same moments the old way (cards in
+ * the chat, the Activity sheet, the full-screen workflow), so one command shows before and after.
+ */
+async function processes(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const fixture = JSON.parse(await Bun.file(join(import.meta.dir, "../../web/src/components/activity/activity.fixture.json")).text());
+  const result = await withBench(async (bridge, browser) => {
+    const pane = bridge.herd!.working;
+    const now = bridge.now();
+    const shift = now - fixture.now;
+    const shiftTimes = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(shiftTimes);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, (k === "startedAt" || k === "updatedAt" || k === "at") && typeof v === "number" ? v + shift : shiftTimes(v)]));
+      }
+      return value;
+    };
+    const list = shiftTimes(fixture.list) as { workflows: unknown[]; tasks: unknown[] };
+    list.tasks = [
+      { id: "b0001", kind: "bash", title: "bun test --watch", status: "running", at: now - 8_000, hasOutput: true },
+      { id: "m0001", kind: "monitor", title: "Monitor CI checks", status: "running", at: now - 60_000, hasOutput: false },
+      { id: "b0002", kind: "bash", title: "bun run build", status: "completed", exitCode: 0, at: now - 900_000, hasOutput: true },
+      ...list.tasks,
+    ];
+    const detail = shiftTimes(fixture.detail);
+    const iso = (ago: number) => new Date(now - ago).toISOString();
+    const subagents = {
+      available: true, sessionKey: "bench", truncated: false, agents: [
+        { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the processes chip diff", model: "claude-opus-5-5[1m]", status: "waiting", updatedAt: iso(120_000) },
+        { id: "a0000000000000002", parentId: "", name: "state-reader", task: "Read how Stop decides a turn runs", model: "claude-opus-5-5[1m]", status: "running", updatedAt: iso(20_000) },
+        { id: "a0000000000000003", parentId: "", name: "ui-audit", task: "Audit the composer row", status: "completed", updatedAt: iso(1_800_000) },
+      ],
+    };
+    // Everything above, finished: what the chip offers once nothing waits or runs.
+    const finishedList = { ...list, workflows: (list.workflows as Array<Record<string, unknown>>).map((w) => ({ ...w, status: w.status === "running" ? "completed" : w.status, durationMs: w.durationMs ?? 600_000 })),
+      tasks: (list.tasks as Array<Record<string, unknown>>).map((t) => ({ ...t, status: t.status === "running" ? "completed" : t.status })) };
+    const finishedSubagents = { ...subagents, agents: subagents.agents.map((a) => ({ ...a, status: "completed" })) };
+    let finished = false;
+    const shots: string[] = [];
+    const found: Record<string, Record<string, boolean>> = {};
+    const devices: Array<[string, Record<string, unknown>]> = [
+      ["1440", DESKTOP], ["1920", { ...DESKTOP, viewport: { width: 1920, height: 1080 } }], ["390", PHONE],
+    ];
+    for (const [deviceName, device] of devices) {
+      bridge.fake!.setStatus(pane, "working");
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: now });
+      await page.route("**/api/pane/*/activity*", (route) => {
+        const url = new URL(route.request().url());
+        const run = url.searchParams.get("run");
+        if (run) {
+          const workflow = (list as { workflows: Array<{ runId: string }> }).workflows.find((w) => w.runId === run);
+          return route.fulfill(workflow ? { json: run === (detail as { workflow: { runId: string } }).workflow.runId ? detail : { sessionKey: "bench", workflow, results: {} } } : { status: 404 });
+        }
+        if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "✓ 412 pass\n  0 fail\nwatching for changes…", truncated: false, updatedAt: now } });
+        return route.fulfill({ json: finished ? finishedList : list });
+      });
+      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: finished ? finishedSubagents : subagents }));
+      finished = false;
+      const writes: string[] = [];
+      page.on("request", (request) => { if (request.method() === "POST" && request.url().includes("/api/pane/")) writes.push(new URL(request.url()).pathname); });
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
+      const box = page.getByRole("textbox").first();
+      await box.waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1800);
+      const seen: Record<string, boolean> = {};
+      found[deviceName] = seen;
+      const shot = async (name: string) => {
+        const path = join(outDir, `processes-${name}-${deviceName}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      const tap = async (locator: Locator, key: string) => {
+        seen[key] = await locator.waitFor({ timeout: 2500 }).then(() => true, () => false);
+        if (seen[key]) await locator.click();
+        await page.waitForTimeout(500);
+        return seen[key];
+      };
+      await shot("chat");
+      if (await tap(page.getByRole("button", { name: /^Processes/ }).first(), "chip")) {
+        await shot("list");
+        if (await tap(page.getByRole("button", { name: "Expand nenu-wave" }).first(), "expand")) await shot("expanded");
+        if (await tap(page.getByRole("button", { name: "Details of nenu-wave" }).first(), "details")) await shot("details");
+        const panel = page.getByRole("complementary", { name: /^Details/ });
+        if (await panel.isVisible()) {
+          // Esc in the empty composer closes the desk's panel first; it must not stop the turn.
+          await box.click();
+          const before = writes.length;
+          await page.keyboard.press("Escape");
+          await page.waitForTimeout(400);
+          seen.escClosesPanel = !(await panel.isVisible());
+          seen.escSentNothing = writes.length === before;
+        } else {
+          await page.keyboard.press("Escape");
+          await page.keyboard.press("Escape");
+        }
+      } else {
+        // The build before the chip: the Activity sheet behind ⋯, and a workflow full screen.
+        if (await tap(page.getByRole("button", { name: "Conversation actions" }).first(), "menu-old")) {
+          if (await tap(page.getByRole("button", { name: "Background activity" }).first(), "activity-sheet")) await shot("list");
+          await page.keyboard.press("Escape");
+        }
+        if (await tap(page.getByRole("button", { name: /View workflow/ }).first(), "workflow-screen")) {
+          await shot("details");
+          await tap(page.getByRole("button", { name: "Back" }).first(), "back");
+        }
+      }
+      await page.waitForTimeout(300);
+      if (await tap(page.getByRole("button", { name: "Conversation actions" }).first(), "menu")) {
+        await shot("menu");
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(300);
+      }
+      await box.fill("Also run the tests before you finish");
+      await page.waitForTimeout(500);
+      await shot("typing");
+      seen.stopWhileTyping = await page.getByRole("button", { name: "Stop", exact: true }).isVisible();
+      seen.sendWhileTyping = await page.getByRole("button", { name: "Send", exact: true }).isVisible();
+      await box.fill("");
+      await page.waitForTimeout(400);
+      seen.stopEmpty = await page.getByRole("button", { name: "Stop", exact: true }).isVisible();
+      seen.sendEmpty = await page.getByRole("button", { name: "Send", exact: true }).isVisible();
+      finished = true;
+      bridge.fake!.setStatus(pane, "idle");
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
+      await box.waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1800);
+      const quiet = page.getByRole("button", { name: /^Processes/ }).first();
+      seen.quietChip = await quiet.waitFor({ timeout: 2500 }).then(() => true, () => false);
+      seen.quietChipText = await page.getByRole("button", { name: /^Processes: \d+ done$/ }).first().isVisible();
+      await shot("finished");
+      if (await tap(quiet, "quietOpens") && await tap(page.getByRole("button", { name: /^Done \(\d+\)$/ }).first(), "doneFold")) await shot("finished-list");
+      await context.close();
+    }
+    return { shots, found };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "processes.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+}
+
+/**
  * Stop decided by the CLI's own state (ADR 0067). The working Claude pane draws a custom statusline,
  * so its screen never says "esc to interrupt", and its session file (`<profile>/sessions/<pid>.json`)
  * says busy. Phone: Stop shows and presses Escape once, confirmed when the file goes idle. Then the
@@ -897,10 +1046,11 @@ else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "layout") await layout();
 else if (command === "stop") await stop();
+else if (command === "processes") await processes();
 else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|stop-state|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|processes|stop-state|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

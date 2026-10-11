@@ -4,7 +4,7 @@ import { isLocked, useLocked } from "@/lib/idle";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { modelDisplayName } from "@/lib/model-display";
 import type { SubagentHistoryResponse } from "@/lib/types";
-import type { SubagentSelection } from "./session-subagents";
+import type { SubagentSelection } from "@/hooks/use-subagents";
 import { TranscriptView } from "./transcript-view";
 import { ChatMessageList } from "./ui/chat/chat-message-list";
 

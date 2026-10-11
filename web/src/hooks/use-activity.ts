@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchActivity, fetchWorkflowDetail, type ActivityResponse, type WorkflowDetailResponse } from "@/lib/activity";
+import { fetchActivity, fetchWorkflowDetail, runningCount, type ActivityResponse, type WorkflowDetailResponse } from "@/lib/activity";
 import { concerns, isLiveHealthy, type LiveEvent } from "@/lib/live-events";
 import { useLivePoll } from "./use-live-poll";
 
@@ -71,4 +71,17 @@ export function useWorkflowDetail(paneId: string, runId: string | null, session?
     return () => controller.abort();
   }, [paneId, runId, session, version]);
   return { detail, failed };
+}
+
+/** The clock running work is measured against, ticking each second only while something runs. */
+export function useActivityClock(data: ActivityResponse | null, enabled = true): number {
+  const [now, setNow] = useState(() => Date.now());
+  const ticking = enabled && runningCount(data) > 0;
+  useEffect(() => {
+    if (!ticking) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(id);
+  }, [ticking]);
+  return now;
 }
