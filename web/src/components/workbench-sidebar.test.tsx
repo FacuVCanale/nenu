@@ -50,7 +50,8 @@ describe("the sidebar's workspaces, with no projects", () => {
 
     const design = screen.getByRole("region", { name: "Design" });
     expect(within(design).getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
-    expect(within(design).getByRole("link", { name: /^Design/ })).toHaveAttribute("href", "/space/w2");
+    // The workspace opens on the agent asking for you.
+    expect(within(design).getByRole("link", { name: /^Design/ })).toHaveAttribute("href", "/pane/d3");
     expect(within(design).getByRole("link", { name: /^coordinator/ })).toHaveAttribute("aria-current", "page");
     expect(within(design).getByRole("link", { name: /^coordinator/ })).toHaveTextContent("coordinatorLanding vs Maxdone");
     const panels = within(design).getByRole("group", { name: "panels" });

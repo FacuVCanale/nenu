@@ -1,24 +1,25 @@
 import { useEffect, useRef } from "react";
-import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
+import { Navigate, useNavigate, useParams, useRouteLoaderData } from "react-router";
+import { MessageSquare, Plus } from "lucide-react";
 
-import { ColumnPage } from "@/components/column-page";
-import { SpaceView } from "@/components/space-view";
+import { AppHeader, SettingsGear } from "@/components/app-header";
+import { ReadOnlyBanner } from "@/components/read-only-banner";
+import { Button } from "@/components/ui/button";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
-import { soloPane, workspaceName } from "@/lib/spaces";
+import { workspaceEntry, workspaceName } from "@/lib/spaces";
 import { openNewAgent } from "@/lib/spawn";
 import { setStatus } from "@/lib/status";
 import { isReadOnly } from "@/lib/types";
 
-// One workspace: its tabs and their panes, in the project pages' frame. Shares the root snapshot
-// (no own loader) and reads :spaceId from the URL. Switching workspace is the sidebar's job (Browse
-// on a phone), so the page lists no others. A workspace holding a single pane is that pane, the way
-// a project with a live coordinator is its chat, so it opens straight onto it.
+// A workspace has no page of its own. /space/:id opens the pane every other way in opens
+// (workspaceEntry), so a link from an older Nenu lands where a tap in the sidebar does; the tabs and
+// panes are the strips above that chat. Only a workspace without a pane draws here: the empty chat it
+// would open on, with a way to start something in it.
 export function SpaceRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { spaceId = "" } = useParams();
   const navigate = useNavigate();
-  const revalidator = useRevalidator();
 
   const workspace = data.workspaces.find((w) => w.workspaceId === spaceId);
 
@@ -39,17 +40,28 @@ export function SpaceRoute() {
     }
   }, [gone, data.bridge, data.error, data.session, navigate]);
 
-  const solo = workspace && soloPane(workspace.workspaceId, data.agents, data.shellPanes);
-  if (solo) return <Navigate to={panePath(solo.paneId, data.session)} replace />;
+  const entry = workspace && workspaceEntry(workspace.workspaceId, data);
+  if (entry) return <Navigate to={panePath(entry.paneId, data.session)} replace />;
 
+  const canCreate = !isReadOnly(data.device) && !data.error && data.bridge === "connected";
   return (
-    <ColumnPage data={data} title={workspace ? workspaceName(workspace) : "Workspace"}>
-      {/* Keyed, so another workspace starts from the tab it last showed rather than this one's. */}
+    <div className="workbench-chat flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      <AppHeader bridge={data.bridge} error={data.error} onHome={() => navigate(homePath(data.session))}
+        rightTrail={<SettingsGear session={data.session} />}>
+        <span className="truncate text-[15px] font-semibold leading-tight lg:text-sm">{workspace ? workspaceName(workspace) : "Workspace"}</span>
+      </AppHeader>
+      <ReadOnlyBanner device={data.device} />
       {workspace && (
-        <SpaceView key={workspace.workspaceId} workspace={workspace} tabs={data.tabs} agents={data.agents} shellPanes={data.shellPanes}
-          onNewTab={() => openNewAgent({ kind: "tab", workspaceId: workspace.workspaceId })}
-          onChanged={() => revalidator.revalidate()} session={data.session} readOnly={isReadOnly(data.device)} />
+        <div className="flex flex-1 flex-col items-center gap-3 border-t border-border/40 px-4 py-16 text-center text-sm text-muted-foreground">
+          <MessageSquare aria-hidden className="size-5" />
+          <p>Nothing runs in this workspace yet.</p>
+          {canCreate && (
+            <Button type="button" variant="outline" onClick={() => openNewAgent({ kind: "tab", workspaceId: workspace.workspaceId })}>
+              <Plus aria-hidden className="size-4" />Start an agent or a shell
+            </Button>
+          )}
+        </div>
       )}
-    </ColumnPage>
+    </div>
   );
 }

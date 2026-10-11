@@ -1,5 +1,6 @@
 // Helpers for workspaces and their tabs: shape the flat snapshot (agents + shell panes + tabs) into
-// the per-workspace, per-tab tree the workspace page and the sidebar draw, and name what they show.
+// the per-workspace, per-tab tree the sidebar draws, name what it shows, and pick the pane a
+// workspace opens on.
 import type { AgentView, TabView, WorkspaceView } from "./types";
 
 export interface TabGroup {
@@ -15,9 +16,9 @@ export interface TabGroup {
  */
 export function groupPanesByTab(
   workspaceId: string,
-  tabs: TabView[],
-  agents: AgentView[],
-  shellPanes: AgentView[],
+  tabs: readonly TabView[],
+  agents: readonly AgentView[],
+  shellPanes: readonly AgentView[],
 ): TabGroup[] {
   const panes = [...agents, ...shellPanes].filter((p) => p.workspaceId === workspaceId);
   const wsTabs = tabs.filter((t) => t.workspaceId === workspaceId);
@@ -40,14 +41,32 @@ export function workspaceName(workspace: Pick<WorkspaceView, "label" | "number">
   return workspace.label || `Workspace ${workspace.number}`;
 }
 
-/** The pane a workspace is when it holds exactly one, which its page opens straight onto. */
-export function soloPane(
-  workspaceId: string,
-  agents: readonly AgentView[],
-  shellPanes: readonly AgentView[],
-): AgentView | undefined {
-  const panes = [...agents, ...shellPanes].filter((p) => p.workspaceId === workspaceId);
-  return panes.length === 1 ? panes[0] : undefined;
+/** What {@link workspaceEntry} reads from the snapshot. */
+export interface Herd {
+  workspaces: readonly WorkspaceView[];
+  tabs: readonly TabView[];
+  agents: readonly AgentView[];
+  shellPanes?: readonly AgentView[];
+}
+
+/**
+ * The pane a workspace opens on, the same from every place that opens one: the agent asking for you
+ * (the latest to ask), else the pane you had open last, else the first in the tab Herdr shows, else
+ * its first pane. Undefined for a workspace with no pane.
+ */
+export function workspaceEntry(workspaceId: string, herd: Herd): AgentView | undefined {
+  const shellPanes = herd.shellPanes ?? [];
+  // The pane with the highest stamp; the first in snapshot order on a tie.
+  const latest = (panes: AgentView[], at: (pane: AgentView) => number) =>
+    panes.reduce<AgentView | undefined>((best, pane) => (!best || at(pane) > at(best) ? pane : best), undefined);
+  const asking = herd.agents.filter((pane) => pane.workspaceId === workspaceId && pane.status === "blocked");
+  const seen = [...herd.agents, ...shellPanes].filter((pane) => pane.workspaceId === workspaceId && (pane.lastSeenAt ?? 0) > 0);
+  const groups = groupPanesByTab(workspaceId, herd.tabs, herd.agents, shellPanes);
+  const active = herd.workspaces.find((workspace) => workspace.workspaceId === workspaceId)?.activeTabId;
+  return latest(asking, (pane) => pane.lastActiveAt ?? 0)
+    ?? latest(seen, (pane) => pane.lastSeenAt ?? 0)
+    ?? groups.find((group) => group.tabId === active)?.panes[0]
+    ?? groups.find((group) => group.panes.length > 0)?.panes[0];
 }
 
 /**
@@ -58,23 +77,6 @@ export function tabName(label: string, position: number): string {
   const trimmed = label.trim();
   if (!trimmed) return `Tab ${position}`;
   return /^\d+$/.test(trimmed) ? `Tab ${trimmed}` : trimmed;
-}
-
-/** The tab a workspace page shows: the one asked for, else the one Herdr has active, else the first. */
-export function shownTab(groups: readonly TabGroup[], asked: string | null, active: string): TabGroup | undefined {
-  return groups.find((g) => g.tabId === asked) ?? groups.find((g) => g.tabId === active) ?? groups[0];
-}
-
-/** The folder a workspace works in: the directory most of its panes sit in, the first such on a tie. */
-export function workspaceFolder(panes: readonly AgentView[]): string | undefined {
-  const counts = new Map<string, number>();
-  for (const p of panes) if (p.cwd) counts.set(p.cwd, (counts.get(p.cwd) ?? 0) + 1);
-  let folder: string | undefined;
-  let most = 0;
-  for (const [cwd, n] of counts) {
-    if (n > most) [folder, most] = [cwd, n];
-  }
-  return folder;
 }
 
 /** The pane Nenu opens for a tab: its first agent, else its first shell. */

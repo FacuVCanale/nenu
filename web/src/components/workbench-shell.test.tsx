@@ -137,6 +137,46 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
 
+// The operator's `soflex`: an agent in tab "1", a shell in "vpn" they had open last.
+const soflex: HomeData = {
+  ...data,
+  workspaces: [{ workspaceId: "w:2", number: 2, label: "soflex", focused: false, activeTabId: "t-a", tabCount: 2, paneCount: 2 }],
+  tabs: [
+    { tabId: "t-a", workspaceId: "w:2", number: 1, label: "1", focused: false, paneCount: 1 },
+    { tabId: "t-b", workspaceId: "w:2", number: 2, label: "vpn", focused: false, paneCount: 1 },
+  ],
+  agents: [{ paneId: "w:2:rag", workspaceId: "w:2", workspaceLabel: "soflex", workspaceNumber: 2, tabId: "t-a", agent: "claude", status: "working", cwd: "/dev/soflex", focused: false, paneLabel: "RAG" }],
+  shellPanes: [{ paneId: "w:2:vpn", workspaceId: "w:2", workspaceLabel: "soflex", workspaceNumber: 2, tabId: "t-b", agent: "shell", kind: "shell", status: "idle", cwd: "/dev/soflex", focused: false, lastSeenAt: 5 }],
+};
+const soflexPane = "/pane/w%3A2%3Avpn?s=work";
+
+it("opens a workspace on the same pane from the sidebar, search and the collapsed rail", async () => {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
+  onTestFinished(() => { window.matchMedia = matchMedia; });
+  const { sidebar, user, router } = setup(soflex);
+  const workspaces = () => within(sidebar.getByRole("region", { name: "Workspaces" }));
+  expect(workspaces().getByRole("link", { name: /^soflex/ })).toHaveAttribute("href", soflexPane);
+
+  await user.keyboard("{Meta>}k{/Meta}");
+  await user.type(sidebar.getByRole("searchbox"), "sof");
+  expect(workspaces().getByRole("link", { name: /^soflex/ })).toHaveAttribute("href", soflexPane);
+  await user.click(workspaces().getByRole("link", { name: /^soflex/ }));
+  expect(router.state.location.pathname + router.state.location.search).toBe(soflexPane);
+
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
+  expect(rail.getByRole("link", { name: "soflex" })).toHaveAttribute("href", soflexPane);
+});
+
+it("opens a workspace on the same pane from the phone's Browse", async () => {
+  const { user, router } = setup(soflex);
+  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
+  const sheet = within(screen.getByRole("dialog", { name: "Navigation" }));
+  await user.click(sheet.getByRole("link", { name: /^soflex/ }));
+  expect(router.state.location.pathname + router.state.location.search).toBe(soflexPane);
+});
+
 it("keeps desktop reopening outside the composer region and preserves the mounted draft", async () => {
   const { sidebar, user } = setup();
   const draft = screen.getByRole("textbox", { name: "Draft" });

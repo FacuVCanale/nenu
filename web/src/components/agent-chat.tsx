@@ -70,8 +70,8 @@ import { type MenuBlockAction } from "@/components/menu-block";
 import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
 import { setMirrorShown } from "@/lib/live-events";
-import { historyPath, projectPath, spacePath } from "@/lib/nav";
-import { paneInTab, soloPane } from "@/lib/spaces";
+import { historyPath, projectPath } from "@/lib/nav";
+import { paneInTab } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
@@ -758,11 +758,11 @@ export function AgentChat({
     if (target) switchTo(target.paneId);
   }
 
-  // Open a space from the nav hub — go to its detail route (its tabs + panes, incl. shells). A step
-  // back up out of the pane, so it slides backward.
-  function openSpace(workspaceId: string) {
+  // A project pane's title opens the project's page. A workspace has no page of its own: its tabs
+  // and panes are the strips above the conversation.
+  function openProject(slug: string) {
     closeDrawer();
-    navigate(project ? projectPath(project.slug, session) : spacePath(workspaceId, session));
+    navigate(projectPath(slug, session));
   }
 
   // Tapping the terminal mirror focuses the composer so you can start typing right away. Three bails:
@@ -843,8 +843,6 @@ export function AgentChat({
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
   /> : undefined;
 
-  // A workspace of only this pane opens straight back onto it, so the title has no overview to open.
-  const titleOpensOverview = !!agent && (!!project || !soloPane(agent.workspaceId, agents, shellPanes));
   const titleLabel = agent && <>
     {isShell
       ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -897,13 +895,13 @@ export function AgentChat({
           ) : headerAction
         }
       >
-        {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. Tapping
-            it opens the workspace overview (all its tabs + panes), unless this pane is all there is. */}
-        {agent ? (titleOpensOverview ? (
+        {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. In a
+            project, tapping it opens the project's page. */}
+        {agent ? (project ? (
           <button
             type="button"
-            onClick={() => openSpace(agent.workspaceId)}
-            aria-label={`Open ${project?.name ?? agent.workspaceLabel} overview`}
+            onClick={() => openProject(project.slug)}
+            aria-label={`Open ${project.name} overview`}
             className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
           >
             {titleLabel}
