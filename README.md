@@ -264,6 +264,21 @@ phone makes no extra polling requests and does not wait for the conversation his
 provider-reported, with their observation time and reset times in the usage popover. Claude versions
 or accounts that omit a limit leave it unavailable; Nenu never estimates account limits from tokens.
 
+### Knowing whether an agent is working
+
+Nenu reads each agent's own record of its turn: Claude's per-process session file
+(`~/.claude/sessions/<pid>.json`, plus its transcript while busy) and Codex's rollout file. The phone's
+Stop button and the Stop action both follow it, so Stop works with a custom Claude status line, and it
+stays hidden while only a background agent runs (Escape would not reach it). Nothing needs installing.
+
+Optional: Claude hooks make the bridge re-read that state the moment Claude reports an event. Install
+them with `herdr plugin action invoke claude-hooks --plugin herdr.collie` and remove them with
+`herdr plugin action invoke claude-hooks-remove --plugin herdr.collie`. The installer only touches
+Nenu's own `type: "http"` hooks in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), backs up the
+file first (`settings.json.nenu-hooks-backup-<time>`), keeps every other hook and setting, and running
+it twice changes nothing. Hooks never allow, deny or block anything, and only new Claude sessions
+load them.
+
 For background Claude sessions, subagent lifecycle hooks are matched to the live runtime's native
 start time. Long tools stay running without a two-minute activity timeout; restarting the parent
 cannot revive children from its previous process. If that runtime cannot be verified, stale children
