@@ -30,6 +30,7 @@ export interface Page {
   evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<T>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   clock: { install(opts: { time: number }): Promise<void> };
+  keyboard: { press(key: string): Promise<void> };
   waitForTimeout(ms: number): Promise<void>;
   close(): Promise<void>;
 }
