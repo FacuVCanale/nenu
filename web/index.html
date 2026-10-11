@@ -17,7 +17,12 @@
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Opaque, not black-translucent: on iOS 26 and later a home-screen app drawn under the status
+         bar is laid out one status bar short of the bottom edge (other PWAs report the same, and no
+         CSS reaches the band), which left the composer ~60pt above the home indicator. iOS reads
+         this tag when the app is added to the Home Screen, so an installed Nenu keeps its old bar
+         until it is removed and added again. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Nenu" />
     <title>Nenu</title>
     <!-- The web manifest <link> is injected by vite-plugin-pwa at build time. -->
