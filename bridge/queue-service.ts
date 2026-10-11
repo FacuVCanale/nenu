@@ -106,6 +106,7 @@ export class QueueService {
     if (!live) return { wait: "disconnected" };
     if (live !== row.conversation)
       return { stranded: "The conversation in this pane changed. Send it here or remove it." };
+    if (row.held !== undefined) return { wait: "stopped" };
     const mode = effectiveMode(row);
     if (mode === "afterTurn" && !this.turnStarted(row.scope, current.pane)) return { wait: "turn-start" };
     const readiness = await queueReadiness(current.pane, current.herdr, mode);
@@ -194,6 +195,14 @@ export class QueueService {
         }
       }),
     );
+  }
+  /**
+   * After a Stop (ADR 0065): what Nenu still holds for the pane's conversation waits for the operator
+   * instead of going when the agent turns idle. Answers how many rows it parked.
+   */
+  async holdAfterStop(session: string, paneId: string): Promise<number> {
+    const current = await this.resolve(session, paneId);
+    return current && identity(current.pane) ? this.queue.hold(scopeFor(session, current.pane)) : 0;
   }
   async handle(
     req: Request,

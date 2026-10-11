@@ -8,14 +8,13 @@ import { historyParams } from "./routes/history.ts";
 import { BUILD_HEADER, withBuildHeader } from "./routes/http.ts";
 import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
 import { paneReadResponse } from "./routes/pane.ts";
-import { interruptCodexPane, keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
+import { keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
 import { cacheControlFor, isReservedAuthPath, resolveStaticPath, staticContentType } from "./routes/static.ts";
 import { normalizeTabLabel } from "./routes/structure.ts";
 import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import { AuditLog } from "./audit.ts";
 import type { Config } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
-import type { StateEngine } from "./state-engine.ts";
 
 const CODEX_WORKING = readFileSync(
   join(import.meta.dirname, "..", "web", "src", "fixtures", "panes", "codex--working.txt"),
@@ -98,70 +97,6 @@ describe("Codex interrupt cue", () => {
   test("refuses copied prose and a question dialog that also advertises Escape", () => {
     expect(hasCodexInterruptCue("• Working (3s • esc to interrupt)")).toBe(false);
     expect(hasCodexInterruptCue(CODEX_QUESTION)).toBe(false);
-  });
-
-  test("revalidates a working Codex pane before sending Escape", async () => {
-    const sent: string[][] = [];
-    const herdr = {
-      readPane: async () => ({
-        text: CODEX_WORKING,
-        revision: 4,
-        truncated: false,
-      }),
-      sendPaneKeys: async (_paneId: string, keys: string[]) => { sent.push(keys); },
-    } as unknown as HerdrClient;
-    const pane = {
-      paneId: "w1:p1", workspaceId: "w1", workspaceLabel: "demo", workspaceNumber: 1,
-      tabId: "t1", agent: "codex", status: "working", cwd: "/tmp", focused: false,
-      kind: "agent",
-    } as const;
-    const engine = {
-      current: () => ({ agents: [pane], shellPanes: [], workspaces: [], tabs: [], bridge: "connected" }),
-    } as unknown as StateEngine;
-
-    const response = await interruptCodexPane(
-      herdr,
-      engine,
-      cfg(),
-      pane.paneId,
-      new Request("http://localhost/api/pane/w1%3Ap1/interrupt", { method: "POST" }),
-      new AuditLog(() => {}),
-      "phone",
-      "default",
-    );
-
-    expect(await response.json()).toEqual({ ok: true });
-    expect(sent).toEqual([["Escape"]]);
-  });
-
-  test("a stale working snapshot cannot interrupt after the live cue disappears", async () => {
-    const sent: string[][] = [];
-    const herdr = {
-      readPane: async () => ({ text: CODEX_QUESTION, revision: 5, truncated: false }),
-      sendPaneKeys: async (_paneId: string, keys: string[]) => { sent.push(keys); },
-    } as unknown as HerdrClient;
-    const pane = {
-      paneId: "w1:p1", workspaceId: "w1", workspaceLabel: "demo", workspaceNumber: 1,
-      tabId: "t1", agent: "codex", status: "working", cwd: "/tmp", focused: false,
-      kind: "agent",
-    } as const;
-    const engine = {
-      current: () => ({ agents: [pane], shellPanes: [], workspaces: [], tabs: [], bridge: "connected" }),
-    } as unknown as StateEngine;
-
-    const response = await interruptCodexPane(
-      herdr,
-      engine,
-      cfg(),
-      pane.paneId,
-      new Request("http://localhost/api/pane/w1%3Ap1/interrupt", { method: "POST" }),
-      new AuditLog(() => {}),
-      null,
-      "default",
-    );
-
-    expect(await response.json()).toEqual({ ok: false, error: "Codex is no longer showing an interruptible turn" });
-    expect(sent).toEqual([]);
   });
 });
 

@@ -422,6 +422,15 @@ export type ActionResponse =
       requestId?: string;
     };
 
+/**
+ * POST /api/pane/:id/interrupt — Stop (ADR 0065). `pressed: false` is a Stop inside another one's
+ * cooldown: nothing was sent, the first Escape is doing the work. `queued` says what the key did to the
+ * CLI's own queue; `held` counts the rows Nenu parked until the operator sends them.
+ */
+export type InterruptResponse =
+  | { ok: true; pressed: boolean; queued: "sends" | "returns" | null; held: number }
+  | { ok: false; error: string; code: "confirm_required" | "not_running" | "busy" | "unsupported" | "failed" };
+
 export type UploadResponse = { ok: true; path: string } | { ok: false; error: string };
 
 /** A freshly-created shell pane — enough to navigate into before the next poll lands. */
@@ -667,7 +676,7 @@ export type SendOutcome =
     };
 
 /** Why a queued row is still waiting (mirrors bridge/types.ts). */
-export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected";
+export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected" | "stopped";
 
 /** What the CLI's own queue did with a delivered row. */
 export type NativeQueueState = "enqueued" | "absorbed" | "recalled";

@@ -389,6 +389,15 @@ export type ActionResponse =
       requestId?: string;
     };
 
+/**
+ * POST /api/pane/:id/interrupt — Stop (ADR 0065). `pressed: false` is a Stop inside another one's
+ * cooldown: nothing was sent, the first Escape is doing the work. `queued` says what the key did to the
+ * CLI's own queue; `held` counts the rows Nenu parked until the operator sends them.
+ */
+export type InterruptResponse =
+  | { ok: true; pressed: boolean; queued: "sends" | "returns" | null; held: number }
+  | { ok: false; error: string; code: "confirm_required" | "not_running" | "busy" | "unsupported" | "failed" };
+
 /** POST /api/pane/:id/upload — image saved to a host file; `path` is the absolute path to ref. */
 export type UploadResponse = { ok: true; path: string } | { ok: false; error: string };
 
@@ -642,8 +651,9 @@ export type SendOutcome =
 
 // ── Queue rows: the fields the delivery rework adds ────────────────────────────────────────────────
 
-/** Why a queued row is still waiting; shown to the operator, never written as a revision bump. */
-export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected";
+/** Why a queued row is still waiting. `stopped` mirrors the row's stored `held`; the others live in
+ *  memory and are never written as a revision bump. */
+export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected" | "stopped";
 
 /** What the CLI's own queue did with a delivered row, read from its journal. */
 export type NativeQueueState = "enqueued" | "absorbed" | "recalled";

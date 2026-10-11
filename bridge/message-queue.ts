@@ -27,6 +27,8 @@ export interface QueuedMessage {
   native?: NativeQueueState;
   /** When the operator had the CLI read it now. The keys go once; a repeat presses nothing. */
   readNowAt?: number;
+  /** When a Stop parked it (ADR 0065). It goes only when the operator sends it. */
+  held?: number;
   device: string | null;
 }
 export type QueueOutcome = {
@@ -146,7 +148,7 @@ export class MessageQueue {
   }
   /** One row as the wire shows it, with why it waits. */
   private view(row: QueuedMessage) {
-    const waitingFor = this.waiting.get(row.id);
+    const waitingFor: QueueWaitReason | undefined = row.held !== undefined ? "stopped" : this.waiting.get(row.id);
     return { ...row, ...(waitingFor && row.state === "queued" ? { waitingFor } : {}) };
   }
   /**
@@ -273,12 +275,35 @@ export class MessageQueue {
         row.state = "queued";
         row.error = undefined;
         row.sendNow = action === "send";
+        if (action === "send") row.held = undefined;
         row.revision++;
       }
       return { ...row };
     });
     this.forget(row.id);
     this.notify(row);
+  }
+  /**
+   * Park every row of `scope` still waiting to be typed, after a Stop (ADR 0065): delivery passes over
+   * it until the operator sends it, and a "Send now" tapped before the Stop is withdrawn with the rest.
+   * Answers how many rows it parked.
+   */
+  async hold(scope: string): Promise<number> {
+    const rows = await this.mutate(() =>
+      this.rows
+        .filter((row) => row.scope === scope && row.state === "queued" && row.held === undefined && !row.stranded)
+        .map((row) => {
+          row.held = this.now();
+          row.sendNow = false;
+          row.revision++;
+          return { ...row };
+        }),
+    );
+    for (const row of rows) {
+      this.forget(row.id);
+      this.notify(row);
+    }
+    return rows.length;
   }
   /** Record what the CLI's own queue did with a row; a paused row the journal confirms becomes sent. */
   async confirm(id: string, native: NativeQueueState) {
@@ -360,7 +385,9 @@ export class MessageQueue {
     { force = false, exclusive = (_row, operation) => operation().then((value) => ({ busy: false as const, value })) }: TickOptions,
   ): Promise<boolean> {
     const candidates = this.rows.filter((row) => row.scope === scope && row.state !== "sent");
-    const head = candidates.find((row) => row.sendNow) ?? candidates[0];
+    // Held rows wait for the operator, not in line: later rows pass them. A scope of only held rows
+    // still has its head assessed, so a pane that closes strands them where the operator sees them.
+    const head = candidates.find((row) => row.sendNow) ?? candidates.find((row) => row.held === undefined) ?? candidates[0];
     if (!head || head.state !== "queued") return false;
     const now = this.now();
     if (head.stranded && head.stranded.since < now - STRANDED_TTL_MS) {

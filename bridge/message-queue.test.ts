@@ -416,3 +416,43 @@ test("until answers on the row's first move, or at the deadline", async () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(45);
   });
 });
+test("a Stop holds what waits: nothing goes on its own, later rows pass it, and Send releases one", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-queue-"));
+  try {
+    let queue = new MessageQueue(join(dir, "queue.json"));
+    await queue.add(row);
+    await queue.add({ ...row, id: "two", text: "Second" });
+    expect(await queue.hold("scope")).toBe(2);
+    // Held survives a restart, and reads as the reason it waits.
+    queue = new MessageQueue(join(dir, "queue.json"));
+    expect((await queue.list("scope")).map((item) => item.waitingFor)).toEqual(["stopped", "stopped"]);
+    const sent: string[] = [];
+    const send = async (item: { id: string }) => {
+      sent.push(item.id);
+      return { status: "sent" as const };
+    };
+    const verdict = async (item: { held?: number }): Promise<Verdict<true>> => (item.held !== undefined ? { wait: "stopped" } : { ready: true });
+    await queue.tick(verdict, send, { force: true });
+    expect(sent).toEqual([]);
+    // A message queued after the Stop is not stuck behind the held ones.
+    await queue.add({ ...row, id: "three", text: "After the stop" });
+    await queue.tick(verdict, send, { force: true });
+    expect(sent).toEqual(["three"]);
+    // Editing keeps it held; Send lets that one row go.
+    const [first] = await queue.list("scope");
+    await queue.change("scope", first!.id, first!.revision, "edit", "Edited");
+    await queue.tick(verdict, send, { force: true });
+    expect(sent).toEqual(["three"]);
+    const [edited] = await queue.list("scope");
+    await queue.change("scope", edited!.id, edited!.revision, "send");
+    await queue.tick(verdict, send, { force: true });
+    expect(sent).toEqual(["three", "one"]);
+    expect((await queue.list("scope")).map((item) => [item.id, item.waitingFor])).toEqual([["two", "stopped"]]);
+    // A second Stop does not re-hold rows already held, and never touches other scopes.
+    await queue.add({ ...row, id: "other", scope: "elsewhere", text: "Other pane" });
+    expect(await queue.hold("scope")).toBe(0);
+    expect((await queue.list("elsewhere"))[0]!.waitingFor).toBeUndefined();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
