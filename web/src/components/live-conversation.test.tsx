@@ -7,7 +7,7 @@ import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { LiveConversation } from "./live-conversation";
 import { fetchHistory } from "@/lib/api";
 import { TranscriptView } from "./transcript-view";
-import { addLocalSend, localSendScope } from "@/lib/local-sends";
+import { addLocalSend, localSendScope, updateLocalSend } from "@/lib/local-sends";
 
 vi.mock("@/lib/api", () => ({ fetchHistory: vi.fn() }));
 vi.mock("@/components/transcript-view", async (original) => {
@@ -262,5 +262,25 @@ describe("LiveConversation — pending bubbles", () => {
     rerender(<LiveConversation paneId="w1:p1" history={history([...fixtureTranscript, { uuid: "t9", ts: "2026-07-25T06:30:00.000Z", role: "user", parts: [{ kind: "text", text: "ship it" }] }])} loading={false} error={false} />);
     await waitFor(() => expect(screen.queryByText("Sending…")).not.toBeInTheDocument());
     expect(screen.getAllByText("ship it")).toHaveLength(1);
+  });
+
+  // Stop already counts a delivered message as a turn (use-stop-turn's awaitingTurn); the chat waited
+  // for the journal row AND Herdr's status before it said Working….
+  it("says Working… under a message the agent received, before the journal or Herdr shows the turn", async () => {
+    const scope = localSendScope("w1:p2", undefined);
+    const answered: TranscriptEntry[] = [fixtureTranscript[0]!, { ...fixtureTranscript[1]!, phase: "final_answer" }];
+    const view = (entries: TranscriptEntry[], activityStatus: "idle" | "working") =>
+      <LiveConversation paneId="w1:p2" history={{ paneId: "w1:p2", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false }}
+        activityStatus={activityStatus} loading={false} error={false} />;
+    const { rerender } = render(view(answered, "idle"));
+    let queued = "";
+    act(() => { queued = addLocalSend(scope, "after this turn", "queued"); });
+    expect(screen.queryByText("Working…")).not.toBeInTheDocument();
+    act(() => { updateLocalSend(scope, queued, { state: "sent" }); });
+    expect(await screen.findByText("Working…")).toBeInTheDocument();
+
+    rerender(view([...answered, { uuid: "t9", ts: "", role: "user", parts: [{ kind: "text", text: "after this turn" }] }], "working"));
+    await waitFor(() => expect(screen.getAllByText("after this turn")).toHaveLength(1));
+    expect(screen.getAllByText("Working…")).toHaveLength(1);
   });
 });
