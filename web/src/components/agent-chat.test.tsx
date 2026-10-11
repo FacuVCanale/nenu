@@ -116,14 +116,13 @@ describe("AgentChat — reply flow", () => {
   });
 });
 
-// Echoes the space passed via navigation state, so a test can assert the header lands on the space
-// overview ("/") for the right workspace.
-function SpaceOverviewSentinel() {
-  const { spaceId } = useParams();
-  return <div>overview:{spaceId ?? "none"}</div>;
+// Echoes the project a title tap opened.
+function ProjectSentinel() {
+  const { projectSlug } = useParams();
+  return <div>project:{projectSlug ?? "none"}</div>;
 }
 
-/** A shell in another tab of fixtureAgents[0]'s workspace, so the workspace overview has more to show. */
+/** A shell in another tab of fixtureAgents[0]'s workspace, so the workspace holds more than this pane. */
 const neighbourShell = { ...fixtureAgents[0]!, paneId: "w1:shell", tabId: "w1:t9", kind: "shell" as const, agent: "shell", status: "idle" as const };
 
 describe("AgentChat — header title block", () => {
@@ -133,21 +132,28 @@ describe("AgentChat — header title block", () => {
     expect(screen.getByText("~/webapp")).toBeInTheDocument(); // directory on the subline
     // The agent is conveyed by its icon (aria-label only), so its name isn't repeated as text.
     expect(screen.queryByText(/claude/i)).toBeNull();
-    expect(screen.getByRole("button", { name: /open webapp overview/i })).toBeInTheDocument();
   });
 
-  it("opens the space overview (all tabs + panes) when the title block is tapped", async () => {
+  // A workspace has no page: its tabs and panes are the strips above the conversation.
+  it("opens nothing from a workspace pane's title, however many panes the workspace holds", () => {
+    renderChat({ shellPanes: [neighbourShell] });
+    expect(screen.getByText("webapp")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
+  });
+
+  it("opens the project's page from a project pane's title", async () => {
     const user = userEvent.setup();
-    const agent = fixtureAgents[0]!; // workspaceId w1
+    const agent = fixtureAgents[0]!;
     const router = createMemoryRouter(
       [
-        { path: "/space/:spaceId", element: <SpaceOverviewSentinel /> },
+        { path: "/project/:projectSlug", element: <ProjectSentinel /> },
         {
           path: "/pane/:paneId",
           element: (
             <AgentChat
               paneId={agent.paneId}
               agent={agent}
+              project={{ slug: "shop", name: "Shop", role: "coordinator" }}
               agents={fixtureAgents}
               shellPanes={[neighbourShell]}
               tabs={[]}
@@ -162,15 +168,8 @@ describe("AgentChat — header title block", () => {
     );
     render(<RouterProvider router={router} />);
 
-    await user.click(screen.getByRole("button", { name: /open webapp overview/i }));
-    expect(await screen.findByText("overview:w1")).toBeInTheDocument();
-  });
-
-  // The overview of a workspace holding only this pane opens straight back onto it.
-  it("offers no overview when the workspace holds only this pane", () => {
-    renderChat();
-    expect(screen.getByText("webapp")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Open Shop overview" }));
+    expect(await screen.findByText("project:shop")).toBeInTheDocument();
   });
 });
 
@@ -635,8 +634,9 @@ describe("AgentChat — shared header: stale-status dimming", () => {
         <AgentChat
           paneId={agent.paneId}
           agent={agent}
+          project={{ slug: "shop", name: "Shop", role: "coordinator" }}
           agents={fixtureAgents}
-          shellPanes={[neighbourShell]}
+          shellPanes={[]}
           tabs={[]}
           text="out"
           error={error}

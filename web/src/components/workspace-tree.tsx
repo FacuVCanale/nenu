@@ -4,8 +4,9 @@ import { ChevronRight, LayoutGrid, Terminal } from "lucide-react";
 
 import { StatusDot } from "@/components/status-badge";
 import { panePath, workspacePath } from "@/lib/nav";
+import type { Herd } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
-import { defaultOpen, paneSubject, workspaceTree, type TabBranch, type TreeSource, type WorkspaceBranch } from "@/lib/workspace-tree";
+import { defaultOpen, paneSubject, workspaceTree, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
 import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
 
 /** Only states worth reading at a glance get a word; a resting pane keeps its hollow dot. */
@@ -14,7 +15,7 @@ const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-statu
 
 /** The herd as Herdr holds it: each workspace, its tabs, and a tab's panes when it has several. */
 export function WorkspaceTree({ source, query, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false }: {
-  source: TreeSource;
+  source: Herd;
   query: string;
   session?: string;
   currentPaneId?: string;
@@ -24,7 +25,7 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   onNavigate?: () => void;
   /** Shown instead when nothing is left to list. */
   empty?: ReactNode;
-  /** The sidebar's one-line workspace rows: the name opens the space, the chevron folds its panes. */
+  /** The sidebar's one-line workspace rows: the name opens the workspace's pane, the chevron folds its panes. */
   compact?: boolean;
 }) {
   const searching = query.trim() !== "";

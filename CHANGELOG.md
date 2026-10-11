@@ -8,6 +8,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-10-11
+
+### Changed
+- A workspace has no page. The sidebar, search, the rail, the phone's Browse and an old `/space/:id` link all open the same pane: the agent asking for you, else the one you had open last, else the active tab's. Its tabs and panes are the strips above the chat, and a workspace pane's title no longer opens an overview. (35a0956, c4cb3c3)
+- On a desk every page (Home, a project, a node, Settings) starts on the header's gutter in one column, 760px growing to 960px on a large screen; every header is the same 52px bar, and a chat's composer takes the conversation's width. Settings no longer boxes its header into a narrow strip. The phone is unchanged. (ba9eb62, c4cb3c3)
+
+### Added
+- A workspace with no pane shows an empty chat that starts an agent or a shell. (35a0956)
+- `bun scripts/e2e/run.ts workspace` opens each workspace from every way in; `layout` captures every page at 1280, 1440 and 1920 (sidebar open and folded), 900 and 390. (096d3ba, c4cb3c3)
+
+### Removed
+- The workspace page, and `bun scripts/e2e/run.ts space`. (35a0956, 096d3ba)
+
 ## [0.61.0] - 2026-10-11
 
 ### Changed

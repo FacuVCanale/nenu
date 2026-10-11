@@ -1,13 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider, useParams } from "react-router";
-import { http, HttpResponse } from "msw";
 import { vi } from "vitest";
 
-import { server } from "@/test/setup";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { AgentView, TabView, WorkspaceView } from "@/lib/types";
-import { __resetShownTabs } from "@/components/space-view";
 import { SpaceRoute } from "./space";
 
 const openNewAgent = vi.fn();
@@ -48,53 +45,29 @@ function setup(path: string, initial: HomeData) {
   return { router, user: userEvent.setup(), setData: (next: HomeData) => { current = next; } };
 }
 
-// Two workspaces: `nenu` with three tabs (Herdr's active one is `review`), and `api` holding one pane.
+// `nenu` holds three tabs (Herdr's active one is `review`), `api` one pane and `empty` none.
 const herd = home({
-  workspaces: [workspace("w1", "nenu", "w1:t2"), workspace("w2", "api", "w2:t1")],
+  workspaces: [workspace("w1", "nenu", "w1:t2"), workspace("w2", "api", "w2:t1"), workspace("w3", "empty", "")],
   tabs: [tab("w1:t1", "redesign"), tab("w1:t2", "review"), tab("w1:t3", "3"), tab("w2:t1", "1")],
   agents: [
-    pane("w1:a", "w1:t1", { paneLabel: "Landing", status: "working", terminalTitle: "Reviewing the diff", lastActiveAt: Date.now() - 3 * 60_000 }),
-    pane("w1:b", "w1:t2", { paneLabel: "Review PR", cwd: "/home/you/nenu/worktrees/pr" }),
+    pane("w1:a", "w1:t1", { status: "working" }),
+    pane("w1:b", "w1:t2"),
     pane("w2:solo", "w2:t1"),
   ],
   shellPanes: [pane("w1:s", "w1:t3", { kind: "shell", agent: "shell" })],
 });
 
-beforeEach(() => __resetShownTabs());
-
-it("lists only this workspace's tabs, opens on Herdr's active one, and switches without an All filter", async () => {
-  const { router, user } = setup("/space/w1", herd);
-  expect(await screen.findByRole("heading", { name: "nenu" })).toBeInTheDocument();
-  expect(screen.getByText("~/nenu")).toBeInTheDocument();
-
-  const tabs = within(screen.getByRole("group", { name: "Tabs" }));
-  expect(tabs.getAllByRole("button").map((b) => b.lastChild?.textContent)).toEqual(["redesign", "review", "Tab 3"]);
-  expect(screen.queryByRole("button", { name: "All" })).toBeNull();
-  // The other workspace is the sidebar's to list, not this page's.
-  expect(screen.queryByText("api", { selector: "main *" })).toBeNull();
-
-  // Herdr's active tab is on screen, and a pane outside the workspace folder says where it sits.
-  const review = within(screen.getByRole("list", { name: "review panes" }));
-  expect(review.getByRole("link", { name: /Review PR/ })).toHaveAttribute("href", "/pane/w1%3Ab");
-  expect(review.getByText("claude · idle · ~/nenu/worktrees/pr")).toBeInTheDocument();
-
-  await user.click(tabs.getByRole("button", { name: /redesign/ }));
-  const redesign = within(screen.getByRole("list", { name: "redesign panes" }));
-  expect(redesign.getByText("claude · working · Reviewing the diff")).toBeInTheDocument();
-  expect(redesign.getByText("3m")).toBeInTheDocument();
-  // A tab switch is not a navigation: it shows at once, with no snapshot read in between.
-  expect(router.state.location.search).toBe("");
+it("opens the pane a workspace opens on everywhere, replacing the workspace link in history", async () => {
+  const { router } = setup("/space/w1", herd);
+  expect(await screen.findByText("pane:w1:b")).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/pane/w1%3Ab");
+  expect(router.state.historyAction).toBe("REPLACE");
 });
 
-it("opens a pane's chat from its row, and Back returns to the tab it was in", async () => {
-  const { router, user } = setup("/space/w1", herd);
-  await user.click(await screen.findByRole("button", { name: /Tab 3/ }));
-  await user.click(screen.getByRole("link", { name: /shell/ }));
-  expect(await screen.findByText("pane:w1:s")).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe("/pane/w1%3As");
-
-  await router.navigate(-1);
-  expect(await screen.findByRole("list", { name: "Tab 3 panes" })).toBeInTheDocument();
+it("opens the agent asking for you, wherever it sits", async () => {
+  const { router } = setup("/space/w1", { ...herd, agents: herd.agents.map((a) => a.paneId === "w1:a" ? { ...a, status: "blocked" as const } : a) });
+  expect(await screen.findByText("pane:w1:a")).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/pane/w1%3Aa");
 });
 
 it("opens a workspace that holds a single pane straight onto it", async () => {
@@ -103,26 +76,21 @@ it("opens a workspace that holds a single pane straight onto it", async () => {
   expect(router.state.location.pathname).toBe("/pane/w2%3Asolo");
 });
 
-it("starts a new tab in this workspace", async () => {
-  const { user } = setup("/space/w1", herd);
-  await user.click(await screen.findByRole("button", { name: "New tab" }));
-  expect(openNewAgent).toHaveBeenCalledWith({ kind: "tab", workspaceId: "w1" });
+it("shows a workspace without a pane as an empty chat that starts one", async () => {
+  const { user } = setup("/space/w3", herd);
+  expect(await screen.findByText("Nothing runs in this workspace yet.")).toBeInTheDocument();
+  expect(screen.getByText("empty")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Start an agent or a shell" }));
+  expect(openNewAgent).toHaveBeenCalledWith({ kind: "tab", workspaceId: "w3" });
 });
 
-it("moves to the tab beside the one it closes", async () => {
-  let closed = "";
-  server.use(http.post(/\/api\/tab\/[^/]+\/close$/, ({ request }) => {
-    closed = decodeURIComponent(new URL(request.url).pathname.split("/")[3]!);
-    return HttpResponse.json({ ok: true });
-  }));
-  const { user, setData } = setup("/space/w1", herd);
-  await user.click(within(await screen.findByRole("group", { name: "Tabs" })).getByRole("button", { name: /review/ }));
-  await user.click(screen.getByRole("button", { name: "review actions" }));
-  await user.click(screen.getByRole("button", { name: "Close tab" }));
-  setData({ ...herd, tabs: herd.tabs.filter((t) => t.tabId !== "w1:t2"), agents: herd.agents.filter((a) => a.tabId !== "w1:t2") });
-  await user.click(screen.getByRole("button", { name: /^Tap again to close/ }));
+it("offers nothing to start on a read-only device", async () => {
+  setup("/space/w3", { ...herd, device: { enforced: true, device: "spare-phone", authorized: false } });
+  expect(await screen.findByText("Nothing runs in this workspace yet.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Start an agent or a shell" })).toBeNull();
+});
 
-  expect(await screen.findByRole("list", { name: "redesign panes" })).toBeInTheDocument();
-  expect(closed).toBe("w1:t2");
-  expect(within(screen.getByRole("group", { name: "Tabs" })).queryByRole("button", { name: /review/ })).toBeNull();
+it("goes Home from a workspace Herdr no longer has", async () => {
+  setup("/space/w9", herd);
+  expect(await screen.findByText("HOME")).toBeInTheDocument();
 });

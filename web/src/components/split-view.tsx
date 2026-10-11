@@ -155,9 +155,9 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
   const onMirrorShown = useCallback((shown: boolean) => setScreenShown(shown), []);
   const readOnly = isReadOnly(data.device);
   const header = ({ terminal, canToggle, setTerminal, find, menu }: DockedHeaderView) => find
-    ? <div className="flex min-h-12 shrink-0 items-center border-b border-border px-3">{find}</div>
+    ? <div className="flex min-h-13 shrink-0 items-center border-b border-border/60 px-3">{find}</div>
     : (
-    <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+    <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-border/60 px-3">
       <NodeDot state={nodeState(thread)} />
       <span className="shrink-0 text-sm font-semibold">{thread.title}</span>
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{subtitle}</span>

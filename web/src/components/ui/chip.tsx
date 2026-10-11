@@ -29,7 +29,7 @@ interface ChipProps {
   onTapActive?: () => void;
 }
 
-// A tab in a quiet underline row, shared by a pane's tab bar and the workspace page: the active tab
+// A tab in a quiet underline row, as in a pane's tab bar: the active tab
 // underlined, a dashed underline for the tab focused in the desktop TUI, and a leading status dot
 // saying what's going on inside. A long-press opens the tab's actions when the parent wires them.
 export function Chip({ label, active, ring, status, onClick, onLongPress, onTapActive }: ChipProps) {
