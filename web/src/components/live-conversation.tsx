@@ -7,6 +7,7 @@ import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
+import { atTail } from "@/hooks/use-auto-scroll";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 
 interface LiveConversationProps {
@@ -53,6 +54,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  // Where the list last stood, set by every pin: only a move up from here is the reader leaving the
+  // tail (see useAutoScroll for why geometry alone can't tell).
+  const lastTop = useRef(0);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
   const anchor = useRef<{ height: number; top: number } | null>(null);
@@ -98,6 +102,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     request.current = null;
   }, []);
 
+  const pin = useCallback((el: HTMLElement) => {
+    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    lastTop.current = el.scrollTop;
+  }, []);
+
   const followLatest = useCallback(() => {
     cancelOlder();
     anchor.current = null;
@@ -108,8 +117,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     setOlderError(false);
     setOlderStopped(false);
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-  }, [cancelOlder]);
+    if (el) pin(el);
+  }, [cancelOlder, pin]);
 
   useEffect(() => {
     if (localSendCount > previousSendCount.current) followLatest();
@@ -147,9 +156,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
       restoreFrame.current = requestAnimationFrame(() => { restoring.current = false; });
     } else if (following.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      pin(el);
     }
-  }, [entries]);
+  }, [entries, pin]);
 
   // Follow viewport/content resizing (including the mobile keyboard) only while at the live tail.
   useEffect(() => {
@@ -157,12 +166,12 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const content = contentRef.current;
     if (!el || !content || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
-      if (following.current) el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      if (following.current) pin(el);
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
-  }, []);
+  }, [pin]);
 
   const onWorkToggle = useCallback((target: HTMLElement) => {
     const el = scrollRef.current;
@@ -182,14 +191,18 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
 
   function onScroll() {
     const el = scrollRef.current;
-    if (!el || restoring.current) return;
-    const atBottom = Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) <= 24;
-    if (atBottom) {
+    if (!el) return;
+    const up = el.scrollTop < lastTop.current;
+    lastTop.current = el.scrollTop;
+    if (restoring.current) return;
+    if (atTail(el)) {
       if (!following.current) followLatest();
-    } else {
+    } else if (up) {
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);
+    } else if (following.current) {
+      pin(el);
     }
   }
 

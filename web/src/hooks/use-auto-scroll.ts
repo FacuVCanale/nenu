@@ -9,8 +9,18 @@ interface UseAutoScrollOptions {
   onAtBottomChange?: (atBottom: boolean) => void;
 }
 
+/** At or past the bottom (an iOS bounce overshoots it), within `offset` px. */
+export function atTail(el: HTMLElement, offset = 24): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= offset;
+}
+
 // Keeps a scroll container pinned to the bottom as content grows, but yields control the moment
 // the user scrolls up to read backscroll (and offers a button to jump back down).
+//
+// Only a move UP leaves the tail. A pin queues a scroll event the browser dispatches a frame later,
+// and output that grows meanwhile makes that event report a gap nobody scrolled; read as the user
+// leaving, it froze the view at the bottom behind the arrow. So `lastTop` keeps where the list last
+// stood, set by every pin, and an event that did not move above it re-pins instead.
 export function useAutoScroll<T extends HTMLElement = HTMLDivElement>(
   options: UseAutoScrollOptions = {},
 ) {
@@ -18,35 +28,42 @@ export function useAutoScroll<T extends HTMLElement = HTMLDivElement>(
   const scrollRef = useRef<T>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const autoScroll = useRef(true);
+  const lastTop = useRef(0);
 
-  const atBottom = useCallback(
-    (el: HTMLElement) => Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) <= offset,
-    [offset],
-  );
+  const pin = useCallback((el: HTMLElement) => {
+    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    lastTop.current = el.scrollTop;
+  }, []);
 
   const pinToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el || !autoScroll.current) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-  }, []);
+    pin(el);
+  }, [pin]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     autoScroll.current = true;
-    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    pin(el);
     setIsAtBottom(true);
     onAtBottomChange?.(true);
-  }, [onAtBottomChange]);
+  }, [onAtBottomChange, pin]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const bottom = atBottom(el);
+    const up = el.scrollTop < lastTop.current;
+    lastTop.current = el.scrollTop;
+    const bottom = atTail(el, offset);
+    if (!bottom && !up) {
+      if (autoScroll.current) pin(el);
+      return;
+    }
     autoScroll.current = bottom;
     setIsAtBottom(bottom);
     onAtBottomChange?.(bottom);
-  }, [atBottom, onAtBottomChange]);
+  }, [offset, onAtBottomChange, pin]);
 
   // Re-pin before paint when new content arrives — opening a pane / switching tabs must land on
   // the live tail without a flash of the oldest scrollback. Yields if the user has scrolled away.
