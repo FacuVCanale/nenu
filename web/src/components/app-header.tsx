@@ -51,7 +51,7 @@ export function AppHeader({
   const connecting = isConnecting({ bridge, error });
   const lost = useConnectionLost(connecting);
   return (
-    <header className="workbench-app-header sticky top-0 z-20 flex min-h-11 shrink-0 items-center gap-1.5 border-b border-border/60 bg-muted px-2 py-0 sm:gap-2 sm:pl-4 sm:pr-2 sm:py-2">
+    <header className="workbench-app-header sticky top-0 z-20 flex min-h-11 shrink-0 items-center gap-1.5 border-b border-border/60 bg-muted px-2 py-0 sm:gap-2 sm:pr-2 sm:py-2 lg:pl-(--page-gutter)">
       {override ?? (
         <>
           {navigation && (

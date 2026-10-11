@@ -486,7 +486,7 @@ async function addSoflex(bridge: TestBridge): Promise<void> {
 
 /**
  * Every page at the widths a desk shows it (1280, 1440 and 1920, the sidebar open and folded) and on
- * a phone, with where the header title and the content column sit in each (layout.json): Home, a
+ * a phone, with the header's height and where its title and the content column sit (layout.json): Home, a
  * project, a node, Settings, a workspace and a workspace pane's chat, then a coordinator's chat
  * beside the project panel.
  */
@@ -518,6 +518,7 @@ async function layout(): Promise<void> {
           };
           return {
             path: decodeURIComponent(location.pathname),
+            header: Math.round(document.querySelector(".workbench-app-header")?.getBoundingClientRect().height ?? 0),
             pane: box(document.querySelector(".workbench-main")),
             title: box(document.querySelector(".workbench-app-header .flex-1 > *")),
             column: box(document.querySelector("main > div")),

@@ -53,8 +53,8 @@ export function HomeRoute() {
       <span className="truncate text-sm font-medium">Home</span>
     </AppHeader>
     <ReadOnlyBanner device={data.device} />
-    <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-8 sm:pt-9 xl:px-12">
-      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6 lg:gap-7">
+    <main className="page-body max-sm:pt-2">
+      <div className="page-column flex flex-col gap-6 lg:gap-7">
         <div className="flex flex-col gap-1.5">
           <p className="text-sm text-muted-foreground sm:text-[13px]">
             {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}

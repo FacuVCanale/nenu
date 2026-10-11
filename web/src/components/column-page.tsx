@@ -6,7 +6,7 @@ import { ReadOnlyBanner } from "@/components/read-only-banner";
 import type { HomeData } from "@/lib/loaders";
 import { homePath } from "@/lib/nav";
 
-/** A page of the project family: the shared header with its title, the read-only notice, and one centred column. */
+/** A page of the project family: the shared header with its title, the read-only notice, and the page column under it. */
 export function ColumnPage({ data, title, children }: { data: HomeData; title: string; children: ReactNode }) {
   const navigate = useNavigate();
   return (
@@ -16,8 +16,8 @@ export function ColumnPage({ data, title, children }: { data: HomeData; title: s
         <span className="truncate text-sm font-medium">{title}</span>
       </AppHeader>
       <ReadOnlyBanner device={data.device} />
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-8 sm:pt-12">
-        <div className="mx-auto w-full max-w-2xl">{children}</div>
+      <main className="page-body">
+        <div className="page-column">{children}</div>
       </main>
     </div>
   );
