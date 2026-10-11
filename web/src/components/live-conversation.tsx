@@ -80,6 +80,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   }, [sendScope, liveEntries, localSends]);
   // A new bubble is the operator's own action: bring the tail into view even if they had scrolled up.
   const localSendCount = localSends.length;
+  // A message the agent received starts its turn: say so under it at once, as Stop already does in the
+  // composer, rather than once the journal has the row and Herdr reports working. It stays until the
+  // journal takes the bubble over, or the agent has worked and stopped.
+  const handed = localSends.at(-1);
+  const delivered = handed?.state === "sent" && !handed.native && !handed.unverified ? handed.id : null;
+  const [ranFor, setRanFor] = useState<string | null>(null);
+  useEffect(() => { if (delivered && activityStatus === "working") setRanFor(delivered); }, [delivered, activityStatus]);
+  const turnStarting = !error && !frozen && delivered !== null && (activityStatus === "working" || ranFor !== delivered);
+  const startingLabel = turnStarting && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
   const previousSendCount = useRef(localSendCount);
   useEffect(() => { onMatchCount?.(matches.length); }, [matches.length, onMatchCount]);
   useEffect(() => {
@@ -285,10 +294,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               </div>}
               <TranscriptView entries={entries} query={query}
                 focusedUuid={searching ? entries[matches[currentMatch] ?? -1]?.uuid : undefined}
-                activityStatus={!error && !frozen ? activityStatus : undefined} onWorkToggle={onWorkToggle} />
+                activityStatus={!error && !frozen ? activityStatus : undefined} activityLabel={!turnStarting} onWorkToggle={onWorkToggle} />
               <PendingTurns sends={localSends} actions={localSendActions} />
+              {startingLabel}
               {footer}
-            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && recovery}

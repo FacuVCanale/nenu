@@ -216,11 +216,13 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
   </div>;
 }
 
-export function TranscriptView({ entries, query = "", focusedUuid, activityStatus, onWorkToggle }: {
+export function TranscriptView({ entries, query = "", focusedUuid, activityStatus, activityLabel = true, onWorkToggle }: {
   entries: TranscriptEntry[];
   query?: string;
   focusedUuid?: string;
   activityStatus?: AgentStatus;
+  /** False while the trailing Working… belongs under a message the journal does not show yet. */
+  activityLabel?: boolean;
   onWorkToggle?: (anchor: HTMLElement) => void;
 }) {
   // A question is pending until its call has a result: Claude records the answer as the
@@ -232,7 +234,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
   let lastDay = "";
   let lastRole = "";
   const last = entries.at(-1);
-  const pending = activityStatus === "working" && !rows.some((row) => row.kind === "work" && row.active) &&
+  const pending = activityLabel && activityStatus === "working" && !rows.some((row) => row.kind === "work" && row.active) &&
     (!last || last.role === "user" || (last.role === "assistant" && last.phase !== "final_answer" && last.turn?.status !== "completed" && last.turn?.status !== "aborted"));
   return <div className="space-y-3" onClickCapture={(event) => {
     const anchor = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-work-toggle]") : null;
