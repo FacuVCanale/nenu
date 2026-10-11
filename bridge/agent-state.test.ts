@@ -153,6 +153,85 @@ describe("Claude panes", () => {
   });
 });
 
+describe("Claude panes, races and restarts", () => {
+  const row = (value: object) => JSON.stringify(value) + "\n";
+  const queue = (operation: string, at: number, content?: string) => row({ type: "queue-operation", operation, timestamp: iso(at), ...(content ? { content } : {}) });
+
+  test("two watch events for one append scan it once: the queue drains", async () => {
+    const w = watches();
+    const { service } = states(w);
+    await writeFile(transcript, row({ type: "user", timestamp: iso(T0 + 20), message: { content: "write an essay" } }));
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    await appendFile(transcript, queue("enqueue", T0 + 100, "After that, say BANANA."));
+    w.fire(transcript);
+    void service.fresh("s", pane("claude"), herdr([PID]), { remap: false });
+    w.fire(transcript);
+    await settle();
+    expect(service.get("s", "w1:p1")).toMatchObject({ running: true, queued: "sends" });
+    // One read of the dequeue: a doubled enqueue would leave a phantom message behind it.
+    await appendFile(transcript, queue("dequeue", T0 + 200));
+    w.fire(transcript);
+    await settle();
+    expect(service.get("s", "w1:p1")).toMatchObject({ running: true, queued: null });
+  });
+
+  test("a Claude that crashed and restarted in the pane is not read from its old busy file", async () => {
+    const w = watches();
+    const { service } = states(w);
+    const NEW = PID + 1;
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0));
+    let fg = [PID];
+    const host = { processInfo: async () => ({ foreground_processes: fg.map((pid) => ({ pid })) }) };
+    service.sync("s", host, [pane("claude", { status: "working", stateChangeSeq: 1 })]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toMatchObject({ running: true });
+    // SIGKILL: the old file stays. A new Claude starts in the pane and writes its own, idle.
+    fg = [NEW];
+    await writeFile(join(sessions, `${NEW}.json`), sessionFile("idle", T0 + 5_000, { pid: NEW }));
+    w.fire(sessions, `${NEW}.json`);
+    await settle();
+    expect(await service.fresh("s", pane("claude"), host)).toEqual({ running: false, source: "claude-session" });
+  });
+
+  test("a Herdr status move re-checks the pid, so the restart shows without a Stop", async () => {
+    const w = watches();
+    let clock = T0;
+    const { service } = states(w, { now: () => clock });
+    const NEW = PID + 1;
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0));
+    let fg = [PID];
+    const host = { processInfo: async () => ({ foreground_processes: fg.map((pid) => ({ pid })) }) };
+    service.sync("s", host, [pane("claude", { status: "working", stateChangeSeq: 1 })]);
+    await settle();
+    fg = [NEW];
+    clock += 5_000;
+    await writeFile(join(sessions, `${NEW}.json`), sessionFile("idle", T0 + 5_000, { pid: NEW }));
+    service.sync("s", host, [pane("claude", { status: "idle", stateChangeSeq: 2 })]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+  });
+
+  test("a background agent's dialog answered after the main turn ended keeps it background", async () => {
+    const w = watches();
+    const { service } = states(w);
+    await writeFile(transcript, row({ type: "user", timestamp: iso(T0 + 20), message: { content: "start a background agent" } }) + row({ type: "assistant", timestamp: iso(T0 + 500), message: { stop_reason: "end_turn", content: [] } }));
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, background: true, source: "claude-session" });
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("waiting", T0 + 2_000, { waitingFor: "permission prompt" }));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    expect(service.get("s", "w1:p1")).toMatchObject({ running: false, waiting: "permission prompt" });
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 3_000));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, background: true, source: "claude-session" });
+  });
+});
+
 describe("Codex panes", () => {
   const rollout = () => join(codexRoot, "2026", "10", "11", "rollout-2026-10-11T15-04-38-01a12b10-b86b-7781-9182-b55f713c7ee2.jsonl");
   const event = (type: string, turnId: string) => JSON.stringify({ type: "event_msg", payload: { type, turn_id: turnId } }) + "\n";
@@ -195,5 +274,18 @@ describe("Codex panes", () => {
     await writeFile(rollout(), event("task_started", "b"));
     open = [old, rollout()];
     expect(await service.fresh("s", pane("codex"), herdr([7]))).toEqual({ running: true, source: "codex-rollout" });
+  });
+
+  test("fresh() without remap only re-reads: an idle Codex costs no process lookup per poll", async () => {
+    const w = watches();
+    await writeFile(rollout(), event("task_started", "a") + event("task_complete", "a"));
+    let lookups = 0;
+    const { service } = states(w, { openFiles: async () => (lookups++, [rollout()]) });
+    service.sync("s", herdr([7]), [pane("codex")]);
+    await settle();
+    lookups = 0;
+    await service.fresh("s", pane("codex"), herdr([7]));
+    for (let i = 0; i < 10; i++) await service.fresh("s", pane("codex"), herdr([7]), { remap: false });
+    expect(lookups).toBe(1);
   });
 });

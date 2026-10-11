@@ -65,6 +65,8 @@ interface Tail<S> {
   tail?: TailState;
   scan: S;
   watcher?: Watcher;
+  /** The read in flight: reads chain, so each starts at the offset the previous one reached. */
+  reading?: Promise<void>;
 }
 
 interface Entry {
@@ -81,6 +83,8 @@ interface Entry {
   /** Claude: the foreground pids last seen, so a session file created later still maps. */
   pids: number[];
   file?: ClaudeSessionFile;
+  /** When the current busy spell began: a dialog answered inside it (waiting → busy) does not restart it. */
+  busySince?: number;
   sessionDir?: string;
   transcript?: Tail<ClaudeTurnScan> & { sessionId: string };
   transcriptRetry?: ReturnType<typeof setTimeout>;
@@ -149,11 +153,12 @@ export class AgentStates {
   }
 
   /**
-   * Stop's look: re-read the pane's files now rather than trust the last watch event, resolving the
-   * mapping first when it is missing. A Codex pane that reads idle is re-resolved too, because a
-   * `/new` moves its turn to a rollout the watch does not follow yet.
+   * Stop's look: re-read the pane's files now rather than trust the last watch event. With `remap`
+   * (Stop's first look) the mapping is checked against the pane's foreground processes too: a Claude
+   * that crashed and restarted in the pane leaves its old busy file behind, and a Codex `/new` moves
+   * its turn to a rollout the watch does not follow yet. Later looks only re-read the known files.
    */
-  async fresh(session: string, pane: AgentView, herdr: ProcessInfo): Promise<TurnState | undefined> {
+  async fresh(session: string, pane: AgentView, herdr: ProcessInfo, { remap = true }: { remap?: boolean } = {}): Promise<TurnState | undefined> {
     if (!tracked(pane.agent)) return undefined;
     const k = key(session, pane.paneId);
     let entry = this.entries.get(k);
@@ -162,11 +167,11 @@ export class AgentStates {
     entry.herdr = herdr;
     entry.agentSession = pane.agentSession;
     if (entry.agent === "claude") {
-      if (entry.file && entry.sessionDir) await this.loadClaude(entry, entry.sessionDir, entry.file.pid);
-      if (!entry.file) await this.resolve(entry, true);
+      if (remap) await this.resolve(entry, true);
+      else if (entry.file && entry.sessionDir) await this.loadClaude(entry, entry.sessionDir, entry.file.pid);
     } else {
       if (entry.rollout) await this.readRollout(entry);
-      if (!entry.rollout || !entry.state?.running) await this.resolve(entry, true);
+      if (remap && (!entry.rollout || !entry.state?.running)) await this.resolve(entry, true);
     }
     return entry.state;
   }
@@ -201,7 +206,8 @@ export class AgentStates {
     if (fresh) return true;
     const unresolved = entry.agent === "claude" ? !entry.file : !entry.rollout;
     if (unresolved) return moved || this.now() - entry.triedAt >= RETRY_UNRESOLVED_MS;
-    return entry.agent === "codex" && moved && entry.status === "working";
+    // Claude: a status move re-checks that the mapped pid still owns the pane (a crash leaves its file).
+    return moved && (entry.agent === "claude" || entry.status === "working");
   }
 
   /** Map the pane to its files through the processes in its foreground. Shared while in flight. */
@@ -228,6 +234,9 @@ export class AgentStates {
     entry.pids = pids;
     for (const pid of pids) this.pids.set(pid, entry.key);
     for (const dir of this.sessionDirs) this.watchDir(dir);
+    // Still in the pane's foreground, so still the process whose start was checked when it mapped.
+    const mapped = entry.file?.pid;
+    if (mapped !== undefined && entry.sessionDir && pids.includes(mapped) && (await this.loadClaude(entry, entry.sessionDir, mapped))) return;
     for (const dir of this.sessionDirs) {
       for (const pid of pids) {
         if (await this.loadClaude(entry, dir, pid, true)) return;
@@ -256,6 +265,11 @@ export class AgentStates {
 
   private async applyClaude(entry: Entry, file: ClaudeSessionFile | undefined): Promise<void> {
     if (entry.dropped) return;
+    const before = entry.file?.sessionId === file?.sessionId ? entry.file?.status : undefined;
+    if (file?.status === "busy" || file?.status === "waiting") {
+      // A spell starts when the session leaves idle; a dialog inside it (busy ⇄ waiting) continues it.
+      if (entry.busySince === undefined || (before !== "busy" && before !== "waiting")) entry.busySince = file.statusUpdatedAt;
+    } else entry.busySince = undefined;
     entry.file = file;
     if (file?.status === "busy" && !file.waitingFor) await this.followTranscript(entry, file.sessionId, 0);
     else this.closeTail(entry.transcript);
@@ -321,20 +335,27 @@ export class AgentStates {
     this.update(entry);
   }
 
-  private async readTail(tail: Tail<{ line(text: string): void }>): Promise<void> {
-    try {
-      const read = await readAppended(tail.path, TAIL_BYTES, tail.tail);
-      tail.tail = read.tail;
-      for (const line of read.lines) tail.scan.line(line);
-    } catch {
-      // Gone or replaced: the next resolve finds the new file.
-    }
+  /** Read what was appended since the last read. Two reads of one file never overlap: the same lines
+   *  scanned twice would replay Claude's queue twice and leave a phantom queued message. */
+  private readTail(tail: Tail<{ line(text: string): void }>): Promise<void> {
+    const read = (tail.reading ?? Promise.resolve()).then(async () => {
+      try {
+        const next = await readAppended(tail.path, TAIL_BYTES, tail.tail);
+        tail.tail = next.tail;
+        for (const line of next.lines) tail.scan.line(line);
+      } catch {
+        // Gone or replaced: the next resolve finds the new file.
+      }
+    });
+    tail.reading = read;
+    void read.then(() => { if (tail.reading === read) tail.reading = undefined; });
+    return read;
   }
 
   private update(entry: Entry): void {
     if (entry.dropped) return;
     const state = entry.agent === "claude"
-      ? entry.file ? claudeTurn(entry.file, entry.transcript?.scan ?? null) : undefined
+      ? entry.file ? claudeTurn(entry.file, entry.transcript?.scan ?? null, entry.busySince) : undefined
       : entry.rollout ? codexTurn(entry.rollout.scan) ?? undefined : undefined;
     const published = JSON.stringify(state ?? null);
     if (published === entry.published) return;

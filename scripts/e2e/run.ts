@@ -691,19 +691,26 @@ async function stopState(): Promise<void> {
       }, pane);
       run.stopAfterIdle = await stopButton.isVisible();
 
-      // Background only: busy, but the main turn's turn_duration landed inside this busy spell.
+      // Background only: busy, and the main chain's last assistant row ended the turn inside this busy
+      // spell. No turn_duration: Claude holds it back while teammates or detached tool calls run.
       clearInterval(stopWatch);
       const bgAt = Date.now();
       await writeSession("busy", bgAt);
       await writeFile(transcript, [
         { type: "user", timestamp: new Date(bgAt + 5).toISOString(), message: { role: "user", content: "launch a background agent" } },
-        { type: "assistant", timestamp: new Date(bgAt + 50).toISOString(), message: { role: "assistant", content: [] } },
-        { type: "system", subtype: "turn_duration", durationMs: 90, timestamp: new Date(bgAt + 100).toISOString() },
+        { type: "assistant", timestamp: new Date(bgAt + 50).toISOString(), message: { role: "assistant", stop_reason: "end_turn", content: [] } },
       ].map((row) => JSON.stringify(row)).join("\n") + "\n");
       fake.setStatus(pane, "working");
       await page.waitForTimeout(2500);
       run.backgroundStopShown = await stopButton.isVisible();
+      run.backgroundNote = await page.getByText("Background work is running. Stop doesn't reach it.").isVisible();
       await shot("background");
+      // A background agent's permission prompt, answered: waiting, then busy again with a later timestamp.
+      await writeSession("waiting", Date.now());
+      await page.waitForTimeout(400);
+      await writeSession("busy", Date.now());
+      await page.waitForTimeout(1500);
+      run.afterDialogStopShown = await stopButton.isVisible();
       run.backgroundForced = await page.evaluate(async (id: string) => (await fetch(`/api/pane/${encodeURIComponent(id)}/interrupt`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json(), pane);
       run.escapesAfterBackground = fake.interrupted.length;
       await context.close();
@@ -718,6 +725,8 @@ async function stopState(): Promise<void> {
       turnAfter?.source === "claude-session" && turnAfter.running === false && !run.stopAfterIdle ? null : "the session file's idle did not reach the button",
       run.escapes === 1 ? null : `expected 1 Escape, got ${run.escapes}`,
       run.backgroundStopShown ? "Stop shown while only background work runs" : null,
+      run.backgroundNote ? null : "no note says why Stop is missing during background work",
+      run.afterDialogStopShown ? "Stop shown after a background agent's dialog was answered" : null,
       forced?.code === "not_running" && run.escapesAfterBackground === 1 ? null : "a forced Stop on background work pressed or answered wrongly",
     ].filter(Boolean);
     return { run, shots, failed };

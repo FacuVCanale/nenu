@@ -69,9 +69,12 @@ export function claudeSessionDirs(projectRoots: readonly string[]): string[] {
 
 /**
  * Claude's transcript, reduced to what says whether the main turn is over: when the conversation last
- * moved (a typed prompt, an assistant row) and when a turn last ended (`turn_duration`,
- * `stop_hook_summary`, an interruption row), plus Claude's own queue replayed from its
- * `queue-operation` rows. Sidechains (subagents) are not the main turn and are skipped.
+ * moved (a typed prompt, an assistant row) and when a turn last ended (an assistant row that stopped
+ * with `end_turn`, `turn_duration`, `stop_hook_summary`, an interruption row), plus Claude's own queue
+ * replayed from its `queue-operation` rows. Sidechains (subagents) are not the main turn and are
+ * skipped. The `end_turn` row matters: 2.1.296 holds `turn_duration` back while teammates or detached
+ * tool calls still run (`_deferSwarmDuration`, `_holdDurationForDetachedToolCalls`, read in code),
+ * but the main chain's last assistant row is written either way.
  */
 export class ClaudeTurnScan {
   lastMove = -Infinity;
@@ -90,6 +93,7 @@ export class ClaudeTurnScan {
       this.lastEnd = Math.max(this.lastEnd, at);
     } else if (row.type === "assistant") {
       this.lastMove = Math.max(this.lastMove, at);
+      if (record(row.message).stop_reason === "end_turn") this.lastEnd = Math.max(this.lastEnd, at);
     } else if (row.type === "user" && row.isMeta !== true && row.isCompactSummary !== true) {
       const said = userText(record(row.message).content);
       if (INTERRUPTED.test(said)) this.lastEnd = Math.max(this.lastEnd, at);
@@ -142,14 +146,16 @@ function userText(content: unknown): string {
  * Claude's turn from its session file and, while busy, its transcript (ADR 0067). `busy` alone is not
  * a running turn: delegated work (a background agent or workflow) keeps it busy after the main turn
  * ended, and Escape then does nothing (measured 2.1.296). So a busy session whose transcript ended a
- * turn inside this busy spell, and has not moved since, is background work only.
+ * turn inside this busy spell, and has not moved since, is background work only. `busySince` is when
+ * the spell began; it defaults to the file's last status change, which a dialog answered mid-spell
+ * moves (waiting → busy), so the service passes the spell's real start when it saw one.
  */
-export function claudeTurn(file: ClaudeSessionFile, scan: Pick<ClaudeTurnScan, "lastMove" | "lastEnd" | "queued"> | null): TurnState {
+export function claudeTurn(file: ClaudeSessionFile, scan: Pick<ClaudeTurnScan, "lastMove" | "lastEnd" | "queued"> | null, busySince = file.statusUpdatedAt): TurnState {
   const source = "claude-session" as const;
   if (file.waitingFor || file.status === "waiting") return { running: false, waiting: file.waitingFor ?? "dialog open", source };
   if (file.status === "idle") return { running: false, source };
   if (file.status === "shell") return { running: false, background: true, source };
-  if (scan && scan.lastEnd >= file.statusUpdatedAt && scan.lastEnd >= scan.lastMove) return { running: false, background: true, source };
+  if (scan && scan.lastEnd >= busySince && scan.lastEnd >= scan.lastMove) return { running: false, background: true, source };
   return { running: true, ...(scan ? { queued: scan.queued > 0 ? "sends" as const : null } : {}), source };
 }
 

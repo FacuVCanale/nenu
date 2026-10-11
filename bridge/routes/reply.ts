@@ -160,10 +160,12 @@ export async function interruptPane(
   if (!pane || !interrupt) return json({ ok: false, code: "unsupported", error: "Nenu has no safe way to stop this agent." } satisfies InterruptResponse, ae);
   const name = AGENT_NAMES[pane.agent] ?? pane.agent;
   let structured: TurnState | undefined;
+  // The first look re-checks which process owns the pane; the polls after it only re-read its files.
+  let looks = 0;
   const outcome = await interruptTurn({
     // The screen as it is now, read the way the queue reads a composer (queue-readiness.ts).
     read: async () => (await herdr.readPane(paneId, "visible", 100, "ansi")).text,
-    ...(ctx.agentStates ? { state: async () => (structured = await ctx.agentStates!.fresh(session, pane, herdr)) } : {}),
+    ...(ctx.agentStates ? { state: async () => (structured = await ctx.agentStates!.fresh(session, pane, herdr, { remap: looks++ === 0 })) } : {}),
     exclusive: (operation) => ctx.input.run(session, paneId, operation),
     async press(keys) {
       let sent = false;

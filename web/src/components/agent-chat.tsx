@@ -1,7 +1,7 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
-import { agentBusy, turnRunning } from "@/lib/turn";
+import { agentBusy, turnNote, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
@@ -1157,6 +1157,9 @@ export function AgentChat({
           {!showConversation && agentsFooter.length > 0 && <AgentsFooter rows={agentsFooter} />}
 
           {!subagent && composerTop}
+          {!subagent && turnNote(agent) && (
+            <p role="status" className="px-3 pt-1 text-[11px] leading-tight text-muted-foreground">{turnNote(agent)}</p>
+          )}
           <Composer
             ref={composerRef}
             paneId={paneId}

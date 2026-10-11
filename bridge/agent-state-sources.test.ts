@@ -94,6 +94,31 @@ describe("Claude turn", () => {
     expect(s.lastEnd).toBeGreaterThanOrEqual(s.lastMove);
   });
 
+  test("a dialog answered inside the spell does not restart it: background stays background", () => {
+    // Busy since 1000, the main turn ended at 1500, a background agent's permission prompt flipped the
+    // file waiting and back to busy at 2000. The spell still began at 1000.
+    expect(claudeTurn(file("busy", { statusUpdatedAt: 2_000 }), scan(1_400, 1_500), 1_000)).toEqual({ running: false, background: true, source: "claude-session" });
+    // Without the spell's start the file's own timestamp is all there is, and it reads as a turn.
+    expect(claudeTurn(file("busy", { statusUpdatedAt: 2_000 }), scan(1_400, 1_500))).toMatchObject({ running: true });
+  });
+
+  test("the main chain's end_turn row ends the turn even when turn_duration is held back", () => {
+    // Claude defers turn_duration while teammates or detached tool calls run; the last assistant row
+    // of the main chain still says end_turn.
+    const s = new ClaudeTurnScan();
+    const assistant = (at: string, stop_reason: string | null, extra: object = {}) => JSON.stringify({ type: "assistant", timestamp: at, message: { stop_reason, content: [] }, ...extra });
+    s.line(JSON.stringify({ type: "user", timestamp: "2026-10-11T13:00:00.000Z", message: { content: "spawn a team" } }));
+    s.line(assistant("2026-10-11T13:00:01.000Z", "tool_use"));
+    s.line(assistant("2026-10-11T13:00:02.000Z", "end_turn", { isSidechain: true }));
+    expect(s.lastEnd).toBe(-Infinity);
+    s.line(assistant("2026-10-11T13:00:03.000Z", "end_turn"));
+    expect(s.lastEnd).toBe(Date.parse("2026-10-11T13:00:03.000Z"));
+    expect(s.lastEnd).toBeGreaterThanOrEqual(s.lastMove);
+    // A Stop hook that blocks continues the turn: the next assistant row moves it again.
+    s.line(assistant("2026-10-11T13:00:05.000Z", "tool_use"));
+    expect(s.lastMove).toBeGreaterThan(s.lastEnd);
+  });
+
   test("an interruption row ends the turn; a notification row does not move it", () => {
     const s = new ClaudeTurnScan();
     const user = (text: string, at: string, extra: object = {}) => JSON.stringify({ type: "user", timestamp: at, message: { role: "user", content: [{ type: "text", text }] }, ...extra });

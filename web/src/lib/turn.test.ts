@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { agentBusy, turnRunning } from "./turn";
+import { agentBusy, turnNote, turnRunning } from "./turn";
 
 const codexBusy = readFileSync(join(__dirname, "..", "fixtures", "panes", "codex--v0159-busy.txt"), "utf8");
 
@@ -27,5 +27,14 @@ describe("agentBusy", () => {
     expect(agentBusy({ agent: "claude", status: "working", turn: { running: false, background: true, source: "claude-session" } }, "")).toBe(true);
     expect(agentBusy({ agent: "codex", status: "idle", turn: { running: true, source: "codex-rollout" } }, "")).toBe(true);
     expect(agentBusy({ agent: "codex", status: "idle", turn: { running: false, source: "codex-rollout" } }, "")).toBe(false);
+  });
+});
+
+describe("turnNote", () => {
+  it("explains a missing Stop only when background work alone keeps the agent busy", () => {
+    expect(turnNote({ agent: "claude", status: "working", turn: { running: false, background: true, source: "claude-session" } })).toMatch(/Stop doesn't reach it/);
+    expect(turnNote({ agent: "claude", status: "working", turn: { running: true, source: "claude-session" } })).toBeNull();
+    expect(turnNote({ agent: "claude", status: "blocked", turn: { running: false, waiting: "permission prompt", source: "claude-session" } })).toBeNull();
+    expect(turnNote({ agent: "claude", status: "working" })).toBeNull();
   });
 });

@@ -35,8 +35,14 @@ operator's settings. They stay observers that make the bridge re-read the files 
 
 1. **One structured state per Claude or Codex pane, kept by the bridge** (`AgentStates`). Claude's is
    its session file, plus its transcript while busy: a busy session whose transcript ended a turn
-   inside this busy spell, and has not moved since, is background work, not a turn. Codex's is the
-   open turn in its rollout. Files are watched, never polled. Unknown shapes (a missing `status`, a new
+   inside this busy spell, and has not moved since, is background work, not a turn. The main chain's
+   last assistant row with `stop_reason: end_turn` counts as the end, because Claude holds
+   `turn_duration` back while teammates or detached tool calls run (measured with an agent team). The
+   spell starts when the session leaves idle; a dialog answered inside it (`waiting` → `busy`, e.g. a
+   background agent's permission prompt) does not restart it. The pane's mapping is re-checked
+   against its foreground pids on every Herdr status move and on Stop's first look, so a crashed and
+   restarted Claude is never read from its old file. Transcript reads are serialized per file. Codex's
+   is the open turn in its rollout. Files are watched, never polled. Unknown shapes (a missing `status`, a new
    status word, an unknown kind) decode to nothing, which is the fallback.
 2. **The real state wins; the screen is the fallback** only for a pane no structured source knows
    (no session file, no rollout yet, another agent).
