@@ -786,6 +786,7 @@ async function processes(): Promise<void> {
   console.log(JSON.stringify(result, null, 2));
 }
 
+/**
  * Stop decided by the CLI's own state (ADR 0067). The working Claude pane draws a custom statusline,
  * so its screen never says "esc to interrupt", and its session file (`<profile>/sessions/<pid>.json`)
  * says busy. Phone: Stop shows and presses Escape once, confirmed when the file goes idle. Then the
