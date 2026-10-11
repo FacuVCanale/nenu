@@ -135,6 +135,11 @@ export function isReadOnly(device: DeviceAuth | undefined): boolean {
   return !!device && device.enforced && !device.authorized;
 }
 
+/** Whether this device may start something now: allowed to write, on a live, connected snapshot. */
+export function canCreate(snapshot: { device: DeviceAuth | undefined; error: boolean; bridge: BridgeStatus | undefined }): boolean {
+  return !isReadOnly(snapshot.device) && !snapshot.error && snapshot.bridge === "connected";
+}
+
 /**
  * One entry in the snapshot's session registry — a named Herdr session the bridge is fanning out.
  * Order is primary-first, then alphabetical. An unreachable session (crashed / stale socket) reports

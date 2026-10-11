@@ -10,7 +10,7 @@ import { homePath, panePath } from "@/lib/nav";
 import { workspaceEntry, workspaceName } from "@/lib/spaces";
 import { openNewAgent } from "@/lib/spawn";
 import { setStatus } from "@/lib/status";
-import { isReadOnly } from "@/lib/types";
+import { canCreate } from "@/lib/types";
 
 // A workspace has no page of its own. /space/:id opens the pane every other way in opens
 // (workspaceEntry), so a link from an older Nenu lands where a tap in the sidebar does; the tabs and
@@ -43,7 +43,6 @@ export function SpaceRoute() {
   const entry = workspace && workspaceEntry(workspace.workspaceId, data);
   if (entry) return <Navigate to={panePath(entry.paneId, data.session)} replace />;
 
-  const canCreate = !isReadOnly(data.device) && !data.error && data.bridge === "connected";
   return (
     <div className="workbench-chat flex min-h-0 w-full min-w-0 flex-1 flex-col">
       <AppHeader bridge={data.bridge} error={data.error} onHome={() => navigate(homePath(data.session))}
@@ -55,7 +54,7 @@ export function SpaceRoute() {
         <div className="flex flex-1 flex-col items-center gap-3 border-t border-border/40 px-4 py-16 text-center text-sm text-muted-foreground">
           <MessageSquare aria-hidden className="size-5" />
           <p>Nothing runs in this workspace yet.</p>
-          {canCreate && (
+          {canCreate(data) && (
             <Button type="button" variant="outline" onClick={() => openNewAgent({ kind: "tab", workspaceId: workspace.workspaceId })}>
               <Plus aria-hidden className="size-4" />Start an agent or a shell
             </Button>

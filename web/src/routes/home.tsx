@@ -2,10 +2,9 @@ import { useContext, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
 import { ArrowUp, Check, ChevronDown, Folder, LayoutGrid, Plus } from "lucide-react";
 
-import { AppHeader, SettingsGear } from "@/components/app-header";
+import { ColumnPage } from "@/components/column-page";
 import { HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
 import { NeedsYouList } from "@/components/needs-you-list";
-import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useInteractions } from "@/hooks/use-interactions";
@@ -48,44 +47,39 @@ export function HomeRoute() {
     : data.bridge !== "connected" ? "Waiting for your workspaces to connect."
     : data.agents.length ? null : "Describe a task to start your first agent. You pick the agent and folder next.";
 
-  return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
-    <AppHeader bridge={data.bridge} error={data.error} rightTrail={<SettingsGear session={data.session} />}>
-      <span className="truncate text-sm font-medium">Home</span>
-    </AppHeader>
-    <ReadOnlyBanner device={data.device} />
-    <main className="page-body max-sm:pt-2">
-      <div className="page-column flex flex-col gap-6 lg:gap-7">
-        <div className="flex flex-col gap-1.5">
-          <p className="text-sm text-muted-foreground sm:text-[13px]">
-            {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
-            <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
-          </p>
-          <h1 className="text-[27px] leading-tight font-semibold tracking-tight sm:text-[30px]">
-            {!live ? "What should we work on?" : short === long ? long : <>
-              <span className="sm:hidden">{short}</span>
-              <span className="max-sm:hidden">{long}</span>
-            </>}
-          </h1>
-          {notice && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{notice}</p>}
-        </div>
-        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
-        {calm
-          ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
-          : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
-            interactions={interactions} readOnly={readOnly || !live} />}
-        <RecentChats chats={recent} working={counts.working} session={data.session} now={now} />
-        <ReadyToReviewList entries={reviews} session={data.session} />
-        {running.length > 0 && (
-          <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
-            <HomeHeading id="home-running" label="Running in background" count={running.length} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} />)}
-            </div>
-          </section>
-        )}
+  // On a phone the date sits right under the header, so the first screen holds more of the list.
+  return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
+    <div className="flex flex-col gap-6 lg:gap-7">
+      <div className="flex flex-col gap-1.5">
+        <p className="text-sm text-muted-foreground sm:text-[13px]">
+          {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
+          <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
+        </p>
+        <h1 className="text-[27px] leading-tight font-semibold tracking-tight sm:text-[30px]">
+          {!live ? "What should we work on?" : short === long ? long : <>
+            <span className="sm:hidden">{short}</span>
+            <span className="max-sm:hidden">{long}</span>
+          </>}
+        </h1>
+        {notice && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{notice}</p>}
       </div>
-    </main>
-  </div>;
+      <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
+      {calm
+        ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
+        : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
+          interactions={interactions} readOnly={readOnly || !live} />}
+      <RecentChats chats={recent} working={counts.working} session={data.session} now={now} />
+      <ReadyToReviewList entries={reviews} session={data.session} />
+      {running.length > 0 && (
+        <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
+          <HomeHeading id="home-running" label="Running in background" count={running.length} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} />)}
+          </div>
+        </section>
+      )}
+    </div>
+  </ColumnPage>;
 }
 
 /** Where the composer sends: a project's coordinator, a new thread in a workspace, or a new workspace. */

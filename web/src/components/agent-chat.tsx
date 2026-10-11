@@ -82,7 +82,7 @@ import type {
   WizardModel,
 } from "@/lib/blocks";
 
-/** The chat title's box, whether it opens the workspace overview or has none to open. */
+/** The chat title's box, whether it opens the project's page or has nothing to open. */
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left lg:-mx-1 lg:min-h-9";
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */

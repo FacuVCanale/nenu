@@ -257,7 +257,7 @@
   .bottom-tab-bar { display: none; }
   .workbench-expand { width: 44px; height: 44px; margin-bottom: 8px; }
   /* Every header is the same bar on a desk, whatever its right side holds and whatever route draws it. */
-  .workbench-app-header { min-height: 52px; padding-block: 0; background: var(--background); }
+  .workbench-app-header { min-height: 52px; gap: 8px; padding: 0 8px 0 var(--page-gutter); background: var(--background); }
   .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: 16px; }
   .workbench-composer > button[aria-label="Switch pane"] { display: none; }
   .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }

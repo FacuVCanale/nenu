@@ -111,8 +111,6 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
   /** Heading and its second line; the project's name and goal by default. */
   title?: string;
   subtitle?: ReactNode;
-  /** Extra header control, e.g. the panel's collapse button. */
-  action?: ReactNode;
 }
 
 /**
@@ -120,11 +118,11 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
  * urgent first) and one grey History of everything resolved. Every node opens its chat or its
  * detail; an open one can be closed and the coordinator replaced.
  */
-export function ProjectTasks({ threads, title, subtitle, action, ...tree }: ProjectTasksProps) {
+export function ProjectTasks({ threads, title, subtitle, ...tree }: ProjectTasksProps) {
   const { project, panes, session, currentPaneId, readOnly, onOpenPane, onChanged } = tree;
   return (
     <div className="project-tasks">
-      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"} action={action} />
+      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"} />
       <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />
       <OrgTreeList {...tree} threads={threads ?? project.threads} />
       {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={() => void onChanged()} /></div>}
@@ -176,13 +174,12 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
 }
 
 /** A task list's heading: the project or coordinator, a Paused badge, and its second line. */
-export function TasksHeader({ title, subtitle, paused = false, action }: { title: string; subtitle?: ReactNode; paused?: boolean; action?: ReactNode }) {
+export function TasksHeader({ title, subtitle, paused = false }: { title: string; subtitle?: ReactNode; paused?: boolean }) {
   return (
     <header className="mb-4">
       <div className="flex items-start gap-2">
         <h2 className="min-w-0 flex-1 break-words text-lg font-semibold tracking-tight">{title}</h2>
         {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Paused</span>}
-        {action}
       </div>
       {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{subtitle}</p>}
     </header>

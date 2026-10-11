@@ -51,8 +51,8 @@ export interface Herd {
 
 /**
  * The pane a workspace opens on, the same from every place that opens one: the agent asking for you
- * (the latest to ask), else the pane you had open last, else the first in the tab Herdr shows, else
- * its first pane. Undefined for a workspace with no pane.
+ * (the latest to ask), else the pane you had open last, else the pane the tab Herdr shows opens on
+ * (paneInTab), else its first pane. Undefined for a workspace with no pane.
  */
 export function workspaceEntry(workspaceId: string, herd: Herd): AgentView | undefined {
   const shellPanes = herd.shellPanes ?? [];
@@ -61,12 +61,11 @@ export function workspaceEntry(workspaceId: string, herd: Herd): AgentView | und
     panes.reduce<AgentView | undefined>((best, pane) => (!best || at(pane) > at(best) ? pane : best), undefined);
   const asking = herd.agents.filter((pane) => pane.workspaceId === workspaceId && pane.status === "blocked");
   const seen = [...herd.agents, ...shellPanes].filter((pane) => pane.workspaceId === workspaceId && (pane.lastSeenAt ?? 0) > 0);
-  const groups = groupPanesByTab(workspaceId, herd.tabs, herd.agents, shellPanes);
   const active = herd.workspaces.find((workspace) => workspace.workspaceId === workspaceId)?.activeTabId;
   return latest(asking, (pane) => pane.lastActiveAt ?? 0)
     ?? latest(seen, (pane) => pane.lastSeenAt ?? 0)
-    ?? groups.find((group) => group.tabId === active)?.panes[0]
-    ?? groups.find((group) => group.panes.length > 0)?.panes[0];
+    ?? (active ? paneInTab(active, herd.agents, shellPanes) : undefined)
+    ?? groupPanesByTab(workspaceId, herd.tabs, herd.agents, shellPanes).find((group) => group.panes.length > 0)?.panes[0];
 }
 
 /**

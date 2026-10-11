@@ -1,6 +1,6 @@
 import { matches } from "@/lib/projects";
-import { groupPanesByTab, spaceLastSeenMap, tabName, workspaceName } from "@/lib/spaces";
-import { paneDisplayName, type AgentView, type TabView, type WorkspaceView } from "@/lib/types";
+import { groupPanesByTab, spaceLastSeenMap, tabName, workspaceName, type Herd } from "@/lib/spaces";
+import { paneDisplayName, type AgentView, type WorkspaceView } from "@/lib/types";
 
 /** A tab in the navigation tree; `panes` is never empty. */
 export interface TabBranch {
@@ -19,19 +19,12 @@ export interface WorkspaceBranch {
   current: boolean;
 }
 
-export interface TreeSource {
-  workspaces: readonly WorkspaceView[];
-  tabs: readonly TabView[];
-  agents: readonly AgentView[];
-  shellPanes?: readonly AgentView[];
-}
-
 /**
  * Workspace → tab → pane, narrowed to a search. The workspace on screen leads, then the rest by
  * last activity. A query matching a workspace or tab name keeps all of it; otherwise only the panes
  * that match survive, and a workspace left with nothing is dropped.
  */
-export function workspaceTree(source: TreeSource, query = "", currentPaneId?: string): WorkspaceBranch[] {
+export function workspaceTree(source: Herd, query = "", currentPaneId?: string): WorkspaceBranch[] {
   const shells = source.shellPanes ?? [];
   const all = [...source.agents, ...shells];
   const lastSeen = spaceLastSeenMap(all);
@@ -41,7 +34,7 @@ export function workspaceTree(source: TreeSource, query = "", currentPaneId?: st
     .map((workspace): WorkspaceBranch => {
       const name = workspaceName(workspace);
       const wholeWorkspace = matches(query, name);
-      const tabs = groupPanesByTab(workspace.workspaceId, [...source.tabs], [...source.agents], [...shells])
+      const tabs = groupPanesByTab(workspace.workspaceId, source.tabs, source.agents, shells)
         .map((group, index): TabBranch => {
           const label = tabName(group.label, index + 1);
           const wholeTab = wholeWorkspace || matches(query, label);
