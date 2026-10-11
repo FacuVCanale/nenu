@@ -132,7 +132,7 @@ export async function sendReplySteps(
 const interruptLedger = new InterruptLedger();
 
 /**
- * Stop the pane's running turn with its CLI's interrupt key (ADR 0065). The adapter decides whether
+ * Stop the pane's running turn with its CLI's interrupt key (ADR 0066). The adapter decides whether
  * the agent has one and reads the live screen for a running turn; `interruptTurn` presses it once,
  * inside the pane's write lock, and the queue parks what Nenu still holds for that conversation.
  */

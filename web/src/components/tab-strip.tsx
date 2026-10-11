@@ -54,7 +54,7 @@ export function TabStrip({
     <>
       {/* 36px to the eye: the extra 8px of bottom padding overlaps the conversation (negative margin,
           transparent, raised) only to give each tab a 44px touch target. */}
-      <div data-workbench-navigation-band="tabs" className="relative z-[1] -mb-2 box-content flex h-9 shrink-0 items-start gap-0.5 overflow-x-auto overflow-y-hidden border-t border-border/40 px-2 pb-2 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden">
+      <div data-workbench-navigation-band="tabs" className="relative z-[1] -mb-2 box-content flex h-9 shrink-0 items-start gap-0.5 overflow-x-auto overflow-y-hidden border-t border-border/40 px-2 pb-2 [scrollbar-width:none] sm:px-4 lg:px-(--page-gutter) [&::-webkit-scrollbar]:hidden">
         {wsTabs.map((t, index) => (
           <Chip
             key={t.tabId}

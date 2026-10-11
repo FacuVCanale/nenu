@@ -27,7 +27,7 @@ export interface StopTurn {
 }
 
 /**
- * Stop for one pane (ADR 0065). The bridge presses the CLI's interrupt key; this owns what the
+ * Stop for one pane (ADR 0066). The bridge presses the CLI's interrupt key; this owns what the
  * composer shows meanwhile, so a second tap during "Stopping…" sends nothing.
  */
 export function useStopTurn({ paneId, session, agent, interruptible, working, locked }: {

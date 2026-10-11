@@ -1,4 +1,4 @@
-# 0065. Stop presses the CLI's interrupt key once, and only on a running turn
+# 0066. Stop presses the CLI's interrupt key once, and only on a running turn
 
 - **Status:** Accepted (2026-10-11). Fran asked for it ("I can't cancel the turn"); the probes below
   set the keys and the guards.

@@ -108,7 +108,7 @@ const EXPECTED: Record<string, string> = {
   "ask-type-something-filled-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Mango=neutral | Submit=primary | Chat about this=deny",
   "ask-type-something-focused-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "ask-type-something-typed-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Mango=neutral | Submit=primary | Chat about this=deny",
-  // The Rewind a second Escape opens at an idle Claude (ADR 0065): its footer names Enter and Esc.
+  // The Rewind a second Escape opens at an idle Claude (ADR 0066): its footer names Enter and Esc.
   "interrupt-rewind-v2296.txt": "menu: Continue=neutral | Cancel=deny",
   "permission-bash-v2296.txt": "permission: Yes=primary | Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
   "permission-bash-amend-typed-v2296.txt": "permission: Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",

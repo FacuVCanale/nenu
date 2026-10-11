@@ -27,7 +27,7 @@ export interface QueuedMessage {
   native?: NativeQueueState;
   /** When the operator had the CLI read it now. The keys go once; a repeat presses nothing. */
   readNowAt?: number;
-  /** When a Stop parked it (ADR 0065). It goes only when the operator sends it. */
+  /** When a Stop parked it (ADR 0066). It goes only when the operator sends it. */
   held?: number;
   device: string | null;
 }
@@ -284,7 +284,7 @@ export class MessageQueue {
     this.notify(row);
   }
   /**
-   * Park every row of `scope` still waiting to be typed, after a Stop (ADR 0065): delivery passes over
+   * Park every row of `scope` still waiting to be typed, after a Stop (ADR 0066): delivery passes over
    * it until the operator sends it, and a "Send now" tapped before the Stop is withdrawn with the rest.
    * Answers how many rows it parked.
    */

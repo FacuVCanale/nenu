@@ -56,81 +56,83 @@ export function SettingsRoute() {
   }
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-screen-sm flex-1 flex-col">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       <AppHeader bridge={root?.bridge} error={Boolean(root?.error)}
         onHome={() => navigate(homePath(session))}>
         <h1 className="truncate text-sm font-semibold tracking-tight">Settings</h1>
       </AppHeader>
 
-      <main className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto p-4">
-        {/* First: it's the setting people come here to change, and below the notification stack it
-            sat off-screen on a phone, a scroll into a 1240px page. */}
-        <ThemeControl />
+      <main className="page-body flex flex-col">
+        <div className="page-column flex flex-1 flex-col gap-4">
+          {/* First: it's the setting people come here to change, and below the notification stack it
+              sat off-screen on a phone, a scroll into a 1240px page. */}
+          <ThemeControl />
 
-        {/* Device behaviour sits with appearance — both are "how this phone treats you", as opposed
-            to the herd/notification settings below. Renders nothing where vibrate is unsupported. */}
-        <HapticsControl />
+          {/* Device behaviour sits with appearance — both are "how this phone treats you", as opposed
+              to the herd/notification settings below. Renders nothing where vibrate is unsupported. */}
+          <HapticsControl />
 
-        <Card className="gap-0 py-0">
-          <div className="flex items-center justify-between gap-4 p-4">
-            <div className="flex min-w-0 items-start gap-3">
-              <Bell className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <div className="font-medium">Push notifications</div>
-                <p className="text-sm text-muted-foreground">
-                  Get a notification when an agent needs you.
-                </p>
+          <Card className="gap-0 py-0">
+            <div className="flex items-center justify-between gap-4 p-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <Bell className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="font-medium">Push notifications</div>
+                  <p className="text-sm text-muted-foreground">
+                    Get a notification when an agent needs you.
+                  </p>
+                </div>
+              </div>
+              {/* Fixed slot the size of the Switch (h-6 w-11): the spinner is smaller, so without it
+                  the row — and the whole page under it — resized when state landed. */}
+              <div className="flex h-6 w-11 shrink-0 items-center justify-center">
+                {state ? (
+                  <Switch
+                    checked={on}
+                    disabled={toggleDisabled}
+                    onCheckedChange={toggle}
+                    aria-label="Push notifications"
+                  />
+                ) : (
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                )}
               </div>
             </div>
-            {/* Fixed slot the size of the Switch (h-6 w-11): the spinner is smaller, so without it
-                the row — and the whole page under it — resized when state landed. */}
-            <div className="flex h-6 w-11 shrink-0 items-center justify-center">
-              {state ? (
-                <Switch
-                  checked={on}
-                  disabled={toggleDisabled}
-                  onCheckedChange={toggle}
-                  aria-label="Push notifications"
-                />
-              ) : (
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-              )}
-            </div>
+
+            {state && blocked && (
+              <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+                {availabilityNote(state.availability)}
+              </p>
+            )}
+            {error && (
+              <p className="border-t border-border/60 px-4 py-2.5 text-xs text-status-blocked">
+                {error}
+              </p>
+            )}
+          </Card>
+
+          {/* Mounted while push state is still UNKNOWN, and only removed once we positively learn the
+              bridge has no VAPID keys. Gating on `state` truthiness instead inserted ~400px into the
+              middle of the page one frame late, shoving everything below it down. These two are
+              bridge-wide settings — which transitions notify, and quiet hours — so they are meaningful
+              whatever this particular device's push status turns out to be. */}
+          {state?.availability !== "server-off" && (
+            <>
+              <NotifyPrefsControl />
+              <SnoozeControl snoozedUntil={root?.snoozedUntil ?? null} />
+            </>
+          )}
+
+          {/* On-demand upstream update check (independent of push) — drives the footer UpdateBanner. */}
+          <UpdateCheckControl />
+
+          <ConnectionInfo bridge={root?.bridge} device={root?.device} build={serverBuild} />
+
+          {/* Update nudge + build stamp, grouped and pinned to the bottom of the page. */}
+          <div className="mt-auto flex flex-col gap-2 pt-4">
+            <UpdateBanner />
+            <BuildStamp />
           </div>
-
-          {state && blocked && (
-            <p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-              {availabilityNote(state.availability)}
-            </p>
-          )}
-          {error && (
-            <p className="border-t border-border/60 px-4 py-2.5 text-xs text-status-blocked">
-              {error}
-            </p>
-          )}
-        </Card>
-
-        {/* Mounted while push state is still UNKNOWN, and only removed once we positively learn the
-            bridge has no VAPID keys. Gating on `state` truthiness instead inserted ~400px into the
-            middle of the page one frame late, shoving everything below it down. These two are
-            bridge-wide settings — which transitions notify, and quiet hours — so they are meaningful
-            whatever this particular device's push status turns out to be. */}
-        {state?.availability !== "server-off" && (
-          <>
-            <NotifyPrefsControl />
-            <SnoozeControl snoozedUntil={root?.snoozedUntil ?? null} />
-          </>
-        )}
-
-        {/* On-demand upstream update check (independent of push) — drives the footer UpdateBanner. */}
-        <UpdateCheckControl />
-
-        <ConnectionInfo bridge={root?.bridge} device={root?.device} build={serverBuild} />
-
-        {/* Update nudge + build stamp, grouped and pinned to the bottom of the page. */}
-        <div className="mt-auto flex flex-col gap-2 pt-4">
-          <UpdateBanner />
-          <BuildStamp />
         </div>
       </main>
     </div>

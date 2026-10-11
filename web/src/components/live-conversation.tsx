@@ -259,8 +259,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} onScroll={onScroll} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-8" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className="mx-auto w-full max-w-3xl">
+        <div ref={scrollRef} onScroll={onScroll} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
+          <div ref={contentRef} className="mx-auto w-full max-w-(--chat-column)">
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">

@@ -197,7 +197,7 @@ export class QueueService {
     );
   }
   /**
-   * After a Stop (ADR 0065): what Nenu still holds for the pane's conversation waits for the operator
+   * After a Stop (ADR 0066): what Nenu still holds for the pane's conversation waits for the operator
    * instead of going when the agent turns idle. Answers how many rows it parked.
    */
   async holdAfterStop(session: string, paneId: string): Promise<number> {

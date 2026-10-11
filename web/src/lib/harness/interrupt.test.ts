@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { adapterFor } from "./index";
 
-// Stop presses Escape only while the CLI's own screen says a turn runs (ADR 0065). These are live
+// Stop presses Escape only while the CLI's own screen says a turn runs (ADR 0066). These are live
 // captures: Claude 2.1.296 and Codex 0.160.1 / 0.162.1 in a disposable Herdr session.
 
 const capture = (agent: "claude" | "codex", name: string) =>

@@ -219,7 +219,7 @@ MEASURED by running the adapters on the new captures:
 
 ## Stop (2026-10-11)
 
-Probed for [ADR 0065](../../../../.adr/0065-stop-presses-the-clis-interrupt-key-once.md) in a second
+Probed for [ADR 0066](../../../../.adr/0066-stop-presses-the-clis-interrupt-key-once.md) in a second
 disposable Herdr 0.9.3 server (own socket and `XDG_*` dirs), with Claude Code 2.1.296
 (`--model haiku --effort low --setting-sources project,local`) and Codex **0.162.1** (same flags as
 above; the installed version had moved past the 7-day window). A `slow.py` that prints a tick a second

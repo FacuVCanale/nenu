@@ -47,7 +47,7 @@ export function PaneStrip({
 
   return (
     <>
-      <div data-workbench-navigation-band="panes" className="flex min-h-9 items-center gap-1 overflow-x-auto border-t border-border/40 bg-muted/20 px-2 py-0.5 [scrollbar-width:none] sm:gap-2 sm:px-3 sm:py-1.5 [&::-webkit-scrollbar]:hidden">
+      <div data-workbench-navigation-band="panes" className="flex min-h-9 items-center gap-1 overflow-x-auto border-t border-border/40 bg-muted/20 px-2 py-0.5 [scrollbar-width:none] sm:gap-2 sm:px-3 sm:py-1.5 lg:px-(--page-gutter) [&::-webkit-scrollbar]:hidden">
         <span className="hidden sm:inline"><SectionLabel>Panes</SectionLabel></span>
         {panes.map((p) => (
           <PanePill

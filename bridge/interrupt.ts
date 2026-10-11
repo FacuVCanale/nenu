@@ -1,7 +1,7 @@
 import type { TurnInterrupt } from "../web/src/lib/harness/types.ts";
 import type { InterruptResponse } from "./types.ts";
 
-// Stop (ADR 0065). Claude 2.1.296 and Codex 0.162.1 both open their rewind on a second Escape at an
+// Stop (ADR 0066). Claude 2.1.296 and Codex 0.162.1 both open their rewind on a second Escape at an
 // idle screen (measured), so the key goes out once per Stop and only while the screen says a turn
 // runs, re-read inside the pane's write lock.
 

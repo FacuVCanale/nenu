@@ -6,7 +6,7 @@ import type { TurnReading } from "../types";
 const STEER_PENDING = /^• Messages to be submitted after next tool call \(press esc to interrupt and send immediately\)$/;
 const FOLLOW_UPS_QUEUED = /^• Queued follow-up inputs$/;
 
-/** Stop's reading of a Codex screen (ADR 0065): the painted interrupt cue, and what its own queue holds. */
+/** Stop's reading of a Codex screen (ADR 0066): the painted interrupt cue, and what its own queue holds. */
 export function readCodexTurn(text: string): TurnReading {
   const rows = text.split(/\r\n?|\n/).map((row) => parseAnsi(row).map((segment) => segment.text).join("").trimEnd());
   const queued = rows.some((row) => STEER_PENDING.test(row)) ? "sends" : rows.some((row) => FOLLOW_UPS_QUEUED.test(row)) ? "returns" : null;

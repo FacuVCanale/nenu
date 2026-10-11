@@ -141,6 +141,9 @@ the unit name; the Herdr action runs from anywhere.
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/project/:projectSlug`,
   `/project/:projectSlug/node/:nodeId`, `/settings`, `/pane/:paneId` and `/pane/:paneId/history`.
   The router instance is module-scoped so it keeps its location.
+- **A workspace has no page.** Every way in opens the pane `workspaceEntry` picks; its tabs and panes
+  are the strips above that chat, and `/space/:spaceId` only resolves old links and an empty workspace
+  ([ADR 0065](./.adr/0065-a-workspace-opens-on-its-pane.md)).
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
@@ -222,7 +225,7 @@ the unit name; the Herdr action runs from anywhere.
   turn**, re-read inside the pane's write lock, then a two-second cooldown per pane. A second Escape
   at an idle Claude or Codex opens its rewind. Agents without a measured key get no Stop, a Stop that
   would send the CLI's own queue asks first, and Nenu's queued rows are held until the operator sends
-  them ([ADR 0065](./.adr/0065-stop-presses-the-clis-interrupt-key-once.md)).
+  them ([ADR 0066](./.adr/0066-stop-presses-the-clis-interrupt-key-once.md)).
 - **A generically-detected menu emits only the keys the screen printed** — the footer's
   `<key> to <verb>` hints plus the arrows it advertised. Never synthesise a digit from a numbered row:
   in the `/model` picker a digit confirms *and* persists the user's default. The generic grammar

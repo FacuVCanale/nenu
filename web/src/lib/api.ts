@@ -585,7 +585,7 @@ export function sendKeys(
 }
 
 /**
- * Stop the agent's running turn (ADR 0065). The bridge picks the CLI's key and presses it only while
+ * Stop the agent's running turn (ADR 0066). The bridge picks the CLI's key and presses it only while
  * the live screen shows a turn; `confirm` accepts that the CLI sends its queued messages on stopping.
  */
 export function interruptPane(paneId: string, session?: string, confirm = false): Promise<InterruptResponse> {

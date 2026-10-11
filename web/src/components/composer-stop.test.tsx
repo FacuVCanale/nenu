@@ -9,7 +9,7 @@ import type { InterruptResponse } from "@/lib/types";
 import { Composer } from "./composer";
 import { StatusArea } from "./status-area";
 
-// Stop (ADR 0065), as the operator meets it in the composer on a phone or a desk.
+// Stop (ADR 0066), as the operator meets it in the composer on a phone or a desk.
 
 let answers: InterruptResponse[] = [];
 let bodies: unknown[] = [];

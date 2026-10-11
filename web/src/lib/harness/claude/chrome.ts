@@ -282,7 +282,7 @@ export function extractInputDraft(lines: StyledLine[]): string | null {
 }
 
 /**
- * Stop's reading of the screen (ADR 0065). A turn runs while the statusline under the live input box
+ * Stop's reading of the screen (ADR 0066). A turn runs while the statusline under the live input box
  * names the interrupt key (RUNNING_TURN_HINT). Claude drops that hint while the box holds a draft,
  * and then nothing on screen says a turn runs, so Stop is refused rather than guessed. The empty
  * box's queue placeholder means Claude's own queue holds a message, which Escape sends at once.

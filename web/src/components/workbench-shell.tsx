@@ -11,7 +11,7 @@ import type { HomeData } from "@/lib/loaders";
 import { homePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { workspaceName } from "@/lib/spaces";
-import { isReadOnly } from "@/lib/types";
+import { canCreate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
@@ -67,8 +67,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   const { collapsed, choose: setCollapsed, setDocked } = useSidebarCollapse();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [request, setRequest] = useState<SidebarRequest>();
-  const canCreate = !isReadOnly(data.device) && !data.error && data.bridge === "connected";
-  const newChat = canCreate ? () => { setSheet(null); openNewDialog(); } : undefined;
+  const newChat = canCreate(data) ? () => { setSheet(null); openNewDialog(); } : undefined;
   const attention = needsYou(data).length;
   const sidebarId = useId();
   const expandButton = useRef<HTMLButtonElement>(null);
@@ -170,7 +169,7 @@ function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewCha
 }) {
   const { paneId, projectSlug, spaceId } = useParams();
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-  const currentSpace = spaceId ?? data.agents.find((pane) => pane.paneId === paneId)?.workspaceId;
+  const currentSpace = spaceId ?? [...data.agents, ...data.shellPanes].find((pane) => pane.paneId === paneId)?.workspaceId;
   const initial = (name: string) => name.trim().charAt(0).toUpperCase() || "·";
   return (
     <nav className="workbench-sidebar-rail" aria-label="Collapsed sidebar">

@@ -87,7 +87,7 @@ export interface HarnessAdapter {
    */
   draftIsOpaque?(draft: string): boolean;
   /**
-   * Stop (ADR 0065): the key that interrupts this CLI's running turn, measured on the CLI, and how to
+   * Stop (ADR 0066): the key that interrupts this CLI's running turn, measured on the CLI, and how to
    * read from the screen whether a turn runs and what the key does to the CLI's own queue.
    *
    * OPTIONAL, and absence means Nenu offers no Stop for this agent. A key that only usually

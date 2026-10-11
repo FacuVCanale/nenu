@@ -13,7 +13,8 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
 //   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
-//   bun scripts/e2e/run.ts space    [--port 8797] [--out DIR]   The workspace page for each workspace shape
+//   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
+//   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
 //   bun scripts/e2e/run.ts stop     [--port 8797] [--out DIR]   Stop a working Claude, then what the queue holds
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
@@ -312,8 +313,8 @@ async function org(): Promise<void> {
 
 /**
  * Closing what is on screen, on a phone and a desk: the open pane's tab from Nenu (its actions
- * sheet) and from Herdr (the fake closes it while the page shows it), the open pane beside a
- * sibling, and the tab a space view is filtered to. The demo's `nenu` space holds `redesign`
+ * sheet) and from Herdr (the fake closes it while the page shows it), and the open pane beside a
+ * sibling. The demo's `nenu` space holds `redesign`
  * (working) then `review` (idle); throwaway tabs go after them, so `review` is where a close lands.
  * Then the first tab closes (lands on the next one) and the only tab of `api` closes (lands Home).
  */
@@ -324,8 +325,6 @@ async function tabs(): Promise<void> {
     const herd = bridge.herd!;
     const cases: Array<{ name: string; expected: string; landed: string }> = [];
     const pathname = (page: Page) => page.evaluate(() => decodeURIComponent(location.pathname), null);
-    // A chip's last child is its label; a status dot's screen-reader text comes before it.
-    const activeTab = (page: Page) => page.evaluate(() => document.querySelector('[data-workbench-navigation-band="tabs"] button[aria-current="true"]')?.lastChild?.textContent ?? "", null);
     const sheetClose = (band: "tabs" | "panes", row: "Close tab" | "Close pane") => async (page: Page) => {
       await page.locator(`[data-workbench-navigation-band="${band}"] button[aria-current="true"]`).click();
       await page.getByRole("button", { name: row, exact: true }).click({ timeout: 5000 });
@@ -333,7 +332,7 @@ async function tabs(): Promise<void> {
     };
     const inHerdr = (tabId: string) => async () => fake.closeTab(tabId);
 
-    const run = async (name: string, device: typeof PHONE | typeof DESKTOP, path: string, close: (page: Page) => Promise<void>, expected: string, read = pathname) => {
+    const run = async (name: string, device: typeof PHONE | typeof DESKTOP, path: string, close: (page: Page) => Promise<void>, expected: string) => {
       const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
       const page = await context.newPage();
       await page.clock.install({ time: bridge.now() });
@@ -341,10 +340,10 @@ async function tabs(): Promise<void> {
       await page.locator('[data-workbench-navigation-band="tabs"] button[aria-current="true"]').waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1000);
       await close(page);
-      for (let i = 0; i < 100 && (await read(page)) !== expected; i++) await sleep(100);
+      for (let i = 0; i < 100 && (await pathname(page)) !== expected; i++) await sleep(100);
       // Settle: a second hop (a stale snapshot bouncing Home) would land within a poll.
       await page.waitForTimeout(2500);
-      cases.push({ name, expected, landed: await read(page) });
+      cases.push({ name, expected, landed: await pathname(page) });
       await page.screenshot({ path: join(outDir, `${name}.png`), animations: "disabled" });
       await context.close();
     };
@@ -371,11 +370,6 @@ async function tabs(): Promise<void> {
     }
     // `server` holds Blocked Claude, Codex and a shell: closing the shell keeps you in the tab.
     await run("sibling-pane-nenu-phone", PHONE, `/pane/${encodeURIComponent(herd.shell)}`, sheetClose("panes", "Close pane"), `/pane/${herd.blocked}`);
-    await scratchTab(n);
-    await run("space-tab-nenu-phone", PHONE, "/space/w1", async (page) => {
-      await page.getByRole("button", { name: `scratch ${n}`, exact: true }).click({ timeout: 5000 });
-      await sheetClose("tabs", "Close tab")(page);
-    }, "review", activeTab);
     await run("first-tab-herdr-phone", PHONE, `/pane/${encodeURIComponent(herd.working)}`, inHerdr("w1:t1"), review);
     await run("only-tab-nenu-desktop", DESKTOP, `/pane/${encodeURIComponent(herd.blocked)}`, sheetClose("tabs", "Close tab"), "/");
     const closes = fake.writes().filter((c) => c.method.endsWith(".close")).map((c) => `${c.method} ${String(c.params.tab_id ?? c.params.pane_id)}`);
@@ -387,53 +381,171 @@ async function tabs(): Promise<void> {
 }
 
 /**
- * The workspace page, on a phone and a desk, for each shape a workspace takes: `nenu` (two tabs of
- * one agent each), `api` (one tab holding two agents and a shell) and `psag`, added here as Herdr
- * names an unlabelled tab: one tab called "1" holding one agent. Then a pane's own tab bar, which
- * shares the page's tabs.
+ * Opening a workspace from every way in, on a desk and a phone: the sidebar row, search (⌘K on the
+ * desk), the folded rail, the phone's Browse, and a `/space/:id` link from an older Nenu. Each must
+ * land on the pane the workspace opens on (lib/spaces.ts workspaceEntry): `api` on its blocked
+ * agent, `nenu` on the first pane of Herdr's active tab, `docs` (one pane) on it, and `ops` on
+ * the vpn shell the operator had open last.
  */
-async function space(): Promise<void> {
+async function workspace(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench(async (bridge, browser) => {
     const fake = bridge.fake!;
-    fake.addWorkspace("w3", "psag").addTab("w3:t1", "1")
-      .addPane({ paneId: "w3:solo", workspaceId: "w3", tabId: "w3:t1", agent: "claude", label: "T-76 Mejoras", cwd: join(bridge.dir, "psag") });
-    for (let i = 0; i < 150; i++) {
-      const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string }> }>);
-      if (snap.agents.some((p) => p.paneId === "w3:solo")) break;
-      await sleep(100);
-    }
+    const herd = bridge.herd!;
+    fake.addWorkspace("w3", "docs").addTab("w3:t1", "1")
+      .addPane({ paneId: "w3:solo", workspaceId: "w3", tabId: "w3:t1", agent: "claude", label: "Docs refresh", cwd: join(bridge.dir, "docs") });
+    await addOps(bridge);
+    const expected: Record<string, string> = { nenu: `/pane/${herd.working}`, api: `/pane/${herd.blocked}`, docs: "/pane/w3:solo", ops: "/pane/w4:vpn" };
+    const ids: Record<string, string> = { nenu: "w1", api: "w2", docs: "w3", ops: "w4" };
+    const pathname = (page: Page) => page.evaluate(() => decodeURIComponent(location.pathname), null);
+    const landed: Array<{ entry: string; workspace: string; expected: string; landed: string }> = [];
     const shots: string[] = [];
-    const landed: Array<{ name: string; expected: string; landed: string }> = [];
-    const tabBar = '[data-workbench-navigation-band="tabs"] button[aria-current="true"]';
-    // A workspace of one pane opens straight onto it; the others stay on their page.
-    const cases = [
-      ["nenu", "/space/w1", "/space/w1", 'main >> text="nenu"'],
-      ["api", "/space/w2", "/space/w2", 'main >> text="api"'],
-      ["psag", "/space/w3", "/pane/w3:solo", tabBar],
-      ["pane-tabs", `/pane/${encodeURIComponent(bridge.herd!.idle)}`, `/pane/${bridge.herd!.idle}`, tabBar],
-    ] as const;
-    for (const [deviceName, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
-      for (const [label, path, expected, ready] of cases) {
-        const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
-        const page = await context.newPage();
-        await page.clock.install({ time: bridge.now() });
+    const row = (scope: string, name: string) => `${scope} section[aria-label="${name}"] a.nav-row`;
+    type Entry = (page: Page, name: string) => Promise<void>;
+    const entries: Record<"desktop" | "phone", Array<[string, Entry]>> = {
+      desktop: [
+        ["sidebar", (page, name) => page.locator(row('aside[aria-label="Workspace sidebar"]', name)).click()],
+        ["search", async (page, name) => {
+          await page.keyboard.press("Meta+k");
+          await page.getByRole("searchbox").fill(name);
+          await page.locator(row('aside[aria-label="Workspace sidebar"]', name)).click();
+        }],
+        ["rail", async (page, name) => {
+          // The fold persists, so it is set once and the page reloads onto the rail.
+          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "1"), null);
+          await page.goto(`${bridge.url}/`);
+          await page.locator(`nav[aria-label="Collapsed sidebar"] a[aria-label="${name}"]`).click();
+        }],
+        ["old-link", (page, name) => page.goto(`${bridge.url}/space/${ids[name]}`).then(() => undefined)],
+      ],
+      phone: [
+        ["browse", async (page, name) => {
+          await page.getByRole("button", { name: "Browse" }).click();
+          await page.locator(row("[role=dialog]", name)).click();
+        }],
+        ["search", async (page, name) => {
+          await page.getByRole("button", { name: "Search" }).click();
+          await page.getByRole("searchbox").fill(name);
+          await page.locator(row("[role=dialog]", name)).click();
+        }],
+        ["old-link", (page, name) => page.goto(`${bridge.url}/space/${ids[name]}`).then(() => undefined)],
+      ],
+    };
+
+    for (const [deviceName, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      // The operator had ops' vpn shell open, so the bridge holds it as the pane last seen there.
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent("w4:vpn")}`);
+      await page.locator('[data-workbench-navigation-band="tabs"]').first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      for (const [entry, open] of entries[deviceName]) {
+        for (const name of Object.keys(expected)) {
+          await page.goto(`${bridge.url}/`);
+          await page.locator("h1").first().waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(300);
+          let at = "";
+          try {
+            await open(page, name);
+            for (let i = 0; i < 100 && (at = await pathname(page)) !== expected[name]; i++) await sleep(100);
+          } catch (error) {
+            at = `error: ${(error as Error).message.split("\n")[0]}`;
+          }
+          landed.push({ entry: `${deviceName}/${entry}`, workspace: name, expected: expected[name]!, landed: at });
+          if (name === "ops" && entry === entries[deviceName][0]![0]) {
+            await page.locator('[data-workbench-navigation-band="tabs"]').first().waitFor({ timeout: 15_000 });
+            await page.waitForTimeout(1200);
+            const shot = join(outDir, `ops-${deviceName}.png`);
+            await page.screenshot({ path: shot, animations: "disabled" });
+            shots.push(shot);
+          }
+        }
+      }
+      await context.close();
+    }
+    return { shots, landed, failed: landed.filter((c) => c.landed !== c.expected), unexpectedWrites: fake.writes() };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "workspace.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ ...result, landed: result.landed.length }, null, 2));
+  if (result.failed.length || result.unexpectedWrites.length) process.exit(1);
+}
+
+/** A workspace of two tabs, as Herdr leaves them: an agent in the unlabelled tab "1", a shell in "vpn". */
+async function addOps(bridge: TestBridge): Promise<void> {
+  bridge.fake!.addWorkspace("w4", "ops").addTab("w4:t1", "1").addTab("w4:t2", "vpn")
+    .addPane({ paneId: "w4:agent", workspaceId: "w4", tabId: "w4:t1", agent: "claude", label: "Search metrics", cwd: join(bridge.dir, "ops") })
+    .addPane({ paneId: "w4:vpn", workspaceId: "w4", tabId: "w4:t2", agent: null, label: "vpn", cwd: join(bridge.dir, "ops") });
+  bridge.fake!.setStatus("w4:agent", "working");
+  for (let i = 0; i < 150; i++) {
+    const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ shellPanes: Array<{ paneId: string }> }>);
+    if (snap.shellPanes.some((p) => p.paneId === "w4:vpn")) return;
+    await sleep(100);
+  }
+  throw new Error("the bridge never listed ops");
+}
+
+/**
+ * Every page at the widths a desk shows it (1280, 1440 and 1920, the sidebar open and folded), on a
+ * tablet and on a phone, with the header's height and where its title and the content column sit (layout.json): Home, a
+ * project, a node, Settings, a workspace and a workspace pane's chat, then a coordinator's chat
+ * beside the project panel.
+ */
+async function layout(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  // 900 is a tablet: no sidebar yet, the phone's navigation, a desk's gutter.
+  const variants: Array<[string, Record<string, unknown>, boolean]> = [["390", PHONE, false], ["900", { ...DESKTOP, viewport: { width: 900, height: 900 } }, false]];
+  for (const width of [1280, 1440, 1920]) {
+    for (const folded of [false, true]) variants.push([`${width}-${folded ? "folded" : "open"}`, { ...DESKTOP, viewport: { width, height: 900 } }, folded]);
+  }
+  const tabBar = '[data-workbench-navigation-band="tabs"]';
+  const measures: Record<string, unknown> = {};
+  const capture = async (bridge: TestBridge, browser: Browser, pages: Array<[string, string, string]>) => {
+    for (const [variant, device, folded] of variants) {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      if (folded) await page.addInitScript(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "1"), null);
+      for (const [name, path, ready] of pages) {
         await page.goto(bridge.url + path);
         await page.locator(ready).first().waitFor({ timeout: 15_000 });
-        await page.waitForTimeout(1500);
-        const name = `${label}-${deviceName}`;
-        landed.push({ name, expected, landed: await page.evaluate(() => decodeURIComponent(location.pathname), null) });
-        const shot = join(outDir, `space-${name}.png`);
-        await page.screenshot({ path: shot, animations: "disabled" });
-        shots.push(shot);
-        await context.close();
+        await page.waitForTimeout(1200);
+        const shot = `${name}-${variant}`;
+        await page.screenshot({ path: join(outDir, `${shot}.png`), animations: "disabled" });
+        measures[shot] = await page.evaluate(() => {
+          const box = (el: Element | null) => {
+            if (!el) return null;
+            const { left, right } = el.getBoundingClientRect();
+            return { left: Math.round(left), right: Math.round(right), width: Math.round(right - left) };
+          };
+          return {
+            path: decodeURIComponent(location.pathname),
+            header: Math.round(document.querySelector(".workbench-app-header")?.getBoundingClientRect().height ?? 0),
+            pane: box(document.querySelector(".workbench-main")),
+            title: box(document.querySelector(".workbench-app-header .flex-1 > *")),
+            column: box(document.querySelector("main > div")),
+          };
+        }, null);
       }
+      await context.close();
     }
-    return { shots, landed, failed: landed.filter((c) => c.landed !== c.expected).map((c) => c.name), unexpectedWrites: fake.writes() };
-  }, CAPTURE_EPOCH);
-  await writeFile(join(outDir, "space.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.failed.length || result.unexpectedWrites.length) process.exit(1);
+  };
+  await withBench(async (bridge, browser) => {
+    await addOps(bridge);
+    await capture(bridge, browser, [
+      ["home", "/", "h1"],
+      ["project", "/project/awam", 'main >> text="Panel depósito"'],
+      ["node", "/project/awam/node/t-0101", 'main >> text="Migración de stock"'],
+      ["settings", "/settings", "text=Push notifications"],
+      ["workspace", "/space/w4", `main:has-text("ops"), ${tabBar}`],
+      ["chat", "/pane/w4%3Aagent", tabBar],
+    ]);
+  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now));
+  await withBench(async (bridge, browser) => {
+    await capture(bridge, browser, [["coordinator", `/pane/${encodeURIComponent(bridge.herd!.codex)}`, 'aside[aria-label="Project"]:has-text("Panel depósito"), [role=tab]:has-text("Threads")']]);
+  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now, { coordinator: true }));
+  await writeFile(join(outDir, "layout.json"), JSON.stringify(measures, null, 2));
+  console.log(`[e2e] ${Object.keys(measures).length} captures in ${outDir}`);
 }
 
 /**
@@ -682,11 +794,12 @@ if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
 else if (command === "tabs") await tabs();
-else if (command === "space") await space();
+else if (command === "workspace") await workspace();
+else if (command === "layout") await layout();
 else if (command === "stop") await stop();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|space|stop|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

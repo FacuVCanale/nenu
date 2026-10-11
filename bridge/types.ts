@@ -390,7 +390,7 @@ export type ActionResponse =
     };
 
 /**
- * POST /api/pane/:id/interrupt — Stop (ADR 0065). `pressed: false` is a Stop inside another one's
+ * POST /api/pane/:id/interrupt — Stop (ADR 0066). `pressed: false` is a Stop inside another one's
  * cooldown: nothing was sent, the first Escape is doing the work. `queued` says what the key did to the
  * CLI's own queue; `held` counts the rows Nenu parked until the operator sends them.
  */

@@ -103,7 +103,7 @@ export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId
   const [tab, setTab] = useState<PanelTab>("threads");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div role="tablist" aria-label="Project panel" className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border px-3">
+      <div role="tablist" aria-label="Project panel" className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-3">
         {TABS.map(([key, label, Icon]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} aria-label={label} title={label} onClick={() => setTab(key)}
             className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px]", tab === key ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>

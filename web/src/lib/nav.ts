@@ -2,8 +2,7 @@
 // path; React Router decodes them back in useParams. The active session rides along as `?s=` so a
 // navigation stays scoped to the session you're viewing (see lib/session.ts) — omitted on primary.
 import { sessionSearch } from "./session";
-import { soloPane } from "./spaces";
-import type { AgentView } from "./types";
+import { workspaceEntry, type Herd } from "./spaces";
 
 export function panePath(paneId: string, session?: string): string {
   return `/pane/${encodeURIComponent(paneId)}${sessionSearch(session)}`;
@@ -18,19 +17,13 @@ export function historyPath(paneId: string, session?: string): string {
   return `/pane/${encodeURIComponent(paneId)}/history${sessionSearch(session)}`;
 }
 
-/** A space's detail route (its tabs + panes). Deep-linkable; carries the session like panePath. */
-export function spacePath(spaceId: string, session?: string): string {
-  return `/space/${encodeURIComponent(spaceId)}${sessionSearch(session)}`;
-}
-
-/** Where a workspace opens: straight onto its only pane when it holds one, else its page. */
-export function workspacePath(
-  workspaceId: string,
-  herd: { agents: readonly AgentView[]; shellPanes?: readonly AgentView[] },
-  session?: string,
-): string {
-  const solo = soloPane(workspaceId, herd.agents, herd.shellPanes ?? []);
-  return solo ? panePath(solo.paneId, session) : spacePath(workspaceId, session);
+/**
+ * A workspace's link: the pane it opens on (workspaceEntry), else `/space/:id`, which an empty
+ * workspace answers and an older link resolves the same way.
+ */
+export function workspacePath(workspaceId: string, herd: Herd, session?: string): string {
+  const entry = workspaceEntry(workspaceId, herd);
+  return entry ? panePath(entry.paneId, session) : `/space/${encodeURIComponent(workspaceId)}${sessionSearch(session)}`;
 }
 
 export function projectPath(slug: string, session?: string): string {
