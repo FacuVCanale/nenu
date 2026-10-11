@@ -15,6 +15,7 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
+//   bun scripts/e2e/run.ts stop     [--port 8797] [--out DIR]   Stop a working Claude, then what the queue holds
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -547,6 +548,94 @@ async function layout(): Promise<void> {
   console.log(`[e2e] ${Object.keys(measures).length} captures in ${outDir}`);
 }
 
+/**
+ * Stop on a working Claude, on a phone and a desk: the composer while it works (empty, then with a
+ * draft), "Stopping…", and the composer once the pane is idle. The phone taps Stop twice and fires two
+ * interrupts at once, and must still press Escape once; the desk stops with Esc in the empty composer.
+ * The phone also queues a message for after the turn first: Stop must leave it held, not delivered.
+ * A build without Stop records `stop: false` and keeps the first two captures, so the same command
+ * shows the before.
+ */
+async function stop(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const fake = bridge.fake!;
+    const pane = bridge.herd!.working;
+    // Long enough to see "Stopping…"; a real Claude goes idle ~300 ms after Escape.
+    fake.interruptMs = 2500;
+    const shots: string[] = [];
+    const runs: Array<Record<string, unknown>> = [];
+    // The desk first: the phone's queued row is still listed when a later device opens the pane.
+    for (const [deviceName, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+      fake.setStatus(pane, "working");
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
+      const box = page.getByRole("textbox").first();
+      await box.waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      const shot = async (name: string) => {
+        const path = join(outDir, `stop-${name}-${deviceName}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      await shot("working");
+      await box.fill("Also run the tests before you finish");
+      await page.waitForTimeout(400);
+      await shot("working-draft");
+      const run: Record<string, unknown> = { device: deviceName };
+      runs.push(run);
+      let queued = 0;
+      if (deviceName === "phone") {
+        // Queued for after the turn, the row waits in Nenu while Claude works.
+        await page.getByRole("button", { name: "Send", exact: true }).click();
+        await page.getByRole("button", { name: /Queue for later/ }).click({ timeout: 5000 });
+        queued = fake.submitted.length;
+        await page.waitForTimeout(800);
+      } else {
+        await box.fill("");
+      }
+      const stopButton = page.getByRole("button", { name: "Stop", exact: true });
+      run.stop = await stopButton.waitFor({ timeout: 3000 }).then(() => true, () => false);
+      if (!run.stop) {
+        await context.close();
+        continue;
+      }
+      const before = fake.interrupted.length;
+      if (deviceName === "phone") {
+        await stopButton.click();
+        await stopButton.click({ timeout: 300 }).catch(() => {});
+        // Two requests racing past the button, as two devices would.
+        run.racing = await page.evaluate(async (id: string) => {
+          const post = () => fetch(`/api/pane/${encodeURIComponent(id)}/interrupt`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((r) => r.json());
+          return Promise.all([post(), post()]);
+        }, pane);
+      } else {
+        await box.press("Escape");
+      }
+      run.stopping = await page.getByText("Stopping…").first().waitFor({ timeout: 2000 }).then(() => true, () => false);
+      await shot("stopping");
+      for (let i = 0; i < 100 && fake.screen(pane).includes("esc to interrupt"); i++) await sleep(100);
+      await page.waitForTimeout(2000);
+      await shot("stopped");
+      run.escapes = fake.interrupted.length - before;
+      run.stopAfterIdle = await stopButton.isVisible();
+      if (deviceName === "phone") {
+        // Held, not delivered: nothing new was submitted since the row was queued.
+        run.heldUndelivered = fake.submitted.length === queued;
+        run.held = await page.getByText(/^Held/).first().waitFor({ timeout: 3000 }).then(() => true, () => false);
+      }
+      await context.close();
+    }
+    const failed = runs.filter((r) => r.stop && (r.escapes !== 1 || !r.stopping || r.stopAfterIdle || r.heldUndelivered === false)).map((r) => r.device);
+    return { shots, runs, failed, writes: fake.writes().map((c) => `${c.method} ${JSON.stringify(c.params.keys ?? c.params.text ?? "")}`) };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "stop.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.failed.length) process.exit(1);
+}
+
 async function baseline(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const windowMs = Number(values.seconds) * 1000;
@@ -707,9 +796,10 @@ else if (command === "org") await org();
 else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "layout") await layout();
+else if (command === "stop") await stop();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

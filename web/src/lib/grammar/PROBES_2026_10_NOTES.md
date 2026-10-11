@@ -217,6 +217,35 @@ MEASURED by running the adapters on the new captures:
 | Codex `approval-exec`, `ask-plan-mode`, `trust` | lifted | `Environment: local` line does not break parsing. |
 | Codex `busy-after-enter`, `busy-after-tab` | raw, `composerReady=true` | Pending steer / queue is not surfaced to the UI. |
 
+## Stop (2026-10-11)
+
+Probed for [ADR 0066](../../../../.adr/0066-stop-presses-the-clis-interrupt-key-once.md) in a second
+disposable Herdr 0.9.3 server (own socket and `XDG_*` dirs), with Claude Code 2.1.296
+(`--model haiku --effort low --setting-sources project,local`) and Codex **0.162.1** (same flags as
+above; the installed version had moved past the 7-day window). A `slow.py` that prints a tick a second
+stood in for a long foreground tool. Captures: `harness/{claude,codex}/fixtures/interrupt-*`.
+
+| What | Claude 2.1.296 | Codex 0.162.1 |
+| --- | --- | --- |
+| `send_keys ["Escape"]` on a running tool call | MEASURED: `Interrupted · What should Claude do instead?`, Herdr `idle` 280 ms after the key | MEASURED: `■ Conversation interrupted`, Herdr `done` within 600 ms; the command keeps running as a background terminal |
+| Escape while streamed text runs (no tool) | MEASURED: same, idle within 300 ms | not probed |
+| Escape at the idle screen | MEASURED: nothing visible; a second Escape 0.6 s later opens `Rewind` | MEASURED: `esc again to edit previous message`; the second opens `Browsing transcript … ↵ rewind · esc back` |
+| Escape, Escape 300 ms / 700 ms apart on a running turn | MEASURED: stopped, no Rewind (the stopping Escape does not arm the double press) | not probed |
+| Escape with a message in the CLI's own queue | MEASURED: stops the tool, then the queued message runs at once as a new turn (`working` throughout) | MEASURED (Tab-queued follow-up): stops; the follow-up returns to the composer as a draft and is not sent |
+| Escape with a steer just sent | n/a | MEASURED: on 0.162.1 the steer showed as a user row at once (no "submitted after next tool call" block) and Escape only stopped the turn. 0.160.1's pending steer is sent by Escape (section above) |
+| Escape with a draft typed in the box | MEASURED: stops and keeps the draft. While the draft is there the statusline drops `esc to interrupt` (and `← for agents`) | not probed |
+
+Codex 0.162.1 also paints `• Waiting for background terminal (20s • esc to interrupt)` instead of
+`• Working (…)` while a long command runs, with the same bold bullet and dim hint
+(`interrupt-waiting-background-v0162.txt`). The cue reader accepted only "Working" before this probe.
+
+Ctrl+C was not probed for stopping: Escape stopped both CLIs, and at an idle prompt Ctrl+C arms quit.
+
+End to end on the same server (test bridge on the disposable socket, Chromium headless, the built web):
+Send from the phone composer to Claude, Stop shown 0.7 s later, two taps, one `agent.interrupt`
+audited, Herdr idle 392 ms after the tap, no Rewind. Codex from the desk: Esc twice in the empty
+composer, one Escape audited, `done` 256 ms later, no transcript browser.
+
 ## Not done
 
 - Claude `agent.prompt` on a blocked or working pane: skipped, documented behaviour only.

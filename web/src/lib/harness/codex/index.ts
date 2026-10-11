@@ -33,6 +33,7 @@ import { detectAskRegion } from "./ask";
 import { detectTrustRegion } from "./trust";
 import { codexDraftCarriesSend } from "./paste";
 import { detectModelMenuRegion } from "./model-menu";
+import { readCodexTurn } from "./interrupt";
 
 export function codexBuildBlocks(lines: StyledLine[]): Block[] {
   const update = detectUpdateMenu(lines);
@@ -91,4 +92,6 @@ export const codexAdapter: HarnessAdapter = {
   composerReady,
   composerPrompt,
   draftCarriesSend: codexDraftCarriesSend,
+  // Measured on 0.162.1: Escape interrupts the turn, Herdr reads `done` within ~600 ms.
+  interrupt: { keys: ["Escape"], read: readCodexTurn },
 };

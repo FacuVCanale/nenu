@@ -212,9 +212,13 @@ their exact saved path appears in a user message in this chat. Images need a sav
 appear here. Uploads are currently retained for 48 hours; deleted uploads and remote image URLs are
 unavailable.
 
-While Codex is working, **Stop** interrupts its current turn and leaves the terminal open. The bridge
-checks the live terminal before sending the interruption. An acknowledged request means the interrupt
-was sent; the next status update confirms whether Codex has stopped.
+While Claude or Codex is working, and right after you send a message, **Stop** takes the place of
+Send (with a draft, both show). It interrupts the current turn the way Esc does in the terminal and
+leaves the terminal open; on a desk, Esc in the empty composer does the same. The button turns into
+**Stopping…** until the agent is idle, so a second tap sends nothing. If the agent has a message in
+its own queue that stopping would send, the first tap asks and **Really stop?** confirms. Messages
+still waiting in Nenu's queue are held after a Stop and go only when you send them. Other agents get
+no Stop until their interrupt key has been measured.
 
 ## Configure
 

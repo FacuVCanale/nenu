@@ -80,6 +80,8 @@ describe("api client", () => {
     await expect(interruptPane("w1:p1", "phone")).resolves.toEqual({ ok: true });
     expect(body).toEqual({});
     expect(session).toBe("phone");
+    await interruptPane("w1:p1", "phone", true);
+    expect(body).toEqual({ confirm: true });
   });
 
   // Measured 2026-10-10: the queue strip showed `/api/pane/w4F%3Ap1/queue → 409 {"error":…,"code":…}`.

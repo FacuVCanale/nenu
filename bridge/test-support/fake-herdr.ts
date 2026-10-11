@@ -81,6 +81,10 @@ export class FakeHerdr {
   /** Messages submitted with Enter on a composer, and dialog answers. */
   readonly submitted: Array<{ paneId: string; text: string; at: number }> = [];
   readonly answered: Array<{ paneId: string; key: string; at: number }> = [];
+  /** Escape presses that reached a working composer. */
+  readonly interrupted: Array<{ paneId: string; at: number }> = [];
+  /** How long a working pane takes to go idle after Escape (measured on Claude 2.1.296: ~300 ms). */
+  interruptMs = 0;
 
   constructor(opts: FakeHerdrOptions) {
     this.socketPath = opts.socketPath;
@@ -200,11 +204,15 @@ export class FakeHerdr {
     const pane = this.pane(paneId);
     const body = [...pane.lines, ""];
     if (pane.dialog) return [...body, RULE, pane.dialog].join("\n");
-    if (pane.status === "working") {
+    const working = pane.status === "working";
+    if (working) {
       const elapsed = Math.floor((Date.now() - pane.workingSince) / 1000);
-      body.push(`${SPINNER[pane.revision % SPINNER.length]} Working… (${elapsed}s · esc to interrupt)`, "");
+      body.push(`${SPINNER[pane.revision % SPINNER.length]} Working… (${elapsed}s · ↓ 12 tokens)`, "");
     }
-    return [...body, RULE, `❯ ${pane.draft}`, RULE, "  Opus 5.5 | Context 13% used", "  ← for agents"].join("\n");
+    // Claude 2.1.296 names the interrupt key in the statusline while a turn runs, and drops it while
+    // the box holds a draft.
+    const hint = working && !pane.draft ? " · esc to interrupt" : "";
+    return [...body, RULE, `❯ ${pane.draft}`, RULE, "  Opus 5.5 | Context 13% used", `  ⏵⏵ auto mode on${hint} · ← for agents`].join("\n");
   }
 
   private pane(paneId: string): FakePane {
@@ -345,7 +353,12 @@ export class FakeHerdr {
       pane.draft = "";
       pane.revision++;
     } else if (key === "Escape" && pane.status === "working") {
-      this.setStatus(paneId, "idle");
+      this.interrupted.push({ paneId, at: now });
+      setTimeout(() => {
+        if (this.panes.get(paneId) !== pane) return;
+        pane.lines.push("  ⎿  Interrupted · What should Claude do instead?");
+        this.setStatus(paneId, "idle");
+      }, this.interruptMs);
     }
   }
 

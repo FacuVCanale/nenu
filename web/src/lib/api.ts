@@ -13,6 +13,7 @@ import type {
   CreateResponse,
   DeliveryMode,
   Interaction,
+  InterruptResponse,
   NativeQueueState,
   NodeRole,
   NotifyPrefs,
@@ -583,11 +584,14 @@ export function sendKeys(
   );
 }
 
-/** Interrupt the currently-running Codex turn after the bridge revalidates its live terminal cue. */
-export function interruptPane(paneId: string, session?: string): Promise<ActionResponse> {
-  return req<ActionResponse>(
+/**
+ * Stop the agent's running turn (ADR 0066). The bridge picks the CLI's key and presses it only while
+ * the live screen shows a turn; `confirm` accepts that the CLI sends its queued messages on stopping.
+ */
+export function interruptPane(paneId: string, session?: string, confirm = false): Promise<InterruptResponse> {
+  return req<InterruptResponse>(
     withSession(`/api/pane/${encodeURIComponent(paneId)}/interrupt`, session),
-    { method: "POST", body: "{}" },
+    { method: "POST", body: JSON.stringify(confirm ? { confirm } : {}) },
   );
 }
 

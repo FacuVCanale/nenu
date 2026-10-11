@@ -1,0 +1,34 @@
+[0m[38;2;215;119;87m ▐[0m[38;2;215;119;87m[48;2;0;0;0m▛███▛█   [0m[1mClaude Code [0m[38;2;153;153;153mv2.1.296[0m
+[0m[38;2;215;119;87m▝▜[0m[38;2;215;119;87m[48;2;0;0;0m█████[0m[38;2;215;119;87m█▀  [0m[38;2;153;153;153mHaiku 5.5 with low effort · Claude Team[0m
+[0m[38;2;215;119;87m ▝▝   ▝▝   [0m[38;2;153;153;153m/tmp/nenu-probe/work[0m
+
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯[0m[48;2;55;55;55m [0m[38;2;255;255;255m[48;2;55;55;55m/clear[0m[48;2;55;55;55m                                                                                                               [0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mPlease run python3 slow.py 40 using Bash (foreground). It is a harmless local timer script I wrote. Then reply OK.[0m[48;2;55;55;55m   [0m
+
+[0m[38;2;255;107;128m⏺[0m [0m[1mBash[0m(python3 slow.py 40)
+[0m[38;2;153;153;153m  ⎿  Interrupted · What should Claude do instead?[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mQUEUED-ALPHA say the word banana[0m[48;2;55;55;55m                                                                                     [0m
+
+[0m[38;2;255;255;255m⏺ [0mbanana
+
+[0m[38;2;153;153;153m✻ Sautéed for 1s · done 2:33 AM[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mPlease run python3 slow.py 40 using Bash (foreground), then reply OK.[0m[48;2;55;55;55m                                                [0m
+
+[0m[38;2;255;107;128m⏺[0m [0m[1mBash[0m(python3 slow.py 40)
+[0m[38;2;153;153;153m  ⎿  Interrupted · What should Claude do instead?[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mWrite a 600-word story about a lighthouse keeper. No tools.[0m[48;2;55;55;55m                                                          [0m
+
+[0m[38;2;255;255;255m⏺[0m The lamp had not been lit in eleven days, and Ines Varga had begun to believe the sea was waiting for her to notice.
+
+  She climbed the one hundred and twelve iron steps every evening anyway. Her knees complained at the sixtieth, her
+
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;153;153;153m❯ [0m
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[38;2;255;193;7m⏵⏵ auto mode on[0m[38;2;153;153;153m (shift+tab to cycle) · esc to interrupt · ← for agents[0m                 [0m[38;2;153;153;153mCtrl+Y to paste deleted text[0m
+                                                                                                                  [0m[38;2;78;186;101m/rc[0m

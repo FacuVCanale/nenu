@@ -1,9 +1,24 @@
 import { parseAnsi } from "../../ansi";
+import type { TurnReading } from "../types";
+
+// Measured on 0.160.1 (pending steer) and 0.162.1 (follow-up queue): Escape submits a pending steer
+// at once, and puts queued follow-ups back in the composer as a draft.
+const STEER_PENDING = /^• Messages to be submitted after next tool call \(press esc to interrupt and send immediately\)$/;
+const FOLLOW_UPS_QUEUED = /^• Queued follow-up inputs$/;
+
+/** Stop's reading of a Codex screen (ADR 0066): the painted interrupt cue, and what its own queue holds. */
+export function readCodexTurn(text: string): TurnReading {
+  const rows = text.split(/\r\n?|\n/).map((row) => parseAnsi(row).map((segment) => segment.text).join("").trimEnd());
+  const queued = rows.some((row) => STEER_PENDING.test(row)) ? "sends" : rows.some((row) => FOLLOW_UPS_QUEUED.test(row)) ? "returns" : null;
+  return { running: hasCodexInterruptCue(text), queued };
+}
 
 export function hasCodexInterruptCue(text: string): boolean {
   return text.split(/\r\n?|\n/).some((rawLine) => {
     const plain = parseAnsi(rawLine).map((segment) => segment.text).join("").trimEnd();
-    if (!/^• Working \([^\r\n)]* • esc to interrupt\)(?: · [^\r\n]+)?$/i.test(plain)) return false;
+    // The status phrase varies: "Working", or on 0.162.1 "Waiting for background terminal" while a
+    // long command runs (measured). The paint below is the same for both.
+    if (!/^• [A-Z][^()•\r\n]* \([^\r\n)]* • [Ee]sc to interrupt\)(?: · [^\r\n]+)?$/.test(plain)) return false;
     // The same words can occur in transcript prose. Bind the cue to Codex's renderer paint: bold
     // bullet and dim hint glue; current Codex paints Working muted and Escape bold. A copied/plain historical line fails.
     const painted: Array<{ char: string; bold: boolean; dim: boolean }> = [];

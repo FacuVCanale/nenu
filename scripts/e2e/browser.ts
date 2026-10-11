@@ -11,6 +11,8 @@ export interface Request { url(): string; method(): string }
 export interface Locator {
   click(opts?: { timeout?: number }): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
+  press(key: string, opts?: { timeout?: number }): Promise<void>;
+  isVisible(): Promise<boolean>;
   selectOption(value: string): Promise<unknown>;
   waitFor(opts?: { state?: "visible" | "attached"; timeout?: number }): Promise<void>;
   first(): Locator;

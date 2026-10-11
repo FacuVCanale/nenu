@@ -288,20 +288,20 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     server.use(
       http.post(/\/api\/pane\/[^/]+\/interrupt/, ({ request }) => {
         requests.push(request.url);
-        return HttpResponse.json({ ok: true });
+        return HttpResponse.json({ ok: true, pressed: true, queued: null, held: 0 });
       }),
     );
     const working = { ...fixtureAgents[1]!, status: "working" as const, hasSession: false };
     renderChat({ agent: working, agents: [working], session: "phone", text: "Codex is working" });
 
-    const stop = screen.getByRole("button", { name: "Stop generation" });
+    const stop = screen.getByRole("button", { name: "Stop" });
     // 32px visual circle; the 44px target comes from the hit-area pseudo-element (workbench.css).
     expect(stop).toHaveClass("hit-area");
     await user.click(stop);
 
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(new URL(requests[0]!).searchParams.get("session")).toBe("phone");
-    expect(await screen.findByText("Stopping Codex…")).toBeInTheDocument();
+    expect(await screen.findByText("Stopping…")).toBeInTheDocument();
   });
 
   it("shows the plain mirror (no buttons, menu as raw text) when raw terminal is on", () => {

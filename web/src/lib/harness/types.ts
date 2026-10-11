@@ -86,4 +86,31 @@ export interface HarnessAdapter {
    * heuristic gets, and is the pre-existing behaviour.
    */
   draftIsOpaque?(draft: string): boolean;
+  /**
+   * Stop (ADR 0066): the key that interrupts this CLI's running turn, measured on the CLI, and how to
+   * read from the screen whether a turn runs and what the key does to the CLI's own queue.
+   *
+   * OPTIONAL, and absence means Nenu offers no Stop for this agent. A key that only usually
+   * interrupts is not enough: pressed at an idle screen, Claude's and Codex's Escape opens their
+   * rewind on the second press, so the bridge presses it only while `read` says a turn runs.
+   */
+  interrupt?: TurnInterrupt;
+}
+
+export interface TurnInterrupt {
+  keys: string[];
+  /** Reads a `pane.read` in ANSI form, the way the bridge gets it. */
+  read(text: string): TurnReading;
+}
+
+/** What one screen says about the running turn. */
+export interface TurnReading {
+  /** The CLI paints its own interrupt hint, so its interrupt key reaches a running turn. */
+  running: boolean;
+  /**
+   * What interrupting does to messages waiting in the CLI's own queue, as measured: `sends` submits
+   * them at once (Claude's queue, Codex's pending steer), `returns` puts them back in the input box
+   * (Codex's follow-up queue). Null when nothing waits there.
+   */
+  queued: "sends" | "returns" | null;
 }

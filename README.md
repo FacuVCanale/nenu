@@ -33,7 +33,7 @@ Nenu runs on your machine and is normally exposed only inside your
   `COLLIE_HERDR_ORGANIZATIONS_BIN` points at the binary when it is
   not on the service `PATH`; `HERDR_PROJECTS_ROOT` overrides the project registry folder.
 - A per-chat files and photos browser for references in the available conversation history.
-- A Stop control for interrupting an active Codex turn without closing its terminal.
+- A Stop control for interrupting an active Claude or Codex turn without closing its terminal.
 - Local, cached model and reasoning selectors for Codex CLI and Claude Code.
 - Searchable skills and command palettes tailored to each agent.
 - Context-window and reported-usage visibility.

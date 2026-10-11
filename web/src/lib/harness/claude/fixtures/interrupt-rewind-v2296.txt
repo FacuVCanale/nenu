@@ -1,0 +1,24 @@
+user@host work % claude --model haiku --effort low --setting-sources project,local
+[0m[38;2;215;119;87m ▐[0m[38;2;215;119;87m[48;2;0;0;0m▛███▛█   [0m[1mClaude Code [0m[38;2;153;153;153mv2.1.296[0m
+[0m[38;2;215;119;87m▝▜[0m[38;2;215;119;87m[48;2;0;0;0m█████[0m[38;2;215;119;87m█▀  [0m[38;2;153;153;153mHaiku 5.5 with low effort · Claude Team[0m
+[0m[38;2;215;119;87m ▝▝   ▝▝   [0m[38;2;153;153;153m/tmp/nenu-probe/work[0m
+
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mRun this exact command with the Bash tool in the foreground and wait for it: python3 slow.py 40 . Then reply OK.[0m[48;2;55;55;55m     [0m
+
+[0m[38;2;255;107;128m⏺[0m [0m[1mBash[0m(python3 slow.py 40 .)
+[0m[38;2;153;153;153m  ⎿  Interrupted · What should Claude do instead?[0m
+
+[0m[38;2;177;185;249m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[1m[38;2;177;185;249mRewind[0m
+
+  Restore the code and/or conversation to the point before…
+
+    Run this exact command with the Bash tool in the foreground and wait for it: python3 slow.py 40 . Then reply…
+    [0m[38;2;153;153;153mNo code changes[0m
+
+  [0m[38;2;177;185;249m❯ [0m[3m[38;2;177;185;249m(current)[0m
+
+
+
+  [0m[3m[38;2;153;153;153mEnter to continue · Esc to cancel[0m

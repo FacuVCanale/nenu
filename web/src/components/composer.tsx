@@ -1,4 +1,5 @@
 import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
+import { useStopTurn } from "@/hooks/use-stop-turn";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
@@ -39,6 +40,7 @@ import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
+import { StopControl } from "@/components/stop-control";
 import { readyPaths, useComposerAttachments } from "@/hooks/use-composer-attachments";
 import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
 import {
@@ -436,10 +438,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     void queue.readNow(rowId);
   }
   const [sending, setSending] = useState(false);
-  const [interrupting, setInterrupting] = useState(false);
-  useEffect(() => {
-    if (!working) setInterrupting(false);
-  }, [working]);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
   const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "retry" | "check" | null>(null);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
@@ -557,6 +555,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // draft helpers below stay harness-free: they take the capability, never the grammar. Undefined for
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
+  const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
 
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
@@ -767,6 +766,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // An agent without an adapter has no input box Nenu can read back: Enter went out unverified.
         const unverified = !adapter;
         if (started.id) updateLocalSend(sendScope, started.id, { state: "sent", unverified: unverified || undefined });
+        // A message starts a turn; a slash command or a picker action may not.
+        if (!action && !t.startsWith("/")) stop.turnSent();
         // Remember what/when we sent, so the next few polls recognise this text echoing on the "❯"
         // line as our own in-flight reply rather than a stranded draft (suppressEcho above).
         lastSentRef.current = { text: t, at: Date.now() };
@@ -923,23 +924,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.id));
   const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id));
 
-  async function interruptGeneration() {
-    if (locked || interrupting || agent !== "codex") return;
-    setInterrupting(true);
-    try {
-      const result = await api.interruptPane(paneId, session);
-      if (!result.ok) {
-        setInterrupting(false);
-        setStatus(result.error, "error");
-        return;
-      }
-      setStatus("Stopping Codex…", "info");
-      revalidator.revalidate();
-    } catch (error) {
-      setInterrupting(false);
-      setStatus(error instanceof Error ? error.message : String(error), "error");
-    }
-  }
   const confirmingSend = sendConfirm.pending === "send";
   const forcingSend = forceConfirm.pending === "force";
 
@@ -1029,7 +1013,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The secondary controls, published to the header menu. Their handlers read the latest render
   // through a ref, so the list is re-published only when something a menu row shows has changed.
   const toggleDock = (dock: Exclude<ComposerDrawer, null>) => requestDrawer(drawer === dock ? null : dock);
-  const controlActions = useRef({ toggleDock, type: () => {}, stop: () => {} });
+  const controlActions = useRef({ toggleDock, type: () => {} });
   controlActions.current = {
     toggleDock,
     type: () => {
@@ -1042,9 +1026,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       requestDrawer(null);
       direct.activate();
     },
-    stop: () => void interruptGeneration(),
   };
-  const canStopWithDraft = working && agent === "codex" && hasDraft;
   const dockControl = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
     disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
   });
@@ -1055,14 +1037,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
     { id: "display", group: "View", label: "Display", icon: Settings2, ...dockControl("display", false) },
   ];
-  if (canStopWithDraft) controls.splice(2, 0, { id: "stop", group: "Terminal", label: "Stop generation", icon: X, disabled: locked || interrupting, on: false, run: () => controlActions.current.stop() });
   if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
   if (usageControls) controls.push({ id: "usage", group: "View", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) });
   const latestControls = useRef(controls);
   latestControls.current = controls;
   useEffect(() => {
     onControlsChange?.(latestControls.current);
-  }, [onControlsChange, drawer, direct.active, locked, sending, interrupting, canStopWithDraft, commands.length, Boolean(usageControls)]);
+  }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
   // The chevron under the draft reaches the message-side rows (Terminal, Shortcuts) without the
   // header; View stays in the header's ⋯ menu.
   const shortcutGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts"] as const).map((group) => ({
@@ -1263,6 +1244,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       // on the final event, with isComposing already false.
                       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                       if (skills.onKeyDown(e)) return;
+                      // Esc in the empty composer is Stop, as at the terminal. A draft keeps Esc for
+                      // the browser, and an open dock or the busy choice keeps it for themselves.
+                      if (e.key === "Escape" && stop.offered && !hasDraft && drawer === null && !busyPick) {
+                        e.preventDefault();
+                        stop.stop();
+                        return;
+                      }
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault();
                         onSendClick();
@@ -1289,26 +1277,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               disabled={gone || readOnly}
               rows={1}
             />
-            <div className="flex shrink-0 items-center self-end p-1.5 md:p-1">
-            {working && agent === "codex" && !hasDraft ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="composer-action composer-stop hit-area"
-                onClick={() => { void interruptGeneration(); }}
-                disabled={locked || interrupting}
-                aria-label="Stop generation"
-              >
-                {interrupting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true" className="!size-2.5">
-                    <rect width="10" height="10" rx="2" />
-                  </svg>
-                )}
-              </Button>
-            ) : !direct.active && forcingSend ? (
+            <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
+            {stop.offered && <StopControl stop={stop} disabled={locked} />}
+            {/* Stop takes Send's place while there is nothing to send; with a draft, both show. */}
+            {stop.offered && !hasDraft && !direct.active ? null : !direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
               // submit key is still conditional on the verify step behind it.

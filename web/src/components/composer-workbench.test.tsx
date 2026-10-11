@@ -235,14 +235,15 @@ it("keeps session usage one menu tap away without cluttering the composer", asyn
   expect(screen.getAllByRole("button", { name: "Session metrics" })).toHaveLength(1);
 });
 
- it("shows Stop in the ordinary workbench while Codex works", () => {
+it("shows Stop in the ordinary workbench while Codex works", () => {
   setup({ working: true });
-  expect(screen.getByRole("button", { name: "Stop generation" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Stop" })).toBeVisible();
 });
 
-it("moves Stop to the menu while a draft holds the send slot", async () => {
+it("keeps Stop beside Send while a draft is written, never only in a menu", async () => {
   const { controls, user } = setup({ working: true });
-  expect(controls().some((control) => control.id === "stop")).toBe(false);
   await user.type(screen.getByRole("textbox"), "next step");
-  expect(controls().find((control) => control.id === "stop")).toMatchObject({ group: "Terminal", label: "Stop generation" });
+  expect(screen.getByRole("button", { name: "Stop" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  expect(controls().some((control) => control.label.startsWith("Stop"))).toBe(false);
 });
