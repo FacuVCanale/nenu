@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-10-11
+
+### Added
+- Stop: while Claude or Codex works, and from sending until the turn starts, Stop takes Send's place (both show with a draft); Esc on an empty composer does it on a desk. One press sends one Esc ("Stopping…" until idle, so Claude's Rewind never opens), a stop that would make the CLI send its own queue asks first, and messages still in Nenu's queue are held until you send them. Agents without a measured interrupt key get no Stop. (#57)
+
+### Fixed
+- Codex's "Waiting for background terminal" counts as a running turn. (#57)
+
 ## [0.62.0] - 2026-10-11
 
 ### Changed
