@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.64.1] - 2026-10-11
+
+### Fixed
+- The composer's controls sit on the iPhone's home-indicator inset (34px, was 42) and 8px above the keyboard (was 42); 8px where there is no inset, 16px on a desk as before. (d131043)
+- **Installed iPhone app: remove Nenu from the Home Screen and add it again.** The status bar is now opaque, because iOS 26+ lays a black-translucent home-screen app out one status bar short of the bottom, which left ~60pt under the composer; iOS reads the style only when the app is added. (266b1dc)
+
 ## [0.64.0] - 2026-10-11
 
 ### Changed
