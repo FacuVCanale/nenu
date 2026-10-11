@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 - The chat keeps following the newest turn: a scroll event that arrived after rows or "Working…" landed no longer reads as you scrolling away, which froze the chat, hid Working… and showed the arrow at the bottom until tapped. Same for the terminal mirror. (8cbae61)
-- "Working…" shows under your message as soon as the agent has it, instead of after the journal row and Herdr's status arrive. (fb2e278)
+- "Working…" shows under your message as soon as the agent has it, and follows the CLI's own turn state like Stop, instead of waiting for the journal row and Herdr's status (measured 0.16-1.6 s behind). (fb2e278, c390b51)
 
 ## [0.64.1] - 2026-10-11
 
