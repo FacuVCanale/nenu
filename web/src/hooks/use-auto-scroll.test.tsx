@@ -115,8 +115,10 @@ describe("useAutoScroll — resize re-pin", () => {
   it("does NOT yank the view down on resize when the user has scrolled up", () => {
     const { getByTestId } = render(<Harness />);
     const el = getByTestId("scroll");
-    // Scrolled up: 500 - 0 - 200 = 300px from the bottom, past the 24px threshold → not following.
-    setMetrics(el, { scrollHeight: 500, clientHeight: 200, scrollTop: 0 });
+    // At the bottom, then scrolled up to 300px from it, past the 24px threshold → not following.
+    setMetrics(el, { scrollHeight: 500, clientHeight: 200, scrollTop: 300 });
+    fireEvent.scroll(el);
+    el.scrollTop = 0;
     fireEvent.scroll(el); // onScroll captures the scrolled-up intent (autoScroll = false)
 
     const scrollTo = vi.fn();
@@ -136,6 +138,41 @@ describe("useAutoScroll — resize re-pin", () => {
     act(() => fireEvent.click(getByTestId("grow-dep")));
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 800, behavior: "auto" });
+  });
+
+  // A pin queues a scroll event that the browser dispatches on the next frame; output that grows
+  // before then makes that event report a gap the user never scrolled.
+  it("keeps following when content grows between a pin and its scroll event", () => {
+    const onAtBottomChange = vi.fn();
+    function Following() {
+      const [dep, setDep] = useState("a");
+      const { scrollRef, onScroll, isAtBottom } = useAutoScroll<HTMLDivElement>({ dep, onAtBottomChange });
+      return (
+        <div>
+          <div ref={scrollRef} onScroll={onScroll} data-testid="scroll" data-at-bottom={String(isAtBottom)} />
+          <button type="button" onClick={() => setDep("b")} data-testid="grow-dep">grow dep</button>
+        </div>
+      );
+    }
+    const { getByTestId } = render(<Following />);
+    const el = getByTestId("scroll");
+    const box = { height: 500, top: 0 };
+    Object.defineProperties(el, {
+      scrollHeight: { configurable: true, get: () => box.height },
+      clientHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, get: () => box.top, set: (v: number) => { box.top = Math.min(v, box.height - 200); } },
+    });
+    el.scrollTo = ((o: ScrollToOptions) => { el.scrollTop = o.top ?? 0; }) as HTMLElement["scrollTo"];
+    act(() => { el.scrollTo({ top: 500 }); fireEvent.scroll(el); });
+
+    box.height = 560;
+    act(() => fireEvent.click(getByTestId("grow-dep")));
+    box.height = 600;
+    fireEvent.scroll(el);
+
+    expect(el.dataset.atBottom).toBe("true");
+    expect(onAtBottomChange).not.toHaveBeenCalledWith(false);
+    expect(box.top).toBe(400);
   });
 
   it("no-ops without a ResizeObserver (jsdom / older browsers)", () => {

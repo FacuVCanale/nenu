@@ -69,9 +69,11 @@ describe("LiveConversation", () => {
     const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
     const view = (history: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>;
     const { container, rerender } = render(view(initial));
-    const scroller = container.querySelector(".overflow-y-auto")!;
-    Object.defineProperties(scroller, { scrollHeight: { value: 1000 }, clientHeight: { value: 100 } });
-    fireEvent.scroll(scroller, { target: { scrollTop: 0 } });
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 300;
+    fireEvent.scroll(scroller);
     rerender(view({ ...initial, entries: [{ uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "New latest turn" }] }] }));
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();
@@ -79,7 +81,59 @@ describe("LiveConversation", () => {
     expect(screen.getByText("New latest turn")).toBeInTheDocument();
     expect(screen.queryByText("what changed today?")).not.toBeInTheDocument();
   });
+
+  // Measured on the e2e bench with a real transcript: a new turn slid the 60-entry window (the list
+  // shrank and the browser moved scrollTop up to the new bottom), then "Working…" arrived (+44 px)
+  // before the scroll event that the first move queued was dispatched. That event read a gap of 44 px.
+  it("keeps following when the list grows between a move and its scroll event", () => {
+    const first: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const asked: PaneHistoryResponse = { ...first, entries: [fixtureTranscript[1]!, { uuid: "t3", ts: "", role: "user", parts: [{ kind: "text", text: "and now?" }] }] };
+    const view = (history: PaneHistoryResponse, activityStatus?: "working") => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} activityStatus={activityStatus} loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(first));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    box.height = 820;
+    rerender(view(asked));
+    expect(box.top).toBe(720);
+    box.height = 864;
+    rerender(view(asked, "working"));
+    fireEvent.scroll(scroller);
+
+    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.getByText("Working…")).toBeInTheDocument();
+    expect(box.top).toBe(764);
+    rerender(view({ ...asked, entries: [...asked.entries, { uuid: "t4", ts: "", role: "assistant", parts: [{ kind: "text", text: "Looking." }] }] }, "working"));
+    expect(screen.getByText("Looking.")).toBeInTheDocument();
+  });
+
+  // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
+  it("counts a bounce past the bottom as the bottom", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    for (const top of [960, 940, 900]) {
+      box.top = top;
+      fireEvent.scroll(scroller);
+    }
+    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+  });
 });
+
+/** Scroll geometry jsdom lacks: `top` clamps like a browser's, and scrollTo moves it. */
+function scrollBox(el: HTMLElement, size: { height: number; client: number }) {
+  const box = { ...size, top: 0 };
+  Object.defineProperties(el, {
+    scrollHeight: { configurable: true, get: () => box.height },
+    clientHeight: { configurable: true, get: () => box.client },
+    scrollTop: { configurable: true, get: () => box.top, set: (value: number) => { box.top = Math.max(0, Math.min(value, box.height - box.client)); } },
+  });
+  el.scrollTo = ((options: ScrollToOptions) => { el.scrollTop = options.top ?? 0; }) as HTMLElement["scrollTo"];
+  return box;
+}
 
 
 const initialHistory: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: true, total: 100, fileTruncated: false };
