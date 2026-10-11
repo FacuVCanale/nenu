@@ -86,6 +86,7 @@ export function useStopTurn({ paneId, session, agent, interruptible, working, lo
 /** What a Stop did beyond stopping, for the status line; null when the button says enough. */
 function stoppedNote(name: string, result: Extract<InterruptResponse, { ok: true }>): string | null {
   const notes = [
+    result.pressed && result.confirmed === false ? `Escape went out, but ${name} still reports a running turn.` : null,
     result.queued === "sends" ? `${name} stopped and is reading your queued message.` : null,
     result.queued === "returns" ? `${name} stopped and put your queued message back in its input box.` : null,
     result.held === 1 ? "Your message queued in Nenu waits until you send it." : null,

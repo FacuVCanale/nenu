@@ -85,6 +85,10 @@ export class FakeHerdr {
   readonly interrupted: Array<{ paneId: string; at: number }> = [];
   /** How long a working pane takes to go idle after Escape (measured on Claude 2.1.296: ~300 ms). */
   interruptMs = 0;
+  /** Panes whose statusline is the operator's own: Claude then never prints "esc to interrupt". */
+  readonly customStatusline = new Set<string>();
+  /** `pane.process_info` foreground processes per pane; none by default. */
+  readonly processes = new Map<string, Array<{ pid: number; argv: string[] }>>();
 
   constructor(opts: FakeHerdrOptions) {
     this.socketPath = opts.socketPath;
@@ -211,6 +215,7 @@ export class FakeHerdr {
     }
     // Claude 2.1.296 names the interrupt key in the statusline while a turn runs, and drops it while
     // the box holds a draft.
+    if (this.customStatusline.has(paneId)) return [...body, RULE, `❯ ${pane.draft}`, RULE, "  [custom-sl] opus", "  ⏵⏵ auto mode on · ← for agents"].join("\n");
     const hint = working && !pane.draft ? " · esc to interrupt" : "";
     return [...body, RULE, `❯ ${pane.draft}`, RULE, "  Opus 5.5 | Context 13% used", `  ⏵⏵ auto mode on${hint} · ← for agents`].join("\n");
   }
@@ -257,7 +262,7 @@ export class FakeHerdr {
       case "pane.read":
         return { type: "pane_read", read: this.read(paneId, String(params.source), Number(params.lines) || this.viewportRows) };
       case "pane.process_info":
-        return { type: "process_info", process_info: { pane_id: paneId, foreground_processes: [] } };
+        return { type: "process_info", process_info: { pane_id: paneId, foreground_processes: this.processes.get(paneId) ?? [] } };
       case "pane.send_text":
         this.typeText(paneId, String(params.text ?? ""));
         return { type: "ok" };

@@ -1,7 +1,8 @@
 # 0066. Stop presses the CLI's interrupt key once, and only on a running turn
 
 - **Status:** Accepted (2026-10-11). Fran asked for it ("I can't cancel the turn"); the probes below
-  set the keys and the guards.
+  set the keys and the guards. Rules 2 and 3 amended by [ADR 0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md):
+  the CLI's own state, not the screen's hint, says a turn runs.
 - **Extends:** [ADR 0056](./0056-queued-messages-follow-each-clis-native-queue.md), whose queue a Stop
   holds, and [ADR 0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md): the screen is
   still the only actuator.

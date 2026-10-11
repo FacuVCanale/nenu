@@ -7,10 +7,11 @@ import {
   type PromptBindingResult,
 } from "../prompt-binding.ts";
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
-import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest } from "../types.ts";
+import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest, TurnState } from "../types.ts";
 import { guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
+import type { AgentStates } from "../agent-state.ts";
 import type { QueueService } from "../queue-service.ts";
 import type { SessionRuntime } from "../sessions.ts";
 import { parseAnsi } from "../../web/src/lib/ansi.ts";
@@ -57,7 +58,7 @@ export const replyPaneActions: Record<string, PaneAction> = {
   interrupt: {
     level: "write",
     marksSeen: true,
-    handle: ({ audit, input, queue }, { req, rt, paneId, device }) => interruptPane({ rt, input, queue, audit }, paneId, req, device),
+    handle: ({ audit, input, queue, agentStates }, { req, rt, paneId, device }) => interruptPane({ rt, input, queue, audit, agentStates }, paneId, req, device),
   },
   "send-report": {
     level: "write",
@@ -132,12 +133,19 @@ export async function sendReplySteps(
 const interruptLedger = new InterruptLedger();
 
 /**
- * Stop the pane's running turn with its CLI's interrupt key (ADR 0066). The adapter decides whether
- * the agent has one and reads the live screen for a running turn; `interruptTurn` presses it once,
+ * Stop the pane's running turn with its CLI's interrupt key (ADR 0066, 0067). The adapter decides
+ * whether the agent has one; the pane's structured state (agent-state.ts) says whether a turn runs,
+ * and the live screen only when no structured source knows the pane. `interruptTurn` presses once,
  * inside the pane's write lock, and the queue parks what Nenu still holds for that conversation.
  */
 export async function interruptPane(
-  ctx: { rt: Pick<SessionRuntime, "herdr" | "engine" | "name">; input: PaneWrites; queue: Pick<QueueService, "holdAfterStop">; audit: Pick<AuditLog, "record"> },
+  ctx: {
+    rt: Pick<SessionRuntime, "herdr" | "engine" | "name">;
+    input: PaneWrites;
+    queue: Pick<QueueService, "holdAfterStop">;
+    audit: Pick<AuditLog, "record">;
+    agentStates?: Pick<AgentStates, "fresh">;
+  },
   paneId: string,
   req: Request,
   device: string | null,
@@ -151,9 +159,13 @@ export async function interruptPane(
   const interrupt = pane ? adapterFor(pane.agent)?.interrupt : undefined;
   if (!pane || !interrupt) return json({ ok: false, code: "unsupported", error: "Nenu has no safe way to stop this agent." } satisfies InterruptResponse, ae);
   const name = AGENT_NAMES[pane.agent] ?? pane.agent;
+  let structured: TurnState | undefined;
+  // The first look re-checks which process owns the pane; the polls after it only re-read its files.
+  let looks = 0;
   const outcome = await interruptTurn({
     // The screen as it is now, read the way the queue reads a composer (queue-readiness.ts).
     read: async () => (await herdr.readPane(paneId, "visible", 100, "ansi")).text,
+    ...(ctx.agentStates ? { state: async () => (structured = await ctx.agentStates!.fresh(session, pane, herdr, { remap: looks++ === 0 })) } : {}),
     exclusive: (operation) => ctx.input.run(session, paneId, operation),
     async press(keys) {
       let sent = false;
@@ -168,8 +180,9 @@ export async function interruptPane(
     sleep: defaultSleep,
     now: Date.now,
   }, interrupt, { name, confirm, ledger, pane: JSON.stringify([session, paneId]) });
-  // Claude hides its interrupt hint while the box holds a draft, so a working pane can read as idle.
-  if (!outcome.ok && outcome.code === "not_running" && pane.status === "working")
+  // Screen fallback only: Claude hides its interrupt hint while the box holds a draft, so a working
+  // pane can read as idle when no session file says otherwise.
+  if (!outcome.ok && outcome.code === "not_running" && pane.status === "working" && !structured)
     return json({ ...outcome, error: `${name} shows no turn to stop. If its input box holds a draft, clear it or press Esc in the terminal.` } satisfies InterruptResponse, ae);
   return json(outcome, ae);
 }

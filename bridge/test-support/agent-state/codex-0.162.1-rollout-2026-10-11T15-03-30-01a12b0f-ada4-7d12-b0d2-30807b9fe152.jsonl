@@ -1,0 +1,44 @@
+{"timestamp": "2026-10-11T13:03:48.537Z", "type": "session_meta", "payload": {"id": "01a12b0f-ada4-7d12-b0d2-30807b9fe152"}}
+{"timestamp": "2026-10-11T13:03:48.537Z", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "01a12b0f-f531-79f1-9af4-a38e9a7406d5", "started_at": 1791723828}}
+{"timestamp": "2026-10-11T13:03:48.922Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:03:48.922Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:03:48.923Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:03:48.923Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:03:48.924Z", "type": "turn_context", "payload": {"turn_id": "01a12b0f-f531-79f1-9af4-a38e9a7406d5"}}
+{"timestamp": "2026-10-11T13:03:48.926Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:03:48.926Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b0f-f531-79f1-9af4-a38e9a7406d5", "item": {"type": "UserMessage"}}}
+{"timestamp": "2026-10-11T13:03:51.778Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b0f-f531-79f1-9af4-a38e9a7406d5", "item": {"type": "Reasoning"}}}
+{"timestamp": "2026-10-11T13:03:51.779Z", "type": "response_item", "payload": {"type": "reasoning"}}
+{"timestamp": "2026-10-11T13:03:54.546Z", "type": "event_msg", "payload": {"type": "token_count"}}
+{"timestamp": "2026-10-11T13:03:54.550Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:03:54.552Z", "type": "event_msg", "payload": {"type": "turn_aborted", "turn_id": "01a12b0f-f531-79f1-9af4-a38e9a7406d5", "reason": "interrupted", "started_at": 1791723828, "completed_at": 1791723834, "duration_ms": 6016}}
+{"timestamp": "2026-10-11T13:04:04.503Z", "type": "event_msg", "payload": {"type": "thread_settings_applied"}}
+{"timestamp": "2026-10-11T13:04:04.504Z", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "01a12b10-3394-7293-b6ab-25615d2c000f", "started_at": 1791723844}}
+{"timestamp": "2026-10-11T13:04:04.513Z", "type": "turn_context", "payload": {"turn_id": "01a12b10-3394-7293-b6ab-25615d2c000f"}}
+{"timestamp": "2026-10-11T13:04:04.514Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:04:04.515Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b10-3394-7293-b6ab-25615d2c000f", "item": {"type": "UserMessage"}}}
+{"timestamp": "2026-10-11T13:04:06.537Z", "type": "event_msg", "payload": {"type": "token_count"}}
+{"timestamp": "2026-10-11T13:04:06.538Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:06.539Z", "type": "event_msg", "payload": {"type": "turn_aborted", "turn_id": "01a12b10-3394-7293-b6ab-25615d2c000f", "reason": "interrupted", "started_at": 1791723844, "completed_at": 1791723846, "duration_ms": 2034}}
+{"timestamp": "2026-10-11T13:04:12.121Z", "type": "event_msg", "payload": {"type": "thread_settings_applied"}}
+{"timestamp": "2026-10-11T13:04:12.123Z", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "01a12b10-5156-70f1-8eba-7a2f5c69ff85", "started_at": 1791723852}}
+{"timestamp": "2026-10-11T13:04:12.133Z", "type": "turn_context", "payload": {"turn_id": "01a12b10-5156-70f1-8eba-7a2f5c69ff85"}}
+{"timestamp": "2026-10-11T13:04:12.135Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:04:12.135Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b10-5156-70f1-8eba-7a2f5c69ff85", "item": {"type": "UserMessage"}}}
+{"timestamp": "2026-10-11T13:04:15.170Z", "type": "event_msg", "payload": {"type": "token_count"}}
+{"timestamp": "2026-10-11T13:04:15.174Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:15.176Z", "type": "event_msg", "payload": {"type": "turn_aborted", "turn_id": "01a12b10-5156-70f1-8eba-7a2f5c69ff85", "reason": "interrupted", "started_at": 1791723852, "completed_at": 1791723855, "duration_ms": 3053}}
+{"timestamp": "2026-10-11T13:04:20.756Z", "type": "event_msg", "payload": {"type": "thread_settings_applied"}}
+{"timestamp": "2026-10-11T13:04:20.760Z", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "01a12b10-7311-76e0-886a-57545e38f234", "started_at": 1791723860}}
+{"timestamp": "2026-10-11T13:04:20.771Z", "type": "turn_context", "payload": {"turn_id": "01a12b10-7311-76e0-886a-57545e38f234"}}
+{"timestamp": "2026-10-11T13:04:20.775Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:04:20.779Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b10-7311-76e0-886a-57545e38f234", "item": {"type": "UserMessage"}}}
+{"timestamp": "2026-10-11T13:04:23.308Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b10-7311-76e0-886a-57545e38f234", "item": {"type": "AgentMessage"}}}
+{"timestamp": "2026-10-11T13:04:23.316Z", "type": "response_item", "payload": {"type": "message", "role": "assistant"}}
+{"timestamp": "2026-10-11T13:04:24.081Z", "type": "response_item", "payload": {"type": "custom_tool_call"}}
+{"timestamp": "2026-10-11T13:04:25.414Z", "type": "response_item", "payload": {"type": "custom_tool_call_output"}}
+{"timestamp": "2026-10-11T13:04:25.415Z", "type": "event_msg", "payload": {"type": "token_count"}}
+{"timestamp": "2026-10-11T13:04:26.825Z", "type": "event_msg", "payload": {"type": "token_count"}}
+{"timestamp": "2026-10-11T13:04:26.827Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:26.828Z", "type": "event_msg", "payload": {"type": "turn_aborted", "turn_id": "01a12b10-7311-76e0-886a-57545e38f234", "reason": "interrupted", "started_at": 1791723860, "completed_at": 1791723866, "duration_ms": 6068}}
+{"timestamp": "2026-10-11T13:04:44.301Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b10-7311-76e0-886a-57545e38f234", "item": {"type": "CommandExecution", "status": "completed", "exit_code": 0}}}

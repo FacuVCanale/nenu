@@ -7,7 +7,7 @@ import { PaneWrites } from "./pane-writes.ts";
 import { interruptPane } from "./routes/reply.ts";
 import type { HerdrClient } from "./herdr-client.ts";
 import type { StateEngine } from "./state-engine.ts";
-import type { AgentView, InterruptResponse } from "./types.ts";
+import type { AgentView, InterruptResponse, TurnState } from "./types.ts";
 import type { AuditEntry } from "./audit.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 
@@ -103,8 +103,77 @@ describe("one Stop", () => {
   });
 });
 
+describe("with the CLI's own state (ADR 0067)", () => {
+  /** `harness`, plus a structured state that is `states[i]` on the i-th look. */
+  function stated(screens: string[], states: (TurnState | undefined)[]) {
+    const h = harness(screens);
+    let looks = 0;
+    let screenReads = 0;
+    const deps: InterruptDeps = {
+      ...h.deps,
+      read: async () => { screenReads++; return h.deps.read(); },
+      state: async () => states[Math.min(looks++, states.length - 1)],
+    };
+    return { ...h, deps, screenReads: () => screenReads };
+  }
+  const running: TurnState = { running: true, queued: null, source: "claude-session" };
+  const idle: TurnState = { running: false, source: "claude-session" };
+
+  test("a custom statusline hides Claude's hint: the session file still says busy, so Stop presses", async () => {
+    // The screen without "esc to interrupt" is exactly what a custom statusLine leaves (docs, measured).
+    const h = stated([CLAUDE_IDLE], [running, running, idle]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toEqual({ ok: true, pressed: true, queued: null, held: 1, confirmed: true });
+    expect(h.pressed).toEqual([["Escape"]]);
+    // Claude's queue came from the transcript, so the screen was never read.
+    expect(h.screenReads()).toBe(0);
+  });
+
+  test("the state wins over a stale screen that still paints the hint", async () => {
+    const h = stated([CLAUDE_WORKING], [idle]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toMatchObject({ ok: false, code: "not_running" });
+    expect(h.pressed).toEqual([]);
+  });
+
+  test("a dialog is refused at once and never pressed", async () => {
+    const h = stated([CLAUDE_DIALOG], [{ running: false, waiting: "permission prompt", source: "claude-session" }]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toEqual({ ok: false, code: "not_running", error: "Claude is waiting for you (permission prompt). Answer it; Stop never presses Escape on a dialog." });
+    expect(h.pressed).toEqual([]);
+    expect(h.clock()).toBe(0);
+  });
+
+  test("background work alone is not stopped: Escape would do nothing", async () => {
+    const h = stated([CLAUDE_IDLE], [{ running: false, background: true, source: "claude-session" }]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toMatchObject({ ok: false, code: "not_running", error: expect.stringContaining("background work") });
+    expect(h.pressed).toEqual([]);
+  });
+
+  test("the transcript's queue asks first, like the screen's placeholder did", async () => {
+    const h = stated([CLAUDE_IDLE], [{ ...running, queued: "sends" }]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toMatchObject({ ok: false, code: "confirm_required" });
+    expect(h.pressed).toEqual([]);
+  });
+
+  test("Codex: the rollout says a turn runs, the screen still names its queue", async () => {
+    const codex = adapterFor("codex")!.interrupt!;
+    const h = stated([CODEX_WORKING], [{ running: true, source: "codex-rollout" }, { running: true, source: "codex-rollout" }, { running: false, source: "codex-rollout" }]);
+    expect(await interruptTurn(h.deps, codex, { ...request(h.ledger), name: "Codex" })).toEqual({ ok: true, pressed: true, queued: null, held: 1, confirmed: true });
+    expect(h.screenReads()).toBe(2);
+  });
+
+  test("a turn that keeps running after the press is reported unconfirmed", async () => {
+    const h = stated([CLAUDE_IDLE], [running]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toMatchObject({ ok: true, pressed: true, confirmed: false });
+    expect(h.pressed).toEqual([["Escape"]]);
+  });
+
+  test("no structured source: the screen decides, as before", async () => {
+    const h = stated([CLAUDE_WORKING], [undefined]);
+    expect(await interruptTurn(h.deps, claude, request(h.ledger))).toEqual({ ok: true, pressed: true, queued: null, held: 1 });
+  });
+});
+
 describe("POST /api/pane/:id/interrupt", () => {
-  function route(agent: string, screen: string, status: AgentView["status"] = "working") {
+  function route(agent: string, screen: string, status: AgentView["status"] = "working", states?: (TurnState | undefined)[]) {
     const pressed: string[][] = [];
     const audits: AuditEntry[] = [];
     const holds: string[] = [];
@@ -116,9 +185,11 @@ describe("POST /api/pane/:id/interrupt", () => {
     const engine = { current: () => ({ agents: [pane] }) } as unknown as StateEngine;
     const input = new PaneWrites();
     const ledger = new InterruptLedger();
+    let looks = 0;
+    const agentStates = states ? { fresh: async () => states[Math.min(looks++, states.length - 1)] } : undefined;
     const call = (body = "{}") =>
       interruptPane(
-        { rt: { herdr, engine, name: "default" }, input, queue: { holdAfterStop: async (_s, paneId) => (holds.push(paneId), 1) }, audit: { record: (entry) => void audits.push(entry) } },
+        { rt: { herdr, engine, name: "default" }, input, queue: { holdAfterStop: async (_s, paneId) => (holds.push(paneId), 1) }, audit: { record: (entry) => void audits.push(entry) }, agentStates },
         "w1:p1",
         new Request("http://localhost/api/pane/w1%3Ap1/interrupt", { method: "POST", body }),
         "phone",
@@ -146,6 +217,13 @@ describe("POST /api/pane/:id/interrupt", () => {
     const r = route("claude", CLAUDE_QUEUED);
     expect(await r.call()).toMatchObject({ ok: false, code: "confirm_required" });
     expect(await r.call(JSON.stringify({ confirm: true }))).toMatchObject({ ok: true, pressed: true, queued: "sends" });
+  });
+
+  test("Claude with a custom statusline: the session file decides and the button's source presses", async () => {
+    const running: TurnState = { running: true, queued: null, source: "claude-session" };
+    const r = route("claude", CLAUDE_IDLE, "working", [running, running, { running: false, source: "claude-session" }]);
+    expect(await r.call()).toEqual({ ok: true, pressed: true, queued: null, held: 1, confirmed: true });
+    expect(r.pressed).toEqual([["Escape"]]);
   });
 
   test("an agent without a measured interrupt key gets no Stop", async () => {

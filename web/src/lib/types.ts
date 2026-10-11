@@ -74,6 +74,20 @@ export interface AgentView {
   stateChangeSeq?: number;
   /** Bumps when an idle transition completed work. Absent when Herdr doesn't report it. */
   completionSeq?: number;
+  /** The turn as the CLI's own files record it (bridge/agent-state.ts, ADR 0067); absent when unknown. */
+  turn?: TurnState;
+}
+
+/** Mirror of the bridge's TurnState: Claude's session file or Codex's rollout. */
+export interface TurnState {
+  /** A turn the CLI's interrupt key reaches; Stop's button and Stop's press both read it. */
+  running: boolean;
+  /** Claude: a dialog owns the keyboard ("permission prompt", "input needed", …). */
+  waiting?: string;
+  /** Work goes on with no turn to interrupt: background agents, a workflow or a shell. */
+  background?: boolean;
+  queued?: "sends" | null;
+  source: "claude-session" | "codex-rollout";
 }
 
 /**
@@ -433,7 +447,7 @@ export type ActionResponse =
  * CLI's own queue; `held` counts the rows Nenu parked until the operator sends them.
  */
 export type InterruptResponse =
-  | { ok: true; pressed: boolean; queued: "sends" | "returns" | null; held: number }
+  | { ok: true; pressed: boolean; queued: "sends" | "returns" | null; held: number; confirmed?: boolean }
   | { ok: false; error: string; code: "confirm_required" | "not_running" | "busy" | "unsupported" | "failed" };
 
 export type UploadResponse = { ok: true; path: string } | { ok: false; error: string };

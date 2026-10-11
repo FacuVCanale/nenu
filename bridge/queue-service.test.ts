@@ -101,6 +101,25 @@ it("does not mistake a blocked-status busy Codex composer for an idle terminal",
   expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr, "afterTurn")).toEqual({ ready: true, busy: true });
 });
 
+it("trusts Codex's rollout over its painted cue when the bridge knows the rollout (ADR 0067)", async () => {
+  const { queueReadiness } = await import("./queue-readiness.ts");
+  const text = await repoFile("web/src/fixtures/panes/codex--v0159-busy.txt");
+  const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
+  const closed = { running: false, source: "codex-rollout" as const };
+  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked", turn: closed }, herdr, "afterTurn")).toEqual({ ready: true, busy: false });
+  const open = { running: true, source: "codex-rollout" as const };
+  const idle = await repoFile("web/src/fixtures/panes/codex--v0157-idle.txt");
+  const idleHerdr = { readPane: async () => ({ pane_id: "pane", text: idle, revision: 1, truncated: false }) };
+  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked", turn: open }, idleHerdr, "afterTurn")).toEqual({ ready: true, busy: true });
+});
+
+it("holds a row while Claude's own state reports a dialog, without reading the screen", async () => {
+  const { queueReadiness } = await import("./queue-readiness.ts");
+  const herdr = { readPane: async () => { throw new Error("must not read"); } };
+  const waiting = { running: false, waiting: "permission prompt", source: "claude-session" as const };
+  expect(await queueReadiness({ paneId: "pane", agent: "claude", status: "working", turn: waiting }, herdr, "asap")).toEqual({ ready: false, reason: "dialog" });
+});
+
 it("attempts an explicit Codex message immediately while the agent is working", async () => {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");

@@ -342,6 +342,16 @@ describe("Interactions.refresh", () => {
     expect((await interactions.refresh("s", pane.io, [working]))[0]?.kind).toBe("permission");
   });
 
+  test("the CLI's own `waiting` makes a pane Herdr still calls working eligible (ADR 0067)", async () => {
+    let waiting = false;
+    const interactions = new Interactions(recorder().live, { sleep: noSleep, waiting: () => waiting });
+    const pane = scriptedPane(fixture("codex--approval-exec.txt"));
+    const working = blocked("p", "codex", "working");
+    expect(await interactions.refresh("s", pane.io, [working])).toEqual([]);
+    waiting = true;
+    expect((await interactions.refresh("s", pane.io, [working]))[0]?.kind).toBe("permission");
+  });
+
   test("a hint arriving later re-publishes the card", async () => {
     const { events, live } = recorder();
     const interactions = new Interactions(live, { sleep: noSleep });

@@ -1,0 +1,24 @@
+{
+ "pid": 25327,
+ "sessionId": "86629802-eb8f-4a01-abec-13644095ba48",
+ "cwd": "/private/tmp/nts/work",
+ "startedAt": 1791723582561,
+ "procStart": "Sun Oct 11 12:59:42 2026",
+ "version": "2.1.296",
+ "peerProtocol": 1,
+ "peerFeatures": [
+  "notify_idle",
+  "reply_across_default_dirs",
+  "artifact_yield"
+ ],
+ "kind": "interactive",
+ "entrypoint": "cli",
+ "pidDomain": "darwin",
+ "messagingSocketPath": "/tmp/nts/xdg/run/cc-socks/25327.sock",
+ "name": "work-36",
+ "nameSource": "derived",
+ "nameSince": 1791723582561,
+ "status": "busy",
+ "updatedAt": 1791723904763,
+ "statusUpdatedAt": 1791723904763
+}
