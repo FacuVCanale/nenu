@@ -38,6 +38,20 @@ it.each(["codex", "claude"])("recovers %s history without a SessionStart hook", 
   expect(await screen.findByText("Recovered conversation")).toBeInTheDocument();
 });
 
+// Measured on the live bridge (read-only, 2026-10-11): Herdr reported working 157-1636 ms after
+// Claude's own session file said the turn runs (ADR 0067). The chat's Working… waited for Herdr.
+it("says Working… as soon as the CLI's own state says the turn runs, before Herdr does", async () => {
+  const paneId = "turn-before-herdr";
+  server.use(http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json({
+    paneId, available: true, entries: [{ uuid: "asked", ts: "", role: "user", parts: [{ kind: "text", text: "run the tests" }] }],
+    total: 1, hasMore: false, fileTruncated: false,
+  })));
+  const agent = { ...fixtureAgents[0]!, paneId, agent: "claude", status: "idle" as const, hasSession: true, turn: { running: true, source: "claude-session" as const } };
+  renderChat({ paneId, agent, agents: [agent], text: "" });
+  expect(await screen.findByText("run the tests")).toBeInTheDocument();
+  expect(screen.getByText("Working…")).toBeInTheDocument();
+});
+
 // The detail view's core job: type a reply and submit it to the bridge. This drives the whole wired
 // path (composer → api.sendReply → MSW → optimistic clear / error surfacing) end-to-end, which no
 // other test covers. AgentChat uses useRevalidator, so it needs a data router (createMemoryRouter).
