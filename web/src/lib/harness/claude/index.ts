@@ -9,7 +9,8 @@ import { detectOverlayMenu } from "./overlay-menu";
 // TUI shape, so it has no adapter and keeps the plain raw terminal mirror — running Claude's matchers
 // on it could mis-lift a menu, strip real output as "chrome", or paint a bogus status strip.
 
-import { trimTrailingBlank, type Block, type StyledLine } from "../../blocks";
+import { parseAnsi } from "../../ansi";
+import { splitLines, trimTrailingBlank, type Block, type StyledLine } from "../../blocks";
 import type { HarnessAdapter } from "../types";
 import { detectPreviewSelectRegion } from "./preview-select";
 import { detectWizardRegion } from "./wizard";
@@ -25,6 +26,7 @@ import {
   extractInputDraft,
   hasInputBox,
   inputBoxTail,
+  readClaudeTurn,
 } from "./chrome";
 import { withoutDialogClosingRule } from "./markers";
 import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
@@ -169,4 +171,6 @@ export const claudeAdapter: HarnessAdapter = {
   // "this isn't the user's text" for the stranded-draft preview's Take over.
   draftCarriesSend: pasteCarriesSend,
   draftIsOpaque: isPastePlaceholderOnly,
+  // Measured on 2.1.296: Escape stops a tool call or streamed text and the pane goes idle in ~300 ms.
+  interrupt: { keys: ["Escape"], read: (text) => readClaudeTurn(splitLines(parseAnsi(text))) },
 };

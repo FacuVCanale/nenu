@@ -11,6 +11,7 @@
 
 import { detectOverlayMenu } from "./overlay-menu";
 import type { StyledLine } from "../../blocks";
+import type { TurnReading } from "../types";
 import { namesAMenuKey } from "../menu-hints";
 import { findAutocompleteRun, MAX_AUTOCOMPLETE_LINES } from "./autocomplete";
 import {
@@ -66,7 +67,8 @@ const MAX_DRAFT_LINES = 100;
 // Text Claude draws on the "❯" prompt line that is NOT a real user draft — it's a hint the TUI paints
 // when the box is otherwise empty. Must never be surfaced as a recoverable draft. Kept as an array so
 // more variants can be added without touching the extraction logic.
-const INPUT_PLACEHOLDERS = ["Press up to edit queued messages"];
+const QUEUED_PLACEHOLDER = "Press up to edit queued messages";
+const INPUT_PLACEHOLDERS = [QUEUED_PLACEHOLDER];
 
 /**
  * GHOST TEXT — the generated "suggested next prompt" a newer Claude Code paints inside an otherwise
@@ -277,6 +279,26 @@ export function extractInputDraft(lines: StyledLine[]): string | null {
   const draft = parts.join(" ").trim();
   if (draft.length === 0 || INPUT_PLACEHOLDERS.includes(draft)) return null;
   return draft;
+}
+
+/**
+ * Stop's reading of the screen (ADR 0065). A turn runs while the statusline under the live input box
+ * names the interrupt key (RUNNING_TURN_HINT). Claude drops that hint while the box holds a draft,
+ * and then nothing on screen says a turn runs, so Stop is refused rather than guessed. The empty
+ * box's queue placeholder means Claude's own queue holds a message, which Escape sends at once.
+ */
+export function readClaudeTurn(lines: StyledLine[]): TurnReading {
+  const texts = lines.map(lineText);
+  let end = lines.length;
+  while (end > 0 && isBlank(texts[end - 1]!)) end--;
+  const box = end === 0 ? null : locateInputBox(lines, texts, end);
+  if (box === null) return { running: false, queued: null };
+  const running = texts
+    .slice(box.bottomBorder + 1, box.statusEnd)
+    .some((row) => row.split(/\s+·\s+/).some((segment) => RUNNING_TURN_HINT.test(segment.trim())));
+  const prompt = texts[box.prompt]!.trimStart();
+  const queued = isPromptRow(prompt) && prompt.slice(1).trim() === QUEUED_PLACEHOLDER ? "sends" : null;
+  return { running, queued };
 }
 
 /**
