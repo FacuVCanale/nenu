@@ -834,9 +834,6 @@ export function AgentChat({
     selected: subagent, onLost: () => setSubagent(null) });
   const processes = useMemo(() => buildProcesses(activity.data, subagents.list, { activityStale: activity.stale, subagentsStale: subagents.stale }),
     [activity.data, subagents.list, activity.stale, subagents.stale]);
-  const anyLive = processes.waiting.length + processes.running.length > 0;
-  // The list closes with the chip, unless it is showing a run's details.
-  useEffect(() => { if (!anyLive && !processDetail) setProcessesOpen(false); }, [anyLive, processDetail]);
   const processesNow = useActivityClock(activity.data, processesOpen || processDetail !== null);
   const openProcessDetail = (next: ProcessDetail) => {
     setProcessDetail(next);
@@ -844,9 +841,10 @@ export function AgentChat({
   };
   const processDetailContent = processDetail &&
     <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={processDetail} now={processesNow} onChange={setProcessDetail} />;
-  const processesControl = !isShell && !subagent && <ProcessesChip processes={processes} desktop={desktop} open={processesOpen}
+  const published = activity.data?.available ? activity.data.artifacts : [];
+  const processesControl = !isShell && !subagent && <ProcessesChip processes={processes} published={published.length} desktop={desktop} open={processesOpen}
     onOpenChange={(open) => { setProcessesOpen(open); if (!open && !desktop) setProcessDetail(null); }}
-    list={<ProcessesList processes={processes} artifacts={activity.data?.available ? activity.data.artifacts : []} now={processesNow} stale={activity.stale || subagents.stale}
+    list={<ProcessesList processes={processes} artifacts={published} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
       onOpenSubagent={(item) => {
         if (!subagents.list?.available) return;
@@ -1202,6 +1200,7 @@ export function AgentChat({
             disconnected={unavailable}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             processesControl={processesControl}
+            onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             workingSince={workingSince}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}

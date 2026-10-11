@@ -75,5 +75,5 @@ export function useSubagents({ paneId, session, enabled, open = false, selected 
     wakes: (event) => concerns(event, "journal", paneId),
   });
 
-  return { list, stale: stale || !enabled, refresh: () => setTick((n) => n + 1) };
+  return { list, stale, refresh: () => setTick((n) => n + 1) };
 }

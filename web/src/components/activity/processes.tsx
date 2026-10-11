@@ -15,7 +15,7 @@ import {
   type ActivityTask,
 } from "@/lib/activity";
 import { modelDisplayName } from "@/lib/model-display";
-import { processesLabel, processName, type ProcessItem, type Processes, type ProcessState } from "@/lib/processes";
+import { finishedLabel, processesLabel, processName, type ProcessItem, type Processes, type ProcessState } from "@/lib/processes";
 import { cn } from "@/lib/utils";
 import { AgentBar, Meta, PhaseSteps, StateDot } from "./activity-parts";
 import { ArtifactList } from "./artifact-list";
@@ -213,7 +213,7 @@ export function detailTitle(detail: ProcessDetail, activity: ActivityState): str
  */
 export function ProcessPanel({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <aside aria-label={`Details: ${title}`} className="flex min-h-0 w-[430px] max-w-[45%] shrink-0 flex-col border-l border-border bg-background">
+    <aside aria-label={`Details: ${title}`} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } }} className="flex min-h-0 w-[430px] max-w-[45%] shrink-0 flex-col border-l border-border bg-background">
       <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
         <Button variant="ghost" size="icon" aria-label="Close details" onClick={onClose}><X aria-hidden="true" /></Button>
@@ -224,13 +224,16 @@ export function ProcessPanel({ title, onClose, children }: { title: string; onCl
 }
 
 /**
- * The chip in the composer row: "● 3 running", or "● 1 waiting on you" in the blocked colour.
- * Hidden while nothing waits or runs. A desk opens the list as a popover anchored to the chip; a
+ * The chip in the composer row: "● 3 running", or "● 1 waiting on you" in the blocked colour. Once
+ * nothing waits or runs it goes quiet ("3 done", no dot) so finished work stays one tap away, and it
+ * is absent only when the session has nothing at all. A desk opens the list as a popover anchored to the chip; a
  * phone opens a bottom sheet sized to its content, whose content the details replace (with Back).
  * On a desk, details are handed to `onDetail` for the side panel and the popover closes.
  */
-export function ProcessesChip({ processes, desktop, open, onOpenChange, list, detail, detailContent, detailName, onBack }: {
+export function ProcessesChip({ processes, published = 0, desktop, open, onOpenChange, list, detail, detailContent, detailName, onBack }: {
   processes: Processes;
+  /** Pages the session published, which keep the quiet chip when nothing else finished. */
+  published?: number;
   desktop: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -242,16 +245,16 @@ export function ProcessesChip({ processes, desktop, open, onOpenChange, list, de
   onBack?: () => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
-  const label = processesLabel(processes);
-  // An open sheet showing a run's details outlives the last running process; only the chip goes.
+  const live = processesLabel(processes);
+  const label = live ?? finishedLabel(processes, published);
   if (!label && !open) return null;
   const waiting = processes.waiting.length > 0;
-  const aria = `Processes: ${[waiting ? `${processes.waiting.length} waiting on you` : "", processes.running.length ? `${processes.running.length} running` : ""].filter(Boolean).join(", ")}`;
+  const aria = `Processes: ${live ? [waiting ? `${processes.waiting.length} waiting on you` : "", processes.running.length ? `${processes.running.length} running` : ""].filter(Boolean).join(", ") : label}`;
   const phoneDetail = !desktop && detail ? detailContent : null;
   return <>
     {label && <button ref={trigger} type="button" aria-label={aria} aria-haspopup="dialog" aria-expanded={open} onClick={() => onOpenChange(!open)}
       className={cn("composer-quiet hit-area gap-1.5 tabular-nums", waiting && "text-status-blocked")}>
-      <Dot state={waiting ? "waiting" : "running"} className={cn("size-2", !waiting && "motion-safe:animate-pulse")} />
+      {live && <Dot state={waiting ? "waiting" : "running"} className={cn("size-2", !waiting && "motion-safe:animate-pulse")} />}
       <span className="truncate">{label}</span>
     </button>}
     {desktop

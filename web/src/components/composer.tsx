@@ -106,6 +106,9 @@ interface ComposerProps {
   modelControl?: ReactNode;
   /** The background-work chip, beside the model in the row under the draft. */
   processesControl?: ReactNode;
+  /** Something beside the composer (the desk's details panel) that the empty composer's Esc closes
+   *  before it would stop the turn. */
+  onEscape?: () => void;
   /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
   workingSince?: string;
   usageControls?: ReactNode;
@@ -228,7 +231,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, processesControl, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1261,6 +1264,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       if (skills.onKeyDown(e)) return;
                       // Esc in the empty composer is Stop, as at the terminal. A draft keeps Esc for
                       // the browser, and an open dock or the busy choice keeps it for themselves.
+                      if (e.key === "Escape" && onEscape && drawer === null && !busyPick) {
+                        e.preventDefault();
+                        onEscape();
+                        return;
+                      }
                       if (e.key === "Escape" && stop.offered && !hasDraft && drawer === null && !busyPick) {
                         e.preventDefault();
                         stop.stop();

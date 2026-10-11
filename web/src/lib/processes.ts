@@ -66,6 +66,13 @@ export function processesLabel({ waiting, running }: Processes): string | null {
   return null;
 }
 
+/** "3 done" or "2 published": what the quiet chip says once nothing waits or runs, or null for nothing. */
+export function finishedLabel({ done }: Processes, published: number): string | null {
+  if (done.length) return `${done.length} done`;
+  if (published) return `${published} published`;
+  return null;
+}
+
 export function processName(item: ProcessItem): string {
   return item.kind === "workflow" ? item.workflow.name : item.kind === "task" ? item.task.title : item.agent.name;
 }

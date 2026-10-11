@@ -643,7 +643,8 @@ async function stop(): Promise<void> {
  * real (redacted) session files, so here their answers are fixed (web/src/components/activity
  * fixture, shifted to the capture instant) and the bench looks at how the chat shows them: the chat,
  * the processes list, a row expanded, a workflow's details, the ⋯ menu and the composer typing while
- * the agent works. Run on a build without the chip, it captures the same moments the old way (cards in
+ * the agent works, then everything finished: the quiet chip and its Done list. On a desk it also
+ * checks that Esc in the empty composer closes the details panel without sending anything. Run on a build without the chip, it captures the same moments the old way (cards in
  * the chat, the Activity sheet, the full-screen workflow), so one command shows before and after.
  */
 async function processes(): Promise<void> {
@@ -676,6 +677,11 @@ async function processes(): Promise<void> {
         { id: "a0000000000000003", parentId: "", name: "ui-audit", task: "Audit the composer row", status: "completed", updatedAt: iso(1_800_000) },
       ],
     };
+    // Everything above, finished: what the chip offers once nothing waits or runs.
+    const finishedList = { ...list, workflows: (list.workflows as Array<Record<string, unknown>>).map((w) => ({ ...w, status: w.status === "running" ? "completed" : w.status, durationMs: w.durationMs ?? 600_000 })),
+      tasks: (list.tasks as Array<Record<string, unknown>>).map((t) => ({ ...t, status: t.status === "running" ? "completed" : t.status })) };
+    const finishedSubagents = { ...subagents, agents: subagents.agents.map((a) => ({ ...a, status: "completed" })) };
+    let finished = false;
     const shots: string[] = [];
     const found: Record<string, Record<string, boolean>> = {};
     const devices: Array<[string, Record<string, unknown>]> = [
@@ -694,9 +700,12 @@ async function processes(): Promise<void> {
           return route.fulfill(workflow ? { json: run === (detail as { workflow: { runId: string } }).workflow.runId ? detail : { sessionKey: "bench", workflow, results: {} } } : { status: 404 });
         }
         if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "✓ 412 pass\n  0 fail\nwatching for changes…", truncated: false, updatedAt: now } });
-        return route.fulfill({ json: list });
+        return route.fulfill({ json: finished ? finishedList : list });
       });
-      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: subagents }));
+      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: finished ? finishedSubagents : subagents }));
+      finished = false;
+      const writes: string[] = [];
+      page.on("request", (request) => { if (request.method() === "POST" && request.url().includes("/api/pane/")) writes.push(new URL(request.url()).pathname); });
       await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
       const box = page.getByRole("textbox").first();
       await box.waitFor({ timeout: 15_000 });
@@ -719,8 +728,19 @@ async function processes(): Promise<void> {
         await shot("list");
         if (await tap(page.getByRole("button", { name: "Expand nenu-wave" }).first(), "expand")) await shot("expanded");
         if (await tap(page.getByRole("button", { name: "Details of nenu-wave" }).first(), "details")) await shot("details");
-        await page.keyboard.press("Escape");
-        await page.keyboard.press("Escape");
+        const panel = page.getByRole("complementary", { name: /^Details/ });
+        if (await panel.isVisible()) {
+          // Esc in the empty composer closes the desk's panel first; it must not stop the turn.
+          await box.click();
+          const before = writes.length;
+          await page.keyboard.press("Escape");
+          await page.waitForTimeout(400);
+          seen.escClosesPanel = !(await panel.isVisible());
+          seen.escSentNothing = writes.length === before;
+        } else {
+          await page.keyboard.press("Escape");
+          await page.keyboard.press("Escape");
+        }
       } else {
         // The build before the chip: the Activity sheet behind ⋯, and a workflow full screen.
         if (await tap(page.getByRole("button", { name: "Conversation actions" }).first(), "menu-old")) {
@@ -747,6 +767,16 @@ async function processes(): Promise<void> {
       await page.waitForTimeout(400);
       seen.stopEmpty = await page.getByRole("button", { name: "Stop", exact: true }).isVisible();
       seen.sendEmpty = await page.getByRole("button", { name: "Send", exact: true }).isVisible();
+      finished = true;
+      bridge.fake!.setStatus(pane, "idle");
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
+      await box.waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1800);
+      const quiet = page.getByRole("button", { name: /^Processes/ }).first();
+      seen.quietChip = await quiet.waitFor({ timeout: 2500 }).then(() => true, () => false);
+      seen.quietChipText = await page.getByRole("button", { name: /^Processes: \d+ done$/ }).first().isVisible();
+      await shot("finished");
+      if (await tap(quiet, "quietOpens") && await tap(page.getByRole("button", { name: /^Done \(\d+\)$/ }).first(), "doneFold")) await shot("finished-list");
       await context.close();
     }
     return { shots, found };

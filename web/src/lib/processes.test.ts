@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ActivityResponse } from "@/lib/activity";
 import type { SubagentsResponse } from "@/lib/types";
-import { buildProcesses, processesLabel } from "./processes";
+import { buildProcesses, finishedLabel, processesLabel } from "./processes";
 
 const workflow = (runId: string, status: "running" | "completed", startedAt: number, durationMs?: number) =>
   ({ runId, name: runId, status, startedAt, durationMs, phases: [], agentCount: 2, doneCount: status === "running" ? 0 : 2 });
@@ -53,4 +53,11 @@ describe("buildProcesses", () => {
 test("the chip names who waits on you before what runs", () => {
   expect(processesLabel(buildProcesses(activity, subagents))).toBe("1 waiting on you");
   expect(processesLabel(buildProcesses(activity, null))).toBe("3 running");
+});
+
+test("the quiet chip counts what finished, then what was published, then nothing", () => {
+  const empty = { waiting: [], running: [], done: [] };
+  expect(finishedLabel(buildProcesses(activity, subagents), 0)).toMatch(/^\d+ done$/);
+  expect(finishedLabel(empty, 2)).toBe("2 published");
+  expect(finishedLabel(empty, 0)).toBeNull();
 });
