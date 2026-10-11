@@ -1,4 +1,5 @@
-import { agentName, busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
+import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
+import { useStopTurn } from "@/hooks/use-stop-turn";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
@@ -39,6 +40,7 @@ import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
+import { StopControl } from "@/components/stop-control";
 import { readyPaths, useComposerAttachments } from "@/hooks/use-composer-attachments";
 import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
 import {
@@ -152,22 +154,6 @@ const SENT_ECHO_GRACE_MS = 5_000;
 
 // Burst window for post-keypress revalidation (see scheduleKeyRevalidate).
 const KEY_REVALIDATE_MS = 300;
-
-// Stop stays offered this long after a send for the turn to show up (the bridge waits 4 s for it).
-const TURN_PENDING_MS = 8_000;
-// "Stopping…" gives the button back if Herdr never reports the pane idle.
-const STOPPING_MS = 8_000;
-
-/** What a Stop did beyond stopping, for the status line; null when the button says enough. */
-function stoppedNote(name: string, result: { queued: "sends" | "returns" | null; held: number }): string | null {
-  const notes = [
-    result.queued === "sends" ? `${name} stopped and is reading your queued message.` : null,
-    result.queued === "returns" ? `${name} stopped and put your queued message back in its input box.` : null,
-    result.held === 1 ? "Your message queued in Nenu waits until you send it." : null,
-    result.held > 1 ? `${result.held} messages queued in Nenu wait until you send them.` : null,
-  ].filter(Boolean);
-  return notes.length ? notes.join(" ") : null;
-}
 
 // Shared in-flow dock chrome for Keys/Quick — an IN-FLOW panel (never an overlay), so the terminal
 // mirror's flex-1 box shrinks and its tail stays visible while the dock is open (a covering sheet
@@ -452,32 +438,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     void queue.readNow(rowId);
   }
   const [sending, setSending] = useState(false);
-  // Stop (ADR 0065): offered while the agent works, and from a sent message until its turn shows up.
-  // `stopping` holds the button through one Stop, so a second tap sends nothing.
-  const [stopping, setStopping] = useState(false);
-  const [turnPending, setTurnPending] = useState(false);
-  const stopConfirm = usePendingConfirm(8_000);
-  const workingRef = useRef(working);
-  workingRef.current = working;
-  useEffect(() => {
-    if (working) setTurnPending(false);
-    else setStopping(false);
-  }, [working]);
-  // Neither waits for good: a turn that never shows up, or an idle Herdr never reports.
-  useEffect(() => {
-    if (!turnPending) return;
-    const timer = setTimeout(() => setTurnPending(false), TURN_PENDING_MS);
-    return () => clearTimeout(timer);
-  }, [turnPending]);
-  useEffect(() => {
-    if (!stopping) return;
-    const timer = setTimeout(() => setStopping(false), STOPPING_MS);
-    return () => clearTimeout(timer);
-  }, [stopping]);
-  useEffect(() => {
-    setTurnPending(false);
-    setStopping(false);
-  }, [paneId, session]);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
   const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "retry" | "check" | null>(null);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
@@ -595,6 +555,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // draft helpers below stay harness-free: they take the capability, never the grammar. Undefined for
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
+  const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
 
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
@@ -806,7 +767,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         const unverified = !adapter;
         if (started.id) updateLocalSend(sendScope, started.id, { state: "sent", unverified: unverified || undefined });
         // A message starts a turn; a slash command or a picker action may not.
-        if (!action && !t.startsWith("/")) setTurnPending(true);
+        if (!action && !t.startsWith("/")) stop.turnSent();
         // Remember what/when we sent, so the next few polls recognise this text echoing on the "❯"
         // line as our own in-flight reply rather than a stranded draft (suppressEcho above).
         lastSentRef.current = { text: t, at: Date.now() };
@@ -963,34 +924,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.id));
   const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id));
 
-  const canStop = !!adapter?.interrupt && !isShell && !gone && !readOnly && (working || turnPending || stopping);
-  const stopArmed = stopConfirm.pending === "stop";
-  async function stopTurn() {
-    if (!canStop || locked || stopping) return;
-    const confirm = stopArmed;
-    if (confirm) stopConfirm.reset();
-    setStopping(true);
-    try {
-      const result = await api.interruptPane(paneId, session, confirm);
-      if (!result.ok) {
-        setStopping(false);
-        // The CLI would send its own queue on stopping: the next tap says so knowingly.
-        if (result.code === "confirm_required") stopConfirm.confirm("stop");
-        if (result.code === "not_running") setTurnPending(false);
-        setStatus(result.error, result.code === "confirm_required" || result.code === "not_running" ? "info" : "error");
-        return;
-      }
-      setTurnPending(false);
-      // Stopped before this view ever saw it working: no change of `working` is coming to clear it.
-      if (!workingRef.current) setStopping(false);
-      const note = stoppedNote(agentName(agent), result);
-      if (note) setStatus(note, "info");
-      revalidator.revalidate();
-    } catch (error) {
-      setStopping(false);
-      setStatus(error instanceof Error ? error.message : String(error), "error");
-    }
-  }
   const confirmingSend = sendConfirm.pending === "send";
   const forcingSend = forceConfirm.pending === "force";
 
@@ -1313,9 +1246,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       if (skills.onKeyDown(e)) return;
                       // Esc in the empty composer is Stop, as at the terminal. A draft keeps Esc for
                       // the browser, and an open dock or the busy choice keeps it for themselves.
-                      if (e.key === "Escape" && canStop && !hasDraft && drawer === null && !busyPick) {
+                      if (e.key === "Escape" && stop.offered && !hasDraft && drawer === null && !busyPick) {
                         e.preventDefault();
-                        void stopTurn();
+                        stop.stop();
                         return;
                       }
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -1345,33 +1278,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               rows={1}
             />
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
-            {canStop && (stopping ? (
-              <span role="status" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                Stopping…
-              </span>
-            ) : stopArmed ? (
-              <Button variant="destructive" className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold" onClick={() => void stopTurn()} disabled={locked}>
-                Really stop?
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="composer-action composer-stop hit-area"
-                onClick={() => void stopTurn()}
-                disabled={locked}
-                aria-label="Stop"
-                title="Stop (Esc)"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true" className="!size-2.5">
-                  <rect width="10" height="10" rx="2" />
-                </svg>
-              </Button>
-            ))}
+            {stop.offered && <StopControl stop={stop} disabled={locked} />}
             {/* Stop takes Send's place while there is nothing to send; with a draft, both show. */}
-            {canStop && !hasDraft && !direct.active ? null : !direct.active && forcingSend ? (
+            {stop.offered && !hasDraft && !direct.active ? null : !direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
               // submit key is still conditional on the verify step behind it.

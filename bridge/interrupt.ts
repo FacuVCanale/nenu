@@ -48,8 +48,6 @@ export interface InterruptRequest {
   waitMs?: number;
 }
 
-type Attempt = { kind: "pressed"; queued: "sends" | "returns" | null; held: number } | { kind: "cooldown" } | { kind: "confirm" } | { kind: "ended" };
-
 export async function interruptTurn(deps: InterruptDeps, interrupt: TurnInterrupt, request: InterruptRequest): Promise<InterruptResponse> {
   const { name, confirm, ledger, pane } = request;
   const deadline = deps.now() + (request.waitMs ?? TURN_START_WAIT_MS);
@@ -58,29 +56,25 @@ export async function interruptTurn(deps: InterruptDeps, interrupt: TurnInterrup
     code: "confirm_required",
     error: `${name} sends its queued message as soon as it stops. Tap Stop again to stop anyway.`,
   };
+  const cooldown: InterruptResponse = { ok: true, pressed: false, queued: null, held: 0 };
   try {
     for (;;) {
-      if (ledger.recent(pane)) return { ok: true, pressed: false, queued: null, held: 0 };
+      if (ledger.recent(pane)) return cooldown;
       const seen = interrupt.read(await deps.read());
       if (seen.running) {
-        if (seen.queued === "sends" && !confirm) return confirmRequired;
-        const run = await deps.exclusive(async (): Promise<Attempt> => {
+        // Null when the turn ended between the two reads: look again until the deadline.
+        const run = await deps.exclusive(async (): Promise<InterruptResponse | null> => {
           // Another Stop may have pressed while this one waited, and the screen not yet repainted.
-          if (ledger.recent(pane)) return { kind: "cooldown" };
+          if (ledger.recent(pane)) return cooldown;
           const now = interrupt.read(await deps.read());
-          if (!now.running) return { kind: "ended" };
-          if (now.queued === "sends" && !confirm) return { kind: "confirm" };
+          if (!now.running) return null;
+          if (now.queued === "sends" && !confirm) return confirmRequired;
           await deps.press(interrupt.keys);
           ledger.mark(pane);
           // The key is out: a failed hold must not report the Stop as failed.
-          return { kind: "pressed", queued: now.queued, held: await deps.stopped().catch(() => 0) };
+          return { ok: true, pressed: true, queued: now.queued, held: await deps.stopped().catch(() => 0) };
         });
-        if (!run.busy) {
-          const attempt = run.value;
-          if (attempt.kind === "pressed") return { ok: true, pressed: true, queued: attempt.queued, held: attempt.held };
-          if (attempt.kind === "cooldown") return { ok: true, pressed: false, queued: null, held: 0 };
-          if (attempt.kind === "confirm") return confirmRequired;
-        }
+        if (!run.busy && run.value) return run.value;
       }
       if (deps.now() >= deadline) {
         return seen.running
@@ -90,6 +84,6 @@ export async function interruptTurn(deps: InterruptDeps, interrupt: TurnInterrup
       await deps.sleep(POLL_MS);
     }
   } catch (err) {
-    return { ok: false, code: "failed", error: (err as Error).message };
+    return { ok: false, code: "failed", error: err instanceof Error ? err.message : String(err) };
   }
 }

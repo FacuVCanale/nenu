@@ -136,3 +136,12 @@ it("a Stop the bridge answers after the pane went idle does not leave 'Stopping�
   await waitFor(() => expect(screen.queryByText("Stopping…")).not.toBeInTheDocument());
   expect(stopButton()).not.toBeInTheDocument();
 });
+
+it("when stopping sent Claude's own queue, the new turn gets a Stop of its own", async () => {
+  answers = [{ ok: true, pressed: true, queued: "sends", held: 0 }];
+  const { user } = setup();
+  await user.click(stopButton()!);
+  expect(await screen.findByText("Claude stopped and is reading your queued message.")).toBeVisible();
+  expect(screen.queryByText("Stopping…")).not.toBeInTheDocument();
+  expect(stopButton()).toBeVisible();
+});
