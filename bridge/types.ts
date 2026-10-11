@@ -92,6 +92,25 @@ export interface AgentView {
   stateChangeSeq?: number;
   /** Herdr's `agent.list` `completion_seq`: bumps when an idle transition completed work. */
   completionSeq?: number;
+  /**
+   * The agent's turn as the CLI itself records it (ADR 0067): Claude's session file, Codex's rollout.
+   * Attached at read time by bridge/agent-state.ts; absent when no structured source is known for the
+   * pane, and then the screen and Herdr's status stay the fallback.
+   */
+  turn?: TurnState;
+}
+
+/** What the CLI's own files say about its turn (ADR 0067). */
+export interface TurnState {
+  /** A turn the CLI's interrupt key reaches. Stop's button and Stop's press both read this. */
+  running: boolean;
+  /** Claude: a dialog owns the keyboard (its `waitingFor`, e.g. "permission prompt"). */
+  waiting?: string;
+  /** Work goes on with no turn to interrupt: background agents, a workflow or a shell. */
+  background?: boolean;
+  /** What Escape does to the CLI's own queue, when its files say (Claude): `sends` or nothing. */
+  queued?: "sends" | null;
+  source: "claude-session" | "codex-rollout";
 }
 
 /**
@@ -395,7 +414,12 @@ export type ActionResponse =
  * CLI's own queue; `held` counts the rows Nenu parked until the operator sends them.
  */
 export type InterruptResponse =
-  | { ok: true; pressed: boolean; queued: "sends" | "returns" | null; held: number }
+  | {
+    ok: true; pressed: boolean; queued: "sends" | "returns" | null; held: number;
+    /** After a press: the CLI's own state showed the turn end (true), or still running (false).
+     *  Absent when no structured source watches the pane. */
+    confirmed?: boolean;
+  }
   | { ok: false; error: string; code: "confirm_required" | "not_running" | "busy" | "unsupported" | "failed" };
 
 /** POST /api/pane/:id/upload — image saved to a host file; `path` is the absolute path to ref. */

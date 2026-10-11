@@ -1,0 +1,12 @@
+{"timestamp": "2026-10-11T13:04:40.903Z", "type": "session_meta", "payload": {"id": "01a12b10-b86b-7781-9182-b55f713c7ee2"}}
+{"timestamp": "2026-10-11T13:04:40.903Z", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "01a12b10-c1c1-7be0-8310-63df03c6efc4", "started_at": 1791723880}}
+{"timestamp": "2026-10-11T13:04:41.235Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:41.236Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:41.236Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:41.236Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:04:41.241Z", "type": "turn_context", "payload": {"turn_id": "01a12b10-c1c1-7be0-8310-63df03c6efc4"}}
+{"timestamp": "2026-10-11T13:04:41.279Z", "type": "response_item", "payload": {"type": "message", "role": "user"}}
+{"timestamp": "2026-10-11T13:04:41.280Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "01a12b10-c1c1-7be0-8310-63df03c6efc4", "item": {"type": "UserMessage"}}}
+{"timestamp": "2026-10-11T13:04:45.986Z", "type": "event_msg", "payload": {"type": "token_count"}}
+{"timestamp": "2026-10-11T13:04:45.989Z", "type": "response_item", "payload": {"type": "message", "role": "developer"}}
+{"timestamp": "2026-10-11T13:04:45.990Z", "type": "event_msg", "payload": {"type": "turn_aborted", "turn_id": "01a12b10-c1c1-7be0-8310-63df03c6efc4", "reason": "interrupted", "started_at": 1791723880, "completed_at": 1791723885, "duration_ms": 5087}}

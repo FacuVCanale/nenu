@@ -96,7 +96,8 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md) | A refused file opens only through a confirmed, single-use link (amends 0021, 0059) | Accepted |
 | [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Accepted |
 | [0065](./0065-a-workspace-opens-on-its-pane.md) | A workspace opens on its pane, not on a page | Accepted |
-| [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted |
+| [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted; "running turn" amended by 0067 |
+| [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

@@ -110,13 +110,15 @@ export class ClaudeHooks {
   /** Latest dialog hint per pane, in memory only; a restart forgets it and the screen still rules. */
   private readonly hints = new Map<string, InteractionHint>();
 
-  constructor(readonly live: LivePublisher) {}
+  /** `poke` re-reads the pane's own state files at once (agent-state.ts): a hook only speeds that up. */
+  constructor(readonly live: LivePublisher, private readonly poke: (session: string, paneId: string) => void = () => {}) {}
 
   /** Record one observation for its pane and name what changed on the live stream. */
   receive(session: string, paneId: string, observation: ClaudeHookObservation): void {
     const key = `${session}\u0000${paneId}`;
     if (observation.hint) this.hints.set(key, observation.hint);
     else if (observation.event === "Stop" || observation.event === "StopFailure" || observation.event === "UserPromptSubmit") this.hints.delete(key);
+    this.poke(session, paneId);
     for (const topic of TOPICS[observation.event]) this.live.publish({ session, topic, paneId });
   }
 

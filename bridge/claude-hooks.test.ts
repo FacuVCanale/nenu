@@ -72,6 +72,13 @@ test("ClaudeHooks names the pane and keeps a fresh hint until the turn ends", ()
   expect(hooks.hintFor("s", "w:1", 3_000)).toBeUndefined();
 });
 
+test("a hook delivery re-reads the pane's own state files at once", () => {
+  const poked: string[] = [];
+  const hooks = new ClaudeHooks({ publish() {} }, (session, paneId) => void poked.push(`${session}/${paneId}`));
+  hooks.receive("s", "w:1", decodeClaudeHook({ hook_event_name: "UserPromptSubmit", session_id: SESSION }, 1_000)!);
+  expect(poked).toEqual(["s/w:1"]);
+});
+
 describe("POST /api/hooks/claude", () => {
   const TOKEN = "t".repeat(64);
   let url = "";

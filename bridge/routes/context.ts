@@ -1,3 +1,4 @@
+import type { AgentStates } from "../agent-state.ts";
 import type { ActivityLedger } from "../activity.ts";
 import type { AuditLog } from "../audit.ts";
 import type { ClaudeHooks } from "../claude-hooks.ts";
@@ -63,6 +64,8 @@ export interface Services extends ServerDeps {
   paneWatcher: PaneWatcher;
   journalWatch: JournalWatch;
   claudeHooks: ClaudeHooks;
+  /** Each Claude and Codex pane's turn from the CLI's own files (ADR 0067). */
+  agentStates: AgentStates;
   /** Single-use links to files the operator confirmed opening outside the preview (ADR 0063). */
   fileGrants: FileGrants;
 }
