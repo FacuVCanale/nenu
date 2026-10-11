@@ -37,6 +37,8 @@ describe("Codex's running turn", () => {
   it("runs while the painted Working cue is up", () => {
     expect(read("codex", "interrupt-working-v0162")).toEqual({ running: true, queued: null });
     expect(read("codex", "interrupt-steer-absorbed-v0162")).toEqual({ running: true, queued: null });
+    // 0.162.1 names a long command's wait instead of "Working", with the same paint.
+    expect(read("codex", "interrupt-waiting-background-v0162")).toEqual({ running: true, queued: null });
   });
 
   it("a pending steer is sent by Escape; queued follow-ups go back to the composer", () => {

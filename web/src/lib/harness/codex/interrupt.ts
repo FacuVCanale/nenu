@@ -16,7 +16,9 @@ export function readCodexTurn(text: string): TurnReading {
 export function hasCodexInterruptCue(text: string): boolean {
   return text.split(/\r\n?|\n/).some((rawLine) => {
     const plain = parseAnsi(rawLine).map((segment) => segment.text).join("").trimEnd();
-    if (!/^• Working \([^\r\n)]* • esc to interrupt\)(?: · [^\r\n]+)?$/i.test(plain)) return false;
+    // The status phrase varies: "Working", or on 0.162.1 "Waiting for background terminal" while a
+    // long command runs (measured). The paint below is the same for both.
+    if (!/^• [A-Z][^()•\r\n]* \([^\r\n)]* • [Ee]sc to interrupt\)(?: · [^\r\n]+)?$/.test(plain)) return false;
     // The same words can occur in transcript prose. Bind the cue to Codex's renderer paint: bold
     // bullet and dim hint glue; current Codex paints Working muted and Escape bold. A copied/plain historical line fails.
     const painted: Array<{ char: string; bold: boolean; dim: boolean }> = [];
