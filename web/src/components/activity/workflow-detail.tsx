@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, MessageSquare, Workflow, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import {
   agentElapsed,
@@ -17,9 +16,6 @@ import {
 } from "@/lib/activity";
 import { AgentBar, Meta, StateDot, StatusTag } from "./activity-parts";
 
-const TICK_STEPS_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 240];
-const LABEL_W = 160;
-
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -29,73 +25,9 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
-/** Each agent as a bar on one shared clock, grouped by phase, so what ran in parallel shows. */
-export function WorkflowTimeline({ workflow, now, selectedAgentId, onSelectAgent }: { workflow: ActivityWorkflow; now: number; selectedAgentId?: string | null; onSelectAgent?: (id: string) => void }) {
-  const agents = allAgents(workflow);
-  const starts = agents.flatMap((a) => a.startedAt ?? []);
-  const t0 = workflow.startedAt ?? (starts.length ? Math.min(...starts) : undefined);
-  if (t0 === undefined || !agents.length) return <p className="text-xs text-muted-foreground">No timing recorded yet.</p>;
-  const end = (a: ActivityAgent) => (a.startedAt ?? t0) + (agentElapsed(a, now) ?? 0);
-  const t1 = workflow.status === "running" ? now : Math.max(t0 + (workflow.durationMs ?? 0), ...agents.map(end));
-  const span = Math.max(1, t1 - t0);
-  const pct = (t: number) => `${Math.min(100, Math.max(0, ((t - t0) / span) * 100))}%`;
-  const stepMin = TICK_STEPS_MIN.find((m) => span / (m * 60_000) <= 7) ?? 480;
-  const step = stepMin * 60_000;
-  const ticks: number[] = [];
-  // A tick hard against either edge would be clipped by the track, so those are left out.
-  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) if ((t - t0) / span > 0.03 && (t1 - t) / span > 0.05) ticks.push(t);
-  return (
-    <div className="overflow-x-auto">
-      <div className="relative flex min-w-[560px] flex-col gap-0.5">
-        <div className="flex h-6 items-center">
-          <span className="shrink-0 pl-3 text-[11.5px] text-muted-foreground" style={{ width: LABEL_W }}>Agent</span>
-          <span className="relative h-6 flex-1">
-            {ticks.map((t) => <span key={t} className="absolute top-1 -translate-x-1/2 font-mono text-[11px] text-muted-foreground" style={{ left: pct(t) }}>{formatClock(t)}</span>)}
-          </span>
-        </div>
-        {workflow.phases.map((phase) => (
-          <div key={phase.title} className="flex flex-col gap-0.5">
-            <div className="flex h-7 items-center gap-2 px-3 text-xs font-medium">
-              {phaseRunning(phase) ? <StateDot state="running" /> : <Check aria-hidden="true" className="size-3 text-status-done" />}
-              <span>{phase.title || "Agents"}</span>
-              <span className="font-normal text-muted-foreground">{phaseDone(phase)}/{phase.agents.length} done</span>
-            </div>
-            {phase.agents.map((agent) => {
-              const start = agent.startedAt ?? t0;
-              const on = agent.id === selectedAgentId;
-              return (
-                <button
-                  key={agent.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => onSelectAgent?.(agent.id)}
-                  className={cn("flex h-7 items-center rounded-md text-left hover:bg-muted/40", on && "bg-muted")}
-                >
-                  <span className="flex shrink-0 items-center gap-2 overflow-hidden pl-3 pr-2 text-[12.5px]" style={{ width: LABEL_W }}>
-                    <StateDot state={agent.state} /><span className="truncate">{agent.label}</span>
-                  </span>
-                  <span className="relative h-7 flex-1">
-                    <span
-                      className={cn("absolute top-[9px] h-2.5 min-w-1.5 rounded-full", agent.state === "running" ? "bg-gradient-to-r from-status-working/50 to-status-working" : agent.state === "failed" ? "bg-destructive/60" : on ? "bg-status-done/85" : "bg-status-done/55")}
-                      style={{ left: pct(start), width: `calc(${pct(end(agent))} - ${pct(start)})` }}
-                    />
-                  </span>
-                  <span className={cn("w-16 shrink-0 pl-2 text-[11.5px] tabular-nums", agent.state === "running" ? "text-status-working" : "text-muted-foreground")}>
-                    {formatDuration(agentElapsed(agent, now))}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /**
- * The phone's form of the timeline: per phase, each agent with what it is doing or returned and how
- * long it took. A shared clock needs more width than a phone has, so the bars give way to this list.
+ * Per phase, each agent with what it is doing or returned and how long it took. The detail lives in
+ * a side panel or a sheet, never wider than a phone, so agents are a list rather than a timeline.
  */
 export function WorkflowAgentList({ workflow, now, selectedAgentId, onSelectAgent }: { workflow: ActivityWorkflow; now: number; selectedAgentId?: string | null; onSelectAgent?: (id: string) => void }) {
   if (!allAgents(workflow).length) return <p className="text-xs text-muted-foreground">No agents recorded yet.</p>;
@@ -196,7 +128,7 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
     void navigator.clipboard?.writeText(typeof result === "string" ? result : JSON.stringify(result, null, 2)).then(() => setCopied(true), () => {});
   };
   return (
-    <aside aria-label={`Agent ${agent.label}`} className="flex min-h-0 flex-col border-t border-border lg:w-[430px] lg:shrink-0 lg:border-l lg:border-t-0">
+    <aside aria-label={`Agent ${agent.label}`} className="flex flex-col border-t border-border">
       <div className="flex flex-col gap-2.5 border-b border-border px-[18px] pb-3 pt-4">
         <div className="flex items-center gap-2">
           <StateDot state={agent.state} className="size-2" />
@@ -207,7 +139,7 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
         </div>
         <Meta items={[agent.phase, formatDuration(agentElapsed(agent, now)), agent.toolCalls !== undefined ? `${agent.toolCalls} tool calls` : "", agent.tokens !== undefined ? `${formatCount(agent.tokens)} tokens` : "", agent.model ?? ""]} />
       </div>
-      <div className="px-[18px] py-4 lg:flex-1 lg:overflow-y-auto">
+      <div className="px-[18px] py-4">
         {result !== undefined ? <AgentResult value={result} />
           : agent.state === "running" ? <p className="text-[13px] text-muted-foreground">Still working{agent.lastTool ? ` · ${agent.lastTool}` : ""}.</p>
             : <p className="text-[13px] text-muted-foreground">{agent.resultPreview ?? "No result recorded."}</p>}
@@ -223,8 +155,8 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
 }
 
 /**
- * A workflow opened from its card: header with totals, one card per phase, the timeline, and the
- * selected agent's result beside it (below it on a phone).
+ * A workflow's details, shaped for a side panel or a sheet: header with totals, one card per phase,
+ * its agents, and the selected agent's result below them.
  */
 export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = null, onSelectAgent, onOpenTranscript, className }: {
   workflow: ActivityWorkflow;
@@ -236,22 +168,20 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
   className?: string;
 }) {
   const selected = selectedAgentId ? allAgents(workflow).find((a) => a.id === selectedAgentId) : undefined;
-  const phone = useMediaQuery("(max-width: 639px)");
-  const Agents = phone ? WorkflowAgentList : WorkflowTimeline;
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden", className)}>
-      <div className="flex min-w-0 flex-col gap-5 px-4 pb-6 pt-5 lg:flex-1 lg:overflow-y-auto lg:px-7 lg:pt-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+    <div className={cn("flex flex-col", className)}>
+      <div className="flex min-w-0 flex-col gap-5 pb-5">
+        <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="inline-flex h-5 items-center gap-1 rounded-md bg-muted px-1.5 text-[11.5px] font-medium text-muted-foreground"><Workflow aria-hidden="true" className="size-3" />Workflow</span>
               <StatusTag status={workflow.status} />
               {workflow.startedAt !== undefined && <span className="text-xs text-muted-foreground">started {formatClock(workflow.startedAt)} by Claude</span>}
             </div>
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{workflow.name}</h1>
+            <h2 className="truncate text-lg font-semibold tracking-tight">{workflow.name}</h2>
             {workflow.summary && <p className="max-w-[560px] text-[13.5px] leading-relaxed text-muted-foreground">{workflow.summary}</p>}
           </div>
-          <div className="flex gap-6 lg:pt-1.5">
+          <div className="flex gap-6">
             <Stat value={`${workflow.doneCount}/${workflow.agentCount}`} label="agents done" />
             <Stat value={formatDuration(workflowElapsed(workflow, now)) || "–"} label={workflow.status === "running" ? "elapsed" : "took"} />
             {workflow.totalToolCalls !== undefined && <Stat value={String(workflow.totalToolCalls)} label="tool calls" />}
@@ -259,7 +189,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
           </div>
         </div>
         {workflow.phases.length > 0 && (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
             {workflow.phases.map((phase) => (
               <div key={phase.title} className={cn("flex flex-col gap-2 rounded-lg bg-card px-3 py-2.5 ring-1", phaseRunning(phase) ? "ring-status-working/30" : "ring-border")}>
                 <div className="flex items-center gap-1.5 text-[12.5px]">
@@ -275,11 +205,11 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
         )}
         <section className="flex flex-col gap-2.5">
           <div className="flex items-center">
-            <h2 className="text-[13px] font-medium">{phone ? "Agents" : "Timeline"}</h2>
+            <h3 className="text-[13px] font-medium">Agents</h3>
             <span className="flex-1" />
             {workflow.status === "running" && <span className="text-xs text-muted-foreground">Now {formatClock(now)}</span>}
           </div>
-          <Agents workflow={workflow} now={now} selectedAgentId={selectedAgentId} onSelectAgent={(id) => onSelectAgent?.(id === selectedAgentId ? null : id)} />
+          <WorkflowAgentList workflow={workflow} now={now} selectedAgentId={selectedAgentId} onSelectAgent={(id) => onSelectAgent?.(id === selectedAgentId ? null : id)} />
         </section>
       </div>
       {selected && <AgentPanel agent={selected} result={results[selected.id]} now={now} onClose={onSelectAgent && (() => onSelectAgent(null))} onOpenTranscript={onOpenTranscript} />}

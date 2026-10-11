@@ -23,7 +23,7 @@ interface Props {
   recovery?: ReactNode;
 }
 
-/** The pane's one ⋯ menu: every secondary tool, grouped and named, so the header and composer stay one row. */
+/** The pane's one ⋯ menu: the pane's views, grouped and named when there is more than one group. */
 export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery }, ref) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -46,9 +46,11 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
 
 /** The menu's grouped rows; `onRun` decides what happens around an action (the menu closes first). */
 export function ActionGroups({ groups, onRun }: { groups: ConversationActionGroup[]; onRun: (action: () => void) => void }) {
-  return groups.filter((group) => group.actions.length > 0).map((group, index) => (
+  const shown = groups.filter((group) => group.actions.length > 0);
+  // A lone group needs no heading; the menu's own name says what it holds.
+  return shown.map((group, index) => (
     <section key={group.label} aria-label={group.label} className={cn(index > 0 && "mt-1 border-t border-border/60 pt-1")}>
-      <h4 className="px-2.5 pb-0.5 pt-1.5 text-[11px] font-medium text-muted-foreground">{group.label}</h4>
+      {shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5 text-[11px] font-medium text-muted-foreground">{group.label}</h4>}
       {group.actions.map(({ id, label, icon: Icon, run, disabled, on }) => (
         <button key={id} type="button" disabled={disabled} aria-pressed={on === undefined ? undefined : on}
           onClick={() => onRun(run)}

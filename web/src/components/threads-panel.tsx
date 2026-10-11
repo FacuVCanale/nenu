@@ -1,13 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Activity, BookText, GitPullRequest, MessageSquare } from "lucide-react";
+import { Activity, ArrowLeft, BookText, GitPullRequest, MessageSquare } from "lucide-react";
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
-import { TaskOutput } from "@/components/activity/task-output";
-import { WorkflowScreen, useActivityClock, type OpenWorkflow } from "@/components/activity/running-workflows";
+import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
 import { NodeDot } from "@/components/node-row";
 import { ProjectTasks, prSummary, threadAge } from "@/components/project-tasks";
-import { BottomSheet } from "@/components/ui/sheet";
-import { useActivity } from "@/hooks/use-activity";
+import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { nodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -53,23 +51,27 @@ export function PrList({ threads, onOpenPane, onOpenNode, now = Date.now() }: {
 }
 
 /**
- * A Claude pane's background work: the Activity list, a workflow opened full screen, and a task's
- * output in a sheet. Reads only while mounted, so a closed tab costs nothing.
+ * A Claude pane's background work: the Activity list, and a workflow or a command's output opened in
+ * its place with Back. Reads only while mounted, so a closed tab costs nothing.
  */
 export function PaneActivity({ paneId, session, className }: { paneId: string; session?: string; className?: string }) {
   const activity = useActivity(paneId, session);
   const now = useActivityClock(activity.data);
-  const [workflow, setWorkflow] = useState<OpenWorkflow | null>(null);
-  const [task, setTask] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ProcessDetail | null>(null);
+  if (detail) {
+    return (
+      <div className={cn("flex flex-col gap-3", className)}>
+        <button type="button" onClick={() => setDetail(null)} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 self-start rounded-md px-2 text-sm text-muted-foreground hover:text-foreground lg:min-h-8">
+          <ArrowLeft aria-hidden="true" className="size-4" />Back
+        </button>
+        <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={detail} now={now} onChange={setDetail} />
+      </div>
+    );
+  }
   return (
-    <>
-      <ActivityPanel className={className} data={activity.data} stale={activity.stale} now={now} onRetry={activity.refresh}
-        onOpenWorkflow={(runId, agentId) => setWorkflow({ runId, agentId: agentId ?? null })} onOpenTask={setTask} />
-      {workflow && <WorkflowScreen paneId={paneId} session={session} activity={activity} open={workflow} now={now} onChange={setWorkflow} />}
-      <BottomSheet open={task !== null} onClose={() => setTask(null)} title="Task output">
-        {task && <TaskOutput paneId={paneId} session={session} taskId={task} />}
-      </BottomSheet>
-    </>
+    <ActivityPanel className={className} data={activity.data} stale={activity.stale} now={now} onRetry={activity.refresh}
+      onOpenWorkflow={(runId, agentId) => setDetail({ kind: "workflow", runId, agentId: agentId ?? null })}
+      onOpenTask={(taskId) => setDetail({ kind: "task", taskId, title: activity.data?.available ? activity.data.tasks.find((t) => t.id === taskId)?.title ?? "Output" : "Output" })} />
   );
 }
 

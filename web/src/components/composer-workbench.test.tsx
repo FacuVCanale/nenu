@@ -95,13 +95,13 @@ it("keeps composing available while disconnected or a dialog is open", async () 
   expect(sendMessage).not.toHaveBeenCalled();
 });
 
-it("publishes its secondary controls to the header menu, grouped, instead of rendering them", async () => {
+it("publishes its secondary controls, grouped, instead of rendering them", async () => {
   const { controls, user } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
   const input = screen.getByRole("textbox");
   await user.type(input, "draft survives navigation");
   expect(controls().map(({ group, label }) => `${group}: ${label}`)).toEqual([
     "Terminal: Keys", "Terminal: Type into terminal", "Shortcuts: Quick replies", "Shortcuts: Commands",
-    "View: Display", "View: Context and usage",
+    "View: Display", "Session: Context and usage",
   ]);
   for (const name of ["Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   expect(input).toHaveValue("draft survives navigation");

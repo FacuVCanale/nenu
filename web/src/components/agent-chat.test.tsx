@@ -674,22 +674,24 @@ describe("AgentChat — history affordance", () => {
     expect(screen.queryByRole("button", { name: /conversation history/i })).not.toBeInTheDocument();
   });
 
-  it("keeps a phone header to one ⋯ that holds history, files, subagents and the terminal switch", async () => {
+  it("keeps a phone header to one ⋯ of five views, with no group headings", async () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true };
     renderChat({ agent, agents: [agent] });
     for (const name of [/conversation history/i, "Show raw terminal", "Artifacts and files", /^Subagents/]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    const view = screen.getByRole("region", { name: "View" });
-    for (const name of ["Conversation history", "Artifacts and files", "Subagents", "Terminal mirror", "Display"]) {
-      expect(within(view).getByRole("button", { name })).toBeVisible();
+    const menu = screen.getByRole("dialog", { name: "Conversation actions" });
+    expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
+      expect.arrayContaining(["Find in output", "Conversation history", "Artifacts and files", "Terminal mirror", "Display"]));
+    for (const heading of ["Terminal", "Shortcuts", "View"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
+    // Message tools stay under the composer's chevron, background work behind the processes chip.
+    for (const name of ["Keys", "Type into terminal", "Quick replies", "Background activity", "Subagents", "Context and usage"]) {
+      expect(within(menu).queryByRole("button", { name })).not.toBeInTheDocument();
     }
-    expect(within(screen.getByRole("region", { name: "Terminal" })).getByRole("button", { name: "Keys" })).toBeVisible();
-    expect(within(screen.getByRole("region", { name: "Shortcuts" })).getByRole("button", { name: "Quick replies" })).toBeVisible();
   });
 
-  it("keeps Subagents and the terminal switch in a desktop header, beside the ⋯", async () => {
+  it("keeps the terminal switch in a desktop header, beside the ⋯, and no separate Agents button", async () => {
     const original = window.matchMedia;
     window.matchMedia = ((query: string) => ({ matches: query === "(min-width: 1024px)", media: query, onchange: null,
       addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
@@ -697,7 +699,7 @@ describe("AgentChat — history affordance", () => {
       const agent = { ...fixtureAgents[0]!, hasSession: true };
       renderChat({ agent, agents: [agent] });
       expect(screen.getByRole("button", { name: "Show raw terminal" })).toBeVisible();
-      expect(screen.getByRole("button", { name: /^Subagents/ })).toBeVisible();
+      expect(screen.queryByRole("button", { name: /^Subagents/ })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
       expect(screen.queryByRole("button", { name: "Terminal mirror" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Artifacts and files" })).toBeVisible();
@@ -706,17 +708,21 @@ describe("AgentChat — history affordance", () => {
     }
   });
 
-  it("arms Type into terminal and docks Keys from the menu, keeping the input row to one line", async () => {
+  it("arms Type into terminal and docks Keys from the composer's chevron, keeping the input row to one line", async () => {
     const user = userEvent.setup();
     const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
     renderChat({ agent, agents: [agent] });
+    const shortcut = async (name: string) => {
+      await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Message shortcuts" })).getByRole("button", { name }));
+    };
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
-    await openMenuItem(user, "Keys");
+    await shortcut("Keys");
     expect(screen.getByRole("button", { name: "Close Keys" })).toBeVisible();
-    await openMenuItem(user, "Type into terminal");
+    await shortcut("Type into terminal");
     expect(screen.getByPlaceholderText(/type into the terminal/i)).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Close Keys" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
     expect(screen.getByRole("button", { name: "Type into terminal" })).toHaveAttribute("aria-pressed", "true");
   });
 

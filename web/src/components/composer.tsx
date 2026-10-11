@@ -41,6 +41,7 @@ import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
 import { StopControl } from "@/components/stop-control";
+import { WorkActivityLabel } from "@/components/work-activity-label";
 import { readyPaths, useComposerAttachments } from "@/hooks/use-composer-attachments";
 import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
 import {
@@ -68,12 +69,13 @@ export interface ComposerHandle {
 }
 
 /**
- * One of the composer's secondary controls. The composer owns their state and behaviour; the pane
- * header's ⋯ menu is where they are reached, so the input row stays one line on every screen.
+ * One of the composer's secondary controls. The composer owns their state and behaviour. The
+ * chevron under the draft reaches the message-side groups; View is published to the pane header's
+ * ⋯ menu, so the input row stays one line on every screen.
  */
 export interface ComposerControl {
-  id: "keys" | "type" | "stop" | "quick" | "commands" | "display" | "usage";
-  group: "Terminal" | "Shortcuts" | "View";
+  id: "keys" | "type" | "quick" | "commands" | "display" | "usage";
+  group: "Terminal" | "Shortcuts" | "Session" | "View";
   label: string;
   icon: LucideIcon;
   disabled: boolean;
@@ -102,6 +104,10 @@ interface ComposerProps {
   /** Transport unavailable: stop terminal writes while keeping the local draft editable. */
   disconnected?: boolean;
   modelControl?: ReactNode;
+  /** The background-work chip, beside the model in the row under the draft. */
+  processesControl?: ReactNode;
+  /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
+  workingSince?: string;
   usageControls?: ReactNode;
   nativeWorkbench?: boolean;
   prepareSend?: () => Promise<boolean>;
@@ -222,7 +228,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, processesControl, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1038,15 +1044,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     { id: "display", group: "View", label: "Display", icon: Settings2, ...dockControl("display", false) },
   ];
   if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
-  if (usageControls) controls.push({ id: "usage", group: "View", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) });
+  if (usageControls) controls.push({ id: "usage", group: "Session", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) });
   const latestControls = useRef(controls);
   latestControls.current = controls;
   useEffect(() => {
     onControlsChange?.(latestControls.current);
   }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
-  // The chevron under the draft reaches the message-side rows (Terminal, Shortcuts) without the
-  // header; View stays in the header's ⋯ menu.
-  const shortcutGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts"] as const).map((group) => ({
+  // The chevron under the draft reaches the message-side rows (Terminal, Shortcuts, Session) without
+  // the header; View stays in the header's ⋯ menu.
+  const shortcutGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts", "Session"] as const).map((group) => ({
     label: group,
     actions: controls.filter((control) => control.group === group),
   }));
@@ -1213,6 +1219,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         )}
 
+        {/* While a draft holds the round button for Send, Stop stays one tap away on the row that says
+            the agent is working, never as a second round button beside Send. */}
+        {stop.offered && (hasDraft || direct.active) && (
+          <div role="group" aria-label="Agent working" className="flex min-h-8 items-center gap-2 px-1 pb-1">
+            <WorkActivityLabel startedAt={workingSince} />
+            <span className="flex-1" />
+            <StopControl stop={stop} disabled={locked} compact />
+          </div>
+        )}
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
         {/* One rounded box: the draft grows upward to its cap and the single action sits inside on
             the right (send, stop, or the confirm pill). Quiet controls live in the row below it. */}
@@ -1278,9 +1293,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               rows={1}
             />
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
-            {stop.offered && <StopControl stop={stop} disabled={locked} />}
-            {/* Stop takes Send's place while there is nothing to send; with a draft, both show. */}
-            {stop.offered && !hasDraft && !direct.active ? null : !direct.active && forcingSend ? (
+            {/* One round button that morphs: Stop while the agent works and there is nothing to send,
+                Send (or queue) once a draft exists. */}
+            {stop.offered && !hasDraft && !direct.active ? <StopControl stop={stop} disabled={locked} /> : !direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
               // submit key is still conditional on the verify step behind it.
@@ -1339,6 +1354,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <ActionGroups groups={shortcutGroups} onRun={(run) => { setShortcutsOpen(false); run(); }} />
           </WorkbenchPopover>
           <div className="flex-1" />
+          {processesControl}
           {modelControl && <div className="flex min-w-0 items-center justify-end">{modelControl}</div>}
         </div>
       </div>

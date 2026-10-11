@@ -4,14 +4,14 @@ import { useInteractions } from "@/hooks/use-interactions";
 import { hasCodexInterruptCue } from "@/lib/harness/codex/interrupt";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
-import type { SubagentSelection } from "@/components/session-subagents";
-import { SessionSubagents } from "@/components/session-subagents";
-import { PaneActivity } from "@/components/threads-panel";
-import { RunningWorkflows } from "@/components/activity/running-workflows";
+import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
+import { useActivity, useActivityClock } from "@/hooks/use-activity";
+import { buildProcesses } from "@/lib/processes";
+import { detailTitle, ProcessDetailView, ProcessesChip, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { Activity as ActivityIcon, ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users, X } from "lucide-react";
+import { ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, X } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
@@ -24,7 +24,7 @@ import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { BottomSheet } from "@/components/ui/sheet";
-import { ConversationActions, type ConversationAction, type ConversationActionGroup } from "@/components/conversation-actions";
+import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useKeyboardOpen } from "@/hooks/use-keyboard";
 import { AppHeader } from "@/components/app-header";
@@ -146,7 +146,7 @@ export interface DockedHeaderView {
 }
 
 export interface DockedChat {
-  /** `find` is the find bar while searching; `menu` holds the chat's files, subagents and ⋯ actions. */
+  /** `find` is the find bar while searching; `menu` holds the chat's files and ⋯ actions. */
   header: (view: DockedHeaderView) => ReactNode;
   onMirrorShown: (shown: boolean) => void;
 }
@@ -218,15 +218,15 @@ export function AgentChat({
   const closeDrawer = () => setDrawer(null);
   const listRef = useRef<ChatMessageListHandle>(null);
   const composerRef = useRef<ComposerHandle>(null);
-  // The header keeps one ⋯ on a phone; a desktop also shows Subagents and the terminal switch.
+  // The header keeps one ⋯ on a phone; a desktop also shows the terminal switch.
   const desktop = useMediaQuery("(min-width: 1024px)");
   // While a phone keyboard is up, the tab and pane strips step aside so the chat keeps the height.
   const keyboardOpen = useKeyboardOpen();
-  const moreRef = useRef<HTMLButtonElement>(null);
   const [composerControls, setComposerControls] = useState<ComposerControl[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
-  const [subagentsOpen, setSubagentsOpen] = useState(false);
-  const [activityOpen, setActivityOpen] = useState(false);
+  const [processesOpen, setProcessesOpen] = useState(false);
+  const [processDetail, setProcessDetail] = useState<ProcessDetail | null>(null);
+  useEffect(() => { setProcessesOpen(false); setProcessDetail(null); }, [displayScope]);
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
   const [subagent, setSubagent] = useState<SubagentSelection | null>(null);
@@ -790,6 +790,15 @@ export function AgentChat({
     composerRef.current?.focusInput();
   }
 
+  // When the running turn started, for the composer's "Working for …" row: the turn's own start when
+  // the journal records one, else the user message that opened it.
+  const workingSince = useMemo(() => {
+    const entries = conversation.history?.available ? conversation.history.entries : [];
+    const last = entries.at(-1);
+    if (last?.turn?.status === "running" && last.turn.startedAt) return last.turn.startedAt;
+    return entries.findLast((entry) => entry.role === "user")?.ts;
+  }, [conversation.history]);
+
   const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
   const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
   const telemetryProps = {
@@ -807,21 +816,46 @@ export function AgentChat({
 
   const harnessWithSubagents = agent?.agent === "codex" || agent?.agent === "claude";
   const toggleRawTerminal = () => { setSubagent(null); setRawTerminal(!prefs.rawTerminal); };
-  // The ⋯ menu: the composer's controls in their groups, plus the pane's own views. Phone-only rows
-  // stand in for the icon buttons a desktop header has room for.
+  // The ⋯ menu holds only the pane's views. Message tools live under the composer's chevron, the
+  // context and usage in the composer row, and background work behind the processes chip.
   const viewActions: ConversationAction[] = [
     ...(display ? [{ id: "find", label: "Find in output", icon: Search, run: openFind }] : []),
     ...(hasConversation ? [{ id: "history", label: "Conversation history", icon: ScrollText,
       run: () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) }] : []),
     ...(conversationCapable ? [{ id: "files", label: "Artifacts and files", icon: Paperclip, run: () => setFilesOpen(true) }] : []),
-    ...(conversationCapable && agent?.agent === "claude" ? [{ id: "activity", label: "Background activity", icon: ActivityIcon, run: () => setActivityOpen(true) }] : []),
-    ...(!desktop && harnessWithSubagents ? [{ id: "subagents", label: "Subagents", icon: Users, disabled: connecting || gone, run: () => setSubagentsOpen(true) }] : []),
     ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal mirror", icon: TerminalSquare, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
+    ...composerControls.filter((control) => control.group === "View"),
   ];
-  const menuGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts", "View"] as const).map((group) => ({
-    label: group,
-    actions: [...(group === "View" ? viewActions : []), ...composerControls.filter((control) => control.group === group)],
-  }));
+
+  // Background work: workflows and commands (Claude's activity reader) and subagents, as one list
+  // behind the chip in the composer row.
+  const activity = useActivity(paneId, session, agent?.agent === "claude" && conversationCapable && !gone && !connecting);
+  const subagents = useSubagents({ paneId, session, enabled: harnessWithSubagents && !gone && !connecting, open: processesOpen,
+    selected: subagent, onLost: () => setSubagent(null) });
+  const processes = useMemo(() => buildProcesses(activity.data, subagents.list, { activityStale: activity.stale, subagentsStale: subagents.stale }),
+    [activity.data, subagents.list, activity.stale, subagents.stale]);
+  const anyLive = processes.waiting.length + processes.running.length > 0;
+  // The list closes with the chip, unless it is showing a run's details.
+  useEffect(() => { if (!anyLive && !processDetail) setProcessesOpen(false); }, [anyLive, processDetail]);
+  const processesNow = useActivityClock(activity.data, processesOpen || processDetail !== null);
+  const openProcessDetail = (next: ProcessDetail) => {
+    setProcessDetail(next);
+    if (desktop) setProcessesOpen(false);
+  };
+  const processDetailContent = processDetail &&
+    <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={processDetail} now={processesNow} onChange={setProcessDetail} />;
+  const processesControl = !isShell && !subagent && <ProcessesChip processes={processes} desktop={desktop} open={processesOpen}
+    onOpenChange={(open) => { setProcessesOpen(open); if (!open && !desktop) setProcessDetail(null); }}
+    list={<ProcessesList processes={processes} artifacts={activity.data?.available ? activity.data.artifacts : []} now={processesNow} stale={activity.stale || subagents.stale}
+      onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
+      onOpenSubagent={(item) => {
+        if (!subagents.list?.available) return;
+        setProcessesOpen(false);
+        setProcessDetail(null);
+        selectSubagent({ agent: item.agent, parentKey: subagents.list.sessionKey });
+      }} />}
+    detail={processDetail} detailContent={processDetailContent} detailName={processDetail ? detailTitle(processDetail, activity) : undefined}
+    onBack={() => setProcessDetail(null)} />;
   const title = titleOverride ??
     project?.name ??
     agent?.paneLabel ??
@@ -832,14 +866,11 @@ export function AgentChat({
     <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch}
       onPrev={() => gotoMatch(-1)} onNext={() => gotoMatch(1)} onClose={closeFind} />
   ) : undefined;
-  const sessionTools = agent ? <>
-    {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />}
-    {harnessWithSubagents && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone}
-      {...(desktop ? {} : { open: subagentsOpen, onOpenChange: setSubagentsOpen, anchorRef: moreRef })} />}
-  </> : undefined;
+  const sessionTools = agent && conversationCapable
+    ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
+    : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions
-    ref={moreRef}
-    groups={menuGroups}
+    groups={[{ label: "View", actions: viewActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
   /> : undefined;
 
@@ -914,8 +945,9 @@ export function AgentChat({
       </AppHeader>}
       {overlay}
 
+      <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
       {/* Content region below the header — the mirror inside is the scroller. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col" hidden={Boolean(overlay)}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 
@@ -977,7 +1009,7 @@ export function AgentChat({
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
               onMatchCount={findOpen ? handleMatchCount : undefined}
-              footer={<>{conversationFooter}{agent?.agent === "claude" && <RunningWorkflows key={displayScope} paneId={paneId} session={session} />}</>} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
+              footer={conversationFooter} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -1169,6 +1201,8 @@ export function AgentChat({
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
+            processesControl={processesControl}
+            workingSince={workingSince}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
             prepareSend={showConversation ? panels.prepareSend : undefined}
@@ -1187,12 +1221,11 @@ export function AgentChat({
           />
         </div>
       </div>
+      {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
+      </div>
 
       {/* Swipe-up quick switcher — just the panes (agents + shells), reached by the thumb gesture.
           Switch-only: pane closing lives in the pane pill's long-press sheet, not here. */}
-      <BottomSheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity">
-        {activityOpen && <PaneActivity paneId={paneId} session={session} className="pb-4" />}
-      </BottomSheet>
       <BottomSheet open={drawer === "switcher"} onClose={closeDrawer} title="Switch pane">
         <ThreadSidebar
           agents={agents}
