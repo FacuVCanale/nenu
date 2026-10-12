@@ -273,7 +273,7 @@ describe("what a permission asks for, as the dialog draws it", () => {
 
   test("an indented command wrapped onto its last row keeps that row: a full row above it is no description's", () => {
     const command = "touch /tmp/claude-lab/project/scratch-one.txt";
-    const screen = fixture("claude-lab--permission-bash--w40.txt").replace(/^.*Create empty file scratch-one\.txt.*\n/m, "");
+    const screen = fixture("claude-lab--permission-bash--w40.txt").replace(/^[^\n]*Create empty file scratch-one\.txt[^\n]*\n/m, "");
     const plain = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [], 0).interaction;
     expect(plain.subject).toEqual({ tool: "Bash", command });
     const hinted = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], 0).interaction;
