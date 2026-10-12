@@ -19,6 +19,7 @@ import type {
   InteractionHint,
   InteractionKind,
   InteractionOption,
+  InteractionStep,
   LivePublisher,
   LiveTopic,
 } from "./types.ts";
@@ -71,6 +72,7 @@ interface Described {
   family: string;
   question: string;
   context?: string;
+  steps?: InteractionStep[];
   choices: Draft[];
 }
 
@@ -155,9 +157,9 @@ function describe(dialog: Dialog, agent: string): Described {
     case "prompt-select": return describePrompt(dialog.model, agent);
     case "wizard": {
       const w = dialog.model;
-      if (w.phase === "review") return review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n"));
+      if (w.phase === "review") return { ...review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps) };
       return {
-        kind: "wizard", family: agent, question: w.question,
+        kind: "wizard", family: agent, question: w.question, ...stepsOf(w.steps),
         choices: w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
       };
     }
@@ -166,7 +168,7 @@ function describe(dialog: Dialog, agent: string): Described {
       if (m.phase === "review") return review(agent, "multi-select");
       const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
       return {
-        kind: "multi-select", family: agent, question: m.question,
+        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps),
         choices: [
           ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
           ...(textRow !== null ? [pick("Type something", { type: "typeSomething", n: textRow }, {}, true)] : []),
@@ -176,7 +178,7 @@ function describe(dialog: Dialog, agent: string): Described {
       };
     }
     case "preview-select":
-      return { kind: "question", family: agent, question: dialog.model.question, choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
+      return { kind: "question", family: agent, question: dialog.model.question, ...stepsOf(dialog.model.steps), choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
     case "menu":
       return {
         kind: "menu", family: agent, question: dialog.model.title,
@@ -212,8 +214,22 @@ function describePrompt(p: PromptModel, agent: string): Described {
   }
   // AskUserQuestion's single-choice "Type something." has no measured recipe: shown, answered in the terminal.
   if (p.textRow) choices.push(pick(p.textRow.label, { type: "unsupported" }, { role: "freeText" }));
-  const context = promptContext(p);
-  return { kind, family: p.family, question: p.question, ...(context ? { context } : {}), choices };
+  const { context, steps } = promptContext(p);
+  return { kind, family: p.family, question: p.question, ...(context ? { context } : {}), ...stepsOf(steps), choices };
+}
+
+const stepsOf = (steps: readonly InteractionStep[] | null | undefined): { steps?: InteractionStep[] } =>
+  steps?.length ? { steps: steps.map(({ label, answered, current }) => ({ label, answered, current })) } : {};
+
+/** Header chips as Claude draws them above a question: `☐ Fruit`, `☒` once answered. */
+const CHIP = /([☐☒☑])\s+([^☐☒☑✔←→]+)/g;
+
+/** The chips of a header row, or null for any other row. A lone chip is the question on screen. */
+function headerChips(row: string): InteractionStep[] | null {
+  if (!/^(?:←\s*)?[☐☒☑]\s/.test(row)) return null;
+  const chips = [...row.matchAll(CHIP)].map(([, glyph, label]) => ({ label: label!.trim(), answered: glyph !== "☐", current: false }));
+  if (chips.length === 1) chips[0]!.current = true;
+  return chips.length ? chips : null;
 }
 
 /**
@@ -221,17 +237,24 @@ function describePrompt(p: PromptModel, agent: string): Described {
  * question (Claude's command or file), plus the rows between the question and the first option
  * (Codex's `$ command`). Bounded, so a long plan shows its tail here and its whole text via a hint.
  */
-function promptContext(p: PromptModel): string | undefined {
+function promptContext(p: PromptModel): { context?: string; steps?: InteractionStep[] } {
   const lines = p.signature.split("\n");
   const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
-  if (q < 0) return undefined;
+  if (q < 0) return {};
   const first = p.options[0] ? lines.findIndex((l, i) => i > q && l.includes(p.options[0]!.label)) : -1;
   let top = q;
   while (top > 0 && q - top < CONTEXT_MAX_ROWS && !/^\s*[─━▔═]{8,}\s*$/.test(lines[top - 1]!)) top--;
   const rows = [...lines.slice(top, q), ...(first > q ? lines.slice(q + 1, first) : [])]
     .map((l) => l.replace(/^[\s│┃]+|[\s│┃]+$/g, ""))
     .filter((l) => l && !/^[─━▔═╌]+$/.test(l));
-  return rows.length ? rows.join("\n") : undefined;
+  // A select question's header chip names it; it is not part of what the operator decides on.
+  let steps: InteractionStep[] | undefined;
+  const subject = rows.filter((l) => {
+    const chips = p.family === "select" ? headerChips(l) : null;
+    if (chips) steps = chips;
+    return !chips && compact(l) !== compact(p.question);
+  });
+  return { ...(subject.length ? { context: subject.join("\n") } : {}), ...(steps ? { steps } : {}) };
 }
 
 /**
@@ -308,6 +331,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     family: base.family,
     question: asked?.question && asked.question.length > base.question.length ? asked.question : base.question,
     ...(context ? { context } : {}),
+    ...(base.steps ? { steps: base.steps } : {}),
     options: choices.map((c) => c.option),
     signature: dialogSignature(dialog),
     revision,
