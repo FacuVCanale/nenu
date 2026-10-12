@@ -17,7 +17,16 @@
 
 @media (max-width: 1023px) {
   .chat-chrome { position: absolute; inset-inline: 0; top: 0; }
-  .chat-chrome::before { content: ""; position: absolute; inset: 0; z-index: -1; border-bottom: 1px solid var(--border); background: var(--chrome); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+  /* A backdrop blur samples only what lies under its own box, so a line entering the bar's bottom edge
+     stayed sharp there. The material reaches 40px further down, where the blur samples that line, and
+     a mask cuts it back to the bar; it lets taps through to the thread under that reach. */
+  .chat-chrome::before {
+    content: ""; position: absolute; inset: 0 0 -40px; z-index: -1; pointer-events: none;
+    background: var(--chrome); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 40px), transparent calc(100% - 40px));
+    mask-image: linear-gradient(#000 calc(100% - 40px), transparent calc(100% - 40px));
+  }
+  .chat-chrome::after { content: ""; position: absolute; inset: auto 0 0; z-index: -1; pointer-events: none; border-bottom: 1px solid var(--border); }
   /* One material: the bands inside draw none of their own, and the stack draws the one hairline. */
   .chat-chrome .workbench-app-header, .chat-chrome .strip { border-bottom-color: transparent; background: transparent; }
 
