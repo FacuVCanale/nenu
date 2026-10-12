@@ -82,9 +82,9 @@ describe("history with nothing to read", () => {
     expect(router.state.location.pathname).toBe("/pane/w2%3Acodex");
   });
 
-  it("sends a closed pane's reader Home", async () => {
+  it("says a closed pane is closed and sends its reader Home", async () => {
     const { router, user } = setup("w9:ghost", { unavailable: "no-session" });
-    expect(await screen.findByRole("heading", { name: "No conversation yet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to Home" }));
     expect(router.state.location.pathname).toBe("/");
   });
