@@ -3,6 +3,7 @@ import { CornerDownLeft, Pencil, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "@/components/ui/sheet";
+import { SectionLabel } from "@/components/ui/section-label";
 import { AgentIcon } from "@/components/agent-icon";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
 import { commandsFor, type AgentCommand } from "@/lib/agent-commands";
@@ -86,9 +87,7 @@ export function CommandPalette({
       </div>
 
       {!q && (
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-          Common · type to search all {all.length}
-        </p>
+        <SectionLabel className="mb-2 block">Common · type to search all {all.length}</SectionLabel>
       )}
 
       <div className="flex flex-col gap-1">

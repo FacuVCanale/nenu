@@ -2,17 +2,8 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-// The small uppercase tag that names a control/navigation row — Spaces · Tabs · Panes · Controls.
-// One component so the "name the section" pattern stays visually identical everywhere it's used.
+// The quiet name over a group of controls: the docks' Keys · Quick · Display, the desk's Panes, the
+// palette's list. Sentence case in the tertiary tone, so it names the group without competing with it.
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground",
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
+  return <span className={cn("shrink-0 text-footnote font-medium text-subtle-foreground", className)}>{children}</span>;
 }
