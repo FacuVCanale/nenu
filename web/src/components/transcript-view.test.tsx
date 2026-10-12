@@ -777,3 +777,23 @@ describe("TranscriptView — a turn waiting on the operator", () => {
     expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
   });
 });
+
+// Find's current match is drawn solid wherever its words are: prose, a fold, a step.
+describe("TranscriptView — the current find match", () => {
+  const entries = [
+    turn({ uuid: "u1", parts: [{ kind: "text", text: "Fix the composer." }] }),
+    turn({ uuid: "n1", role: "note", parts: [{ kind: "context", label: "Message from nenustop", text: "The composer is green." }] }),
+    turn({ uuid: "a1", role: "assistant", turnId: "t1", parts: [{ kind: "thinking", text: "The composer gap.\nCounted twice." }] }),
+    turn({ uuid: "a2", role: "assistant", turnId: "t1", parts: [{ kind: "tool", name: "Bash", summary: "bun run test composer", result: { text: "ok" } }] }),
+    turn({ uuid: "a3", role: "assistant", turnId: "t1", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "The composer is fixed." }] }),
+  ];
+  const current = (container: HTMLElement) => [...container.querySelectorAll("mark")].filter((mark) => mark.getAttribute("aria-current") === "true");
+
+  it.each(["u1", "n1", "a1", "a2", "a3"])("marks only the hits of %s as current", (uuid) => {
+    const { container } = render(<TranscriptView entries={entries} query="composer" focusedUuid={uuid} activityStatus="done" />);
+    const marks = current(container);
+    expect(marks.length).toBeGreaterThan(0);
+    for (const mark of marks) expect(mark.closest("[data-turn]")).toHaveAttribute("data-turn", uuid);
+    expect(container.querySelectorAll("mark").length).toBeGreaterThan(marks.length);
+  });
+});

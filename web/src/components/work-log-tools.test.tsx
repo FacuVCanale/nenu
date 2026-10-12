@@ -226,3 +226,15 @@ describe("dialog calls", () => {
     expect(screen.getByRole("button", { name: "Question Which source? Waiting on you" })).toBeInTheDocument();
   });
 });
+
+// Find's current match is drawn solid; every other hit keeps the plain amber.
+it("draws the current find match's hits apart from the others", () => {
+  render(<>
+    <ToolStep id="a" part={status} query="git" active={false} focused={false} />
+    <ToolStep id="b" part={{ ...status, summary: "git diff" }} query="git" active={false} focused />
+  </>);
+  const [other, current] = [screen.getByRole("button", { name: /^Ran git status/ }), screen.getByRole("button", { name: /^Ran git diff/ })];
+  expect(other.querySelector("mark")).not.toHaveAttribute("aria-current");
+  expect(current.querySelector("mark")).toHaveAttribute("aria-current", "true");
+  expect(current.querySelector("mark")!.className).not.toBe(other.querySelector("mark")!.className);
+});
