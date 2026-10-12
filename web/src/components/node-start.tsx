@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
+import { useRevalidator } from "react-router";
 
-import { Field, Segmented, inputField, openNewDialog, selectField, textField } from "@/components/new-agent-sheet";
+import { Field, Segmented, inputField, openNewDialog, selectField, textField, useOnScreen } from "@/components/new-agent-sheet";
 import { Button } from "@/components/ui/button";
 import { fetchOrgStartOptions, startOrgNode } from "@/lib/api";
 import type { NodeRole, ProjectView, TemplateView } from "@/lib/types";
@@ -80,6 +81,8 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, readO
   readOnly?: boolean;
 }) {
   const options = useStartOptions(project.slug, session);
+  const revalidator = useRevalidator();
+  const onScreen = useOnScreen();
   const [form, setForm] = useState<StartForm>({ title: "", parent: "root", task: "", profile: "", template: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +102,10 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, readO
     try {
       const { title, parent, task, profile } = form;
       await startOrgNode({ project: project.slug, role, title, parent, task, ...(template ? { template } : profile ? { profile } : {}) }, session);
+      if (!onScreen.current) {
+        void revalidator.revalidate();
+        return;
+      }
       setSubmitting(false);
       onStarted();
     } catch (failure) {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronRight, Folder, TriangleAlert } from "lucide-react";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
@@ -233,15 +233,34 @@ export function defaultCwdFor(target: SpawnTarget, data: HomeData | undefined): 
   return uniqueDirs(panes.sort((a, b) => Number(b.focused) - Number(a.focused)))[0] ?? "";
 }
 
+/**
+ * Whether the step that sent a create is still on screen. One the person stepped away from still
+ * lands and refreshes the lists, but it navigates and closes nothing: by then the sheet may hold
+ * whatever they opened next.
+ */
+export function useOnScreen() {
+  const onScreen = useRef(false);
+  useEffect(() => {
+    onScreen.current = true;
+    return () => {
+      onScreen.current = false;
+    };
+  }, []);
+  return onScreen;
+}
+
 /** Create the tab or workspace, then open its pane live. Resolves to an error to show, or null. */
 export function useSpawnInto(onDone: () => void) {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const onScreen = useOnScreen();
   return async (target: SpawnTarget, values: NewAgentValues): Promise<string | null> => {
     try {
       const created = await spawn({ ...values, target, session: data?.session });
       if (!created.ok) return created.error;
+      void revalidator.revalidate();
+      if (!onScreen.current) return null;
       const p = created.pane;
       // The new pane is not in the snapshot yet; hand it to the pane route so it opens live.
       const fresh: AgentView = {
@@ -256,7 +275,6 @@ export function useSpawnInto(onDone: () => void) {
         focused: false,
         kind: "shell",
       };
-      void revalidator.revalidate();
       navigate(panePath(p.paneId, data?.session), { state: { freshPane: fresh } });
       onDone();
       return null;
@@ -290,6 +308,15 @@ export function useNewDialogOpen(): boolean {
 // The flow is only loaded once someone opens it, like the folder picker.
 const NewDialog = lazy(() => import("@/components/new-dialog"));
 
+// Each request mounts a fresh flow: ⌘N over an open one starts over instead of keeping its step,
+// and a create still in flight in the one it replaced is off screen.
+let opened = 0;
+const openings = new WeakMap<NewPreset, number>();
+function openingOf(preset: NewPreset): number {
+  if (!openings.has(preset)) openings.set(preset, ++opened);
+  return openings.get(preset)!;
+}
+
 /** The New flow, mounted at the app root. {@link openNewAgent} (lib/spawn) opens it on a tab or a workspace. */
 export function NewAgentHost() {
   const target = useNewAgentRequest();
@@ -298,7 +325,7 @@ export function NewAgentHost() {
   if (!preset) return null;
   return (
     <Suspense fallback={null}>
-      <NewDialog preset={preset} onClose={() => { openNewDialog(false); openNewAgent(null); }} />
+      <NewDialog key={openingOf(preset)} preset={preset} onClose={() => { openNewDialog(false); openNewAgent(null); }} />
     </Suspense>
   );
 }

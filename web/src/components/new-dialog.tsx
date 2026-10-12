@@ -12,6 +12,7 @@ import {
   liveDirsOf,
   selectField,
   textField,
+  useOnScreen,
   useSpawnInto,
 } from "@/components/new-agent-sheet";
 import { NodeStartForm, errorMessage, startableRoles } from "@/components/node-start";
@@ -326,6 +327,7 @@ function ProjectPane({ data, readOnly, browsing, onBrowsing, onDone }: {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const onScreen = useOnScreen();
   const fetchedHome = useHome();
   const knownHome = home || fetchedHome;
 
@@ -336,6 +338,7 @@ function ProjectPane({ data, readOnly, browsing, onBrowsing, onDone }: {
     try {
       const created = await createOrgProject({ name: name.trim(), goal: goal.trim() || undefined, repo: repo || undefined }, data?.session);
       void revalidator.revalidate();
+      if (!onScreen.current) return;
       navigate(projectPath(created.project.slug, data?.session));
       onDone();
     } catch (failure) {
