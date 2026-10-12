@@ -12,7 +12,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
 import { searchableText } from "@/lib/transcript-search";
-import { containsQuery, Highlight, LiveStepRow, PaneCwdContext, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
+import { containsQuery, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
 import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -288,10 +288,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   </div>;
 }
 
-export function TranscriptView({ entries, cwd = "", query = "", focusedUuid, activityStatus, activityLabel = true, onWorkToggle }: {
+export function TranscriptView({ entries, query = "", focusedUuid, activityStatus, activityLabel = true, onWorkToggle }: {
   entries: TranscriptEntry[];
-  /** The pane's folder; the work log names files from it. */
-  cwd?: string;
   query?: string;
   focusedUuid?: string;
   activityStatus?: AgentStatus;
@@ -314,7 +312,7 @@ export function TranscriptView({ entries, cwd = "", query = "", focusedUuid, act
   const last = entries.at(-1);
   const pending = activityLabel && activityStatus === "working" && !rows.some((row) => row.kind === "work" && row.active) &&
     (!last || last.role === "user" || (last.role === "assistant" && last.phase !== "final_answer" && last.turn?.status !== "completed" && last.turn?.status !== "aborted"));
-  return <PaneCwdContext value={cwd}><div className="space-y-3" onClickCapture={(event) => {
+  return <div className="space-y-3" onClickCapture={(event) => {
     const anchor = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-work-toggle]") : null;
     if (anchor) onWorkToggle?.(anchor);
   }}>
@@ -333,5 +331,5 @@ export function TranscriptView({ entries, cwd = "", query = "", focusedUuid, act
       </div>;
     })}
     {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}
-  </div></PaneCwdContext>;
+  </div>;
 }

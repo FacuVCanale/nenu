@@ -8,6 +8,7 @@ import { server } from "@/test/setup";
 
 import { TranscriptView } from "./transcript-view";
 import { FilePreviewProvider } from "./file-preview-provider";
+import { PaneCwdContext } from "./work-log-tools";
 import type { TranscriptEntry } from "@/lib/types";
 
 // TranscriptView renders the agent's own conversation log — the only history a Claude pane can have
@@ -99,13 +100,14 @@ describe("TranscriptView", () => {
 
   it("shows a step's file relative to the pane's folder, and one outside it from home", async () => {
     render(
-      <TranscriptView
-        cwd="/home/you/webapp"
-        entries={[turn({ role: "assistant", parts: [
-          { kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "" } },
-          { kind: "tool", name: "Edit", summary: "/home/you/.config/nenu/keys.toml", result: { text: "" } },
-        ] })]}
-      />,
+      <PaneCwdContext value="/home/you/webapp">
+        <TranscriptView
+          entries={[turn({ role: "assistant", parts: [
+            { kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "" } },
+            { kind: "tool", name: "Edit", summary: "/home/you/.config/nenu/keys.toml", result: { text: "" } },
+          ] })]}
+        />
+      </PaneCwdContext>,
     );
     await openWork();
     expect(screen.getByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);

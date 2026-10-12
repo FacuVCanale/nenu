@@ -42,6 +42,7 @@ import { PaneGone } from "@/components/pane-gone";
 import { Composer, type ComposerControl, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
 import { LiveConversation } from "@/components/live-conversation";
+import { PaneCwdContext } from "@/components/work-log-tools";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
 import { useLiveConversation } from "@/hooks/use-live-conversation";
 import { useModelMenuSource } from "@/hooks/use-model-menu-source";
@@ -1135,6 +1136,8 @@ export function AgentChat({
       </div>
       {overlay && <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col">{overlay}</div>}
 
+      {/* The pane's folder, for every work log under it: the conversation's and a subagent's. */}
+      <PaneCwdContext value={agent?.cwd ?? ""}>
       <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
       {/* Content region below the header — the mirror inside is the scroller. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1154,7 +1157,7 @@ export function AgentChat({
           harness={subagentHarness} ownHeader={Boolean(docked)} onMain={() => setSubagent(null)}
           onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
           <div className="chat-thread min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} cwd={agent?.cwd} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
+            <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
@@ -1346,6 +1349,7 @@ export function AgentChat({
       </div>
       {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
       </div>
+      </PaneCwdContext>
 
       {/* Closing the open pane or its tab moves the route to the pane beside it (DetailRoute). */}
       {agent && <PaneActionsSheet open={paneSheet === "pane"} onClose={() => setPaneSheet(null)} pane={agent} name={title}

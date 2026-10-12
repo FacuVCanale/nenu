@@ -18,8 +18,6 @@ import { cn } from "@/lib/utils";
 interface LiveConversationProps {
   paneId: string;
   session?: string;
-  /** The pane's folder; the work log names files from it. */
-  cwd?: string;
   activityStatus?: AgentStatus;
   history: PaneHistoryResponse | null;
   loading: boolean;
@@ -138,7 +136,7 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, cwd, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -482,7 +480,7 @@ function ScopedConversation({ paneId, session, cwd, activityStatus, history, loa
                 {olderError && <p role="status">Couldn't load older messages. Your conversation is still live.</p>}
                 {historyBoundary && <p role="status">You've reached the oldest messages available from this session log.</p>}
               </div>}
-              <TranscriptView entries={entries} cwd={cwd} query={query}
+              <TranscriptView entries={entries} query={query}
                 focusedUuid={searching ? entries[matches[currentMatch] ?? -1]?.uuid : undefined}
                 activityStatus={activity} activityLabel={!labelUnderSend} onWorkToggle={onWorkToggle} />
               <PendingTurns sends={localSends} actions={localSendActions} />
