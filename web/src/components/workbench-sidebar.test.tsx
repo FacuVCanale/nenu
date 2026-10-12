@@ -55,10 +55,11 @@ describe("the sidebar's workspaces, with no projects", () => {
     expect(within(design).getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
     // The workspace opens on the agent asking for you.
     expect(within(design).getByRole("link", { name: /^Design/ })).toHaveAttribute("href", "/pane/d3");
-    expect(within(design).getByRole("link", { name: /^coordinator/ })).toHaveAttribute("aria-current", "page");
-    expect(within(design).getByRole("link", { name: /^coordinator/ })).toHaveTextContent("coordinatorLanding vs Maxdone");
+    // A one-pane tab's row is named after its agent, as the chat it opens is.
+    expect(within(design).getByRole("link", { name: /^Landing vs Max/ })).toHaveAttribute("aria-current", "page");
+    expect(within(design).getByRole("link", { name: /^Landing vs Max/ })).toHaveTextContent("Landing vs Maxdone");
     const panels = within(design).getByRole("group", { name: "panels" });
-    expect(within(panels).getAllByRole("link").map((link) => link.textContent)).toEqual(["Panel prodclaudeworking", "Panel ventasclaudeneeds you"]);
+    expect(within(panels).getAllByRole("link").map((link) => link.textContent)).toEqual(["Panel prodworking", "Panel ventasneeds you"]);
 
     // Elsewhere, a workspace with nothing waiting on you starts folded.
     expect(screen.getByRole("button", { name: "Nenu panes" })).toHaveAttribute("aria-expanded", "false");
@@ -228,6 +229,24 @@ describe("the sidebar", () => {
     expect(project.getByRole("link", { name: /^new fix/ })).toHaveAttribute("href", "/project/awam/node/t11");
     await user.click(project.getByRole("button", { name: "old plan threads" }));
     expect(names().slice(7)).toEqual(["newer plan", "old plan", "old step", "new fix"]);
+  });
+
+  it("calls the coordinator what every other view calls it, in Needs you and the drawer's Recent", async () => {
+    const asking = { ...awam, coordinator: { ...awam.coordinator!, liveStatus: "blocked" as const } };
+    const source = { ...herd, agents: herd.agents.map((agent) => agent.paneId === "c" ? { ...agent, status: "blocked" as const, tabLabel: "lead" } : agent), projects: [asking] };
+    const user = open("/", source);
+    await user.click(screen.getByRole("button", { name: "Needs you, 2" }));
+    const list = screen.getByRole("region", { name: "Needs you" });
+    expect(within(list).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent)).toEqual(["AWAM coordinator", "panel depo"]);
+  });
+
+  it("names a chat in the drawer's Recent as the chat names itself, with its workspace and tab under it", () => {
+    const source = { ...herd, agents: herd.agents.map((agent) => agent.paneId === "c" ? { ...agent, tabLabel: "lead" } : agent) };
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={source} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
+    render(<RouterProvider router={router} />);
+    const recent = within(screen.getByRole("region", { name: "Recent" }));
+    const coordinator = recent.getByRole("link", { name: /^AWAM coordinator/ });
+    expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
   it("names the host and what it holds in the footer, beside Settings", () => {
