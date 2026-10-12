@@ -47,7 +47,7 @@ describe("LiveConversation", () => {
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
     expect(draft).toHaveValue("Still writing");
-    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Scroll to latest/ }));
     expect(screen.getByText("New latest turn")).toBeInTheDocument();
   });
 
@@ -78,7 +78,7 @@ describe("LiveConversation", () => {
     rerender(view({ ...initial, entries: [{ uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "New latest turn" }] }] }));
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Scroll to latest/ }));
     expect(screen.getByText("New latest turn")).toBeInTheDocument();
     expect(screen.queryByText("what changed today?")).not.toBeInTheDocument();
   });
@@ -102,7 +102,7 @@ describe("LiveConversation", () => {
     rerender(view(asked, "working"));
     fireEvent.scroll(scroller);
 
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     expect(screen.getByText("Working…")).toBeInTheDocument();
     expect(box.top).toBe(764);
     rerender(view({ ...asked, entries: [...asked.entries, { uuid: "t4", ts: "", role: "assistant", parts: [{ kind: "text", text: "Looking." }] }] }, "working"));
@@ -136,7 +136,7 @@ describe("LiveConversation", () => {
     // Scrolled away, the way back names the question and lands on its first line.
     box.top = 300;
     fireEvent.scroll(scroller);
-    const back = screen.getByRole("button", { name: "Scroll to latest" });
+    const back = screen.getByRole("button", { name: /^Scroll to latest/ });
     expect(back).toHaveTextContent("Waiting on you");
     fireEvent.click(back);
     expect(box.top).toBe(988);
@@ -192,11 +192,11 @@ describe("LiveConversation", () => {
     fireEvent.scroll(scroller);
     box.top = 1000;
     fireEvent.scroll(scroller);
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     // Above the question the reader has left; the way back lands on its first line.
     box.top = 500;
     fireEvent.scroll(scroller);
-    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Scroll to latest/ }));
     expect(box.top).toBe(944);
     vi.restoreAllMocks();
   });
@@ -219,7 +219,7 @@ describe("LiveConversation", () => {
     box.client = 439;
     fireEvent.scroll(scroller);
 
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     expect(box.top).toBe(2706);
   });
 
@@ -235,7 +235,7 @@ describe("LiveConversation", () => {
     box.top = 2400;
     fireEvent.scroll(scroller);
 
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
     expect(box.top).toBe(2400);
   });
 
@@ -254,7 +254,7 @@ describe("LiveConversation", () => {
     box.top = 2400;
     fireEvent.scroll(scroller);
 
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
     now.mockRestore();
   });
 
@@ -268,14 +268,14 @@ describe("LiveConversation", () => {
     act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
     box.top = 300;
     fireEvent.scroll(scroller);
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).not.toHaveTextContent(/\S/);
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).not.toHaveTextContent(/\S/);
 
     rerender(view({ ...initial, entries: [...fixtureTranscript,
       { uuid: "n1", ts: "", role: "user", parts: [{ kind: "text", text: "Open the PR." }] },
       { uuid: "n2", ts: "", role: "assistant", parts: [{ kind: "tool", name: "Bash", summary: "gh pr create" }] },
       { uuid: "n3", ts: "", role: "assistant", parts: [{ kind: "text", text: "Opened." }] },
     ] }));
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toHaveTextContent("2 new");
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toHaveTextContent("2 new");
   });
 
   // T42: on a slow link the pane showed a spinner in its upper third until the history came back.
@@ -353,7 +353,7 @@ describe("LiveConversation", () => {
       box.top = top;
       fireEvent.scroll(scroller);
     }
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
   });
 });
 
@@ -391,7 +391,7 @@ describe("inline history pagination", () => {
     expect(screen.getByRole("textbox", { name: "Live draft" })).toBe(draft);
     expect(draft).toHaveValue("Keep writing");
     expect(scroller.scrollTop).toBe(650);
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load older messages" })).not.toBeInTheDocument();
   });
 
@@ -416,7 +416,7 @@ describe("inline history pagination", () => {
     expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 120, before: fixtureTranscript[0]!.uuid }, "work", expect.any(AbortSignal));
     // The page landed 400 px above the turn being read, so the list moved down by exactly that much.
     expect(box.top).toBe(600);
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
   });
 
   it("leaves a failed older page for the reader to retry and pages nothing while searching", async () => {
@@ -478,7 +478,7 @@ describe("inline history pagination", () => {
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     rerender(view(latest, 1));
     expect(screen.getByText("Latest reply")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     await act(async () => { resolvePage({ ...initialHistory, available: true, entries: [olderEntry] }); });
     expect(screen.queryByText("An older request")).not.toBeInTheDocument();
   });

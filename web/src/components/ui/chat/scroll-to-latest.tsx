@@ -24,12 +24,13 @@ export function ScrollToLatest({ onClick, waiting = false, count = 0, changed = 
   const pill = scrollToLatestIsPill({ waiting, count });
   const fresh = pill && !waiting;
   return (
-    <button type="button" onClick={onClick} aria-label="Scroll to latest"
+    <button type="button" onClick={onClick} aria-label={pill ? undefined : changed ? "Scroll to latest, updated" : "Scroll to latest"}
       className={cn(
         "pointer-events-auto relative flex h-11 shrink-0 items-center justify-center rounded-full shadow-(--shadow-float) transition-[scale,background-color] duration-150 ease-out active:scale-[0.97] animate-in fade-in slide-in-from-bottom-1 motion-reduce:animate-none motion-reduce:transition-none",
         pill ? "gap-1.5 px-4 text-footnote font-medium" : "w-11",
         fresh ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border bg-popover text-popover-foreground hover:bg-accent",
       )}>
+      {pill && <><span className="sr-only">Scroll to latest,</span>{" "}</>}
       {waiting
         ? <><span aria-hidden className="size-2 rounded-full bg-status-blocked" />Waiting on you<ArrowDown aria-hidden="true" className="size-4" /></>
         : fresh
