@@ -172,9 +172,16 @@ describe("QuestionCard", () => {
     expect(screen.queryByText(/of 2/)).not.toBeInTheDocument();
   });
 
-  it("keeps Codex's Recommended marker on Home's one-line options", () => {
+  it("marks Codex's recommended answer on Home with the same badge, not its label suffix", () => {
     setup({ compact: true, interaction: { ...question, options: [{ index: 0, label: "Tabs (Recommended)", role: "neutral" }, question.options[3]!] } });
-    expect(screen.getByRole("button", { name: /Tabs/ })).toHaveTextContent(/Recommended/);
+    const row = screen.getByRole("button", { name: /Tabs/ });
+    expect(row).not.toHaveTextContent("(Recommended)");
+    expect(within(row).getByText("Recommended")).toBeVisible();
+  });
+
+  it("never draws a decline or an escape in the alarm colour", () => {
+    setup({ interaction: permission });
+    expect(screen.getByRole("button", { name: /^No/ }).className).not.toMatch(/status-blocked|destructive/);
   });
 
   it("lists a review's answers instead of echoing them as code", () => {
@@ -195,12 +202,14 @@ describe("QuestionCard", () => {
     expect(screen.getByText("Question 1/2 (2 unanswered)").tagName).not.toBe("PRE");
   });
 
-  it("names the terminal for a text row on Home, where the card's own Open leads there", () => {
-    setup({ compact: true });
-    const row = document.querySelector<HTMLElement>("[data-in-terminal]")!;
-    expect(row).toHaveTextContent("Type something. Answer in the terminal.");
-    expect(within(row).queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open" })).toBeVisible();
+  it("offers a text row Home cannot type as a way into the thread", async () => {
+    const { onOpen, onAnswer, user } = setup({ compact: true });
+    expect(screen.queryByText(/Answer in the terminal/)).not.toBeInTheDocument();
+    const own = screen.getByRole("button", { name: "Type your own answer" });
+    expect(own.closest("[data-secondary-actions]")).not.toBeNull();
+    await user.click(own);
+    expect(onOpen).toHaveBeenCalled();
+    expect(onAnswer).not.toHaveBeenCalled();
   });
 
   it("asks to confirm a persistent option in place, keeping its label, and sends confirm on the second tap", async () => {
@@ -542,6 +551,72 @@ describe("QuestionCard", () => {
   });
 
   describe("compact (Home)", () => {
+    const described: Interaction = { ...question, options: [
+      { index: 0, label: "Apple", role: "neutral", description: "Crisp and red." }, ...question.options.slice(1),
+    ] };
+
+    it("is a neutral card titled by who asks: the red stays on the dot", () => {
+      setup({ compact: true, title: "panel depo" });
+      const card = document.querySelector<HTMLElement>("[data-question-card]")!;
+      expect(within(card).queryByText("Waiting on you")).not.toBeInTheDocument();
+      const red = [card, ...card.querySelectorAll("*")].filter((el) => /status-blocked/.test(el.getAttribute("class") ?? ""));
+      expect(red).toHaveLength(1);
+      expect(red[0]).toHaveAttribute("aria-hidden");
+      expect(screen.getByText("panel depo")).toBeVisible();
+    });
+
+    it("opens the thread from its header row instead of an Open button among the answers", async () => {
+      const { onOpen, user } = setup({ compact: true, title: "panel depo" });
+      expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /panel depo.*open thread/i }));
+      expect(onOpen).toHaveBeenCalled();
+    });
+
+    it("lists answers as rows with what each means, and keeps the escape with the utilities", () => {
+      setup({ compact: true, interaction: described });
+      const answers = screen.getByRole("group", { name: "Answers" });
+      expect(within(answers).getByRole("button", { name: /Apple/ })).toHaveTextContent("Crisp and red.");
+      expect(within(answers).queryByRole("button", { name: /Chat about this/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Chat about this" }).closest("[data-secondary-actions]")).not.toBeNull();
+    });
+
+    it("answers in the thread when a description would be cut short on the card", async () => {
+      const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(60);
+      const short = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(36);
+      try {
+        const { onOpen, onAnswer, user } = setup({ compact: true, interaction: described });
+        expect(screen.queryByRole("button", { name: /Apple/ })).not.toBeInTheDocument();
+        expect(within(screen.getByRole("list", { name: "Options" })).getByText("Apple")).toBeVisible();
+        await user.click(screen.getByRole("button", { name: "Answer in thread" }));
+        expect(onOpen).toHaveBeenCalled();
+        expect(onAnswer).not.toHaveBeenCalled();
+      } finally {
+        tall.mockRestore();
+        short.mockRestore();
+      }
+    });
+
+    it("sends a menu to its thread: Open to answer and Cancel, nothing that commits", async () => {
+      const menu: Interaction = { ...base, kind: "menu", family: "claude", question: "Rewind", options: [
+        { index: 0, label: "Continue", role: "neutral" }, { index: 1, label: "Cancel", role: "deny" },
+      ] };
+      const { onOpen, onAnswer, user } = setup({ compact: true, interaction: menu });
+      expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Open to answer" }));
+      expect(onOpen).toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onAnswer).toHaveBeenCalledWith(menu.options[1], {});
+    });
+
+    it("sends a preview question to its thread, where each option's preview is", () => {
+      const preview: Interaction = { ...base, kind: "question", family: "claude", question: "Which widget design?", options: [
+        { index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" },
+      ] };
+      setup({ compact: true, interaction: preview });
+      for (const name of ["Boxy", "Rounded", "Minimal"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open to answer" })).toBeVisible();
+    });
+
     it("keeps approval off a permission without its full detail and offers Review in thread", async () => {
       const { onOpen, user } = setup({ interaction: permission, compact: true, title: "panel depo" });
       expect(screen.queryByRole("button", { name: /^Yes$/ })).not.toBeInTheDocument();
