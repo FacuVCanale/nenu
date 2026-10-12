@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendMessage } from "@/lib/api";
 import { loadDraft } from "@/lib/drafts";
 import { clearStatus } from "@/lib/status";
+import { declarations } from "@/test/css-rules";
 import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
 
 // These seams isolate workbench commands from the separately tested send protocol: the bridge's
@@ -200,7 +201,21 @@ it("gives every small composer control a 44px touch target", () => {
   for (const name of ["Attach image", "Message shortcuts"]) expect(within(toolbar).getByRole("button", { name })).toHaveClass("hit-area");
   expect(screen.getByRole("button", { name: "Send" })).toHaveClass("hit-area");
   const css = readFileSync(resolve(import.meta.dirname, "../workbench.css"), "utf8");
-  expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.hit-area::before \{[^}]*width: max\(100%, 44px\); height: max\(100%, 44px\)/);
+  expect(declarations(css, ".hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ width: "max(100%, 44px)", height: "max(100%, 44px)" });
+});
+
+it("paints the armed Send in the accent its box wears, so armed reads as one signal", async () => {
+  const { user } = setup();
+  await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Message shortcuts" })).getByRole("button", { name: "Type into terminal" }));
+  const armed = screen.getByRole("button", { name: "Stop typing into terminal" });
+  expect(armed).toHaveAttribute("aria-pressed", "true");
+  expect(armed).toHaveClass("composer-send");
+  // The ink primary must not win here: the direction keeps the accent for the armed mode.
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  const box = declarations(css, ".composer-box-armed")["border-color"];
+  expect(box).toBe("var(--primary)");
+  expect(declarations(css, '.composer-send[aria-pressed="true"]')).toMatchObject({ background: box, color: "var(--primary-foreground)" });
 });
 
 it("opens quick replies from the menu without changing or sending the draft", async () => {
