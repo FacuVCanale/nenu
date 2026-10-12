@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -38,7 +38,7 @@ describe("SnoozeControl", () => {
       "For 30 minutes",
       "For 1 hour",
       "For 4 hours",
-      "Until tomorrow",
+      expect.stringMatching(/^Until /),
     ]);
 
     await user.selectOptions(menu, "For 1 hour");
@@ -50,17 +50,25 @@ describe("SnoozeControl", () => {
     expect(revalidate).toHaveBeenCalled();
   });
 
-  test("pauses until 8 the next morning, local time", async () => {
-    const user = userEvent.setup();
-    render(<SnoozeControl snoozedUntil={null} />);
+  describe("until the morning", () => {
+    afterEach(() => vi.useRealTimers());
+    const eight = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Do not disturb" }), "Until tomorrow");
+    // Local times, so the cases hold in any timezone. Only Date is faked: userEvent still needs timers.
+    test.each([
+      ["at 1:00 it is 8:00 the same day", new Date(2026, 9, 12, 1, 0), new Date(2026, 9, 12, 8, 0), ""],
+      ["at 14:00 it is 8:00 the next day", new Date(2026, 9, 12, 14, 0), new Date(2026, 9, 13, 8, 0), "tomorrow, "],
+      ["at 8:00 sharp it is 8:00 the next day", new Date(2026, 9, 12, 8, 0), new Date(2026, 9, 13, 8, 0), "tomorrow, "],
+    ])("pauses until the next 8:00 and says so: %s", async (_case, now, morning, day) => {
+      vi.useFakeTimers({ toFake: ["Date"], now });
+      const user = userEvent.setup();
+      render(<SnoozeControl snoozedUntil={null} />);
 
-    await waitFor(() => expect(lastBody).toBeDefined());
-    const morning = new Date();
-    morning.setDate(morning.getDate() + 1);
-    morning.setHours(8, 0, 0, 0);
-    expect(lastBody!.snoozedUntil).toBe(morning.getTime());
+      await user.selectOptions(screen.getByRole("combobox", { name: "Do not disturb" }), `Until ${day}${eight(morning)}`);
+
+      await waitFor(() => expect(lastBody).toBeDefined());
+      expect(lastBody!.snoozedUntil).toBe(morning.getTime());
+    });
   });
 
   test("shows the deadline as the row's value and turns off from the same menu", async () => {
