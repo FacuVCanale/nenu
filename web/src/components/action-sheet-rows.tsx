@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { Loader2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useSheetStep } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 // Shared building blocks for the long-press action sheets — pane AND tab — so the two stay visually
@@ -45,9 +46,9 @@ export function ActionRow({
 
 /**
  * The confirmation a destructive row opens in place of the action list, as an iOS action sheet asks:
- * the question, what it takes with it, the destructive button and Cancel. Cancel ends up where the
- * row was, and the destructive button ignores taps for its first {@link CONFIRM_SETTLE_MS}, so a
- * double tap on the row closes nothing.
+ * the question as the sheet's title (it names the tab or pane, so the name shows once), what it takes
+ * with it, the destructive button and Cancel. Cancel ends up where the row was, and the destructive
+ * button ignores taps for its first {@link CONFIRM_SETTLE_MS}, so a double tap on the row closes nothing.
  */
 export function ConfirmView({
   title,
@@ -67,6 +68,7 @@ export function ConfirmView({
 }) {
   const [shownAt] = useState(() => performance.now());
   const cancelRef = useRef<HTMLButtonElement>(null);
+  useSheetStep(title);
   // The row that opened this is gone; keep a keyboard user's focus in the sheet, on the safe choice.
   useEffect(() => cancelRef.current?.focus({ preventScroll: true }), []);
 
@@ -77,10 +79,7 @@ export function ConfirmView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-headline">{title}</h2>
-        <p className="text-subhead text-muted-foreground">{message}</p>
-      </div>
+      <p className="text-subhead text-muted-foreground">{message}</p>
       <div className="flex flex-col gap-2">
         <Button variant="destructive" size="lg" className="w-full" onClick={confirm} disabled={busy} aria-busy={busy || undefined}>
           {busy && <Loader2 className="size-4 animate-spin" />}
@@ -95,12 +94,11 @@ export function ConfirmView({
 }
 
 /**
- * The rename view behind "Rename", as an iOS edit sheet: an edit header (Cancel · title · Save, 44px
- * controls) that stands in for the sheet's own title row while it shows (strips.css), and the field
- * alone, at 16px so iOS doesn't zoom, with a clear button. The caller autofocuses the field through
- * `inputRef`. `canSave` lets a sheet refuse a blank field — tabs have no "clear" so they pass
- * `canSave = trimmed.length > 0`, while a pane passes `true` so saving a blank field clears its
- * label. Enter in the field saves.
+ * The rename view behind "Rename": the sheet's header names it ("Rename pane") with the chevron back
+ * to the actions, and under it the field, at 16px so iOS doesn't zoom, with a clear button, then Save.
+ * The caller autofocuses the field through `inputRef`. `canSave` lets a sheet refuse a blank field —
+ * tabs have no "clear" so they pass `canSave = trimmed.length > 0`, while a pane passes `true` so
+ * saving a blank field clears its label. Enter in the field saves.
  */
 export function RenameView({
   inputRef,
@@ -115,18 +113,21 @@ export function RenameView({
   placeholder,
 }: {
   inputRef: RefObject<HTMLInputElement | null>;
-  /** "Rename pane", "Rename tab". */
+  /** "Rename pane", "Rename tab": the sheet's title while renaming. */
   title: string;
   /** The field's accessible name: "Pane name", "Tab name". */
   fieldLabel: string;
   label: string;
   onLabelChange: (value: string) => void;
   onSave: () => void;
+  /** Back to the actions, from the header's chevron. */
   onCancel: () => void;
   saving: boolean;
   canSave: boolean;
   placeholder: string;
 }) {
+  useSheetStep(title, onCancel);
+
   function onInputKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -136,30 +137,6 @@ export function RenameView({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Bleeds through the sheet body's padding (16px sides, 12px top) to sit where the title row was. */}
-      <div data-sheet-edit-header className="sticky top-0 z-10 -mx-4 -mt-3 border-b border-border/60 bg-background">
-        {/* From 640 px a sheet floats and has nothing to pull, as in ui/sheet.tsx. */}
-        <div aria-hidden="true" className="flex justify-center pt-2 pb-1 sm:hidden">
-          <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
-        </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pb-1 sm:pt-1">
-          <button type="button" onClick={onCancel} className="h-11 justify-self-start rounded-md px-2 text-headline font-normal text-muted-foreground">
-            Cancel
-          </button>
-          <h2 className="truncate text-headline">{title}</h2>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving || !canSave}
-            aria-busy={saving || undefined}
-            className="relative h-11 justify-self-end rounded-md px-2 text-headline disabled:not-aria-busy:text-disabled-foreground"
-          >
-            {/* While saving a spinner stands in for the word, which keeps the button's width and name. */}
-            <span className={cn(saving && "opacity-0")}>Save</span>
-            {saving && <Loader2 aria-hidden="true" className="absolute inset-0 m-auto size-4 animate-spin" />}
-          </button>
-        </div>
-      </div>
       <div className="relative">
         <input
           ref={inputRef}
@@ -187,6 +164,11 @@ export function RenameView({
           </button>
         )}
       </div>
+      {/* While saving a spinner joins the word, which keeps the button's name. */}
+      <Button size="lg" className="w-full" onClick={onSave} disabled={saving || !canSave} aria-busy={saving || undefined}>
+        {saving && <Loader2 aria-hidden="true" className="size-4 animate-spin" />}
+        Save
+      </Button>
     </div>
   );
 }

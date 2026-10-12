@@ -68,8 +68,3 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   .workbench-chat[data-keyboard-open] [data-workbench-navigation-band] { display: none; }
 }
-
-/* Renaming a tab or pane: the sheet's own title row gives way to the edit header (Cancel · Rename ·
-   Save) in action-sheet-rows, as an iOS edit sheet does. ui/sheet.tsx has no header slot, so this
-   reaches into its panel (index.css) and hides whatever there does not hold the edit header. */
-.sheet-bottom-panel:has([data-sheet-edit-header]) > :not(:has([data-sheet-edit-header])) { display: none; }
