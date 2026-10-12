@@ -63,9 +63,9 @@ describe("RootError", () => {
     return router;
   }
   beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it("reads as Nenu's problem, with a 44px Reload, and keeps the raw message behind a disclosure", async () => {
+  it("reads as Nenu's problem, with a Reload, and keeps the raw message behind a disclosure", async () => {
     const router = crash({ element: <Boom /> });
     expect(await screen.findByRole("heading", { name: "Nenu hit a problem" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
@@ -85,6 +85,29 @@ describe("RootError", () => {
     expect(copied).toContain("Cannot read properties of undefined (reading 'charAt')");
     expect(copied).toContain("Boom");
     expect(copied).toContain(BUILD.version);
+    router.dispose();
+  });
+
+  it("says Copied for a moment, then offers the copy again", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.resolve() }, configurable: true });
+    const router = crash({ element: <Boom /> });
+    const button = await screen.findByRole("button", { name: "Copy details" });
+    vi.useFakeTimers();
+    await act(async () => { fireEvent.click(button); });
+    expect(button).toHaveTextContent("Copied");
+    act(() => vi.advanceTimersByTime(1500));
+    expect(button).toHaveTextContent("Copy details");
+    router.dispose();
+  });
+
+  it("opens the details for selecting by hand when the clipboard refuses", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("denied")) }, configurable: true });
+    const router = crash({ element: <Boom /> });
+    const raw = await screen.findByText(/reading 'charAt'/, { selector: "pre" });
+    expect(raw).not.toBeVisible();
+    await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Copy details" })); });
+    expect(raw).toBeVisible();
+    expect(screen.queryByText("Copied")).not.toBeInTheDocument();
     router.dispose();
   });
 
