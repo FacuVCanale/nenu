@@ -102,17 +102,30 @@ it("opens the shared new-agent flow from the composer, carrying what was typed",
   const { user, main } = await setup({ ...data, agents: [], workspaces: [] });
   expect(screen.getByRole("heading", { level: 1, name: "What should we work on?" })).toBeInTheDocument();
   expect(screen.getByText(/Describe a task to start your first agent/)).toBeInTheDocument();
-  await user.click(main.getByRole("button", { name: "New chat" }));
+  await user.click(main.getByRole("button", { name: "Start" }));
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace" });
-  await user.type(main.getByRole("textbox", { name: "First message for a new chat" }), "Audit the auth flow{Enter}");
+  await user.type(main.getByRole("textbox", { name: "Task for a new agent" }), "Audit the auth flow{Enter}");
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace", message: "Audit the auth flow" });
-  expect(main.getByRole("textbox", { name: "First message for a new chat" })).toHaveValue("");
+  expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveValue("");
+});
+
+it("calls the one action by one verb: describe a task, in a place, then Start", async () => {
+  const { user, main } = await setup();
+  const box = main.getByRole("textbox", { name: "Task for a new agent" });
+  expect(box).toHaveAttribute("placeholder", "Describe a task…");
+  // What the chip shows, leaving out the native select's option list.
+  const chip = () => [...main.getByRole("combobox", { name: "Send to" }).closest("label")!.children]
+    .filter((el) => el.tagName !== "SELECT").map((el) => el.textContent).join(" ").replace(/\s+/g, " ").trim();
+  expect(chip()).toBe("In: New workspace");
+  expect(main.getByRole("button", { name: "Start" })).toBeEnabled();
+  await user.selectOptions(main.getByRole("combobox", { name: "Send to" }), "workspace:w1");
+  expect(chip()).toBe("In: Nenu");
 });
 
 it("starts a thread in a chosen workspace", async () => {
   const { user, main } = await setup();
   await user.selectOptions(main.getByRole("combobox", { name: "Send to" }), "workspace:w1");
-  await user.type(main.getByRole("textbox", { name: "First message for a new chat" }), "Fix the flaky test{Enter}");
+  await user.type(main.getByRole("textbox", { name: "Task for a new agent" }), "Fix the flaky test{Enter}");
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "tab", workspaceId: "w1", message: "Fix the flaky test" });
 });
 
@@ -324,15 +337,15 @@ it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one 
 it("does not claim an empty live herd or allow creation from stale disconnected data", async () => {
   const { main } = await setup({ ...data, error: true, agents: [], workspaces: [] });
   expect(screen.getByText(/Showing your last workspace snapshot/)).toBeInTheDocument();
-  expect(main.getByRole("button", { name: "New chat" })).toBeDisabled();
-  expect(main.getByRole("textbox", { name: "First message for a new chat" })).toBeDisabled();
+  expect(main.getByRole("button", { name: "Start" })).toBeDisabled();
+  expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeDisabled();
   expect(screen.queryByText(/Describe a task to start your first agent/)).not.toBeInTheDocument();
 });
 
 it("keeps existing threads navigable while answering and creating are read-only", async () => {
   server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
   const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
-  expect(main.getByRole("button", { name: "New chat" })).toBeDisabled();
+  expect(main.getByRole("button", { name: "Start" })).toBeDisabled();
   const needs = within(main.getByRole("region", { name: /^Needs you/ }));
   // The card says why, and lists what the agent offers with nothing to press.
   expect(await needs.findByText("Read-only on this device. Answer from an authorised one.")).toBeVisible();
