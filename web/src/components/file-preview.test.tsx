@@ -339,6 +339,14 @@ describe("image viewer", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("outside this agent's folder");
   });
 
+  // A large picture over a slow link leaves the black empty: a spinner says it is on its way.
+  it("says a picture is still on its way until it has loaded", () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    expect(screen.getByRole("status", { name: "Loading image" })).toBeInTheDocument();
+    fireEvent.load(screen.getByRole("img", { name: "Image 1" }));
+    expect(screen.queryByRole("status", { name: "Loading image" })).not.toBeInTheDocument();
+  });
+
   // A picture that fails while it waits beside the current one never fails again once it is the
   // current one: the same <img> with the same src fires no second error. The viewer remembers it.
   it("explains a picture that failed while it waited beside the current one, and retries it", async () => {
