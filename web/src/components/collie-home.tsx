@@ -19,10 +19,10 @@ interface CollieHomeProps {
   className?: string;
 }
 
-// The single, shared Nenu mark: brand + button + connection loader in one. At rest it's the familiar static app icon (favicon.svg); once the
-// connection has been not-live for a sustained beat (`trouble`) it springs into the galloping sprite —
-// until the outage escalates (`lost`), when it drops the gallop and rests on the SAME static icon,
-// muted, then settles back to the full-color icon once live. The rest state is always the static icon,
+// The single, shared Nenu mark: brand + button + connection loader in one. At rest it's the familiar
+// static app icon (favicon.svg); once the connection has been not-live for a sustained beat (`trouble`)
+// it springs into the galloping sprite — until the outage escalates (`lost`), when it drops the gallop
+// and rests on the SAME static icon, muted, then settles back to the full-color icon once live. The rest state is always the static icon,
 // never a paused sprite: a gallop strip's rest frame is a full-stretch mid-stride pose that reads as
 // frozen mid-run. On a phone it leads Home's header (and a chat's, until the chat's title opens the
 // switcher), where tapping it opens navigation; every other screen leads with a back instead (AppHeader).
