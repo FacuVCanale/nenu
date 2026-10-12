@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendMessage } from "@/lib/api";
 import { loadDraft } from "@/lib/drafts";
-import { clearStatus } from "@/lib/status";
+import { clearStatus, useStatus } from "@/lib/status";
 import { declarations } from "@/test/css-rules";
 import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
 
@@ -22,6 +22,11 @@ beforeEach(() => {
   vi.mocked(sendMessage).mockImplementation(async (_pane, request) => ({ ok: true, requestId: request.requestId, ack: "submitted" }));
   clearStatus();
 });
+
+/** The toast line, as the status area would show it. */
+function StatusLine() {
+  return <output data-testid="status">{useStatus()?.text ?? ""}</output>;
+}
 
 /** The texts sent through the bridge's one-request send, with the pane and session they went to. */
 const sent = () => vi.mocked(sendMessage).mock.calls.map(([pane, request, session]) => ({ pane, text: request.text, session }));
@@ -39,7 +44,7 @@ function setup(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
     setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(),
     onSent, onControlsChange, ...overrides,
   };
-  const router = createMemoryRouter([{ path: "/", element: <Composer {...props} ref={ref} /> }]);
+  const router = createMemoryRouter([{ path: "/", element: <><Composer {...props} ref={ref} /><StatusLine /></> }]);
   render(<RouterProvider router={router} />);
   /** The ⋯ menu's view of the composer: its published controls, run as a menu tap would. */
   const run = (id: ComposerControl["id"]) => act(() => controls.find((control) => control.id === id)!.run());
@@ -119,6 +124,16 @@ it("does not convert a rejected picker command into a forced send on retry", asy
   expect(vi.mocked(sendMessage).mock.calls.some(([, request]) => request.force)).toBe(false);
   expect(screen.getByRole("textbox")).toHaveValue("Preserve this draft");
   expect(onSent).not.toHaveBeenCalled();
+});
+
+it("reports a failed toolbar command in a toast, never as a draft's notice with Try again", async () => {
+  // Try again resends a message; a /compact that failed to verify is not one, and re-sending its
+  // text as a reply would skip the action's own guard.
+  vi.mocked(sendMessage).mockResolvedValueOnce({ ok: false, requestId: "r", stage: "verify", error: "Compact didn't reach the agent.", textDelivered: false });
+  const { ref } = setup();
+  await act(async () => { expect(await ref.current!.compactContext()).toBe(false); });
+  expect(screen.getByTestId("status")).toHaveTextContent("Compact didn't reach the agent.");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 it("does not arm a normal draft override when a toolbar command is rejected", async () => {
