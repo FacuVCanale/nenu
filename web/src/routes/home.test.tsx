@@ -500,8 +500,8 @@ describe("an outage", () => {
     const { update, main } = await setup();
     await update({ ...data, error: true });
     expect(headline()).toBe("1 thread needs you");
-    expect(main.queryByText(/Can't reach/)).not.toBeInTheDocument();
-    expect(document.querySelector("[data-stale]")).toBeNull();
+    expect(main.queryByText(/Can't reach|Last synced|Showing the last herd/)).not.toBeInTheDocument();
+    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
   });
 
   // Known gap, pinned so it turns red the day it is fixed: a failed snapshot read makes canCreate
@@ -513,14 +513,19 @@ describe("an outage", () => {
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeEnabled();
   });
 
-  it("says Herdr can't be reached once it is sustained, and dims the last herd with when it was synced", async () => {
+  it("says Herdr can't be reached once it is sustained, with when the herd on screen was synced", async () => {
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
     const { update, main } = await setup();
+    const needs = within(main.getByRole("region", { name: /^Needs you/ }));
+    await needs.findByRole("button", { name: "Yes" });
     const since = sustained();
     await update({ ...data, bridge: "disconnected" });
     expect(headline()).toBe("Can't reach Herdr");
     expect(subline()).toBe(`Last synced ${clockTime(since)}`);
-    expect(main.getByRole("region", { name: /^Recent/ }).closest("[data-stale]")).not.toBeNull();
-    expect(main.queryByText(/working now/)).not.toBeInTheDocument();
+    // The herd stays to look at and open; what it cannot vouch for is paused.
+    expect(await needs.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    expect(needs.getByRole("button", { name: "Yes" })).toBeDisabled();
+    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
   });
 
@@ -530,13 +535,11 @@ describe("an outage", () => {
     await setup({ ...data, error: true, lastSeenAt: at });
     expect(headline()).toBe("Can't reach Nenu");
     expect(subline()).toBe(`Last synced ${clockTime(at)}`);
-    expect(document.querySelector("[data-stale]")).not.toBeNull();
   });
 
   it("says access was refused at once, without waiting for an outage, and asks to sign in", async () => {
     await setup({ ...data, error: true, authError: true });
     expect(headline()).toBe("Access refused");
-    expect(document.querySelector("[data-stale]")).not.toBeNull();
     expect(screen.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Sign in again to start an agent");
   });
 

@@ -94,7 +94,7 @@ export function HomeRoute() {
         )}</Reveal>
       </div>
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
-      <div data-stale={outage ? "" : undefined} className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
+      <div className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
         {calm
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
