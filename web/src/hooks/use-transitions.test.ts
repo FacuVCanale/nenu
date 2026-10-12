@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setStatus } from "@/lib/status";
-import type { AgentStatus, AgentView } from "@/lib/types";
+import type { AgentStatus, AgentView, ProjectView } from "@/lib/types";
 import { useAgentTransitions } from "./use-transitions";
 
 vi.mock("@/lib/status", () => ({ setStatus: vi.fn() }));
@@ -12,8 +12,8 @@ const agent = (paneId: string, status: AgentStatus, extra: Partial<AgentView> = 
   workspaceNumber: 1, tabId: "w1:t1", cwd: "/work/collie", focused: false, ...extra,
 });
 
-function setup(agents: AgentView[], session?: string, openPaneId: string | null = null) {
-  const hook = renderHook((props) => useAgentTransitions(props.agents, props.openPaneId, props.session), {
+function setup(agents: AgentView[], session?: string, openPaneId: string | null = null, projects?: ProjectView[]) {
+  const hook = renderHook((props) => useAgentTransitions(props.agents, props.openPaneId, props.session, projects), {
     initialProps: { agents, session, openPaneId },
   });
   return { ...hook, update: (next: AgentView[], activeSession = session, openPane = openPaneId) => {
@@ -39,7 +39,7 @@ describe("useAgentTransitions", () => {
     const { update } = setup([view("working")]);
     act(() => update([view(state)]));
     expect(notify).toHaveBeenCalledExactlyOnceWith(title, tone, undefined, {
-      description: "collie · Frontend", background: true,
+      description: "collie · Frontend", background: true, to: "/pane/one",
     });
     act(() => update([view(state)]));
     expect(notify).toHaveBeenCalledOnce();
@@ -61,8 +61,9 @@ describe("useAgentTransitions", () => {
     ];
     const { update } = setup(views);
     act(() => update(views.map((view, index) => ({ ...view, status: index === 3 ? "done" : "blocked" }))));
+    // Several at once open Home, whose Needs you lists them all.
     expect(notify).toHaveBeenCalledExactlyOnceWith("3 agents need your input", "warn", undefined, {
-      description: "api, web", background: true,
+      description: "api, web", background: true, to: "/",
     });
   });
 
@@ -71,7 +72,7 @@ describe("useAgentTransitions", () => {
     const { update } = setup(views);
     act(() => update(views.map((view) => ({ ...view, status: "done" }))));
     expect(notify).toHaveBeenCalledExactlyOnceWith("2 agents finished", "success", undefined, {
-      description: "collie, docs", background: true,
+      description: "collie, docs", background: true, to: "/",
     });
   });
 
@@ -82,7 +83,7 @@ describe("useAgentTransitions", () => {
     act(() => update([agent("one", "working")], "second"));
     act(() => update([agent("one", "done")], "second"));
     expect(notify).toHaveBeenCalledExactlyOnceWith("Codex finished", "success", undefined, {
-      description: "collie", background: true,
+      description: "collie", background: true, to: "/pane/one?s=second",
     });
     act(() => update([agent("one", "blocked")], "first"));
     expect(notify).toHaveBeenCalledOnce();
@@ -95,5 +96,26 @@ describe("useAgentTransitions", () => {
     act(() => update([]));
     act(() => update([agent("one", "done")]));
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("names the pane the way its header does, not the CLI behind it", () => {
+    const view = (status: AgentStatus) => agent("w1:working", status, { agent: "claude", paneLabel: "Working Claude", tabLabel: "redesign", workspaceLabel: "nenu" });
+    const { update } = setup([view("working"), agent("w1:other", "working", { agent: "claude" })]);
+    act(() => update([view("blocked"), agent("w1:other", "working", { agent: "claude" })]));
+    expect(notify).toHaveBeenCalledExactlyOnceWith("Working Claude needs your input", "warn", undefined, {
+      description: "nenu · redesign", background: true, to: "/pane/w1%3Aworking",
+    });
+  });
+
+  it("names a project's thread by its title and places it in its project", () => {
+    const projects: ProjectView[] = [{
+      slug: "nenu", name: "Nenu", status: "active",
+      threads: [{ id: "t1", title: "Fix the toast", parentId: "", role: "worker", status: "open", paneId: "one" }],
+    }];
+    const { update } = setup([agent("one", "working")], undefined, null, projects);
+    act(() => update([agent("one", "done")]));
+    expect(notify).toHaveBeenCalledExactlyOnceWith("Fix the toast finished", "success", undefined, {
+      description: "Nenu", background: true, to: "/pane/one",
+    });
   });
 });
