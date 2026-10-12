@@ -12,6 +12,7 @@ import { detectPromptSelect } from "@/lib/harness/claude/prompt-select";
 import { detectWizard } from "@/lib/harness/claude/wizard";
 import type { Interaction } from "@/lib/types";
 import { MenuBlock } from "./menu-block";
+import { ROW_SELECTED } from "./option-button";
 import { MultiSelectBlock } from "./multi-select-block";
 import { PreviewSelectBlock } from "./preview-select-block";
 import { PromptSelectBlock } from "./prompt-select-block";
@@ -132,7 +133,7 @@ describe.each(CARDS)("%s", (_name, make, listed) => {
     // Three children of the blocks sit outside this change's files and keep Tailwind's own steps, a
     // follow-up each: the stepper chips (wizard-stepper.tsx), a prompt's request details
     // (prompt-request-context.tsx) and a preview's diagram (preview-content.tsx).
-    const OUTSIDE = '[data-dialog-card] ol[aria-label="Questions"], [data-dialog-card] [aria-label="Request details"], [data-dialog-card] code';
+    const OUTSIDE = '[data-dialog-card] ol[aria-label="Questions"], [data-dialog-card] [aria-label="Request details"], [data-preview-content] code';
     const ours = (el: Element) => !el.closest(OUTSIDE);
     const off = [card, ...card.querySelectorAll("*")].filter(ours).flatMap((el) => classesOf(el).filter((c) => OFF_SCALE.test(c)).map((c) => `${el.tagName.toLowerCase()} ${c}`));
     expect(off).toEqual([]);
@@ -169,30 +170,28 @@ it("names a permission's pressable list Answers in the card and in the mirror bl
 });
 
 describe("a choice that is selected", () => {
-  const SELECTED = "bg-[var(--workbench-row-selected)]";
-
   it("fills a ticked multi-select row neutrally and keeps the blue on its checkbox (card and block)", () => {
     const card = renderCard(CARDS.find(([n]) => n === "thread multi-select")![1]);
     const olives = [...card.querySelectorAll("[data-option-list] > *")].find((row) => row.textContent?.includes("Olives"))!;
-    expect(olives).toHaveClass(SELECTED);
+    expect(olives).toHaveClass(ROW_SELECTED);
     expect(olives.querySelector(".bg-primary")).not.toBeNull();
     const block = renderCard(CARDS.find(([n]) => n === "multi-select block")![1]);
     const ticked = block.querySelector('[role="checkbox"][aria-checked="true"]')!;
-    expect(ticked).toHaveClass(SELECTED);
+    expect(ticked).toHaveClass(ROW_SELECTED);
     expect(ticked.querySelector(".bg-primary")).not.toBeNull();
-    expect(block.querySelector('[role="checkbox"][aria-checked="false"]')).not.toHaveClass(SELECTED);
+    expect(block.querySelector('[role="checkbox"][aria-checked="false"]')).not.toHaveClass(ROW_SELECTED);
   });
 
   it("fills the previewed row neutrally and keeps the blue on its radio", () => {
     const card = renderCard(CARDS.find(([n]) => n === "preview-select")![1]);
     const pointed = card.querySelector('[role="radio"][aria-checked="true"]')!;
-    expect(pointed).toHaveClass(SELECTED);
+    expect(pointed).toHaveClass(ROW_SELECTED);
     expect(pointed.querySelector(".bg-primary")).not.toBeNull();
   });
 
   it("fills a wizard's current answer neutrally", () => {
     const card = renderCard(CARDS.find(([n]) => n === "wizard step")![1]);
     const current = card.querySelector('[aria-label="Current answer"]')!.closest("button")!;
-    expect(current).toHaveClass(SELECTED);
+    expect(current).toHaveClass(ROW_SELECTED);
   });
 });

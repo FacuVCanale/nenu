@@ -126,7 +126,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
 
       {/* Native preview content, without the terminal widget's frame. */}
       {preview.preview.length > 0 && (
-        <div role="group" aria-labelledby={captionId} className="flex min-w-0 flex-col gap-1.5">
+        <div role="group" aria-labelledby={captionId} data-preview-content className="flex min-w-0 flex-col gap-1.5">
           <p id={captionId} className="text-footnote text-muted-foreground">
             {pointedName ? `Preview of ${pointedName}` : "Preview"}
           </p>
