@@ -551,7 +551,8 @@ describe("find's current hit", () => {
     });
     onTestFinished(() => spy.mockRestore());
     // What the browser's centring would do, so a stray scrollIntoView shows up as a moved hit.
-    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { box.top += this.getBoundingClientRect().top - 300; });
+    const centre = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) { box.top += this.getBoundingClientRect().top - 300; });
+    onTestFinished(() => centre.mockRestore());
     return { box, show: (entries: TranscriptEntry[]) => rerender(view(entries, true)) };
   }
 
