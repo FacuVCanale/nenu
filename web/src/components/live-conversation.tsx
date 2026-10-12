@@ -1,15 +1,17 @@
 import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2, MessageSquare } from "lucide-react";
+import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
-import type { AgentStatus, PaneHistoryResponse } from "@/lib/types";
+import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
 import { atTail, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
+import { ScrollToLatest, scrollToLatestIsPill } from "@/components/ui/chat/scroll-to-latest";
+import { cn } from "@/lib/utils";
 
 interface LiveConversationProps {
   paneId: string;
@@ -49,6 +51,11 @@ function stopCap(el: HTMLElement): number | null {
   if (!stop) return null;
   const cap = el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN;
   return cap < el.scrollHeight - el.clientHeight ? cap : null;
+}
+
+/** A message as a reader counts one: someone's words or images, not a tool call or a note. */
+function spoken(entry: TranscriptEntry): boolean {
+  return (entry.role === "user" || entry.role === "assistant") && entry.parts.some((part) => part.kind === "text" || part.kind === "image");
 }
 
 /** The operator is typing in a box inside the question (a reply, a note). */
@@ -97,6 +104,12 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     latest?.uuid !== lastShown?.uuid || latest?.turn?.status !== lastShown?.turn?.status ||
     latest?.turn?.durationMs !== lastShown?.turn?.durationMs
   );
+  // How many messages arrived below the frozen window; null when the live window slid past it.
+  const newCount = useMemo(() => {
+    if (!hasNew || !history?.available) return 0;
+    const from = lastShown ? history.entries.findIndex((entry) => entry.uuid === lastShown.uuid) : -1;
+    return from < 0 ? null : history.entries.slice(from + 1).filter(spoken).length;
+  }, [hasNew, history, lastShown]);
   const matches = useMemo(() => matchingEntries(entries, query), [entries, query]);
   // This client's sends the journal has not caught up with yet. Reconciled against the LIVE window,
   // not a frozen one, so scrolling back to read never holds a delivered bubble on screen.
@@ -368,11 +381,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             </div>{footer}</>}
           </div>
         </div>
-        {paused && <button type="button" onClick={followLatest} aria-label="Scroll to latest" className="absolute bottom-3 left-1/2 z-10 flex min-h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs shadow-md hover:bg-muted">
-          {waiting
-            ? <><span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />Waiting on you<ArrowDown aria-hidden="true" className="size-4" /></>
-            : <><ArrowDown aria-hidden="true" className="size-4" />{hasNew ? "New messages" : "Latest"}</>}
-        </button>}
+        {/* The list's top edge fades into the page instead of cutting text under the strip above it.
+            A gradient over the list, not a mask on it: a mask would also clip the fixed popovers and
+            sheets that open from inside the thread. */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-3 bg-linear-to-b from-background" />
+        {paused && <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-(--page-gutter)">
+          <div className={cn("mx-auto flex max-w-(--chat-column)", scrollToLatestIsPill({ waiting, count: newCount }) ? "justify-center" : "justify-end")}>
+            <ScrollToLatest onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />
+          </div>
+        </div>}
       </div>
     </section>
   );
