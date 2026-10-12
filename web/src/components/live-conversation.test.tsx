@@ -587,3 +587,45 @@ describe("LiveConversation — pending bubbles", () => {
     expect(screen.queryByText("Working…")).not.toBeInTheDocument();
   });
 });
+
+// Tapping a finished step holds the thread still while the turn runs (work-turn #77's finding). The
+// held turn keeps its live state: the running call still runs, and its result lands on its row.
+describe("LiveConversation — a step tapped while the turn runs", () => {
+  const at = (s: number) => `2026-07-25T09:0${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}Z`;
+  const ask: TranscriptEntry = { uuid: "ask", ts: at(0), role: "user", parts: [{ kind: "text", text: "Run the tab strip tests." }] };
+  const read: TranscriptEntry = { uuid: "read", ts: at(4), role: "assistant", turnId: "t1", turn: { status: "running", startedAt: at(0) }, parts: [{ kind: "tool", name: "Read", summary: "/repo/tab-strip.tsx", result: { text: "import" } }] };
+  const run = (result?: string): TranscriptEntry => ({ uuid: "run", ts: at(9), role: "assistant", turnId: "t1", turn: { status: "running", startedAt: at(0) },
+    parts: [{ kind: "tool", name: "Bash", summary: "bun run test tab-strip", ...(result ? { result: { text: result } } : {}) }] });
+  const history = (entries: TranscriptEntry[]): PaneHistoryResponse => ({ paneId: "w1:p1", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false });
+  const view = (entries: TranscriptEntry[], status: "working" | "idle" = "working") =>
+    <MemoryRouter><LiveConversation paneId="w1:p1" history={history(entries)} activityStatus={status} loading={false} error={false} /></MemoryRouter>;
+
+  it("keeps the running call running while the reader holds the thread", () => {
+    const { rerender } = render(view([ask, read, run()]));
+    fireEvent.click(screen.getByRole("button", { name: /^Read / }));
+    rerender(view([ask, read, run()]));
+    expect(screen.getByRole("button", { name: /^Running bun run test tab-strip/ })).toBeInTheDocument();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Working for/ })).toBeInTheDocument();
+  });
+
+  it("lands the call's result on its row while held, and adds nothing below it", () => {
+    const { rerender } = render(view([ask, read, run()]));
+    fireEvent.click(screen.getByRole("button", { name: /^Read / }));
+    const next: TranscriptEntry = { uuid: "next", ts: at(20), role: "assistant", turnId: "t1", turn: { status: "running", startedAt: at(0) }, parts: [{ kind: "tool", name: "Bash", summary: "bun run build" }] };
+    rerender(view([ask, read, run("14 passed"), next]));
+    expect(screen.getByRole("button", { name: "Ran bun run test tab-strip" })).toBeInTheDocument();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    expect(screen.queryByText("bun run build")).not.toBeInTheDocument();
+  });
+
+  it("neither folds the held turn nor calls its calls unrecorded once the turn ends", () => {
+    const { rerender } = render(view([ask, read, run()]));
+    fireEvent.click(screen.getByRole("button", { name: /^Read / }));
+    const done: TranscriptEntry = { uuid: "done", ts: at(30), role: "assistant", turnId: "t1", phase: "final_answer", turn: { status: "completed", startedAt: at(0), durationMs: 30_000 }, parts: [{ kind: "text", text: "All green." }] };
+    rerender(view([ask, read, run("14 passed"), done], "idle"));
+    expect(screen.getByRole("button", { name: /^Read /, expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ran bun run test tab-strip" })).toBeInTheDocument();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+  });
+});
