@@ -31,6 +31,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof PaneActionsS
     open: true,
     onClose: vi.fn(),
     pane: agent,
+    name: "claude",
     onRenamed: vi.fn(),
     onClosed: vi.fn(),
     ...overrides,
@@ -70,11 +71,32 @@ describe("PaneActionsSheet — rename", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("name this pane")).toHaveFocus());
   });
 
-  it("Back returns to the action list without saving", async () => {
+  it("edits under an iOS edit header, Cancel · Rename pane · Save, with no Back link", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "Rename pane" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Pane name" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
+  it("clears the field in one tap and keeps the keyboard on it", async () => {
+    const user = userEvent.setup();
+    renderSheet({ pane: { ...agent, paneLabel: "deploy" } });
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Clear name" }));
+    expect(screen.getByRole("textbox", { name: "Pane name" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Pane name" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Clear name" })).toBeNull();
+  });
+
+  it("Cancel returns to the action list without saving", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -98,6 +120,27 @@ describe("PaneActionsSheet — rename", () => {
     await waitFor(() => expect(props.onRenamed).toHaveBeenCalledTimes(1));
     expect(body).toEqual({ label: "deploy" });
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // While the write is out, Save used to sit disabled at the same colour with nothing moving: on a
+  // slow link that reads as a tap that never took.
+  it("shows a spinner on Save while the rename is in flight, keeping its name", async () => {
+    const user = userEvent.setup();
+    let release = () => {};
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/rename$/, () => new Promise<Response>((resolve) => {
+        release = () => resolve(HttpResponse.json({ ok: true }));
+      })),
+    );
+    const props = renderSheet();
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const save = screen.getByRole("button", { name: "Save" });
+    await waitFor(() => expect(save).toHaveAttribute("aria-busy", "true"));
+    expect(save.querySelector(".animate-spin")).not.toBeNull();
+    release();
+    await waitFor(() => expect(props.onRenamed).toHaveBeenCalledTimes(1));
   });
 
   it("clears the label by saving an empty field (sends an empty label)", async () => {
@@ -136,12 +179,12 @@ describe("PaneActionsSheet — rename", () => {
 
   it("resets back to the action list when the sheet reopens, even mid-rename", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this pane")).toBeInTheDocument();
 
-    rerender(<PaneActionsSheet open={false} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
-    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    rerender(<PaneActionsSheet open={false} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -150,11 +193,11 @@ describe("PaneActionsSheet — rename", () => {
   it("resets back to the action list when the target pane changes, even mid-rename", async () => {
     const user = userEvent.setup();
     const other: AgentView = { ...agent, paneId: "w1:p2" };
-    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this pane")).toBeInTheDocument();
 
-    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={other} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={other} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -162,16 +205,72 @@ describe("PaneActionsSheet — rename", () => {
 });
 
 describe("PaneActionsSheet — close", () => {
-  it("closes only after a two-tap confirm, then calls onClosed and closes the sheet", async () => {
+  // Only the clock the settle window reads is faked; user-event and MSW keep real timers.
+  beforeEach(() => vi.useFakeTimers({ toFake: ["performance"] }));
+  afterEach(() => vi.useRealTimers());
+
+  function countCloses() {
+    const calls: string[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/close$/, ({ request }) => {
+        calls.push(request.url);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    return calls;
+  }
+
+  it("asks first, naming the pane and what closing it does, and closes nothing yet", async () => {
     const user = userEvent.setup();
+    const calls = countCloses();
     const props = renderSheet();
 
     await user.click(screen.getByRole("button", { name: "Close pane" }));
-    expect(props.onClosed).not.toHaveBeenCalled(); // first tap only arms
 
-    await user.click(screen.getByRole("button", { name: "Tap again to close" }));
+    expect(screen.getByRole("heading", { name: "Close “claude”?" })).toBeInTheDocument();
+    expect(screen.getByText("The agent in this pane stops. This can't be undone.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(calls).toEqual([]);
+    expect(props.onClosed).not.toHaveBeenCalled();
+  });
+
+  it("ignores a tap that lands right after the first, so a double tap closes nothing", async () => {
+    const user = userEvent.setup();
+    const calls = countCloses();
+    const props = renderSheet();
+
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(calls).toEqual([]);
+
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
     await waitFor(() => expect(props.onClosed).toHaveBeenCalledExactlyOnceWith("w1:p1"));
+    expect(calls).toHaveLength(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Cancel goes back to the actions and closes nothing", async () => {
+    const user = userEvent.setup();
+    const calls = countCloses();
+    const props = renderSheet();
+
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Close/ })).toBeNull();
+    expect(calls).toEqual([]);
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it("says a shell's programs stop, not an agent", async () => {
+    const user = userEvent.setup();
+    renderSheet({ pane: { ...agent, kind: "shell", agent: "shell", paneLabel: "dev server" }, name: "dev server" });
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(screen.getByRole("heading", { name: "Close “dev server”?" })).toBeInTheDocument();
+    expect(screen.getByText("Anything running in this shell stops. This can't be undone.")).toBeInTheDocument();
   });
 });
 

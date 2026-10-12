@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 
-import { Chip } from "@/components/ui/chip";
+import { Chip, ChipStrip } from "@/components/ui/chip";
 import { TabActionsSheet } from "@/components/tab-actions-sheet";
 import { tabName } from "@/lib/spaces";
-import { worstTriage } from "@/lib/triage";
+import { TRIAGE_STATUS, worstTriage } from "@/lib/triage";
 import type { AgentView, TabView } from "@/lib/types";
 
 interface TabStripProps {
@@ -26,10 +26,10 @@ interface TabStripProps {
 }
 
 // The open pane's space as a row of tabs above the conversation: tapping a tab opens one of its
-// panes; the trailing + creates a new tab (and opens its fresh shell). The desktop-focused tab gets
-// a ring; each tab carries a status dot for the most urgent thing inside it. A long-press on a chip
-// opens its actions sheet (rename / close) when the parent wires both onRenamed and onClosed (the +
-// never takes long-press).
+// panes; the trailing + creates a new tab (and opens its fresh shell). The desktop-focused tab gets a
+// dashed outline; each tab carries a status dot for the most urgent thing inside it. A long-press on
+// a chip, or a tap on the open one, opens its actions sheet (rename / close) when the parent wires
+// both onRenamed and onClosed (the + never takes long-press).
 export function TabStrip({
   workspaceId,
   tabs,
@@ -42,7 +42,8 @@ export function TabStrip({
   onRenamed,
   onClosed,
 }: TabStripProps) {
-  const [sheetTab, setSheetTab] = useState<TabView | null>(null);
+  // The tab whose actions are open, with the name its chip shows, which the sheet repeats.
+  const [sheet, setSheet] = useState<{ tab: TabView; name: string } | null>(null);
   // Actions need both callbacks wired (revalidate on rename, fall back on close); without them the
   // chips stay plain tap-to-switch — long-press is inert.
   const actionsEnabled = !!onRenamed && !!onClosed;
@@ -52,40 +53,43 @@ export function TabStrip({
 
   return (
     <>
-      {/* 36px to the eye: the extra 8px of bottom padding overlaps the conversation (negative margin,
-          transparent, raised) only to give each tab a 44px touch target. */}
-      <div data-workbench-navigation-band="tabs" className="relative z-[1] -mb-2 box-content flex h-9 shrink-0 items-start gap-0.5 overflow-x-auto overflow-y-hidden border-t border-border/40 px-2 pb-2 [scrollbar-width:none] sm:px-4 lg:px-(--page-gutter) [&::-webkit-scrollbar]:hidden">
-        {wsTabs.map((t, index) => (
-          <Chip
-            key={t.tabId}
-            label={tabName(t.label, index + 1)}
-            active={selected === t.tabId}
-            ring={t.focused}
-            // What's actually going on in there — blocked / ready / working / idle — instead of a
-            // dot that only ever appeared for blocked and left every other state unreadable.
-            status={worstTriage(agents.filter((a) => a.tabId === t.tabId))}
-            onClick={() => onSelect(t.tabId)}
-            // Long-press (and a tap on the already-active tab) opens the actions sheet — only when the
-            // parent wired the actions; otherwise the chips stay plain tap-to-switch.
-            onLongPress={actionsEnabled ? () => setSheetTab(t) : undefined}
-            onTapActive={actionsEnabled ? () => setSheetTab(t) : undefined}
-          />
-        ))}
-        <button
-          type="button"
-          onClick={() => onNewTab(workspaceId)}
-          aria-label="New tab"
-          className="relative flex h-9 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors after:absolute after:inset-x-0 after:top-0 after:-bottom-2 after:content-[''] hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-        </button>
-      </div>
+      <ChipStrip
+        band="tabs"
+        activeKey={selected}
+        trail={
+          <button type="button" onClick={() => onNewTab(workspaceId)} aria-label="New tab" className="strip-add">
+            <Plus className="size-4" />
+          </button>
+        }
+      >
+        {wsTabs.map((t, index) => {
+          // What's going on in there (blocked / ready / working / idle); nothing for a tab with no agent,
+          // since empty is not idle.
+          const status = worstTriage(agents.filter((a) => a.tabId === t.tabId));
+          const name = tabName(t.label, index + 1);
+          return (
+            <Chip
+              key={t.tabId}
+              label={name}
+              active={selected === t.tabId}
+              focused={t.focused}
+              status={status && TRIAGE_STATUS[status]}
+              onClick={() => onSelect(t.tabId)}
+              // Long-press, or a tap on the open tab, opens its actions when the parent wired them. A
+              // read-only device's sheet holds only a note, so the open tab doesn't offer it.
+              onLongPress={actionsEnabled ? () => setSheet({ tab: t, name }) : undefined}
+              onTapActive={actionsEnabled && !readOnly ? () => setSheet({ tab: t, name }) : undefined}
+            />
+          );
+        })}
+      </ChipStrip>
 
       {actionsEnabled && (
         <TabActionsSheet
-          open={sheetTab !== null}
-          onClose={() => setSheetTab(null)}
-          tab={sheetTab}
+          open={sheet !== null}
+          onClose={() => setSheet(null)}
+          tab={sheet?.tab ?? null}
+          name={sheet?.name ?? ""}
           session={session}
           readOnly={readOnly}
           onRenamed={onRenamed}
