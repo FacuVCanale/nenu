@@ -51,7 +51,8 @@ describe("BootSplash", () => {
     const { container } = renderSplash();
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
     expect(screen.queryByText(/Connecting to/)).not.toBeInTheDocument();
-    expect(screen.getByText(`Can’t reach Nenu at ${window.location.host}`)).toBeInTheDocument();
+    // No real header is drawn yet, so the problem is the page's title.
+    expect(screen.getByRole("heading", { level: 1, name: `Can’t reach Nenu at ${window.location.host}` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toHaveClass("ui-button-lg", "bg-foreground");
     // The frame stays, so the screen does not jump when Retry or the network brings the app back.
     expect(container.querySelector(".workbench-app-header")).not.toBeNull();
@@ -72,7 +73,8 @@ describe("RootError", () => {
 
   it("reads as Nenu's problem, with a Reload, and keeps the raw message behind a disclosure", async () => {
     const router = crash({ element: <Boom /> });
-    expect(await screen.findByRole("heading", { name: "Nenu hit a problem" })).toBeInTheDocument();
+    // The crash draws none of the app's chrome, so its title is the page's one h1.
+    expect(await screen.findByRole("heading", { level: 1, name: "Nenu hit a problem" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
     // The shared empty state: its title size, and its one action style (the large ink button).
     const page = screen.getByRole("heading", { name: "Nenu hit a problem" }).closest("[data-slot=empty-state]");
@@ -124,7 +126,7 @@ describe("RootError", () => {
 
   it("answers a 404 with Page not found, not the crash screen", async () => {
     const router = crash({ loader: () => { throw new Response(null, { status: 404 }); }, element: <p>never</p> }, "/gone?s=qa");
-    expect(await screen.findByText("Page not found")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/?s=qa");
     expect(screen.queryByText("Nenu hit a problem")).not.toBeInTheDocument();
     router.dispose();
