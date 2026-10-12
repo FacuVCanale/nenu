@@ -65,7 +65,7 @@ function typingIn(el: HTMLElement): boolean {
 }
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
-  "no-session": "Send the first message to start the conversation, or connect an existing session.",
+  "no-session": "Send the first message to start the conversation.",
   "no-log": "Waiting for the first conversation entry…",
 };
 
@@ -367,6 +367,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const empty = entries.length === 0 && localSends.length === 0;
   // The skeleton and the turns sit at the list's foot, where the tail will land.
   const skeleton = empty && loading;
+  // A conversation the operator can link: one card, centred, instead of a sentence over a form.
+  const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
   useEffect(() => { if (skeleton) setSkeletonShown(true); }, [skeleton]);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
@@ -381,7 +383,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       )}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={onScroll} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end",
+          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && "flex min-h-full flex-col justify-center",
             skeletonShown && entries.length > 0 && "animate-in fade-in duration-150 motion-reduce:animate-none")}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
@@ -401,6 +403,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : skeleton ? <>
               <TranscriptSkeleton />
               {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
+              {footer}
+            </> : linkable ? <>
+              <section aria-label="No conversation linked" className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
+                <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
+                <h2 className="text-headline text-balance">No conversation linked</h2>
+                <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
+                <div className="mt-5 w-full">{recovery}</div>
+                {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
+              </section>
               {footer}
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               <MessageSquare className="size-5" />
