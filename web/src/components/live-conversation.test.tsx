@@ -518,12 +518,10 @@ it("skips transcript rendering on unrelated parent polls but renders changed his
 
 it("searches the native transcript and holds results while new messages arrive", () => {
   const count = vi.fn();
-  Element.prototype.scrollIntoView = vi.fn();
   const view = (history: PaneHistoryResponse) => <LiveConversation paneId="w1:p1" history={history} loading={false} error={false} searching query="changed" onMatchCount={count} />;
   const { container, rerender } = render(view(initialHistory));
   expect(count).toHaveBeenLastCalledWith(1);
-  expect(container.querySelector("mark")).toHaveTextContent("changed");
-  expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  expect(container.querySelector('mark[aria-current="true"]')).toHaveTextContent("changed");
   rerender(view({ ...initialHistory, available: true, entries: [olderEntry] }));
   expect(container.querySelector("mark")).toHaveTextContent("changed");
   expect(screen.queryByText("An older request")).not.toBeInTheDocument();

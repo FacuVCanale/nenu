@@ -517,14 +517,13 @@ export function AgentChat({
     observer.observe(chrome);
     return () => observer.disconnect();
   }, []);
-  // The list centres the current hit when it moves to it; this runs after that (a parent's effect
+  // The mirror centres its current hit when it moves to it; this runs after that (a parent's effect
   // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
-  // Only the mirror marks its current hit so far: the chat's turns mark none (transcript-view), so in
-  // the chat this finds nothing and the conversation keeps the turn centred.
+  // The conversation places its own (live-conversation).
   useEffect(() => {
     const root = chatRef.current;
-    if (!findOpen || matchCount === 0 || !root) return;
-    const hit = root.querySelector<HTMLElement>('mark[aria-current="true"], [data-find-match="current"]');
+    if (!findOpen || showConversation || matchCount === 0 || !root) return;
+    const hit = root.querySelector<HTMLElement>('[data-find-match="current"]');
     let scroller = hit?.parentElement ?? null;
     while (scroller && scroller !== root && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
     if (!hit || !scroller || scroller === root) return;
@@ -532,7 +531,7 @@ export function AgentChat({
     const chrome = root.querySelector("[data-chat-chrome]")?.getBoundingClientRect();
     const inset = chrome ? Math.max(0, chrome.bottom - view.top) : 0;
     scroller.scrollTop = thirdScrollTop({ scrollTop: scroller.scrollTop, viewTop: view.top, viewBottom: view.bottom, hitTop: hit.getBoundingClientRect().top, inset });
-  }, [findOpen, findQuery, currentMatch, matchCount]);
+  }, [findOpen, showConversation, findQuery, currentMatch, matchCount]);
 
   // What the top of the buffer can offer — see the JSX for why these are mutually exclusive.
   // `historyAvailable`: the pane reported an agent session, so a transcript exists to open.
