@@ -7,7 +7,7 @@ import { StatusDot } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BottomSheet } from "@/components/ui/sheet";
-import { busyChoiceFor } from "@/hooks/use-message-queue";
+import type { BusyChoice } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat } from "@/lib/home-stats";
@@ -168,26 +168,26 @@ const SHEET_ROW = "flex min-h-14 w-full flex-col items-start justify-center gap-
  * The send-time choice for a busy coordinator, as an action sheet: asked at every send and never
  * remembered (ADR 0056). Each row says what the coordinator's CLI does with it, in the composer's words.
  */
-export function BusySendSheet({ open, name, agent, onPick, onCancel }: {
+export function BusySendSheet({ open, name, choice, onPick, onCancel }: {
   open: boolean;
   /** Who is working, as a sentence subject ("Hub's coordinator"). */
   name: string;
-  agent: string | null | undefined;
+  /** What the coordinator's CLI does with each answer; only a CLI with both measured is asked. */
+  choice: BusyChoice;
   onPick: (mode: DeliveryMode) => void;
   onCancel: () => void;
 }) {
-  const choice = busyChoiceFor(agent);
   return (
     <BottomSheet open={open} onClose={onCancel} title={`${name} is working`} className="sm:mx-auto sm:my-auto sm:max-w-sm sm:rounded-2xl sm:border sm:pb-4">
       <p className="pb-3 text-footnote text-muted-foreground">When should it read this?</p>
       <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-        <button type="button" className={SHEET_ROW} onClick={() => onPick(choice?.now ?? "asap")}>
+        <button type="button" className={SHEET_ROW} onClick={() => onPick(choice.now)}>
           <span className="text-body font-medium">Send now</span>
-          {choice && <span className="text-footnote text-pretty text-muted-foreground">{choice.nowHint}</span>}
+          <span className="text-footnote text-pretty text-muted-foreground">{choice.nowHint}</span>
         </button>
         <button type="button" className={SHEET_ROW} onClick={() => onPick("afterTurn")}>
           <span className="text-body font-medium">Send after this turn</span>
-          {choice && <span className="text-footnote text-pretty text-muted-foreground">{choice.laterHint}</span>}
+          <span className="text-footnote text-pretty text-muted-foreground">{choice.laterHint}</span>
         </button>
       </div>
       <button type="button" onClick={onCancel}

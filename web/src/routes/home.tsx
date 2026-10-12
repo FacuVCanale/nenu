@@ -11,6 +11,7 @@ import { lockReasonOf } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
@@ -147,7 +148,8 @@ class Unavailable extends Error {}
 /**
  * Type here and pick where it goes. A project sends to its live coordinator through the shared
  * queue; while the coordinator is mid-turn an action sheet asks, at every send, whether it reads the
- * message now or after this turn (ADR 0056; the bridge maps each to the CLI's own key). A send that
+ * message now or after this turn, when its CLI has both measured (ADR 0056; the bridge maps each to
+ * the CLI's own key). A send that
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
@@ -170,6 +172,7 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
   const target = targets.find((candidate) => valueOf(candidate) === choice) ?? targets[0]!;
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
   const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
+  const busyChoice = target.kind === "project" ? busyChoiceFor(target.coordinator.agent) : null;
   const placeholder = outage === "refused" ? `Sign in again to ${action}` : outage ? `Reconnect to ${action}`
     : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
@@ -205,7 +208,9 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
     if (target.kind === "new") openNewAgent(text ? { kind: "workspace", message: text } : { kind: "workspace" });
     else if (target.kind === "workspace") openNewAgent({ kind: "tab", workspaceId: target.workspaceId, ...(text ? { message: text } : {}) });
     else if (!text) return;
-    else if (turnRunning(target.coordinator, "")) return setAsking(true);
+    // A turn running asks when to read it, if the CLI's two behaviours were measured (ADR 0056);
+    // otherwise the row waits for the turn to end, as the queue always did.
+    else if (turnRunning(target.coordinator, "")) return busyChoice ? setAsking(true) : void send("afterTurn");
     else return void send("asap");
     setMessage("");
   }
@@ -251,8 +256,8 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
           </Button>
         </div>
       </form>
-      {target.kind === "project" && (
-        <BusySendSheet open={asking} name={`${target.project.name}'s coordinator`} agent={target.coordinator.agent}
+      {target.kind === "project" && busyChoice && (
+        <BusySendSheet open={asking} name={`${target.project.name}'s coordinator`} choice={busyChoice}
           onPick={(mode) => void send(mode)} onCancel={() => setAsking(false)} />
       )}
       {sent?.tone === "ok" && (
