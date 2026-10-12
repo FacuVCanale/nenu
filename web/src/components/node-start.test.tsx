@@ -168,6 +168,17 @@ it("opens the project a thread went to when the person picked another one", asyn
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
+it("titles the flow by what the chosen project can start", async () => {
+  serveOptions();
+  const api: ProjectView = { slug: "api", name: "API", status: "active", nodeActions: false, threads: [] };
+  const { user } = renderActions(project, { others: [api] });
+
+  await user.click(await screen.findByRole("button", { name: "New coordinator" }));
+  await user.selectOptions(within(await screen.findByRole("dialog", { name: "New coordinator" })).getByLabelText("Project"), "api");
+  const dialog = within(screen.getByRole("dialog", { name: "New thread" }));
+  expect(dialog.getByRole("button", { name: "Create thread" })).toBeInTheDocument();
+});
+
 it("lets a start the person dismissed land without closing or moving what they opened next", async () => {
   serveOptions();
   let release!: () => void;

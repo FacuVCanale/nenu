@@ -98,6 +98,18 @@ it("leaves Thread out until there is a project, and Here in until there is a wor
   expect(kinds(create)).toEqual([expect.stringMatching(/^In a new folder/), expect.stringMatching(/^Quick question/), expect.stringMatching(/^Project/)]);
 });
 
+it("offers Thread only for a project that can start one, and picks that project", async () => {
+  const paused: ProjectView = { ...project, slug: "old", name: "Old", status: "paused", workspaceIds: [] };
+  setup({ data: { ...base, projects: [paused] }, entry: "/space/w%3A1?s=work" });
+  const create = within(await screen.findByRole("navigation", { name: "Create" }));
+  expect(create.queryByRole("button", { name: /^Thread/ })).toBeNull();
+  document.body.innerHTML = "";
+
+  const { user } = setup({ data: { ...base, projects: [paused, project] }, entry: "/space/w%3A1?s=work" });
+  await user.click(await screen.findByRole("button", { name: /^Thread/ }));
+  expect(screen.getByLabelText("Project")).toHaveValue("awam");
+});
+
 it("names each step in the sheet's one title, and steps back from its header", async () => {
   const { user } = setup();
   expect(await screen.findByRole("dialog", { name: "New" })).toBeInTheDocument();
