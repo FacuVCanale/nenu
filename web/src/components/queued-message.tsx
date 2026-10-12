@@ -99,7 +99,7 @@ export function QueuedMessage({
         <p
           role="status"
           aria-live="polite"
-          className={cn("flex min-w-0 grow basis-60 items-center justify-end gap-1.5 px-1 py-1 text-right text-footnote text-muted-foreground", tone === "problem" && "text-destructive")}
+          className={cn("flex min-w-0 grow basis-60 items-center justify-end gap-1.5 px-1 py-1 text-footnote text-muted-foreground", tone === "problem" && "text-destructive")}
         >
           {queued ? (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-micro text-foreground">
