@@ -652,14 +652,15 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
   </>;
 }
 
-/** A read-only device's options: what the agent offers, with nothing to press, drawn as the same list
- *  as the answers. Home's keeps the labels. */
+/** Options the card shows but cannot answer (a read-only device, or answered in the thread): the same
+ *  list, drawn unavailable like a paused row, with rows sized to read rather than to tap. Home's keeps
+ *  the labels. */
 function StaticOptions({ ref, options, labelsOnly, clamp = false }: { ref?: Ref<HTMLUListElement>; options: InteractionOption[]; labelsOnly: boolean; clamp?: boolean }) {
   return (
     <ul ref={ref} aria-label="Options" data-option-list className={OPTION_LIST}>
       {options.map((option) => (
-        <li key={option.index} className="flex min-h-9 min-w-0 flex-col justify-center gap-0.5 px-3.5 py-1.5 coarse:min-h-11 coarse:py-2">
-          <OptionLabel label={option.label} />
+        <li key={option.index} className="flex min-h-9 min-w-0 flex-col justify-center gap-0.5 px-3.5 py-1.5">
+          <OptionLabel label={option.label} dim />
           {option.description && !labelsOnly && <OptionDescription clamp={clamp}>{option.description}</OptionDescription>}
         </li>
       ))}
