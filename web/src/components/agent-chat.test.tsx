@@ -1010,8 +1010,14 @@ describe("AgentChat — terminal waiting notice", () => {
     const user = userEvent.setup();
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
-    const notice = await screen.findByRole("status", { name: "Terminal waiting" });
-    expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
+    const notice = await screen.findByRole("region", { name: "Terminal waiting" });
+    // Only the sentence is announced; the buttons around it are not part of a live region.
+    expect(within(notice).getByRole("status")).toHaveTextContent("Claude is showing a screen Nenu can't answer");
+    expect(notice).not.toHaveAttribute("role", "status");
+    // It needs the operator, like the pane's red dot in the header: never the yellow of a working agent.
+    const dots = [...notice.querySelectorAll("[aria-hidden]")].map((el) => el.getAttribute("class") ?? "");
+    expect(dots.some((c) => /status-blocked/.test(c))).toBe(true);
+    expect(dots.some((c) => /status-working/.test(c))).toBe(false);
     // The screen's own hint stays, under the sentence.
     expect(within(notice).getByText("Enter to continue")).toBeVisible();
     expect(within(notice).getByRole("button", { name: "Keys" })).toBeVisible();
@@ -1021,14 +1027,21 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(screen.queryByRole("region", { name: "Live conversation" })).not.toBeInTheDocument();
   });
 
-  it("collapses an unrecognised wait to a chip that still says the composer is paused", async () => {
+  // The composer is not paused: a message typed now waits for the answer ("Message for after you
+  // answer…"). The chip names what is actually waiting, the screen.
+  it("collapses an unrecognised wait to a chip that names the waiting screen, not a paused composer", async () => {
     const user = userEvent.setup();
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
-    const notice = await screen.findByRole("status", { name: "Terminal waiting" });
-    await user.click(within(notice).getByRole("button", { name: "Collapse" }));
+    const notice = await screen.findByRole("region", { name: "Terminal waiting" });
+    const collapse = within(notice).getByRole("button", { name: "Collapse" });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    await user.click(collapse);
     expect(within(notice).queryByText("Claude is showing a screen Nenu can't answer")).not.toBeInTheDocument();
-    const chip = within(notice).getByRole("button", { name: /Composer paused/ });
+    expect(within(notice).queryByText(/Composer paused/)).not.toBeInTheDocument();
+    const chip = within(notice).getByRole("button", { name: "Terminal waiting on a key" });
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    expect(chip.querySelector("[aria-hidden].bg-status-blocked")).not.toBeNull();
     await user.click(chip);
     expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
   });
