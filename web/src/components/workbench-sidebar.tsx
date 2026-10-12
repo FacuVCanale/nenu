@@ -43,14 +43,9 @@ export type SidebarVariant = "sidebar" | "sheet" | "drawer";
  * The workbench navigation: its variant's lead, then projects (coordinators and their threads) and
  * the workspaces no project holds, and the host it all runs on.
  */
-export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant = "sidebar" }: {
+export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar" }: {
   data: HomeData;
   variant?: SidebarVariant;
-  /**
-   * Called once a row's destination is on screen, not at the tap: over a slow link the sheet stays
-   * on the tapped row, which says it is opening (OpeningMark), instead of closing onto an idle page.
-   */
-  onNavigate?: () => void;
   onNewChat?: () => void;
   /** Each new `seq` opens search or the Needs you list (⌘K, the rail, the tab bar). */
   request?: SidebarRequest;
@@ -101,20 +96,22 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
     setSearching(false);
   }
 
-  // A new location (a row's chat landing, or the same page opened again) ends the search and tells
-  // the sheet or drawer holding this navigation to step aside.
-  const shown = useRef(key);
+  // A pick ends the search once its page is on screen, so a slow chat keeps the picked row up saying
+  // it is opening. A navigation the search did not make (the open chat's page replacing itself when
+  // its pane closes) leaves a half-typed query alone.
+  const picking = useRef(false);
   useEffect(() => {
-    if (shown.current === key) return;
-    shown.current = key;
+    if (!picking.current) return;
+    picking.current = false;
     closeSearch();
-    onNavigate?.();
-  }, [key, onNavigate]);
+  }, [key]);
 
   /** Enter opens the picked result, the first one until an arrow moves the pick. */
   function openPicked() {
     const hit = hits[selected];
-    if (hit) navigate(hitPath(hit, data, data.session));
+    if (!hit) return;
+    picking.current = true;
+    navigate(hitPath(hit, data, data.session));
   }
 
   function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
@@ -158,7 +155,8 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 
       <div ref={scroller} className="nav-scroll" onScroll={(event) => { if (browsing) treeScroll.current = event.currentTarget.scrollTop; }}>
         {query.trim()
-          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked} />
+          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
+              onOpen={() => { picking.current = true; }} />
           : mode === "needs-you"
           ? <NeedsYouList data={data} panes={attention} labelled={!phone} />
           : <>
@@ -187,7 +185,7 @@ function hitPath(hit: SearchHit, herd: Herd, session?: string): string {
 }
 
 /** The search's matches as one list (Projects, Workspaces, then Chats), each row named as everywhere else with the match in semibold. */
-function SearchResults({ groups, query, listId, selected, herd, session, onPick }: {
+function SearchResults({ groups, query, listId, selected, herd, session, onPick, onOpen }: {
   groups: SearchGroup[];
   query: string;
   listId: string;
@@ -195,6 +193,7 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick 
   herd: Herd;
   session?: string;
   onPick: (key: string) => void;
+  onOpen: () => void;
 }) {
   useEffect(() => {
     document.getElementById(optionId(listId, selected))?.scrollIntoView?.({ block: "nearest" });
@@ -213,7 +212,7 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick 
             const to = hitPath(hit, herd, session);
             return (
               <Link key={hit.key} id={optionId(listId, at)} role="option" aria-selected={at === selected} className="nav-pane nav-result"
-                to={to} onMouseMove={() => { if (at !== selected) onPick(hit.key); }}>
+                to={to} onClick={onOpen} onMouseMove={() => { if (at !== selected) onPick(hit.key); }}>
                 <RowBody mark={<OpeningMark to={to}><HitMark hit={hit} /></OpeningMark>} title={<Highlight text={hit.title} query={query} />}
                   detail={<PlaceText place={hit.place} query={query} />} end={<span className="sr-only">, {hitState(hit)}</span>} />
               </Link>

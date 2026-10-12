@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -353,23 +353,6 @@ describe("the sidebar", () => {
     expect(screen.getByText(/Agents you start in Herdr show up here too\./)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "New agent" }));
     expect(onNewChat).toHaveBeenCalledOnce();
-  });
-
-  it("keeps a sheet on the tapped row, marked as opening, until its chat is on screen", async () => {
-    let land!: () => void;
-    const landed = new Promise<null>((resolve) => { land = () => resolve(null); });
-    const onNavigate = vi.fn();
-    const element = <WorkbenchSidebar data={herd} variant="sheet" request={{ target: "needs-you", seq: 1 }} onNavigate={onNavigate} />;
-    const router = createMemoryRouter([{ path: "/", element }, { path: "/pane/:paneId", element, loader: () => landed }]);
-    render(<RouterProvider router={router} />);
-    const row = screen.getByRole("link", { name: /^panel depo/ });
-    await userEvent.setup().click(row);
-    // A slow read leaves the sheet up with the row saying it is on its way, rather than nothing at all.
-    await waitFor(() => expect(row.querySelector("[data-pending]")).not.toBeNull());
-    expect(onNavigate).not.toHaveBeenCalled();
-    land();
-    await waitFor(() => expect(onNavigate).toHaveBeenCalledOnce());
-    expect(router.state.location.pathname).toBe("/pane/depo");
   });
 
   it("names the host and what it holds in the footer, beside Settings", () => {
