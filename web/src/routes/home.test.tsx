@@ -637,7 +637,18 @@ describe("an outage", () => {
     const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
     const box = main.getByRole("textbox", { name: "Task for a new agent" });
     expect(box).toBeDisabled();
-    expect(box).toHaveAttribute("placeholder", "Use an authorised device to start an agent");
+    expect(box).toHaveAttribute("placeholder", "Read-only — device not authorised");
+  });
+
+  // Safari sizes the box by its value, not its placeholder, so a placeholder that wraps at 375 px is
+  // cut in half. The Send to chip already names the project, so the box only says what to do.
+  it("keeps the coordinator's placeholder short, whatever the project is called, locked or not", async () => {
+    const long = { ...projectData, projects: projectData.projects!.map((p) => ({ ...p, name: "AWAM Comercio SaaS: plataforma mayorista multi-sucursal" })) };
+    const { update, main } = await setup(long);
+    const box = main.getByRole("textbox", { name: /^Message for AWAM/ });
+    expect(box).toHaveAttribute("placeholder", "Ask the coordinator…");
+    await update({ ...long, bridge: "disconnected" });
+    expect(box).toHaveAttribute("placeholder", "Reconnect to ask the coordinator");
   });
 
   it("tells each Needs you card the real reason answers are paused", async () => {
