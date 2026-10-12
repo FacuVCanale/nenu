@@ -96,4 +96,12 @@ describe("notification interaction lifecycle", () => {
     act(() => vi.advanceTimersByTime(2500));
     expect(result.current).toBeNull();
   });
+
+  it("carries where a notice leads, so the toast can open it", () => {
+    const { result } = renderHook(() => useStatus());
+    act(() => setStatus("Working Claude needs your input", "warn", undefined, { to: "/pane/w1%3Ap1" }));
+    expect(result.current?.to).toBe("/pane/w1%3Ap1");
+    act(() => setStatus("Copied", "success"));
+    expect(result.current).not.toHaveProperty("to");
+  });
 });

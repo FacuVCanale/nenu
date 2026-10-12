@@ -41,6 +41,15 @@ export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: Conne
   return <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />;
 }
 
+/** What the boot splash and the banner say when the bridge has never answered on this page. */
+export function cantReachNenu(host = window.location.host): string {
+  return `Can’t reach Nenu at ${host}`;
+}
+
+// A neutral row in the flow, never over content: up to two lines so the fact the operator needs (what
+// is down, and since when) is never cut, and every control 44px on touch.
+const BANNER = "flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-muted py-1 pl-4 pr-2";
+
 // A refusal is not an outage, so it gets its own surface ahead of the connection state machine: no
 // probe, no reconnect spinner, no escalation clock. The copy stays deliberately non-specific about
 // the cause. The flag covers 401 and 403 alike, and a 403 can equally mean "this device is not
@@ -57,41 +66,19 @@ export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: Conne
 // an already-signed-in device recovers without leaving the app.
 function AuthErrorBanner() {
   return (
-    <div className="grid shrink-0 grid-rows-[1fr] overflow-hidden opacity-100">
-      <div className="min-h-0 overflow-hidden">
-        <div
-          role="alert"
-          aria-live="polite"
-          className={cn(
-            "flex items-center gap-2 border-b px-4 py-1 text-xs",
-            "border-status-blocked/40 bg-status-blocked/15",
-          )}
-        >
-          <TriangleAlert className={cn("size-3.5 shrink-0", "text-status-blocked")} />
-          <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-            Access refused. This is not a connection problem.
-          </span>
-          <a
-            href={PROXY_AUTH_PATH}
-            className={cn(
-              buttonVariants({ size: "sm" }),
-              "h-6 gap-1 px-2 text-xs no-underline",
-            )}
-          >
-            <LogIn className="size-3.5" />
-            Sign in
-          </a>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Reload"
-            className="size-6 text-muted-foreground"
-            onClick={() => window.location.reload()}
-          >
-            <RefreshCw className="size-3.5" />
-          </Button>
-        </div>
-      </div>
+    <div role="alert" aria-live="polite" className={BANNER}>
+      <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+      <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
+        <span className="font-medium text-foreground">Access refused.</span> Sign in again. Not a network problem.
+      </p>
+      <a href={PROXY_AUTH_PATH} className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}>
+        <LogIn aria-hidden="true" className="size-4" />
+        Sign in
+      </a>
+      <Button size="icon" variant="ghost" aria-label="Reload" className="-mr-2 shrink-0 text-muted-foreground"
+        onClick={() => window.location.reload()}>
+        <RefreshCw aria-hidden="true" className="size-4" />
+      </Button>
     </div>
   );
 }
@@ -113,17 +100,25 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
   }, [lost, connecting]);
 
   if (!visible) return null;
-  const copy = bridge === "disconnected" ? "Herdr is unavailable. Retrying…" : "Connection is unstable. Retrying…";
+  // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,
+  // so there is nothing cached to promise and the host is the useful fact. Once reads answer again the
+  // notice waits out the quiet interval saying only what is still true, never "Connected".
+  const headline = !connecting ? "Connection is unstable."
+    : bridge === "disconnected" ? "Herdr is unavailable."
+    : bridge === undefined ? `${cantReachNenu()}.` : "Can’t reach Nenu.";
   async function retry() {
     setRetrying(true);
     try { await revalidator.revalidate(); } finally { setRetrying(false); }
   }
   return (
-    <div role="status" aria-live="polite" className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-muted px-3 text-xs text-muted-foreground">
-      <WifiOff aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{copy}{lastSeenAt === undefined ? "" : ` Last synced ${clockTime(lastSeenAt)}.`}</span>
-      <Button variant="ghost" size="sm" className="min-h-11 shrink-0 gap-1 px-2" onClick={() => void retry()} disabled={retrying}>
-        {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+    <div role="status" aria-live="polite" className={BANNER}>
+      <WifiOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+      <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
+        <span className="font-medium text-foreground">{headline}</span>{connecting && " Retrying…"}
+        {lastSeenAt !== undefined && <> <span className="whitespace-nowrap">Last synced {clockTime(lastSeenAt)}.</span></>}
+      </p>
+      <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
+        {retrying ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <RotateCw aria-hidden="true" className="size-4" />}
         Retry
       </Button>
     </div>
