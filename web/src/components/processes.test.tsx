@@ -64,7 +64,7 @@ const chip = () => screen.findByRole("button", { name: /^Processes/ });
 it("shows one chip that names who waits on you, and lists waiting, then running, then a folded Done", async () => {
   const { user } = renderChat();
   const button = await chip();
-  expect(button).toHaveTextContent("1 waiting on you");
+  expect(button).toHaveTextContent("Background · 1 waiting on you");
   expect(button).toHaveAccessibleName(/1 waiting on you, \d+ running/);
   await user.click(button);
   const sheet = screen.getByRole("dialog", { name: "Processes" });
@@ -86,7 +86,8 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   subagentList = subagents([{ ...explorer, status: "completed" }]);
   const { user } = renderChat();
   const button = await chip();
-  expect(button).toHaveTextContent(/^\d+ done$/);
+  // The chip names its subject: a bare "3 done" did not say done what.
+  expect(button).toHaveTextContent(/^Background · \d+ done$/);
   expect(button).not.toHaveTextContent(/running|waiting/);
   await user.click(button);
   const sheet = screen.getByRole("dialog", { name: "Processes" });

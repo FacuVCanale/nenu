@@ -27,3 +27,11 @@ it("compacts only on the explicit native action and closes the context sheet", a
   expect(compact).toHaveBeenCalledOnce();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+it("says the percentage beside the composer row's ring, and draws nothing when no one reported it", () => {
+  const { rerender } = render(<WorkbenchContextMeter compact usedTokens={26_000} maxTokens={200_000} />);
+  expect(screen.getByRole("button", { name: "Context window 13% used" })).toHaveTextContent("13%");
+  // A hollow ring with no number said nothing; an unknown context is simply not shown.
+  rerender(<WorkbenchContextMeter compact usedTokens={null} maxTokens={null} />);
+  expect(screen.queryByRole("button", { name: /^Context/ })).not.toBeInTheDocument();
+});

@@ -94,7 +94,7 @@ it("puts the context ring beside the model in the composer row and keeps one con
   const onCompact = vi.fn();
   const { unmount } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} onCompact={onCompact} telemetry={telemetry} />);
   const ring = screen.getByRole("button", { name: "Context window 40% used" });
-  expect(ring).not.toHaveTextContent("40%");
+  expect(ring).toHaveTextContent("40%");
   await userEvent.click(ring);
   await userEvent.click(screen.getByRole("button", { name: "Compact context" }));
   expect(onCompact).toHaveBeenCalledOnce();
