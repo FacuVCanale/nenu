@@ -76,7 +76,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
       ? <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <label htmlFor={listId} className="text-footnote text-muted-foreground">Running in this folder</label>
-          <button type="button" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()} className={cn(quiet, "-mr-2 px-2 disabled:text-disabled-foreground")}>Search again</button>
+          <button type="button" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()} className={cn(quiet, "-mr-2 px-2 disabled:not-aria-busy:text-disabled-foreground")}>Search again</button>
         </div>
         <select id={listId} aria-label="Conversation to connect" className={field} value={id} onChange={(event) => setId(event.target.value)}>
           <option value="">Choose a conversation</option>
