@@ -73,9 +73,10 @@ export function TabStrip({
               focused={t.focused}
               status={status && TRIAGE_STATUS[status]}
               onClick={() => onSelect(t.tabId)}
-              // Long-press, or a tap on the open tab, opens its actions when the parent wired them.
+              // Long-press, or a tap on the open tab, opens its actions when the parent wired them. A
+              // read-only device's sheet holds only a note, so the open tab doesn't offer it.
               onLongPress={actionsEnabled ? () => setSheetTab(t) : undefined}
-              onTapActive={actionsEnabled ? () => setSheetTab(t) : undefined}
+              onTapActive={actionsEnabled && !readOnly ? () => setSheetTab(t) : undefined}
             />
           );
         })}

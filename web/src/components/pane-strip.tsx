@@ -61,8 +61,9 @@ export function PaneStrip({
             icon={p.kind === "shell" ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" /> : undefined}
             onClick={() => onSelect(p.paneId)}
             onLongPress={actionsEnabled ? () => setSheetPane(p) : undefined}
-            // A tap on the open pill would be a dead re-navigate; it opens the same sheet instead.
-            onTapActive={actionsEnabled ? () => setSheetPane(p) : undefined}
+            // A tap on the open pill would be a dead re-navigate; it opens the same sheet instead,
+            // except on a read-only device, whose sheet holds only a note.
+            onTapActive={actionsEnabled && !readOnly ? () => setSheetPane(p) : undefined}
           />
         ))}
       </ChipStrip>
