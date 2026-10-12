@@ -557,6 +557,7 @@ describe("a first load that never reached Nenu", () => {
   it("says it is connecting while it retries quietly, with nothing to start", async () => {
     const { main } = await setup(never);
     expect(main.getByRole("heading", { name: "Connecting to Nenu…" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
     expect(main.queryByRole("textbox")).not.toBeInTheDocument();
     expect(main.queryByText(/snapshot/)).not.toBeInTheDocument();
   });
@@ -565,7 +566,8 @@ describe("a first load that never reached Nenu", () => {
     sustained();
     const { main } = await setup(never);
     expect(main.getByRole("heading", { name: `Can't reach Nenu at ${location.host}` })).toBeInTheDocument();
-    expect(main.getByText("Nenu keeps trying. Check Tailscale on this device.")).toBeVisible();
+    expect(main.getByText("Nenu keeps trying. Check this device's network or VPN.")).toBeVisible();
+    expect(screen.getByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
     expect(main.getByRole("button", { name: "Retry" })).toBeEnabled();
   });
 
