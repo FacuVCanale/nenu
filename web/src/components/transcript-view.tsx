@@ -51,7 +51,7 @@ function ThinkingPart({ part, query, focused = false }: { part: Extract<Transcri
       className="flex min-h-11 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground md:min-h-7">
       <ChevronRight aria-hidden="true" className={`size-3.5 ${open ? "rotate-90" : ""}`} />Thinking{part.truncated ? " · truncated" : ""}
     </button>
-    {open && <div className="pb-2 pl-5 text-xs text-muted-foreground"><MarkdownText text={part.text} query={query} />
+    {open && <div className="pb-2 pl-5 text-xs text-muted-foreground select-text"><MarkdownText text={part.text} query={query} />
       {part.truncated && <p>… truncated</p>}</div>}
   </div>;
 }
@@ -114,7 +114,7 @@ function Turn({
   // recap or an injected note names files relative to folders of its own, it does not deliver them.
   if (entry.role === "summary" || entry.role === "note") {
     return (
-      <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
+      <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 select-text">
         <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
           <Info className="size-3" />
           {entry.role === "summary" ? "Context compacted" : "System"}
@@ -134,7 +134,7 @@ function Turn({
   if (entry.role === "user") {
     return (
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
-        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
+        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere] select-text">
           {entry.parts.map((part, i) => (
             <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
           ))}
@@ -145,7 +145,7 @@ function Turn({
     );
   }
   return (
-    <div data-speaker="assistant" className="space-y-1.5 px-0.5" title={time || undefined}>
+    <div data-speaker="assistant" className="space-y-1.5 px-0.5 select-text" title={time || undefined}>
       {entry.parts.map((part, i) => (
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
@@ -163,7 +163,7 @@ function ActivityLog({ entries, query, focusedUuid, active }: { entries: Transcr
       else blocks.push({ kind: "tools", entries: [entry] });
     } else blocks.push({ kind: "entry", entry });
   }
-  return <div className="space-y-1 pl-5 text-xs text-muted-foreground">
+  return <div className="space-y-1 pl-5 text-xs text-muted-foreground select-text">
     {blocks.map((block) => block.kind === "tools"
       ? <WorkLogTools key={block.entries[0]!.uuid} calls={block.entries.flatMap((entry) => entry.parts.flatMap((part, index) => part.kind === "tool" ? [{ id: `${entry.uuid}:${index}`, entryId: index === 0 ? entry.uuid : undefined, owner: entry.uuid, part }] : []))} query={query} focusedEntryId={focusedUuid} active={active} />
       : <div key={block.entry.uuid} data-turn={block.entry.uuid} className={focusedUuid === block.entry.uuid ? "rounded ring-2 ring-primary/60" : undefined}>

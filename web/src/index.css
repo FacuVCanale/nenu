@@ -236,6 +236,12 @@
     height: 100%;
     overflow: hidden;
   }
+  /* A control's label is not content: a long-press on it must not start a selection or the link callout. */
+  button, [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);

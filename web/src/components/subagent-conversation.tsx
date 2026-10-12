@@ -1,24 +1,61 @@
 import { useEffect, useState } from "react";
+import { ChevronLeft, MessageSquareShare } from "lucide-react";
 import { fetchSubagentHistory, isApiErrorStatus } from "@/lib/api";
 import { isLocked, useLocked } from "@/lib/idle";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { modelDisplayName } from "@/lib/model-display";
-import type { SubagentHistoryResponse } from "@/lib/types";
+import type { SubagentHistoryResponse, SubagentStatus, SubagentView } from "@/lib/types";
 import type { SubagentSelection } from "@/hooks/use-subagents";
 import { TranscriptView } from "./transcript-view";
 import { ChatMessageList } from "./ui/chat/chat-message-list";
 
-/** Child journals have no independent terminal input owner. Main's composer remains mounted. */
+type Harness = "claude" | "codex";
+
+/**
+ * Why there is no composer here, in the harness's words. Claude Code takes a subagent's messages only
+ * from its main chat (the TUI's own panel types into it; nothing outside the process can), so Main
+ * forwards them with SendMessage. Codex's app-server would take one on the sub-agent's thread, but
+ * Nenu does not send there yet.
+ */
+const WHY: Record<Harness, string> = {
+  claude: "Claude Code takes messages for a subagent only from its main chat, which forwards them with SendMessage.",
+  codex: "Nenu does not write to a Codex sub-agent directly yet. Its main chat forwards what you send it.",
+};
+
+/** The start of a message to Main that names the child and the tool that reaches it. */
+export function forwardDraft(harness: Harness, agent: Pick<SubagentView, "id" | "name">): string {
+  return harness === "codex"
+    ? `Send to sub-agent "${agent.name}" (${agent.id}) with send_input: `
+    : `Send to subagent "${agent.name}" (${agent.id}) with SendMessage: `;
+}
+
+/** A state worth naming beside the model; an unknown one says nothing. */
+const STATUS_WORD: Partial<Record<SubagentStatus, string>> = {
+  running: "running", waiting: "waiting on you", idle: "idle", completed: "done", failed: "failed",
+};
+const STATUS_TONE: Partial<Record<SubagentStatus, string>> = {
+  running: "text-status-working", waiting: "text-status-blocked", completed: "text-status-done", failed: "text-destructive",
+};
+
+/**
+ * A subagent's conversation in place of Main's. Only what it said can be selected; the bars around it
+ * are controls. Writing to it goes through Main (`onWrite` returns there with a draft addressed to it),
+ * and a device that cannot write gets the explanation without the button.
+ */
 export function SubagentConversation({
   paneId,
   session,
   selection,
+  harness = "claude",
   onMain,
+  onWrite,
 }: {
   paneId: string;
   session?: string;
   selection: SubagentSelection;
+  harness?: Harness;
   onMain: () => void;
+  onWrite?: (draft: string) => void;
 }) {
   const locked = useLocked();
   const [page, setPage] = useState<SubagentHistoryResponse | null>(null);
@@ -111,23 +148,28 @@ export function SubagentConversation({
   return (
     <section
       aria-label={`${child.name} conversation`}
-      className="flex min-h-0 flex-1 flex-col border-t border-border/40"
+      className="flex min-h-0 flex-1 flex-col border-t border-border/40 select-none"
     >
-      <div className="flex items-center gap-3 border-b border-border/40 px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-medium">{child.name}</h2>
-          <p className="text-xs text-muted-foreground">
-            Subagent{child.model ? ` · ${modelDisplayName(child.model)}` : ""}
-          </p>
-        </div>
+      <div className="flex min-h-12 items-center gap-1 border-b border-border/40 py-1 pr-4 pl-1 [-webkit-touch-callout:none]">
         <button
           type="button"
           onClick={onMain}
-          className="min-h-11 rounded-md px-3 text-xs hover:bg-muted"
+          aria-label="Back to Main"
+          className="flex min-h-11 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          Back to Main
+          <ChevronLeft aria-hidden className="size-5" />
+          Main
         </button>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-sm font-medium">{child.name}</h2>
+          <p className="truncate text-xs text-muted-foreground">
+            {harness === "codex" ? "Sub-agent" : "Subagent"}{child.model ? ` · ${modelDisplayName(child.model)}` : ""}
+            {STATUS_WORD[child.status] && <> · <span className={STATUS_TONE[child.status]}>{STATUS_WORD[child.status]}</span></>}
+          </p>
+        </div>
       </div>
+      {/* The list takes what the bars leave: at full height it pushed the footer out and the whole chat scrolled. */}
+      <div className="min-h-0 flex-1">
       <ChatMessageList dep={page} className="px-4 py-3">
         {failed && (
           <div
@@ -143,6 +185,11 @@ export function SubagentConversation({
             </button>
           </div>
         )}
+        {page?.truncated && (
+          <p className="pb-3 text-center text-xs text-muted-foreground">
+            Showing the most recent conversation entries.
+          </p>
+        )}
         {page ? (
           <TranscriptView entries={page.entries} />
         ) : (
@@ -152,15 +199,22 @@ export function SubagentConversation({
             </p>
           )
         )}
-        {page?.truncated && (
-          <p className="text-xs text-muted-foreground">
-            Showing the most recent conversation entries.
-          </p>
-        )}
       </ChatMessageList>
-      <p className="border-t border-border/40 px-4 py-3 text-xs text-muted-foreground">
-        Live conversation. Send instructions through Main.
-      </p>
+      </div>
+      <div className="workbench-composer flex flex-col gap-1.5 pt-2">
+        {onWrite && (
+          <button
+            type="button"
+            onClick={() => onWrite(forwardDraft(harness, child))}
+            aria-label={`Write to ${child.name} through Main`}
+            className="flex min-h-11 items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
+          >
+            <MessageSquareShare aria-hidden className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">Write to it through Main…</span>
+          </button>
+        )}
+        <p className="px-1 text-xs leading-snug text-muted-foreground">{WHY[harness]}</p>
+      </div>
     </section>
   );
 }
