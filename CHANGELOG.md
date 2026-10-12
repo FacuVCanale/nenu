@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-10-12
+
+### Changed
+- Native-feeling redesign across the app (#68, #70-#98): shared design tokens and primitives; phone screens with a native back button and bar title; tab and pane strips as single chips; one New flow from every entry; Home with a noun headline, compact Needs you rows and send-to-coordinator; the work turn reads as a timeline that says what it does now; chat prose at reading size with Wrap and Copy on code; dialog cards that say what is approved and why it is paused, menus and previews inside the card, 44 px controls; a one-box composer that leaves room for the keyboard and names why it is locked; composer docks with filled keys and chips, one row for the queue; history controls clear of the home indicator; Settings as a grouped list; full-screen file preview and a photo viewer with native gestures on the phone; notices, banners, 404, crash, boot and pause that never cover what they report.
+- The logo opens a side drawer from the top: Needs you, the 5 most recent chats, then folded Projects and Workspaces ordered by activity; a subagent's view is clean and offers writing to it through Main. (#69)
+
 ## [0.64.4] - 2026-10-12
 
 ### Fixed
