@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { isRouteErrorResponse, Outlet, useLoaderData, useLocation, useParams, useRouteError, useRouteLoaderData } from "react-router";
 import { Check, Copy, RotateCw, WifiOff } from "lucide-react";
 
@@ -172,6 +172,7 @@ export function RootError() {
 
 function Crash({ error }: { error: unknown }) {
   const [copied, setCopied] = useState(false);
+  const disclosure = useRef<HTMLDetailsElement>(null);
   const message = error instanceof Error ? error.message
     : isRouteErrorResponse(error) ? `${error.status} ${error.statusText}`.trim() : String(error ?? "Unknown error");
   // A V8 stack already starts with the message; print it once.
@@ -182,8 +183,10 @@ function Crash({ error }: { error: unknown }) {
     try {
       await navigator.clipboard.writeText(details);
       setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      setCopied(false);
+      // Blocked (plain HTTP, permission denied): show the trace so it can be selected by hand.
+      if (disclosure.current) disclosure.current.open = true;
     }
   }
   return (
@@ -207,8 +210,8 @@ function Crash({ error }: { error: unknown }) {
           {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy details"}
         </Button>
       </div>
-      <details className="mt-8 w-full max-w-md text-left">
-        <summary className="mx-auto w-fit cursor-pointer rounded-md px-2 py-1 text-footnote text-muted-foreground coarse:py-3">Technical details</summary>
+      <details ref={disclosure} className="mt-8 w-full max-w-md text-left">
+        <summary className="mx-auto w-fit cursor-pointer rounded-md px-2 py-1 text-footnote text-muted-foreground coarse:min-h-11 coarse:content-center">Technical details</summary>
         <pre className="mt-3 max-h-60 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-footnote whitespace-pre-wrap break-words text-muted-foreground">{details}</pre>
       </details>
     </main>
