@@ -23,14 +23,16 @@ export function isTextField(node: EventTarget | null): node is HTMLElement {
 const EDIT_SETTLE_MS = 500;
 
 /**
- * Whether a move up was the layout's, not the reader's. Editing a field can resize what sits beside a
- * list and back within one layout (replacing a selection empties the composer first): the list grows,
- * the browser clamps its scrollTop, the list shrinks back, and no ResizeObserver runs because nothing
+ * Whether a move up was the layout's, not the reader's. Editing a textarea can resize it and back
+ * within one layout (replacing a selection empties the composer first): the list beside it grows, the
+ * browser clamps its scrollTop, the list shrinks back, and no ResizeObserver runs because nothing
  * ended up a different size. Geometry alone can't tell that event from the reader scrolling up the
  * same distance. The reader moves a list with their own input on it (a wheel, a touch, a pointer, a
  * key outside a field), so a move up soon after an edit with none of that since is the layout's. Long
  * after an edit, a move up stays the reader's: a screen reader or the browser's find moves the list
- * without touching it.
+ * without touching it. Only a textarea counts: its height follows its text, while a one-line input
+ * (the mirror's Find, the History search) never resizes, and the jump to a match it starts is a move
+ * up the list has to make.
  */
 export function useEditShift(scrollRef: RefObject<HTMLElement | null>): () => boolean {
   const lastEdit = useRef(Number.NEGATIVE_INFINITY);
@@ -38,7 +40,9 @@ export function useEditShift(scrollRef: RefObject<HTMLElement | null>): () => bo
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const edit = () => { lastEdit.current = performance.now(); };
+    const edit = (event: Event) => {
+      if (event.target instanceof HTMLTextAreaElement) lastEdit.current = performance.now();
+    };
     const reader = () => { lastReader.current = performance.now(); };
     const key = (event: KeyboardEvent) => {
       if (!isTextField(event.target) && (event.target === document.body || el.contains(event.target as Node))) reader();
