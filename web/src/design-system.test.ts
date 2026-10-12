@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 
 import { META_COLOR } from "./hooks/use-theme";
 import { TYPE_SCALE } from "./lib/utils";
+import { cssRules, declarations } from "./test/css-rules";
 
 // The design tokens' contracts that fail silently: a text tone mixed with transparent (it measured
 // 3.16:1 in light), a browser chrome colour that drifts from the page, type sizes that ignore the
@@ -22,9 +23,11 @@ function filesEndingIn(dir: string, ext: string): string[] {
 }
 const stylesheets = (dir: string) => filesEndingIn(dir, ".css");
 
+const root = declarations(indexCss, ":root");
+
 /** `--name: light-dark(<light>, <dark>)` from index.css, as the two hex halves. */
 function themed(name: string): [string, string] {
-  const match = indexCss.match(new RegExp(`--${name}:\\s*light-dark\\((#[0-9a-f]{3,6}),\\s*(#[0-9a-f]{3,6})\\)`, "i"));
+  const match = root[`--${name}`]?.match(/^light-dark\((#[0-9a-f]{3,6}), (#[0-9a-f]{3,6})\)$/i);
   if (!match) throw new Error(`--${name} is not a light-dark() pair of hex colours`);
   return [match[1]!.toLowerCase(), match[2]!.toLowerCase()];
 }
@@ -86,16 +89,17 @@ describe("chrome", () => {
   });
 
   it("gives every header the status bar's surface, mixed from the page background", () => {
-    expect(indexCss).toMatch(/--chrome:\s*color-mix\(in oklab, var\(--background\)/);
-    expect(read("workbench.css")).toMatch(/^\.workbench-app-header \{[^}]*background: var\(--chrome\)/m);
+    expect(root["--chrome"]).toMatch(/^color-mix\(in oklab, var\(--background\) /);
+    expect(declarations(read("workbench.css"), ".workbench-app-header").background).toBe("var(--chrome)");
   });
 
   it("starts the loading strip under the status bar, not behind it", () => {
-    expect(indexCss).toMatch(/\.busy-bar \{[^}]*top: calc\(var\(--app-viewport-top, 0px\) \+ env\(safe-area-inset-top, 0px\)\)/);
+    expect(declarations(indexCss, ".busy-bar").top).toBe("calc(var(--app-viewport-top, 0px) + env(safe-area-inset-top, 0px))");
   });
 
   it("keeps one focus ring: a 2px outline 2px out", () => {
-    expect(indexCss).toMatch(/:focus-visible \{\s*outline: 2px solid var\(--ring\);\s*outline-offset: 2px;/);
+    const focus = cssRules(indexCss).find((rule) => rule.atRules.join() === "@layer base" && rule.selectors.some((s) => s.endsWith(":focus-visible") && s.includes("button")));
+    expect(focus?.decls).toMatchObject({ outline: "2px solid var(--ring)", "outline-offset": "2px" });
   });
 
   it("never lets a control that styles its own focus drop the ring without drawing one", () => {
