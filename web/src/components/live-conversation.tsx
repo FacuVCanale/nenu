@@ -442,7 +442,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const empty = entries.length === 0 && localSends.length === 0;
   // The skeleton and the turns sit at the list's foot, where the tail will land.
   const skeleton = empty && loading;
-  // A conversation the operator can link: one card, centred, instead of a sentence over a form.
+  // A conversation the operator can link: one card, centred, instead of a sentence over a form. While a
+  // question waits in the thread the card folds to one line at the foot, so the question is the one card.
   const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
@@ -457,7 +458,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       )}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && "flex min-h-full flex-col justify-center")}>
+          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && cn("flex min-h-full flex-col", waiting ? "justify-end" : "justify-center"))}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
@@ -478,13 +479,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
               {footer}
             </> : linkable ? <>
-              <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
+              {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
+                <MessageSquare aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />No conversation linked
+              </p> : <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
                 <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
                 <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
                 <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
                 {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
-              </section>
+              </section>}
               {footer}
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               <MessageSquare className="size-5" />
