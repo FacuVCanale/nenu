@@ -79,7 +79,7 @@ export function PrBar({ project, thread, session, readOnly, onChanged }: {
       {pr.state !== "open" && <span className="shrink-0 text-footnote text-muted-foreground">{pr.state}</span>}
       <span className="hidden min-w-0 flex-1 truncate font-mono text-code text-muted-foreground sm:block">{thread.branch}</span>
       <span className="flex-1 sm:hidden" />
-      {pr.diff && <span className="shrink-0 font-mono text-code tabular-nums">
+      {pr.diff && <span className="shrink-0 font-mono text-caption tabular-nums">
         <span className="text-status-done">+{pr.diff.additions}</span> <span className="text-status-blocked">−{pr.diff.deletions}</span>
       </span>}
       <button ref={anchor} type="button" aria-expanded={open} aria-label={`${ciLabel(checks)}, checks`} onClick={() => setOpen(!open)}
