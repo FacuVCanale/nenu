@@ -531,6 +531,43 @@ describe("Composer — a refused send is said beside the draft", () => {
     expect(sends).toHaveLength(1);
   });
 
+  // A pre-flight refusal arms Type anyway, and the notice points at it. A Try again refused the same
+  // way must leave it armed, not take the second refusal as the confirming tap.
+  it("keeps Type anyway armed when Try again is refused the same way", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend((body) => refusal(body, "preflight", NO_BOX, false, "not_ready"));
+    renderComposerWithStatus();
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "please continue");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/tap Type anyway/i));
+    await user.click(within(sendNotice()).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(sends).toHaveLength(2));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i));
+    expect(sends[1]!.force).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Type anyway?" })).toBeVisible();
+    expect(sendNotice()).toHaveTextContent(/tap Type anyway/i);
+  });
+
+  // The override lapses after 10 s; the notice stays until the next edit, so it must not keep
+  // pointing at a button that is no longer there.
+  it("stops naming Type anyway once the override has lapsed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      serveSend((body) => refusal(body, "preflight", NO_BOX, false, "not_ready"));
+      renderComposerWithStatus();
+      await user.type(screen.getByPlaceholderText(/type a reply/i), "please continue");
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(sendNotice()).toHaveTextContent(/tap Type anyway/i));
+      act(() => vi.advanceTimersByTime(10_500));
+      expect(screen.queryByRole("button", { name: "Type anyway?" })).not.toBeInTheDocument();
+      expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i);
+      expect(sendNotice()).not.toHaveTextContent(/Type anyway/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Take over, a card's answer, a bubble's Edit and a picked command all change the draft without
   // the textarea's own change event. The notice was about the draft it refused, so it goes too.
   it("goes away when the draft changes from outside the box, so Try again never sends what it did not refuse", async () => {
