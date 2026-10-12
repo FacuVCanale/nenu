@@ -835,6 +835,38 @@ describe("loaders — a pane opens before its read lands", () => {
     expect(opened).toMatchObject({ pending: true, text: "", error: false, revision: 0 });
   });
 
+  // Quick taps on a slow link left one read per pane running to its 10 s timeout. A read the reader
+  // walked away from is dropped; the pane they are on keeps its own.
+  const paneReads = (fetchSpy: { mock: { calls: Parameters<typeof fetch>[] } }) => fetchSpy.mock.calls
+    .filter(([input]) => /\/api\/pane\/[^/?]+(\?|$)/.test(String(input)))
+    .map(([input, init]) => ({ pane: decodeURIComponent(String(input).split("/api/pane/")[1]!.split("?")[0]!), signal: init?.signal }));
+  const open = async (paneId: string) => {
+    const { paneLoader } = await import("./loaders");
+    return paneLoader({ params: { paneId }, request: new Request(`http://localhost/pane/${encodeURIComponent(paneId)}`) });
+  };
+
+  it("drops the read of a pane the reader left for another, and keeps the one they are on", async () => {
+    slowPane("fresh text", slowRead);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await open("w1:p1");
+    await open("w2:p1");
+    const reads = paneReads(fetchSpy);
+    expect(reads.map((read) => read.pane)).toEqual(["w1:p1", "w2:p1"]);
+    expect(reads[0]!.signal?.aborted).toBe(true);
+    expect(reads[1]!.signal?.aborted).toBe(false);
+  });
+
+  it("drops it when the reader leaves the panes altogether, but not for the pane's own history", async () => {
+    const { rootLoader } = await import("./loaders");
+    slowPane("fresh text", slowRead);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await open("w1:p1");
+    await rootLoader({ request: new Request("http://localhost/pane/w1%3Ap1/history") });
+    expect(paneReads(fetchSpy)[0]!.signal?.aborted).toBe(false);
+    await rootLoader({ request: new Request("http://localhost/") });
+    expect(paneReads(fetchSpy)[0]!.signal?.aborted).toBe(true);
+  });
+
   it("keeps a quick read on the navigation itself, with nothing pending", async () => {
     const { paneLoader } = await import("./loaders");
     const data = await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
