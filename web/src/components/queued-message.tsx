@@ -24,10 +24,12 @@ export interface QueuedAction {
   armed?: boolean;
 }
 
+// Inline, so the mark flows with the words of the status line it leads.
+const MARK = "mr-0.5 inline-block size-3.5 align-[-2px]";
 const TONE_ICON: Record<Exclude<QueuedTone, "waiting">, ReactNode> = {
-  busy: <Loader2 aria-hidden="true" className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />,
-  done: <Check aria-hidden="true" className="size-3.5 shrink-0" />,
-  problem: <AlertCircle aria-hidden="true" className="size-3.5 shrink-0" />,
+  busy: <Loader2 aria-hidden="true" className={cn(MARK, "animate-spin motion-reduce:animate-none")} />,
+  done: <Check aria-hidden="true" className={MARK} />,
+  problem: <AlertCircle aria-hidden="true" className={MARK} />,
 };
 
 /**
@@ -92,25 +94,25 @@ export function QueuedMessage({
         )}
       </div>
       {/* The words take the line while they leave them 15rem; past that (a long failure next to Open
-          Terminal on a phone) the buttons wrap under them instead of squeezing them into a column. */}
+          Terminal on a phone) the buttons wrap under them instead of squeezing them into a column.
+          The line is one right-aligned run of text, its mark included, so it ends under the bubble's
+          edge and its mark leads its words whether it fits one line or wraps to two. */}
       <div className="flex w-full flex-wrap items-center justify-end gap-x-1">
         <p
           role="status"
           aria-live="polite"
-          className={cn("flex min-w-0 grow basis-60 items-center justify-end gap-1.5 px-1 py-1 text-footnote text-muted-foreground", tone === "problem" && "text-destructive")}
+          className={cn("min-w-0 grow basis-60 px-1 py-1 text-right text-pretty text-footnote text-muted-foreground", tone === "problem" && "text-destructive")}
         >
           {queued ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-micro text-foreground">
+            <span className="mr-0.5 inline-flex items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 align-middle text-micro text-foreground">
               <Clock aria-hidden="true" className="size-3" />
               Queued
             </span>
           ) : (
             TONE_ICON[tone]
           )}{" "}
-          <span className="min-w-0">
-            {label}
-            {device ? <> · from {device}</> : null}
-          </span>
+          {label}
+          {device ? <> · from {device}</> : null}
         </p>
         {remedies.map(({ id, label: text, icon: Icon, run, disabled, name, armed }) => (
           <button
