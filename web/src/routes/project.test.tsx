@@ -149,6 +149,15 @@ describe("a wide screen beside the project panel", () => {
     expect(within(screen.getByRole("region", { name: "Threads" })).getByRole("article", { name: "Build" })).toBeInTheDocument();
   });
 
+  it("lists a thread's siblings once: the panel, not chips above the chat as well", async () => {
+    const { user } = setup("/pane/worker", home([pane("coord"), pane("worker"), pane("docs")]));
+    const panel = within(await screen.findByRole("complementary", { name: "Project" }));
+    expect(panel.getByRole("button", { name: /^Docs/ })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Hide project panel" }));
+    expect(within(screen.getByRole("navigation", { name: "Threads" })).getByRole("button", { name: /Docs/ })).toBeInTheDocument();
+  });
+
   it("merges from the panel's PRs, only after confirming", async () => {
     let posted: unknown;
     server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
