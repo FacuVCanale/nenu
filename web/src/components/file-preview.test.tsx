@@ -5,6 +5,9 @@ import { HTML_VERSION_POLL_MS } from "./html-viewer";
 import { MarkdownText } from "./markdown-text";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { fetchArtifactMetadata, fetchPaneFile, PaneFileError } from "@/lib/api";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { declarations } from "@/test/css-rules";
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn(), fetchArtifactMetadata: vi.fn() }));
 vi.mock("./pdf-preview", () => ({ default: () => <div>PDF canvas</div> }));
@@ -375,6 +378,14 @@ describe("image viewer", () => {
     tap(500, 300, "mouse"); tap(500, 300, "mouse");
     expect(zoom()).toBe(2.5);
     expect(close).not.toHaveBeenCalled();
+  });
+
+  // The build resolves every light-dark() token once, at :root, so a color-scheme on the viewer cannot
+  // flip them: in the light theme its bars read #27272a on black. Its text takes a fixed colour.
+  it("keeps the viewer's own text off the theme tokens, which follow the page and not the black", () => {
+    const css = readFileSync(resolve(import.meta.dirname, "file-preview.css"), "utf8");
+    expect(declarations(css, ".file-preview-panel--image").color).not.toMatch(/var\(--/);
+    expect(declarations(css, ".image-viewer-error > *").color).toBe("var(--card-foreground)");
   });
 
   it("closes on a click beside the picture on a desk", async () => {
