@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { cn } from "@/lib/utils";
 
 // The one shared visual language for a dialog: the card every dialog is drawn as (the bridge's
@@ -68,10 +69,10 @@ export function optionSurface(tone: OptionTone): string {
 
 /** The card's one commit: an ink fill, full width (direction.md: one primary per surface). */
 export const PRIMARY_ACTION =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-3.5 text-base font-medium text-background transition-colors active:scale-[0.99] disabled:bg-muted disabled:text-muted-foreground";
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-3.5 py-2.5 text-center text-base font-medium text-background transition-colors active:scale-[0.99] disabled:bg-muted disabled:text-muted-foreground";
 /** A second key the screen names that commits too, beside the primary but never as loud. */
 export const NEUTRAL_ACTION =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-3.5 text-base font-medium text-foreground transition-colors active:scale-[0.99] disabled:opacity-60";
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-3.5 py-2.5 text-center text-base font-medium text-foreground transition-colors active:scale-[0.99] disabled:opacity-60";
 /** An escape or a utility under the card (Cancel, Chat about this, Add a note…): plain text, neutral. */
 export const SECONDARY_ACTION =
   "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";
@@ -111,6 +112,17 @@ export function OptionGroupCaption({ children }: { children: ReactNode }) {
   );
 }
 
+/** An option's title, with the agent's "(Recommended)" suffix drawn as the badge every card uses. */
+export function OptionLabel({ label }: { label: string }) {
+  const { text, recommended } = recommendedLabel(label);
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span className="min-w-0 break-words text-base leading-5 font-medium text-foreground">{text}</span>
+      {recommended && <RecommendedBadge />}
+    </span>
+  );
+}
+
 /** A full option row: label + optional description, and a trailing slot (spinner or a state mark).
  *  Shared by prompt-select and wizard answers, which are structurally identical. */
 export function OptionButton({
@@ -122,7 +134,7 @@ export function OptionButton({
   onClick,
 }: {
   tone?: OptionTone;
-  label: ReactNode;
+  label: string;
   description?: ReactNode;
   trailing?: ReactNode;
   disabled?: boolean;
@@ -131,7 +143,7 @@ export function OptionButton({
   return (
     <button type="button" disabled={disabled} onClick={onClick} className={optionSurface(tone)}>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="break-words text-base leading-5 font-medium text-foreground">{label}</span>
+        <OptionLabel label={label} />
         {description ? (
           <span className="break-words text-[13px] leading-[18px] text-muted-foreground">{description}</span>
         ) : null}

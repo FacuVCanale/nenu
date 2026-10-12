@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { PreviewOption, PreviewSelectModel } from "@/lib/blocks";
 import {
   DialogCard,
+  OptionLabel,
   optionSurface,
   PRIMARY_ACTION,
   QuestionHeading,
@@ -14,6 +15,7 @@ import {
   SecondaryActions,
 } from "@/components/option-button";
 import { NOTE_MAX_LENGTH } from "@/lib/preview-action";
+import { recommendedLabel } from "@/components/recommended-badge";
 import { WIZARD_BACK_KEYS, WIZARD_NEXT_KEYS } from "@/lib/harness/wizard-model";
 
 /** One tap's intent, resolved to keystrokes by the injected handler (preview-action.ts). */
@@ -75,6 +77,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
 
   const wizard = preview.steps !== null;
   const pointed = preview.options.find((o) => o.pointed);
+  const pointedName = pointed && recommendedLabel(pointed.label).text;
   const busyIcon = (
     <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
   );
@@ -116,8 +119,8 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
               )}>
                 {option.pointed && <span className="size-2.5 rounded-full bg-primary" />}
               </span>
-              <span className="min-w-0 flex-1 break-words text-base leading-5 font-medium text-foreground">
-                {option.label}
+              <span className="min-w-0 flex-1">
+                <OptionLabel label={option.label} />
               </span>
               {busy ? busyIcon : option.chosen ? (
                 <Check className="size-4 shrink-0 text-primary" aria-label="Current answer" />
@@ -131,7 +134,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
       {preview.preview.length > 0 && (
         <div role="group" aria-labelledby={captionId} className="flex min-w-0 flex-col gap-1.5">
           <p id={captionId} className="text-[13px] leading-[18px] text-muted-foreground">
-            {pointed ? `Preview of ${pointed.label}` : "Preview"}
+            {pointedName ? `Preview of ${pointedName}` : "Preview"}
           </p>
           <PreviewContent lines={preview.preview} />
         </div>
@@ -213,7 +216,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
           className={PRIMARY_ACTION}
         >
           {sending === "choose" ? busyIcon : null}
-          Choose {pointed.label}
+          Choose {pointedName}
         </button>
       )}
 

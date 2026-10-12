@@ -6,6 +6,7 @@ import type { MultiSelectModel } from "@/lib/blocks";
 import type { MultiSelectIntent } from "@/lib/multi-select-action";
 import {
   DialogCard,
+  OptionLabel,
   optionSurface,
   PRIMARY_ACTION,
   QuestionHeading,
@@ -112,9 +113,7 @@ function CheckboxPhase({
                 {option.checked ? <Check className="size-3.5" /> : null}
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-base leading-5 font-medium text-foreground">
-                  {option.label}
-                </span>
+                <OptionLabel label={option.label} />
                 {option.description ? (
                   <span className="text-[13px] leading-[18px] text-muted-foreground">
                     {option.description}

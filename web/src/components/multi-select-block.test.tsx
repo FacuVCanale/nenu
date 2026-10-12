@@ -21,6 +21,7 @@ function fixtureModel(name: string): MultiSelectModel {
 describe("MultiSelectBlock — checkbox screen", () => {
   it("draws an option's (Recommended) suffix as the badge, not as text", () => {
     const model = fixtureModel("claude--select-multiselect-checked.txt");
+    if (model.phase !== "checkbox") throw new Error("the fixture is a checkbox screen");
     const recommended = { ...model, options: model.options.map((o, i) => (i === 0 ? { ...o, label: `${o.label} (Recommended)` } : o)) };
     render(<MultiSelectBlock multi={recommended} onAction={vi.fn()} />);
     const row = screen.getByRole("checkbox", { name: /^Cheese/ });
