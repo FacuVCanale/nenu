@@ -20,6 +20,29 @@ describe("useInteractions", () => {
     expect(result.current.receipts).toMatchObject([{ paneId: "w1:p1", label: "Apple" }]);
   });
 
+  it("names what an answer did in its receipt: the command approved, the answer chosen", async () => {
+    const bash: Interaction = {
+      ...card, kind: "permission", family: "permission", question: "Do you want to proceed?",
+      subject: { tool: "Bash", command: "echo hi > hello.txt" },
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [bash, { ...card, paneId: "w1:p2" }] })));
+    const { result } = renderHook(() => useInteractions());
+    await waitFor(() => expect(result.current.interactions).toHaveLength(2));
+    await act(async () => { await result.current.answer(bash, bash.options[0]!); });
+    await act(async () => { await result.current.answer({ ...card, paneId: "w1:p2" }, { index: 0, label: "Apple (Recommended)", role: "neutral" }); });
+    expect(result.current.receipts.map((r) => r.summary)).toEqual(["Approved · echo hi > hello.txt", "Answered · Apple"]);
+  });
+
+  it("leaves a wizard's Back and Next without a receipt: the dialog is still there", async () => {
+    const wizard: Interaction = { ...card, kind: "wizard", options: [...card.options, { index: 2, label: "Next", role: "nav" }] };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [wizard] })));
+    const { result } = renderHook(() => useInteractions());
+    await waitFor(() => expect(result.current.interactions).toHaveLength(1));
+    await act(async () => { await result.current.answer(wizard, wizard.options[2]!); });
+    expect(result.current.receipts).toEqual([]);
+  });
+
   it("leaves a multi-select toggle without a receipt", async () => {
     const multi: Interaction = { ...card, kind: "multi-select", options: [{ index: 0, label: "Cheese", role: "neutral", checked: false }] };
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [multi] })));

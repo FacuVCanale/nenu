@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { AnswerOutcome, Interaction } from "@/lib/types";
-import { QuestionCard } from "./question-card";
+import { lockReasonOf, QuestionCard } from "./question-card";
 
 // Shapes as bridge/interactions.ts serves them for the fixture corpus (claude--permission-bash,
 // claude--plan-approval, claude--v2285-ask-question, claude--select-multiselect-checked).
@@ -203,26 +203,34 @@ describe("QuestionCard", () => {
     expect(screen.getByRole("button", { name: "Open" })).toBeVisible();
   });
 
-  it("asks to confirm a persistent option and sends it with confirm on the second tap", async () => {
+  it("asks to confirm a persistent option in place, keeping its label, and sends confirm on the second tap", async () => {
     const { onAnswer, user } = setup({ interaction: permission });
     await user.click(screen.getByRole("button", { name: /don’t ask again/ }));
     expect(onAnswer).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: /Tap again to confirm/ }));
+    const armed = screen.getByRole("button", { name: /^Confirm/ });
+    expect(armed).toHaveTextContent("Yes, and don’t ask again for: mkfifo fixture-fifo *");
+    expect(armed).toHaveTextContent("Applies to future prompts");
+    expect(armed).not.toHaveTextContent(/Tap again/);
+    await user.click(armed);
     expect(onAnswer).toHaveBeenCalledWith(permission.options[1], { confirm: true });
   });
 
-  it("locks every control while someone types in the dialog", () => {
-    setup({ interaction: { ...plan, typing: true } });
-    expect(screen.getByText(/Someone is typing in this dialog/)).toBeVisible();
-    for (const name of [/auto mode/, /manually approve/, /Ultraplan/, /Reply…/]) {
-      expect(screen.getByRole("button", { name })).toBeDisabled();
+  it("while the terminal's text box has focus, says so instead of offering answers, and opens the terminal", async () => {
+    const { onOpen, user } = setup({ interaction: { ...plan, typing: true } });
+    expect(screen.getByText("The terminal's text box has focus")).toBeVisible();
+    expect(screen.getByText("Answers come back when typing ends")).toBeVisible();
+    expect(screen.queryByText(/Someone is typing/)).not.toBeInTheDocument();
+    for (const name of [/auto mode/, /manually approve/, /Ultraplan/, /Tell Claude what to change/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
+    await user.click(screen.getByRole("button", { name: "Open terminal" }));
+    expect(onOpen).toHaveBeenCalled();
   });
 
-  it("never offers the plan's text row as a button; Reply… sends the feedback text", async () => {
+  it("offers the plan's text row by its own words and sends the feedback text", async () => {
     const { onAnswer, user } = setup({ interaction: plan });
-    expect(screen.queryByRole("button", { name: /Tell Claude what to change/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reply…" }));
+    expect(screen.queryByRole("button", { name: "Reply…" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Tell Claude what to change…" }));
     await user.type(screen.getByRole("textbox", { name: "Tell Claude what to change" }), "Split it in two");
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(onAnswer).toHaveBeenCalledWith(plan.options[3], { text: "Split it in two" });
@@ -239,6 +247,109 @@ describe("QuestionCard", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(onAnswer).toHaveBeenCalledWith(withText.options[2], { text: "Pineapple" });
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  describe("what a permission asks for", () => {
+    const bash: Interaction = {
+      ...permission, context: "Bash command\nWrite hi into hello.txt\necho hi > hello.txt",
+      subject: { tool: "Bash", description: "Write hi into hello.txt", command: "echo hi > hello.txt" },
+    };
+
+    it("shows the tool, then what it is for, then the command as code", () => {
+      setup({ interaction: bash });
+      expect(screen.getByText("Bash")).toBeVisible();
+      expect(screen.getByText("Write hi into hello.txt")).toBeVisible();
+      const command = screen.getByLabelText("Command");
+      expect(command.tagName).toBe("PRE");
+      expect(command).toHaveTextContent("echo hi > hello.txt");
+      expect(command).toHaveClass("font-mono", "text-[13px]", "[overflow-wrap:anywhere]");
+      expect(screen.queryByLabelText("Request details")).not.toBeInTheDocument();
+    });
+
+    it("shows a file and its preview lines with their numbers apart from the text", () => {
+      setup({ interaction: { ...permission, question: "Do you want to create hello.txt?", subject: { tool: "Create file", file: "hello.txt", preview: "1 hello\n2 world" } } });
+      expect(screen.getByLabelText("File")).toHaveTextContent("hello.txt");
+      const preview = screen.getByLabelText("Preview");
+      expect(within(preview).getByText("hello")).toBeVisible();
+      expect(within(preview).getByText("2")).toHaveAttribute("aria-hidden", "true");
+    });
+
+    it("names Codex's facts and the options only the terminal answers", () => {
+      setup({ interaction: { ...permission, agent: "codex", subject: { description: "Allow it?", command: "touch x", meta: ["Environment: local"] }, terminalOnly: ["Yes, and don't ask again for these files"] } });
+      expect(screen.getByText("Environment: local")).toBeVisible();
+      expect(screen.getByText("Also in the terminal:", { exact: false })).toHaveTextContent("Also in the terminal: Yes, and don't ask again for these files");
+    });
+  });
+
+  describe("a plan", () => {
+    const written: Interaction = { ...plan, context: "# Plan: Add haiku.txt\n\n## Context\n\nThe user wants a **haiku**.", detailComplete: true };
+
+    it("reads as formatted text, not raw markdown", () => {
+      setup({ interaction: written });
+      expect(screen.getByText("Plan: Add haiku.txt")).toBeVisible();
+      expect(screen.queryByText(/^#/)).not.toBeInTheDocument();
+      expect(screen.getByText("haiku").tagName).toBe("STRONG");
+    });
+
+    it("folds a long plan behind Read the full plan, with no scroll box of its own", async () => {
+      const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+      const roomy = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(240);
+      try {
+        const { user } = setup({ interaction: written });
+        const body = screen.getByLabelText("Plan");
+        expect(body.className).not.toMatch(/overflow-y-auto/);
+        await user.click(screen.getByRole("button", { name: "Read the full plan" }));
+        expect(screen.queryByRole("button", { name: "Read the full plan" })).not.toBeInTheDocument();
+      } finally {
+        tall.mockRestore();
+        roomy.mockRestore();
+      }
+    });
+  });
+
+  describe("a review", () => {
+    const reviewing: Interaction = {
+      ...base, kind: "wizard", family: "claude", question: "Review your answers",
+      answers: [{ question: "Which focus area?", answer: "UI" }],
+      options: [{ index: 0, label: "Submit answers", role: "primary" }, { index: 1, label: "Cancel", role: "deny" }],
+    };
+
+    it("warns when a question has no answer and says Submit sends it anyway", () => {
+      setup({ interaction: { ...reviewing, incomplete: true } });
+      expect(screen.getByText("Some questions have no answer")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Submit anyway" })).toBeVisible();
+    });
+
+    it("keeps the plain Submit when every question is answered", () => {
+      setup({ interaction: reviewing });
+      expect(screen.queryByText("Some questions have no answer")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Submit answers" })).toBeVisible();
+    });
+  });
+
+  it("steps a wizard Back and Next with the arrows the bridge serves", async () => {
+    const stepping: Interaction = { ...question, kind: "wizard", steps: [
+      { label: "Focus area", answered: true, current: false },
+      { label: "Scope", answered: false, current: true },
+      { label: "Workflow", answered: false, current: false },
+    ], options: [...question.options, { index: 4, label: "Back", role: "nav" }, { index: 5, label: "Next", role: "nav" }] };
+    const { onAnswer, user } = setup({ interaction: stepping });
+    expect(within(screen.getByRole("group", { name: "Answers" })).queryByRole("button", { name: /Back|Next/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Previous question" }));
+    expect(onAnswer).toHaveBeenCalledWith(stepping.options[4], {});
+    await user.click(screen.getByRole("button", { name: "Next question" }));
+    expect(onAnswer).toHaveBeenLastCalledWith(stepping.options[5], {});
+  });
+
+  it("counts what a multi-select's Submit sends, and quiets it with nothing ticked", () => {
+    setup({ interaction: multi });
+    expect(screen.getByRole("button", { name: "Submit 1" })).toHaveAttribute("data-role", "primary");
+  });
+
+  it("offers Submit without answers as a quiet action when nothing is ticked", () => {
+    setup({ interaction: { ...multi, options: [{ ...multi.options[0]! }, { ...multi.options[1]!, checked: false }, multi.options[2]!] } });
+    const submit = screen.getByRole("button", { name: "Submit without answers" });
+    expect(submit).not.toHaveClass("bg-foreground");
   });
 
   describe("a note on an answer that accepts text (Tab-amend, Codex notes)", () => {
@@ -309,37 +420,130 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith(multi.options[0], {});
   });
 
-  it("says the menu changed when the bridge refuses a stale card, and brings that line into view", async () => {
+  it("says in the bridge's words that the question changed, under the answers, and brings that line into view", async () => {
     const seen: Element[] = [];
     Element.prototype.scrollIntoView = vi.fn(function (this: Element) { seen.push(this); });
-    const onAnswer = vi.fn((): Promise<AnswerOutcome> => Promise.resolve({ ok: false, error: "changed", code: "interaction_changed" }));
+    const error = "The question changed in the terminal. Nothing was sent.";
+    const onAnswer = vi.fn((): Promise<AnswerOutcome> => Promise.resolve({ ok: false, error, code: "interaction_changed" }));
     const { user } = setup({ onAnswer });
     await user.click(screen.getByRole("button", { name: /Apple/ }));
-    const line = await screen.findByText("Menu changed. Refreshing.");
-    expect(line).toBeVisible();
-    expect(seen).toContain(line);
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent(error);
+    expect(notice).not.toHaveTextContent(/Refreshing/);
+    expect(seen).toContain(notice);
+    // Right under the answers, above the secondary row, not at the card's foot.
+    const secondary = document.querySelector("[data-secondary-actions]")!;
+    expect(notice.compareDocumentPosition(secondary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Apple/ })).toHaveAttribute("data-failed", "true");
   });
 
-  it("respects a read-only device", () => {
+  it("a Submit the terminal never reached says so, and offers to try again or open the terminal", async () => {
+    const error = "Couldn't reach Submit in the terminal. Nothing was submitted.";
+    const onAnswer = vi.fn()
+      .mockResolvedValueOnce({ ok: false, error, code: "not_reached" })
+      .mockResolvedValueOnce({ ok: true });
+    const { onOpen, user } = setup({ interaction: multi, onAnswer });
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent(error);
+    await user.click(screen.getByRole("button", { name: "Open terminal" }));
+    expect(onOpen).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onAnswer).toHaveBeenLastCalledWith(multi.options[2], {});
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("a lock without a known reason never blames the device", () => {
     setup({ readOnly: true });
-    expect(screen.getByText("Read-only on this device.")).toBeVisible();
+    expect(screen.getByText("Answers are paused right now.")).toBeVisible();
+    expect(screen.queryByText(/Read-only/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Apple/ })).toBeDisabled();
   });
 
-  it("shows the optimistic receipt once answered", () => {
-    setup({ interaction: undefined, receipt: { paneId: "w1:p1", signature: "sig-1", label: "Apple", at: 0 } });
-    expect(screen.getByRole("status")).toHaveTextContent("Answered: Apple");
+  it.each([
+    ["offline", "Answers are paused until Nenu reconnects."],
+    ["herdr", "Herdr isn't responding. Answers are paused."],
+    ["refused", "Sign in again to answer."],
+  ] as const)("says why answers are paused (%s), and keeps the buttons", (lockReason, line) => {
+    setup({ interaction: { ...permission, detailComplete: true }, lockReason });
+    expect(screen.getByText(line)).toBeVisible();
+    expect(screen.queryByText(/Read-only/)).not.toBeInTheDocument();
+    const yes = screen.getByRole("button", { name: /^Yes$/ });
+    expect(yes).toBeDisabled();
+    // A disabled primary loses its ink fill instead of fading into a grey slab.
+    expect(yes).not.toHaveClass("bg-foreground");
+  });
+
+  it("a read-only device sees the options as a list it cannot press, and one line saying why", () => {
+    setup({ lockReason: "read-only" });
+    expect(screen.getByText("Read-only on this device. Answer from an authorised one.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Apple/ })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Options" })).getByText("Apple")).toBeVisible();
+  });
+
+  it.each([
+    [{ device: { enforced: true, authorized: false }, error: false, authError: false, bridge: "connected" }, "read-only"],
+    [{ device: undefined, error: true, authError: true, bridge: "connected" }, "refused"],
+    [{ device: undefined, error: true, authError: false, bridge: "connected" }, "offline"],
+    [{ device: undefined, error: false, authError: false, bridge: "disconnected" }, "herdr"],
+    [{ device: undefined, error: false, authError: false, bridge: "connected" }, undefined],
+  ] as const)("names the lock from the snapshot: %j", (snapshot, reason) => {
+    expect(lockReasonOf(snapshot as Parameters<typeof lockReasonOf>[0])).toBe(reason);
+  });
+
+  it("shows the optimistic receipt once answered, naming what was approved", () => {
+    setup({ interaction: undefined, receipt: { paneId: "w1:p1", signature: "sig-1", label: "Yes", summary: "Approved · echo hi > hello.txt", at: 0 } });
+    expect(screen.getByRole("status")).toHaveTextContent("Approved · echo hi > hello.txt");
   });
 
   describe("compact (Home)", () => {
-    it("keeps approval off a permission without its full detail and offers Open", async () => {
+    it("keeps approval off a permission without its full detail and offers Review in thread", async () => {
       const { onOpen, user } = setup({ interaction: permission, compact: true, title: "panel depo" });
       expect(screen.queryByRole("button", { name: /^Yes$/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /don’t ask again/ })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^No/ })).toBeEnabled();
       expect(screen.getByText("panel depo", { exact: false })).toBeVisible();
-      await user.click(screen.getByRole("button", { name: "Open" }));
+      await user.click(screen.getByRole("button", { name: "Review in thread" }));
       expect(onOpen).toHaveBeenCalled();
+    });
+
+    it("never offers Yes on a command folded past eight lines; Review in thread until it is shown whole", async () => {
+      const command = Array.from({ length: 12 }, (_, n) => `step ${n + 1}`).join("\n");
+      const { user } = setup({ interaction: { ...permission, detailComplete: true, subject: { tool: "Bash", command } }, compact: true });
+      expect(screen.queryByRole("button", { name: /^Yes$/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Review in thread" })).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Show all 12 lines" }));
+      expect(screen.getByLabelText("Command")).toHaveTextContent("step 12");
+      expect(screen.getByRole("button", { name: /^Yes$/ })).toBeVisible();
+    });
+
+    it("puts the whole command on screen before the button that approves it", () => {
+      setup({ interaction: { ...permission, detailComplete: true, subject: { tool: "Bash", command: "echo hi > hello.txt" } }, compact: true });
+      const command = screen.getByLabelText("Command");
+      const yes = screen.getByRole("button", { name: /^Yes$/ });
+      expect(command).toHaveTextContent("echo hi > hello.txt");
+      expect(command.compareDocumentPosition(yes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("never approves a plan it has not shown whole (ADR 0057 §4)", async () => {
+      const { onOpen, user } = setup({ interaction: { ...plan, context: "# Plan\n\nShip it." }, compact: true });
+      expect(screen.queryByRole("button", { name: /manually approve/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /auto mode/ })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Review in thread" }));
+      expect(onOpen).toHaveBeenCalled();
+    });
+
+    it("approves a whole plan only once it is unfolded", async () => {
+      const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+      const roomy = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(100);
+      try {
+        const { user } = setup({ interaction: { ...plan, context: "# Plan\n\nShip it.", detailComplete: true }, compact: true });
+        expect(screen.queryByRole("button", { name: /manually approve/ })).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Read the full plan" }));
+        expect(screen.getByRole("button", { name: /manually approve/ })).toBeVisible();
+      } finally {
+        tall.mockRestore();
+        roomy.mockRestore();
+      }
     });
 
     it("approves a permission whose full detail is on the card", async () => {
