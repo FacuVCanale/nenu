@@ -30,12 +30,13 @@ export function ColumnPage({ data, title, back, bodyClassName, children }: {
   );
 }
 
-/** The page's scroller and its one column, centred in the content area as Settings and the chat are. The
- *  boot splash draws it too, so the page the app lands on does not move. */
-export function PageBody({ ref, className, children }: { ref?: Ref<HTMLElement>; className?: string; children: ReactNode }) {
+/** The page's scroller and its one column, centred in the content area as the chat is. The boot splash
+ *  and Settings draw it too, so the page the app lands on does not move and every page centres alike;
+ *  `columnClassName` narrows or lays out the column (Settings' 640px form). */
+export function PageBody({ ref, className, columnClassName, children }: { ref?: Ref<HTMLElement>; className?: string; columnClassName?: string; children: ReactNode }) {
   return (
     <main ref={ref} className={cn("page-body", className)}>
-      <div className="page-column mx-auto">{children}</div>
+      <div className={cn("page-column mx-auto", columnClassName)}>{children}</div>
     </main>
   );
 }
