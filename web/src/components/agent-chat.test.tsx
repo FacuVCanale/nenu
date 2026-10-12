@@ -820,6 +820,8 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
+    // A full-width row a thumb reaches: 44 px under a finger (QA 15).
+    expect(showHistory()).toHaveClass("coarse:min-h-11");
     expect(loadOlder()).not.toBeInTheDocument();
   });
 
@@ -828,6 +830,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     const agent = { ...fixtureAgents[0]!, kind: "shell" as const, readableLines: 6946 };
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(loadOlder()).toBeInTheDocument();
+    expect(loadOlder()).toHaveClass("coarse:min-h-11");
     expect(showHistory()).not.toBeInTheDocument();
   });
 
