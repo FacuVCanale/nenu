@@ -161,11 +161,12 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
-      {view === "threads" ? tasks : <PrList threads={scope.threads} onOpenPane={openPane} onOpenNode={openNode} />}
+      {view === "threads" ? tasks : <PrList project={project} threads={scope.threads} session={data.session} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />}
     </div></div>
   ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
 
-  const cards = scope.coordinating ? (
+  // Beside the panel the cards would list every thread a second time; they come back when it is put away.
+  const cards = scope.coordinating && !panelShown ? (
     <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
       onOpen={(target) => { if (!target.paneId) openNode(target.id); else if (wide) setDocked(target.paneId); else openPane(target.paneId); }} />
   ) : undefined;
