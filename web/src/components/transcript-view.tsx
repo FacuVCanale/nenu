@@ -14,7 +14,7 @@ import { clockTime as formatClock } from "@/lib/format";
 import { searchableText } from "@/lib/transcript-search";
 import { containsQuery, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
-import { buildWorkTimeline, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
+import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 // Renders an agent transcript — the conversation history a Claude pane's terminal structurally
@@ -101,7 +101,7 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
   query: string;
   focused?: boolean;
   active?: boolean;
-  /** The turn waits on the operator: a call without its result is what they are asked about. */
+  /** This call is what a live dialog asks the operator about. */
   waiting?: boolean;
   compactMedia?: boolean;
   /** False when the entry's journal already holds its images, so upload paths don't show them twice. */
@@ -202,15 +202,29 @@ function stepParts(entry: TranscriptEntry, live: LiveStep | null) {
   return entry.parts.flatMap((part, index) => part.kind === "image" || (live?.entry === entry.uuid && live.index === index) ? [] : [{ part, index }]);
 }
 
+/**
+ * The call a live dialog asks the operator about, as `entry:index`: a question the turn asks, or else
+ * the first call still without its result, the one the agent stopped at. Never a subagent's call: what
+ * waits there is a call inside the subagent, so its own call runs on.
+ */
+function askedCall(turn: WorkTurn): string | undefined {
+  const pending = turn.activity.flatMap((entry) => entry.parts.flatMap((part, index) =>
+    part.kind === "tool" && !part.result && describeTool(part.name).kind !== "agent" ? [{ part, id: `${entry.uuid}:${index}` }] : []));
+  return (pending.find(({ part }) => part.questions?.length) ?? pending[0])?.id;
+}
+
 /** A turn's work, one step per row, in the order it happened. */
-function ActivityLog({ entries, query, focusedUuid, active, waiting, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; waiting: boolean; live: LiveStep | null }) {
+function ActivityLog({ entries, query, focusedUuid, active, asked, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; asked?: string; live: LiveStep | null }) {
   return <ol className="min-w-0 select-text">
     {entries.map((entry) => {
       const steps = stepParts(entry, live);
       if (!steps.length && !journalImages(entry).length) return null;
       const focused = focusedUuid === entry.uuid;
       return <li key={entry.uuid} data-turn={entry.uuid} className={focused ? "rounded ring-2 ring-primary/60" : undefined}>
-        {steps.map(({ part, index }) => <Part key={index} part={part} entryId={entry.uuid} id={`${entry.uuid}:${index}`} query={query} focused={focused} active={active} waiting={waiting} />)}
+        {steps.map(({ part, index }) => {
+          const id = `${entry.uuid}:${index}`;
+          return <Part key={index} part={part} entryId={entry.uuid} id={id} query={query} focused={focused} active={active} waiting={id === asked} />;
+        })}
         <EntryImages entry={entry} />
       </li>;
     })}
@@ -225,6 +239,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   const tools = turn.activity.flatMap((entry) => entry.parts.filter((part) => part.kind === "tool"));
   const failures = tools.filter((part) => part.result?.isError).length;
   const live = liveStep(turn);
+  // A turn held up by a dialog has not ended: the call the dialog asks about waits, the others run on.
+  const asked = waiting ? askedCall(turn) : undefined;
   const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
   const label = turn.interrupted ? "Stopped" : turn.settled ? "Worked" : "Work log";
   const duration = turn.durationMs !== undefined ? ` ${turn.interrupted ? "after" : "for"} ${formatWorkDuration(turn.durationMs)}` : "";
@@ -260,8 +276,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
       <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />))}
     {/* The rail under the turn's line ties its steps to it; a running turn keeps its live row under it, open or folded. */}
     {(open || live) && <div className="ml-[7px] min-w-0 border-l pl-3">
-      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} waiting={waiting} live={live} />}
-      {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={waiting} />}
+      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live} />}
+      {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     </div>}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>

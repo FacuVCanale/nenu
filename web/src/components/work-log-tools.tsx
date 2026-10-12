@@ -184,9 +184,9 @@ function WaitingChip() {
 const OUTPUT = "min-w-0 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]";
 
 /**
- * A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). In a
- * turn `waiting` on the operator, a call without its result is what they are asked about: it has not
- * run, so it reads as the request, with no clock and no claim about its output.
+ * A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). A call
+ * `waiting` is the one a live dialog asks the operator about: it has not run, so it reads as the
+ * request, with no clock and no claim about its output.
  */
 export function ToolStep({ id, part, owner, query, active, focused, live, waiting = false }: { id: string; part: ToolPart; owner?: string; query: string; active: boolean; focused: boolean; live?: Live; waiting?: boolean }) {
   const [expanded, setExpanded] = useState(false);
@@ -246,8 +246,8 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
 
 /**
  * The bottom line of a running turn: the step in progress, marked live. It opens like any step, so a
- * command or a thought cut short on a phone can be read whole while it runs. A call the turn is
- * `waiting` on the operator for keeps this place and reads as waiting.
+ * command or a thought cut short on a phone can be read whole while it runs. The call a live dialog
+ * asks about (`waiting`) keeps this place and reads as waiting.
  */
 export function LiveStepRow({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
   return <div data-live-step data-turn={marker} className={focused && marker ? "rounded ring-2 ring-primary/60" : undefined}>
