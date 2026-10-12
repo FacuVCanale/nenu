@@ -19,8 +19,9 @@ import {
   NOTE_MAX_LENGTH,
   previewsEqual,
   submitPreviewKeys,
+  submitPreviewChoice,
   submitPreviewNote,
-  submitPreviewOption,
+  submitPreviewPoint,
 } from "./preview-action";
 
 const mockFetchPane = vi.mocked(fetchPane);
@@ -132,18 +133,16 @@ describe("previewsEqual", () => {
   });
 });
 
-describe("submitPreviewOption — digit → verify pointer → Enter", () => {
-  it("sends the digit, waits for the pointer to land on the row, then confirms with Enter", async () => {
+describe("submitPreviewPoint — digit → verify pointer, never Enter", () => {
+  it("moves the pointer with the digit and stops once it verifiably sits on the row", async () => {
     const m = model({ pointer: 1 });
     mockFetchPane
       .mockResolvedValueOnce(paneWith(buffer({ pointer: 1 }))) // entry guard
       .mockResolvedValue(paneWith(buffer({ pointer: 2 }))); // verification poll
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[1]! });
+    const res = await submitPreviewPoint({ ...base, preview: m, option: m.options[1]! });
     expect(res).toEqual({ status: "sent" });
-    expect(mockSendKeys.mock.calls).toEqual([
-      ["w1:p1", ["2"], undefined, m.regionSignature],
-      ["w1:p1", ["Enter"], undefined],
-    ]);
+    // The digit only moves the pointer in this dialog (NOTES_NOTES): choosing is a separate tap.
+    expect(mockSendKeys.mock.calls).toEqual([["w1:p1", ["2"], undefined, m.regionSignature]]);
   });
 
   it("returns changed when the bound digit write reports prompt_changed", async () => {
@@ -154,27 +153,23 @@ describe("submitPreviewOption — digit → verify pointer → Enter", () => {
       error: "Prompt changed before keys were sent",
       code: "prompt_changed",
     });
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[1]! });
+    const res = await submitPreviewPoint({ ...base, preview: m, option: m.options[1]! });
     expect(res).toEqual({ status: "changed" });
-    expect(mockSendKeys.mock.calls).toEqual([
-      ["w1:p1", ["2"], undefined, m.regionSignature],
-    ]);
+    expect(mockSendKeys.mock.calls).toEqual([["w1:p1", ["2"], undefined, m.regionSignature]]);
   });
 
-  it("never sends Enter when the pointer does not converge (digit was the only side effect)", async () => {
+  it("returns changed when the pointer does not converge", async () => {
     const m = model({ pointer: 1 });
     mockFetchPane.mockResolvedValue(paneWith(buffer({ pointer: 1 }))); // pointer never moves
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[2]! });
+    const res = await submitPreviewPoint({ ...base, preview: m, option: m.options[2]! });
     expect(res).toEqual({ status: "changed" });
-    expect(mockSendKeys.mock.calls).toEqual([
-      ["w1:p1", ["3"], undefined, m.regionSignature],
-    ]);
+    expect(mockSendKeys.mock.calls).toEqual([["w1:p1", ["3"], undefined, m.regionSignature]]);
   });
 
   it("rejects at the entry guard when the dialog changed underfoot (no keys at all)", async () => {
     const m = model({});
     mockFetchPane.mockResolvedValue(paneWith(buffer({ question: "Different question?" })));
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[0]! });
+    const res = await submitPreviewPoint({ ...base, preview: m, option: m.options[1]! });
     expect(res).toEqual({ status: "changed" });
     expect(mockSendKeys).not.toHaveBeenCalled();
   });
@@ -182,38 +177,59 @@ describe("submitPreviewOption — digit → verify pointer → Enter", () => {
   it("rejects when the fresh revision differs (frozen mirror, advanced pane)", async () => {
     const m = model({});
     mockFetchPane.mockResolvedValue(paneWith(buffer({}), 9));
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[0]! });
+    const res = await submitPreviewPoint({ ...base, preview: m, option: m.options[1]! });
     expect(res).toEqual({ status: "changed" });
     expect(mockSendKeys).not.toHaveBeenCalled();
   });
 
-  it("aborts the verification poll early when the dialog's identity drifts mid-flight", async () => {
-    const m = model({ pointer: 1 });
-    mockFetchPane
-      .mockResolvedValueOnce(paneWith(buffer({ pointer: 1 })))
-      .mockResolvedValue(paneWith(buffer({ question: "Another dialog entirely?" })));
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[1]! });
-    expect(res).toEqual({ status: "changed" });
-    expect(mockSendKeys.mock.calls).toEqual([
-      ["w1:p1", ["2"], undefined, m.regionSignature],
-    ]); // digit only, no Enter
-  });
-
-  it("rejects a same-labels successor whose core signature differs mid-flight — NO Enter", async () => {
-    // The H-1 mid-flight hazard: after the digit is sent, a successor with the SAME question+labels
-    // but a different subject renders — with the pointer already on the tapped row. Pre-fix, the
-    // acceptance check keyed on question+labels only, so structureEqual passed and the unconditional
-    // Enter submitted the WRONG dialog's row. The core signature now differs → the poll drifts → the
-    // digit's pointer move stays the only side effect.
+  it("reports changed when a same-labels successor with another subject takes the screen mid-flight", async () => {
     const m = model({ pointer: 1, subject: "Editing foo.ts" });
     mockFetchPane
-      .mockResolvedValueOnce(paneWith(buffer({ pointer: 1, subject: "Editing foo.ts" }))) // entry guard: same dialog
-      .mockResolvedValue(paneWith(buffer({ pointer: 2, subject: "Editing bar.ts" }))); // successor: pointer on tapped row, DIFFERENT subject
-    const res = await submitPreviewOption({ ...base, preview: m, option: m.options[1]! });
+      .mockResolvedValueOnce(paneWith(buffer({ pointer: 1, subject: "Editing foo.ts" })))
+      .mockResolvedValue(paneWith(buffer({ pointer: 2, subject: "Editing bar.ts" })));
+    const res = await submitPreviewPoint({ ...base, preview: m, option: m.options[1]! });
     expect(res).toEqual({ status: "changed" });
-    expect(mockSendKeys.mock.calls).toEqual([
-      ["w1:p1", ["2"], undefined, m.regionSignature],
-    ]); // digit moved the pointer; Enter never fired
+  });
+});
+
+describe("submitPreviewChoice — the pointed row, confirmed with one guarded Enter", () => {
+  it("sends Enter bound to the dialog once a fresh read shows the pointer still on the row", async () => {
+    const m = model({ pointer: 2 });
+    mockFetchPane.mockResolvedValue(paneWith(buffer({ pointer: 2 })));
+    const res = await submitPreviewChoice({ ...base, preview: m, option: m.options[1]! });
+    expect(res).toEqual({ status: "sent" });
+    expect(mockSendKeys.mock.calls).toEqual([["w1:p1", ["Enter"], undefined, m.regionSignature]]);
+  });
+
+  it("sends nothing when the pointer moved since the card was drawn (Enter would pick another row)", async () => {
+    const m = model({ pointer: 2 });
+    mockFetchPane.mockResolvedValue(paneWith(buffer({ pointer: 3 })));
+    const res = await submitPreviewChoice({ ...base, preview: m, option: m.options[1]! });
+    expect(res).toEqual({ status: "changed" });
+    expect(mockSendKeys).not.toHaveBeenCalled();
+  });
+
+  it("refuses a row the pointer is not on, without reading or sending", async () => {
+    const m = model({ pointer: 1 });
+    const res = await submitPreviewChoice({ ...base, preview: m, option: m.options[2]! });
+    expect(res).toEqual({ status: "changed" });
+    expect(mockFetchPane).not.toHaveBeenCalled();
+    expect(mockSendKeys).not.toHaveBeenCalled();
+  });
+
+  it("returns changed when the bound Enter reports prompt_changed", async () => {
+    const m = model({ pointer: 1 });
+    mockFetchPane.mockResolvedValue(paneWith(buffer({ pointer: 1 })));
+    mockSendKeys.mockResolvedValueOnce({ ok: false, error: "Prompt changed before keys were sent", code: "prompt_changed" });
+    const res = await submitPreviewChoice({ ...base, preview: m, option: m.options[0]! });
+    expect(res).toEqual({ status: "changed" });
+  });
+
+  it("refuses while the TUI's note input has focus (Enter there submits without the row)", async () => {
+    const m = model({ pointer: 1, editing: true });
+    const res = await submitPreviewChoice({ ...base, preview: m, option: m.options[0]! });
+    expect(res).toEqual({ status: "changed" });
+    expect(mockSendKeys).not.toHaveBeenCalled();
   });
 });
 

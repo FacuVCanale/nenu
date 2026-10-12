@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { parseAnsi } from "@/lib/ansi";
@@ -37,6 +37,16 @@ describe("MenuBlock generic fallback", () => {
     expect(screen.getByRole("button", { name: "Move up" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Move down" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /right — adjust/i })).toBeInTheDocument();
+  });
+
+  it("draws the menu as the card: its title as the question, one filled commit, Cancel with the utilities", () => {
+    renderMenu();
+    const card = screen.getByRole("region", { name: "Settings" });
+    expect(within(card).getByText("Waiting on you")).toBeInTheDocument();
+    // No terminal-style caption: the title reads as the card's question.
+    expect(within(card).getByText("Settings")).not.toHaveClass("uppercase");
+    expect(screen.getByRole("button", { name: "Cancel" }).closest("[data-secondary-actions]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Set as default" }).closest("[data-secondary-actions]")).toBeNull();
   });
 
   // The arrows are unreadable on their own — the cluster has to say WHAT it adjusts, both visibly and

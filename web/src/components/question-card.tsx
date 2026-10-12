@@ -1,8 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
+import { DIALOG_CARD, PRESS, PRIMARY_ACTION, QuestionHeading, SECONDARY_ACTION, SecondaryActions, WaitingOnYou } from "@/components/option-button";
 import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
@@ -32,6 +33,14 @@ const SUBJECT_ROWS = 8;
 /** A multi-select's advance that sends the answers, as opposed to a wizard step's Next. */
 const SUBMIT = /^submit\b/i;
 
+/**
+ * A preview question: the bridge serves Claude's preview-select as a question whose family is the
+ * agent, where every other question carries its prompt family ("select"). Its previews and notes live
+ * only in the thread. bridge/interactions-family.test.ts pins that convention over the fixture corpus
+ * until the bridge marks a preview outright.
+ */
+const isPreviewQuestion = (i: Interaction) => i.kind === "question" && i.family !== "select";
+
 /** Why answers are paused, so the card names the real cause and never blames the device for an outage. */
 export type LockReason = "read-only" | "offline" | "herdr" | "refused";
 
@@ -60,13 +69,12 @@ export interface QuestionCardProps {
   lockReason?: LockReason;
   /** Why the tap on the dialog this one replaced did nothing ("The question changed…"). */
   refused?: string;
-  /** Home's variant: one line of options and the question clamped. */
+  /** Home's variant: titled by who asks, opened from its header, the question clamped. */
   compact?: boolean;
   /** Who is asking (the pane's name), for a card shown away from its thread. */
   title?: ReactNode;
-  /** Where the full dialog lives: the terminal mirror in a thread, the thread from Home. */
+  /** Where the full dialog lives: the terminal mirror in a thread, the thread from Home (its header). */
   onOpen?: () => void;
-  openLabel?: string;
   /** The keys pad next to the terminal, for a text row the card cannot type (Home has none: `onOpen` is on the card). */
   onKeys?: () => void;
   /**
@@ -84,7 +92,7 @@ type Writing = { to: "reply"; option: InteractionOption } | { to: "note" } | nul
 
 export function QuestionCard({
   interaction: i, receipt, onAnswer, readOnly = false, lockReason, refused, compact = false, title, onOpen,
-  openLabel = compact ? "Open" : "Terminal", onKeys, approveNeedsDetail = compact,
+  onKeys, approveNeedsDetail = compact,
 }: QuestionCardProps) {
   const [busy, setBusy] = useState<number | null>(null);
   const [armed, setArmed] = useState<number | null>(null);
@@ -100,10 +108,38 @@ export function QuestionCard({
   const [opened, setOpened] = useState(false);
   /** Whether this plan text is taller than its fold; unknown until measured, and unknown counts as folded. */
   const [planMeasure, setPlanMeasure] = useState<{ text: string; overflows: boolean } | null>(null);
+  /**
+   * Whether Home's card cuts any answer's description short, per dialog and card width. Only the answer
+   * rows decide it (`on: "answers"`); the read-only list only says when they are worth trying again.
+   */
+  const [cut, setCut] = useState<{ signature: string; width: number; on: "answers" | "list"; cut: boolean } | null>(null);
+  const [frame, setFrame] = useState<HTMLElement | null>(null);
+  const [answerList, setAnswerList] = useState<HTMLElement | null>(null);
+  // Kept only so a resize renders the card again and the measure below runs.
+  const [, setFrameWidth] = useState(0);
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
   const noticeLine = useRef<HTMLParagraphElement>(null);
   const detail = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!compact || !frame || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setFrameWidth(frame.clientWidth));
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [compact, frame]);
+
+  // An answer is never chosen on Home without what it means: if the card clamps a description, the
+  // answers move to the thread, where the whole text is (DLG-10). A new width (a rotation, a narrower
+  // window) measures again, so a card that fits answers again and one that no longer fits stops.
+  useLayoutEffect(() => {
+    if (!compact || !i || !answerList || !frame) return;
+    const on = answerList.hasAttribute("data-answers") ? "answers" : "list";
+    const width = frame.clientWidth;
+    if (cut?.signature === i.signature && cut.width === width && (cut.on === "answers" || on === "list")) return;
+    const clamped = [...answerList.querySelectorAll<HTMLElement>("[data-description]")].some((el) => el.scrollHeight > el.clientHeight + 1);
+    setCut({ signature: i.signature, width, on, cut: clamped });
+  });
 
   useEffect(() => {
     if (armed === null) return;
@@ -165,11 +201,15 @@ export function QuestionCard({
   // A question's deny row ("Chat about this", a review's Cancel) leaves the dialog without answering;
   // a permission's or a plan's No is an answer and stays among them.
   const answers = ANSWER_KINDS.has(i.kind);
-  const escapes = answers ? choices.filter((o) => o.role === "deny") : [];
+  // Home answers neither a menu nor a preview: their content and previews only live in the thread.
+  const opensOnly = compact && (i.kind === "menu" || isPreviewQuestion(i));
+  const escapes = answers || opensOnly ? choices.filter((o) => o.role === "deny") : [];
   const listed = answers ? choices.filter((o) => o.role === "neutral") : [];
   const decisions = choices.filter((o) => !escapes.includes(o) && !listed.includes(o));
   const ticked = i.options.filter((o) => o.checked).length;
   const openLabelFor = compact ? "Open thread" : "Open terminal";
+  const clamped = compact && cut?.signature === i.signature && cut.cut && onOpen !== undefined;
+  const answerable = !staticList && !opensOnly && !clamped;
 
   async function send(option: InteractionOption, extra: AnswerExtra = {}) {
     setBusy(option.index);
@@ -256,25 +296,36 @@ export function QuestionCard({
     </div>
   );
 
+  const progress = steps.length > 1 && (
+    <span className="ml-auto flex shrink-0 items-center gap-1 font-medium tabular-nums text-muted-foreground">
+      {back && <StepButton label="Previous question" disabled={locked} onClick={() => press(back)}><ChevronLeft aria-hidden className="size-4" /></StepButton>}
+      <span>{current >= 0 ? `${current + 1} of ${steps.length}` : "Review"}</span>
+      {next && <StepButton label="Next question" disabled={locked} onClick={() => press(next)}><ChevronRight aria-hidden className="size-4" /></StepButton>}
+    </span>
+  );
+
   return (
-    <Frame compact={compact} label={i.question}>
-      <div className={cn("flex min-w-0 items-center gap-2", compact ? "text-xs" : "text-[13px]")}>
-        <span className="flex shrink-0 items-center gap-1.5 font-medium text-status-blocked">
-          <span aria-hidden className="size-1.5 rounded-full bg-status-blocked ring-2 ring-status-blocked/25" />
-          Waiting on you
-        </span>
-        {title && <span className="min-w-0 truncate text-muted-foreground">· {title}</span>}
-        {steps.length === 1 && <span className="min-w-0 truncate text-muted-foreground"><span aria-hidden>· </span><span>{steps[0]!.label}</span></span>}
-        {steps.length > 1 && (
-          <span className="ml-auto flex shrink-0 items-center gap-1 font-medium tabular-nums text-muted-foreground">
-            {back && <StepButton label="Previous question" disabled={locked} onClick={() => press(back)}><ChevronLeft aria-hidden className="size-4" /></StepButton>}
-            <span>{current >= 0 ? `${current + 1} of ${steps.length}` : "Review"}</span>
-            {next && <StepButton label="Next question" disabled={locked} onClick={() => press(next)}><ChevronRight aria-hidden className="size-4" /></StepButton>}
-          </span>
+    <Frame ref={setFrame} compact={compact} label={i.question}>
+      {compact ? <>
+        <CompactHeader title={title} onOpen={onOpen} />
+        {/* The question's header chip, or where a wizard stands, as a quiet line over the question. */}
+        {steps.length > 0 && (
+          <div className="-mt-1 flex min-w-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <span className="min-w-0 truncate">{steps.length === 1 ? steps[0]!.label : current >= 0 ? steps[current]!.label : "Your answers"}</span>
+            {progress}
+          </div>
         )}
-      </div>
-      {steps.length > 1 && !compact && <Stepper steps={steps} />}
-      <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-[17px] leading-[22px] font-semibold tracking-[-0.01em] text-pretty")}>{i.question}</p>
+        <p className="line-clamp-3 text-[15px] leading-5 text-foreground">{i.question}</p>
+      </> : <>
+        <div className="flex min-w-0 items-center gap-2 text-[13px] leading-[18px]">
+          <WaitingOnYou />
+          {title && <span className="min-w-0 truncate text-muted-foreground">· {title}</span>}
+          {steps.length === 1 && <span className="min-w-0 truncate text-muted-foreground"><span aria-hidden>· </span><span>{steps[0]!.label}</span></span>}
+          {progress}
+        </div>
+        {steps.length > 1 && <Stepper steps={steps} />}
+        <QuestionHeading>{i.question}</QuestionHeading>
+      </>}
       <div ref={detail} tabIndex={-1} className="flex min-w-0 flex-col gap-[inherit] outline-none empty:hidden">
         {i.answers || i.incomplete ? <ReviewAnswers answers={i.answers ?? []} incomplete={Boolean(i.incomplete)} />
           : i.subject ? <Subject subject={i.subject} folded={codeFolded} onOpenAll={() => setOpened(true)} />
@@ -304,41 +355,24 @@ export function QuestionCard({
           <p className="text-[13px] leading-[18px] text-muted-foreground">The full plan isn't on this card.</p>
         )}
 
-        {staticList ? <>
-          <StaticOptions options={compact ? choices.filter((o) => !escapes.includes(o)) : choices} labelsOnly={compact} />
-          {compact && onOpen && (
-            <button type="button" onClick={onOpen} className={cn(PILL, OUTLINED, "self-start")}>
-              <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabel}
-            </button>
-          )}
-        </> : compact ? <>
-          {inTerminal.map((option) => (
-            <p key={option.index} data-in-terminal className="min-w-0 break-words text-xs text-muted-foreground">
-              <span className="text-foreground">{option.label}</span> Answer in the terminal.
-            </p>
-          ))}
-          <div className="flex flex-row flex-wrap gap-2">
-            {approvalHidden && onOpen && (
-              <button type="button" onClick={onOpen} className={cn(PILL, "bg-foreground text-background")}>Review in thread</button>
-            )}
-            {choices.map((option) => <Pill key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} />)}
-            {!reply && replies.map((option) => replyButton(option, cn(PILL, OUTLINED)))}
-            {notable && !writing && <NoteButton locked={locked} textId={textId} className={cn(PILL, OUTLINED)} onClick={() => write({ to: "note" })} />}
-            {onOpen && !approvalHidden && (
-              <button type="button" onClick={onOpen} className={cn(PILL, OUTLINED, "ml-auto")}>
-                <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabel}
-              </button>
-            )}
-          </div>
+        {opensOnly ? (
+          onOpen && <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Open to answer</button>
+        ) : !answerable ? <>
+          {/* Read-only: what the agent offers, nothing to press. Cut short on Home: answered in the thread. */}
+          <StaticOptions ref={clamped ? setAnswerList : undefined} options={clamped ? listed : compact ? choices.filter((o) => !escapes.includes(o)) : choices} labelsOnly={compact && !clamped} clamp={clamped} />
+          {clamped && <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Answer in thread</button>}
         </> : <>
+          {compact && approvalHidden && onOpen && (
+            <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Review in thread</button>
+          )}
           {(listed.length > 0 || (answers && replies.length > 0 && !reply)) && (
-            <div role="group" aria-label="Answers" className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border">
-              {listed.map((option) => <AnswerRow key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} />)}
+            <div ref={setAnswerList} data-answers role="group" aria-label="Answers" className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border">
+              {listed.map((option) => <AnswerRow key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} clamp={compact} />)}
               {answers && !reply && replies.map((option) => replyButton(option, cn(LIST_ROW, "text-muted-foreground disabled:text-muted-foreground/70")))}
             </div>
           )}
           {(decisions.length > 0 || (!answers && replies.length > 0 && !reply)) && (
-            <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap">
+            <div className="flex flex-col gap-2">
               {decisions.map((option) => <DecisionButton key={option.index} {...rowProps(option)} label={decisionLabel(option)} quiet={quiet(option)} />)}
               {!answers && !reply && replies.map((option) => replyButton(option, cn(DECISION, OUTLINED)))}
             </div>
@@ -378,46 +412,68 @@ export function QuestionCard({
           </p>
         )}
 
-        {!compact && ((!staticList && (escapes.length > 0 || (notable && !writing))) || (inTerminal.length > 0 && onKeys) || onOpen) && (
-          <div data-secondary-actions className="-mx-1.5 -mb-1.5 flex flex-wrap items-center">
+        {/* Leaving without an answer, a note, and the ways to the terminal: apart from the answers. */}
+        {((!staticList && escapes.length > 0) || (answerable && notable && !writing)
+          || (inTerminal.length > 0 && (compact ? answerable && onOpen : onKeys)) || (!compact && onOpen)) && (
+          <SecondaryActions>
             {!staticList && escapes.map((option) => (
               <button key={option.index} type="button" data-role={option.role} disabled={rowProps(option).disabled} onClick={() => press(option)} className={SECONDARY}>
-                {busy === option.index && <Loader2 aria-label="Sending" className="size-3.5 animate-spin" />}{option.label}
+                {busy === option.index && <Loader2 aria-label="Sending" className="size-4 animate-spin" />}{option.label}
               </button>
             ))}
-            {!staticList && notable && !writing && <NoteButton locked={locked} textId={textId} className={SECONDARY} onClick={() => write({ to: "note" })} />}
-            {onKeys && inTerminal.map((option) => (
+            {answerable && notable && !writing && <NoteButton locked={locked} textId={textId} className={SECONDARY} onClick={() => write({ to: "note" })} />}
+            {compact ? answerable && onOpen && inTerminal.map((option) => (
+              <button key={option.index} type="button" data-in-terminal onClick={onOpen} className={SECONDARY} title={`${bare(option.label)} in the thread`}>
+                Type your own answer<ChevronRight aria-hidden className="size-4 shrink-0" />
+              </button>
+            )) : onKeys && inTerminal.map((option) => (
               <button key={option.index} type="button" data-in-terminal onClick={onKeys} className={SECONDARY}
                 aria-label="Type your own answer in the terminal" title={`${bare(option.label)} in the terminal`}>
-                <Keyboard aria-hidden className="size-3.5 shrink-0" />Type your own
+                <Keyboard aria-hidden className="size-4 shrink-0" />Type your own
               </button>
             ))}
-            {onOpen && (
+            {!compact && onOpen && (
               <button type="button" onClick={onOpen} className={cn(SECONDARY, "sm:ml-auto")}>
-                <TerminalSquare aria-hidden className="size-3.5 shrink-0" />{openLabel}
+                <TerminalSquare aria-hidden className="size-4 shrink-0" />Terminal
               </button>
             )}
-          </div>
+          </SecondaryActions>
         )}
       </>}
     </Frame>
   );
 }
 
-function Frame({ compact, answered, label, children }: { compact: boolean; answered?: boolean; label?: string; children: ReactNode }) {
+function Frame({ ref, compact, answered, label, children }: { ref?: Ref<HTMLElement>; compact: boolean; answered?: boolean; label?: string; children: ReactNode }) {
   return (
-    <section aria-label={label ?? "Answered"} data-question-card={compact ? "compact" : "full"}
+    <section ref={ref} aria-label={label ?? "Answered"} data-question-card={compact ? "compact" : "full"}
       className={cn(
         "flex min-w-0 flex-col",
-        compact ? "gap-2 rounded-2xl p-3" : answered ? "rounded-xl px-3.5 py-2.5" : "gap-3 rounded-2xl p-4",
         answered
-          ? "border border-border/60 bg-muted/30"
-          // A thread card is a message in the conversation, not an alarm: the dot and its label carry
-          // the urgency. Home's card keeps the tint, since it sits among other panes' summaries.
-          : compact ? "border border-status-blocked/40 bg-status-blocked/[0.06]" : "border border-border bg-card shadow-sm",
+          ? "rounded-xl border border-border/60 bg-muted/30 px-3.5 py-2.5"
+          // A card is a message waiting on you, not an alarm: the dot carries the urgency, in the thread
+          // and on Home alike. Home's header row bleeds to the card's edge, so its padding starts below.
+          : cn(DIALOG_CARD, compact && "gap-2 pt-1"),
       )}>
       {children}
     </section>
+  );
+}
+
+/** Home's card header: who is asking, and the whole row opens the thread. Section already says Needs you. */
+function CompactHeader({ title, onOpen }: { title?: ReactNode; onOpen?: () => void }) {
+  const who = <>
+    <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-blocked" />
+    <span className="min-w-0 flex-1 truncate text-[15px] leading-5 font-medium text-foreground">{title ?? "Waiting on you"}</span>
+  </>;
+  if (!onOpen) return <div className="flex min-h-11 min-w-0 items-center gap-2.5">{who}</div>;
+  return (
+    <button type="button" onClick={onOpen}
+      className="-mx-2 flex min-h-11 min-w-0 items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted/60 active:bg-muted">
+      {who}
+      <span className="sr-only">, open thread</span>
+      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+    </button>
   );
 }
 
@@ -576,15 +632,20 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
 }
 
 /** A read-only device's options: what the agent offers, with nothing to press. Home's keeps the labels. */
-function StaticOptions({ options, labelsOnly }: { options: InteractionOption[]; labelsOnly: boolean }) {
+function StaticOptions({ ref, options, labelsOnly, clamp = false }: { ref?: Ref<HTMLUListElement>; options: InteractionOption[]; labelsOnly: boolean; clamp?: boolean }) {
   return (
-    <ul aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
-      {options.map((option) => (
-        <li key={option.index} className="flex min-w-0 flex-col">
-          <span className="text-[15px] leading-5 text-foreground">{recommendedLabel(option.label).text}</span>
-          {option.description && !labelsOnly && <span className="text-[13px] leading-[18px] text-muted-foreground">{option.description}</span>}
-        </li>
-      ))}
+    <ul ref={ref} aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
+      {options.map((option) => {
+        const { text, recommended } = recommendedLabel(option.label);
+        return (
+          <li key={option.index} className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] leading-5 text-foreground">
+              {text}{recommended && <RecommendedBadge />}
+            </span>
+            {option.description && !labelsOnly && <span data-description className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -598,12 +659,12 @@ function NoteButton({ locked, textId, className, onClick }: { locked: boolean; t
 }
 
 // Touch targets reach 44 px on a coarse pointer (direction.md); a mouse keeps the denser 40.
-const PILL = "inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium transition-colors active:scale-[0.99]";
-const DECISION = "inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-base font-medium transition-colors active:scale-[0.99]";
+const PILL = cn("inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium", PRESS);
+const DECISION = cn("inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-base font-medium", PRESS);
 const LIST_ROW = "flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left text-base transition-colors hover:bg-muted/50 active:bg-muted";
 const OUTLINED = "border border-border bg-transparent text-muted-foreground disabled:text-muted-foreground/70";
 const NEUTRAL = "border border-border bg-secondary text-foreground";
-const SECONDARY = "inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-1.5 rounded-lg px-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";
+const SECONDARY = SECONDARY_ACTION;
 /** A control that cannot fire: muted, never a faded fill that reads as highlighted. */
 const DISABLED = "border border-transparent bg-muted text-muted-foreground cursor-not-allowed";
 /** The tapped option a refusal is about, until the next tap. */
@@ -621,18 +682,18 @@ interface RowProps {
 /** A label without its trailing dots or ellipsis, to end it with our own. */
 const bare = (label: string) => label.replace(/[.…]+$/, "");
 
-/** Weight by role: the one-tap answer filled, a persistent one dashed, a deny outlined in red. */
+/** Weight by role: the one-tap answer filled, a persistent one dashed. A decline is an answer like
+ *  any other, so it stays neutral: red reads as an error, and the dot already says it is your turn. */
 function toneClass(tone: InteractionOption["role"]) {
   return cn(
     tone === "primary" && "bg-foreground text-background",
-    (tone === "neutral" || tone === "nav") && NEUTRAL,
+    (tone === "neutral" || tone === "nav" || tone === "deny") && NEUTRAL,
     tone === "persistent" && "border border-dashed border-border bg-secondary text-foreground",
-    tone === "deny" && "border border-status-blocked/40 bg-transparent text-status-blocked",
   );
 }
 
 /** One answer of a question: title, the agent's description in small grey, a quiet Recommended. */
-function AnswerRow({ option, toggle, busy, failed, disabled, onPress }: RowProps & { toggle: boolean }) {
+function AnswerRow({ option, toggle, busy, failed, disabled, onPress, clamp = false }: RowProps & { toggle: boolean; clamp?: boolean }) {
   const { text, recommended } = recommendedLabel(option.label);
   const dim = disabled && !busy;
   return (
@@ -645,7 +706,9 @@ function AnswerRow({ option, toggle, busy, failed, disabled, onPress }: RowProps
           <span className={cn("min-w-0 break-words font-medium", dim ? "text-muted-foreground" : "text-foreground")}>{text}</span>
           {recommended && <RecommendedBadge />}
         </span>
-        {option.description && <span className="text-[13px] leading-[18px] text-muted-foreground">{option.description}</span>}
+        {option.description && (
+          <span data-description className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>
+        )}
       </span>
       {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin text-muted-foreground" />}
     </button>
@@ -682,7 +745,7 @@ function DecisionButton({ option, armed, busy, failed, disabled, onPress, label,
   return (
     <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined} data-quiet={quiet || undefined}
       aria-label={armed ? `Confirm: ${option.label}` : undefined}
-      className={cn(DECISION, "w-full lg:w-auto", dim ? DISABLED : toneClass(tone), failed && FAILED)}>
+      className={cn(DECISION, "w-full", dim ? DISABLED : toneClass(tone), failed && FAILED)}>
       <span className="flex min-w-0 flex-1 flex-col py-1.5">
         <span className="break-words">{label ?? option.label}</span>
         {(detail || armed) && (
@@ -697,25 +760,10 @@ function DecisionButton({ option, armed, busy, failed, disabled, onPress, label,
   );
 }
 
-/** Home's one-line option. */
-function Pill({ option, toggle, armed, busy, failed, disabled, onPress }: RowProps & { toggle: boolean }) {
-  const dim = disabled && !busy;
-  return (
-    <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined}
-      aria-pressed={toggle ? Boolean(option.checked) : undefined} aria-label={armed ? `Confirm: ${option.label}` : undefined}
-      className={cn(PILL, dim ? DISABLED : toneClass(option.role), failed && FAILED)}>
-      {toggle && <Checkbox checked={Boolean(option.checked)} />}
-      <span className="min-w-0 break-words py-1.5">{option.label}</span>
-      {armed && <ConfirmPill />}
-      {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin" />}
-    </button>
-  );
-}
-
 function Checkbox({ checked }: { checked: boolean }) {
   return (
     <span aria-hidden className={cn("flex size-5 shrink-0 items-center justify-center rounded-md border",
-      checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/60")}>
+      checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground")}>
       {checked && <Check className="size-3.5" />}
     </span>
   );

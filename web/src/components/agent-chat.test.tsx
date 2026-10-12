@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, RouterProvider, useParams } from "react-router";
+import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
 import { __resetConnectionHealth } from "@/lib/connection-health";
 
@@ -1006,18 +1006,44 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(screen.queryByRole("button", { name: /terminal keys/i })).not.toBeInTheDocument();
   });
 
-  it("shows an unrecognised wait as one compact row that expands and dismisses", async () => {
+  it("says in words what an unrecognised wait is, and leads to the terminal and its keys", async () => {
     const user = userEvent.setup();
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
-    const notice = await screen.findByRole("status", { name: "Terminal waiting" });
+    const notice = await screen.findByRole("region", { name: "Terminal waiting" });
+    // Only the sentence is announced; the buttons around it are not part of a live region.
+    expect(within(notice).getByRole("status")).toHaveTextContent("Claude is showing a screen Nenu can't answer");
+    expect(notice).not.toHaveAttribute("role", "status");
+    // It needs the operator, like the pane's red dot in the header: never the yellow of a working agent.
+    const dots = [...notice.querySelectorAll("[aria-hidden]")].map((el) => el.getAttribute("class") ?? "");
+    expect(dots.some((c) => /status-blocked/.test(c))).toBe(true);
+    expect(dots.some((c) => /status-working/.test(c))).toBe(false);
+    // The screen's own hint stays, under the sentence.
     expect(within(notice).getByText("Enter to continue")).toBeVisible();
-    expect(within(notice).queryByText("Something new needs your attention")).not.toBeInTheDocument();
-    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
-    expect(within(notice).getByText(/Something new needs your attention/)).toBeVisible();
     expect(within(notice).getByRole("button", { name: "Keys" })).toBeVisible();
-    await user.click(within(notice).getByRole("button", { name: "Dismiss" }));
-    expect(screen.queryByRole("status", { name: "Terminal waiting" })).not.toBeInTheDocument();
+    // No key of its own until a declared cancel key exists (ADR 0053 rule 2 is still Proposed).
+    expect(within(notice).queryByRole("button", { name: /Esc|Dismiss/ })).not.toBeInTheDocument();
+    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
+    expect(screen.queryByRole("region", { name: "Live conversation" })).not.toBeInTheDocument();
+  });
+
+  // The composer is not paused: a message typed now waits for the answer ("Message for after you
+  // answer…"). The chip names what is actually waiting, the screen.
+  it("collapses an unrecognised wait to a chip that names the waiting screen, not a paused composer", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
+    const notice = await screen.findByRole("region", { name: "Terminal waiting" });
+    const collapse = within(notice).getByRole("button", { name: "Collapse" });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    await user.click(collapse);
+    expect(within(notice).queryByText("Claude is showing a screen Nenu can't answer")).not.toBeInTheDocument();
+    expect(within(notice).queryByText(/Composer paused/)).not.toBeInTheDocument();
+    const chip = within(notice).getByRole("button", { name: "Terminal waiting on a key" });
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    expect(chip.querySelector("[aria-hidden].bg-status-blocked")).not.toBeNull();
+    await user.click(chip);
+    expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
   });
 });
 
@@ -1105,10 +1131,106 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(within(within(card).getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
   });
 
-  it("keeps the popover while the bridge has no card for the pane", async () => {
+  it("draws the dialog as a card in the conversation while the bridge has no card for the pane", async () => {
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: PERMISSION });
-    expect(await screen.findByRole("region", { name: "Agent interaction" })).toBeInTheDocument();
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Waiting on you")).toBeVisible();
+    expect(card.closest("[data-follow-stop]")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+
+  it("draws a generic menu in the conversation as a card, never over it", async () => {
+    const MENU = readFileSync("src/fixtures/panes/claude-lab--menu-rewind--w82.txt", "utf8");
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "menu", family: "claude", question: "Rewind", signature: "sig-m", revision: 1, detectedAt: 0,
+      options: [{ index: 0, label: "Continue", role: "neutral" }, { index: 1, label: "Cancel", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: MENU });
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Rewind" });
+    expect(within(card).getByRole("button", { name: "Continue" })).toBeVisible();
+    expect(within(card).getByRole("button", { name: "Cancel" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+
+  it("draws a preview question in the conversation as a card, never over it", async () => {
+    const PREVIEW = readFileSync("src/fixtures/panes/claude--select-preview.txt", "utf8");
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "question", family: "claude", question: "Which widget design should we use?", signature: "sig-p", revision: 1, detectedAt: 0,
+      options: [{ index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PREVIEW });
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+});
+
+// Pointing at a preview row is the first of two taps: the digit moves the pointer, the guard sees it
+// land, and the card is drawn again from the next read. Until that read lands the tapped row stays
+// busy, so a second tap can never act on the old pointer; nothing was answered, so no "Sent".
+describe("AgentChat — pointing at a preview option", () => {
+  const PLAIN = readFileSync("src/fixtures/panes/claude--select-preview.txt", "utf8").replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "");
+  const ON_ROUNDED = PLAIN.replace("❯ 1. Boxy ", "  1. Boxy ").replace("  2. Rounded", "❯ 2. Rounded").replace("| WIDGET           [X] |", "( WIDGET           (x) )");
+
+  it("keeps the row busy until the refreshed card shows its preview and Choose, and says nothing was sent", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    let pane = PLAIN;
+    const keys: string[][] = [];
+    let hold = false;
+    let held = 0;
+    const waiting: Array<() => void> = [];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+        paneId: agent.paneId, agent: "claude", kind: "question", family: "claude", question: "Which widget design should we use?", signature: "sig-p", revision: 1, detectedAt: 0,
+        options: [{ index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" }],
+      }] })),
+      http.get(/\/api\/pane\/[^/]+$/, () => HttpResponse.json({ paneId: agent.paneId, text: pane, truncated: false, revision: 1 })),
+      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+        const body = (await request.json()) as { keys: string[] };
+        keys.push(body.keys);
+        if (body.keys.join() === "2") pane = ON_ROUNDED;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    function PaneRoute() {
+      const { text } = useLoaderData() as { text: string };
+      return <><AgentChat paneId={agent.paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={text} revision={1} onBack={vi.fn()} onSelect={vi.fn()} /><StatusArea /></>;
+    }
+    const router = createMemoryRouter([{
+      path: "/",
+      loader: async () => {
+        if (hold) { held++; await new Promise<void>((resolve) => waiting.push(resolve)); }
+        return { text: pane };
+      },
+      element: <PaneRoute />,
+    }]);
+    render(<RouterProvider router={router} />);
+    const card = await screen.findByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
+
+    hold = true;
+    await user.click(within(card).getByRole("radio", { name: /^Rounded/ }));
+    await waitFor(() => expect(held).toBeGreaterThan(0));
+    expect(keys).toEqual([["2"]]);
+    // The pointer moved, but the card on screen is still the old read: nothing in it can be pressed.
+    expect(within(card).getByRole("radio", { name: /^Rounded/ })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeDisabled();
+
+    hold = false;
+    act(() => { for (const resolve of waiting.splice(0)) resolve(); });
+    const refreshed = await screen.findByRole("region", { name: "Which widget design should we use?" });
+    expect(await within(refreshed).findByRole("button", { name: "Choose Rounded" })).toBeEnabled();
+    expect(within(within(refreshed).getByRole("group", { name: "Preview of Rounded" })).getByText(/\( WIDGET/)).toBeVisible();
+    expect(keys).toEqual([["2"]]);
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dialog changed/)).not.toBeInTheDocument();
   });
 });
 

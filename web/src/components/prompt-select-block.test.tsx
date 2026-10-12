@@ -59,7 +59,7 @@ describe("PromptSelectBlock — presentation", () => {
   it("renders each option as a focusable button, labelled by the question", () => {
     render(<PromptSelectBlock prompt={selectModel} onAction={vi.fn()} />);
     expect(
-      screen.getByRole("group", { name: "Which color theme should the dashboard use?" }),
+      screen.getByRole("region", { name: "Which color theme should the dashboard use?" }),
     ).toBeInTheDocument();
     const buttons = screen.getAllByRole("button");
     expect(buttons).toHaveLength(2);
@@ -71,6 +71,14 @@ describe("PromptSelectBlock — presentation", () => {
     expect(within(screen.getByRole("button", { name: /Green/ })).queryByText("2")).not.toBeInTheDocument();
     buttons[0]!.focus();
     expect(buttons[0]).toHaveFocus();
+  });
+
+  it("draws an option's (Recommended) suffix as the badge, not as text", () => {
+    const recommended = { ...selectModel, options: [{ ...selectModel.options[0]!, label: "Red (Recommended)" }, selectModel.options[1]!] };
+    render(<PromptSelectBlock prompt={recommended} onAction={vi.fn()} />);
+    const row = screen.getByRole("button", { name: /^Red/ });
+    expect(row).not.toHaveTextContent("(Recommended)");
+    expect(within(row).getByText("Recommended")).toBeInTheDocument();
   });
 
   it("calls onAction with the tapped option", async () => {

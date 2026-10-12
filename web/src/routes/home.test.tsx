@@ -334,7 +334,7 @@ it("keeps existing threads navigable while answering and creating are read-only"
   expect(await needs.findByText("Read-only on this device. Answer from an authorised one.")).toBeVisible();
   expect(needs.queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
   expect(within(needs.getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
-  expect(needs.getByRole("button", { name: "Open" })).toBeEnabled();
+  expect(needs.getByRole("button", { name: /open thread/i })).toBeEnabled();
   const recent = within(main.getByRole("region", { name: /^Recent/ }));
   expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
 });
