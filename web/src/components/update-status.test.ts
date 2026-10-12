@@ -82,7 +82,9 @@ describe("updateStatus", () => {
   });
 
   it("shows a check in flight and a failed check in the badge", () => {
-    expect(updateStatus(someUpdate({}), { ...idle, check: "checking" })).toMatchObject({ badge: "Checking…", action: { kind: "check" } });
+    expect(updateStatus(someUpdate({ checkedAt: 1 }), { ...idle, check: "checking" })).toMatchObject({ badge: "Checking…", action: { kind: "check" } });
+    // The badge takes the line alone, so the row keeps its height while the check runs.
+    expect(updateStatus(someUpdate({ checkedAt: 1 }), { ...idle, check: "checking" }).meta).toBeUndefined();
     expect(updateStatus(someUpdate({}), { ...idle, check: "failed" })).toMatchObject({
       badge: "Couldn't check",
       tone: "error",
