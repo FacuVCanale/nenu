@@ -380,14 +380,14 @@
 }
 
 /* Button sizes (components/ui/button). In the components layer, so a caller's own h-6 or size-9
-   utility still wins; on a coarse pointer the defaults reach the 44px touch floor. */
+   utility still wins; on a coarse pointer the defaults reach the 44 by 44 touch floor. */
 @layer components {
   .ui-button-default { height: 2.25rem; }
   .ui-button-sm { height: 2rem; }
   .ui-button-lg { height: 2.75rem; }
   .ui-button-icon { width: 2.25rem; height: 2.25rem; }
   @media (pointer: coarse) {
-    .ui-button-default, .ui-button-sm { height: 2.75rem; }
+    .ui-button-default, .ui-button-sm { height: 2.75rem; min-width: 2.75rem; }
     .ui-button-icon { width: 2.75rem; height: 2.75rem; }
   }
 }
