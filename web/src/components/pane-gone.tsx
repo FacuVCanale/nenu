@@ -2,6 +2,7 @@ import { MessageSquareX, SearchX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils";
 
 /**
  * A chat whose pane is gone, while the route cannot move off it (Herdr is not answering, or the link
@@ -26,8 +27,9 @@ export function PaneGone({ closed, unsure, next, onOpen, onHome }: {
       : ["That pane no longer exists", "This link points to a pane Herdr no longer has."];
   return (
     <EmptyState icon={closed ? MessageSquareX : SearchX} title={title} className="my-auto" action={
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {next && <Button type="button" size="lg" onClick={() => onOpen(next.paneId)} className="max-w-[min(20rem,80vw)]">
+      // Two ways on stack on a phone at one width, whatever the pane is called; a desk has room for a row.
+      <div className={cn("flex flex-wrap items-center justify-center gap-2", next && "max-sm:w-[min(20rem,80vw)] max-sm:flex-col max-sm:flex-nowrap max-sm:items-stretch")}>
+        {next && <Button type="button" size="lg" onClick={() => onOpen(next.paneId)} className="sm:max-w-[min(20rem,80vw)]">
           <span className="truncate">Open {next.name}</span>
         </Button>}
         <Button type="button" size="lg" variant={next ? "outline" : "default"} onClick={onHome}>Go to Home</Button>

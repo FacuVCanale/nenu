@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 
 import { PaneGone } from "./pane-gone";
 
-// The way home from a chat whose pane is gone reads as it does from every other empty state (the 404,
-// a closed pane's history, a missing project), and is the same large button.
+// The way home from a chat whose pane is gone reads Go to Home, as from every other empty state, and
+// is the 404's and a closed pane's history's large button.
 describe("PaneGone", () => {
   it("offers Go to Home as the one way out when there is no pane beside it", async () => {
     const onHome = vi.fn();
