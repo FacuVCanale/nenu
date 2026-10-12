@@ -1,4 +1,4 @@
-import { lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { lazy, Suspense, useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe, Loader2, MoreHorizontal, RefreshCw, X } from "lucide-react";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -7,6 +7,7 @@ import { displayPath } from "@/lib/display-path";
 import { shortCwd } from "@/lib/format";
 import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
 import { FilePreviewContext } from "@/lib/file-preview-context";
+import { shortName, useFitted } from "@/lib/fit-text";
 import { IMAGE_EXTENSION } from "@/lib/message-images";
 import { useHoldReload } from "@/lib/reload-guard";
 import { cn } from "@/lib/utils";
@@ -46,57 +47,6 @@ function folderOf(path: string, cwd: string | undefined): string {
  */
 function whereLine(folder: string, from: string, max: number): string {
   return [folder && shortCwd(folder, max), from && `from ${from}`].filter(Boolean).join(" · ");
-}
-
-/**
- * A file name cut in the middle to `max` characters, keeping its start, the last letters before its
- * extension and the extension, as Files does. CSS can only cut the end, which hid the extension, and
- * an ellipsis right against the extension read as four dots ("informe….md").
- */
-function shortName(name: string, max: number): string {
-  if (name.length <= max) return name;
-  const dot = name.lastIndexOf(".");
-  const extension = dot > 0 && name.length - dot <= 8 ? name.slice(dot) : "";
-  const stem = name.slice(0, name.length - extension.length);
-  const room = Math.max(1, max - extension.length - 1);
-  const tail = Math.min(4, Math.floor(room / 3));
-  return `${stem.slice(0, room - tail)}…${tail ? stem.slice(-tail) : ""}${extension}`;
-}
-
-let canvas: CanvasRenderingContext2D | null = null;
-function textWidth(text: string, font: string): number {
-  canvas ??= document.createElement("canvas").getContext("2d");
-  if (!canvas) return 0;
-  canvas.font = font;
-  return canvas.measureText(text).width;
-}
-
-/**
- * `cut(n)` for the largest `n` whose text fits the line's width in the font `ref` is drawn with: a
- * character count guesses wrong both ways, "reporte-auditoria.html" fits a phone's bar at 22 and a
- * name of wide letters does not. Where nothing can be measured, `fallback` characters.
- */
-function useFitted(ref: RefObject<HTMLElement | null>, line: RefObject<HTMLElement | null>, full: string, cut: (max: number) => string, fallback: number): string {
-  const [max, setMax] = useState(fallback);
-  useLayoutEffect(() => {
-    const element = ref.current, box = line.current;
-    if (!element || !box) return;
-    const fit = () => {
-      const width = box.clientWidth;
-      if (!width) return setMax(fallback);
-      const { fontStyle, fontWeight, fontSize, fontFamily } = getComputedStyle(element);
-      const font = `${fontStyle} ${fontWeight} ${fontSize} ${fontFamily}`;
-      let n = full.length;
-      while (n > 1 && textWidth(cut(n), font) > width) n--;
-      setMax(n);
-    };
-    fit();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
-    observer?.observe(box);
-    return () => observer?.disconnect();
-    // `cut` is rebuilt every render; `full` and `fallback` are what it depends on.
-  }, [full, fallback]);
-  return cut(max);
 }
 
 export default function FilePreview({ paneId, session, items, start = 0, path, panes = [], onClose }: {

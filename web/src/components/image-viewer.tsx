@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
+import { shortName, useFitted } from "@/lib/fit-text";
 import {
   clampView, dragIntent, DOUBLE_TAP_ZOOM, IDENTITY, MAX_ZOOM, pageStep, project, resist, rubberband, shouldDismiss, velocity, zoomAt,
   type Point, type Sample, type Size, type View,
@@ -71,6 +72,8 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
 }) {
   const [chrome, setChrome] = useState(true);
   const root = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const title = useFitted(titleRef, titleRef, name, (max) => shortName(name, max), 80);
   const stage = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
@@ -328,7 +331,7 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
     {error && <div className="image-viewer-error">{error}</div>}
     <header className="image-viewer-bar image-viewer-top">
       <button type="button" className="preview-done" onClick={onClose}><ChevronLeft className="size-6" aria-hidden="true" />Done</button>
-      <h2 className="image-viewer-title">{name}</h2>
+      <h2 ref={titleRef} className="image-viewer-title" aria-label={title === name ? undefined : name} title={title === name ? undefined : name}>{title}</h2>
       <div className="image-viewer-actions">
         {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download image" className="image-viewer-action"><Download className="size-5" aria-hidden="true" /></a>}
         <button type="button" aria-label="Close image" onClick={onClose} className="image-viewer-action preview-close"><X className="size-5" aria-hidden="true" /></button>
