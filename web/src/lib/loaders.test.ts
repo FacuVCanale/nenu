@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
 import { fixtureAgents, fixtureSnapshot, paneTextWithDraft } from "@/test/handlers";
@@ -781,5 +781,56 @@ describe("loaders — narrowed revalidation", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await rootLoader({ request: new Request("http://localhost/space/w1") });
     expect(fetchSpy).toHaveBeenCalled();
+  });
+});
+
+// Opening a pane must not wait on its read (SYS-17): the bench held a 6 s read and the tap left Home
+// on screen for all of it. A navigation gives the read a moment, then opens the chat on what the page
+// already has, and the read lands through the revalidation the route asks for: one read, not two.
+describe("loaders — a pane opens before its read lands", () => {
+  const slowPane = (text: string, ms: number) => {
+    let reads = 0;
+    server.use(http.get(/\/api\/pane\/[^/]+$/, async () => {
+      reads++;
+      await delay(ms);
+      return HttpResponse.json({ paneId: "w1:p1", text, truncated: false, revision: 9 });
+    }));
+    return () => reads;
+  };
+  const within = <T,>(promise: Promise<T>, ms: number) =>
+    Promise.race([promise, new Promise<"late">((resolve) => setTimeout(() => resolve("late"), ms))]);
+
+  it("opens a pane read before on its last text at once, and the next run brings the fresh read without asking again", async () => {
+    const { paneLoader, rootLoader } = await import("./loaders");
+    await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
+    await rootLoader({ request: new Request("http://localhost/") });
+    const reads = slowPane("fresh text", 1500);
+
+    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), 600);
+    expect(opened).not.toBe("late");
+    if (opened === "late") return;
+    expect(opened.pending).toBe(true);
+    expect(opened.text).toBe(paneTextWithDraft());
+
+    const settled = await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
+    expect(settled.pending).toBeFalsy();
+    expect(settled.text).toBe("fresh text");
+    expect(reads()).toBe(1);
+  });
+
+  it("opens a pane never read on an empty mirror that says it is on its way", async () => {
+    const { paneLoader } = await import("./loaders");
+    slowPane("fresh text", 1500);
+    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), 600);
+    expect(opened).not.toBe("late");
+    if (opened === "late") return;
+    expect(opened).toMatchObject({ pending: true, text: "", error: false, revision: 0 });
+  });
+
+  it("keeps a quick read on the navigation itself, with nothing pending", async () => {
+    const { paneLoader } = await import("./loaders");
+    const data = await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
+    expect(data.pending).toBeFalsy();
+    expect(data.text).toBe(paneTextWithDraft());
   });
 });

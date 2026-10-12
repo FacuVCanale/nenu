@@ -11,8 +11,8 @@ import { DetailRoute } from "./detail";
 // Stub the heavy terminal view: this test is about DetailRoute's routing/freshPane logic, not the
 // composer. The stub reports which pane it was handed and whether an agent resolved for it.
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, agent }: { paneId: string; agent?: AgentView }) => (
-    <div data-testid="chat">{`pane:${paneId}:${agent ? "live" : "gone"}`}</div>
+  AgentChat: ({ paneId, agent, text }: { paneId: string; agent?: AgentView; text: string }) => (
+    <div data-testid="chat" data-text={text}>{`pane:${paneId}:${agent ? "live" : "gone"}`}</div>
   ),
 }));
 
@@ -197,5 +197,27 @@ describe("DetailRoute — the open pane closes", () => {
     await screen.findByTestId("home");
     expect(router.state.location.pathname).toBe("/");
     expect(screen.getByTestId("status")).toHaveTextContent("That pane no longer exists");
+  });
+});
+
+describe("DetailRoute — a pane opened before its read landed", () => {
+  it("asks for the read as soon as the chat shows, and shows it when it lands", async () => {
+    const pane = agentView("w1:p1", "agent");
+    let runs = 0;
+    const router = createMemoryRouter([{
+      id: ROOT_ROUTE_ID, path: "/", loader: () => connected([pane]), element: <Outlet />,
+      children: [{
+        path: "pane/:paneId",
+        loader: ({ params }): PaneData => {
+          runs++;
+          return { paneId: params.paneId ?? "", session: undefined, text: runs === 1 ? "" : "fresh", truncated: false, requestedLines: 600, revision: runs, error: false, authError: false, pending: runs === 1 };
+        },
+        element: <DetailRoute />,
+      }],
+    }], { initialEntries: [panePath("w1:p1")] });
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1:live");
+    await vi.waitFor(() => expect(screen.getByTestId("chat")).toHaveAttribute("data-text", "fresh"));
+    expect(runs).toBe(2);
   });
 });

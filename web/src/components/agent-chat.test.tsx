@@ -1047,6 +1047,13 @@ describe("AgentChat — a pane that is gone", () => {
   });
 });
 
+it("says the terminal is on its way, not that it printed nothing, while the pane's first read is pending", () => {
+  const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
+  renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "", pending: true });
+  expect(screen.getByRole("status", { name: "Reading the terminal" })).toBeInTheDocument();
+  expect(screen.queryByText("(no recent output)")).toBeNull();
+});
+
 // The composer names why it is locked, the same reason the question card gives: a refused sign-in is
 // not a device that was never authorised, and a silent Herdr is not a lost network.
 describe("AgentChat — why the composer is locked", () => {
