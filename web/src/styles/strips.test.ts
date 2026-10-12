@@ -36,9 +36,11 @@ describe("strip chips", () => {
     expect(chip["justify-content"]).toBe("center");
   });
 
-  it("fade the edge a strip can still scroll toward", () => {
-    expect(declarations(css, '.strip-scroller[data-overflow~="start"]', [LAYER])["--fade-start"]).toBe("24px");
-    expect(declarations(css, '.strip-scroller[data-overflow~="end"]', [LAYER])["--fade-end"]).toBe("24px");
+  // At 24px only the last letter or two of a name cut at the edge faded, and "She…" read as cut
+  // (combined QA 19); over 40px the cut name dissolves (redesign-shots/sheet-system/strip-fade.ts).
+  it("fade the edge a strip can still scroll toward, wide enough that a name cut there dissolves", () => {
+    expect(declarations(css, '.strip-scroller[data-overflow~="start"]', [LAYER])["--fade-start"]).toBe("40px");
+    expect(declarations(css, '.strip-scroller[data-overflow~="end"]', [LAYER])["--fade-end"]).toBe("40px");
   });
 });
 
