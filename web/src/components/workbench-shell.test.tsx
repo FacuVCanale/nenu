@@ -453,7 +453,7 @@ async function railNamed() {
   await user.hover(tile);
   expect(await screen.findByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
   vi.useFakeTimers();
-  onTestFinished(() => vi.useRealTimers());
+  onTestFinished(() => { vi.useRealTimers(); });
   return { nav, tile };
 }
 const railName = () => screen.queryByRole("tooltip", { hidden: true });
