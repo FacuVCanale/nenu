@@ -29,7 +29,7 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
   /** An untouched workspace starts folded instead of following {@link defaultOpen}. */
   startFolded?: boolean;
 }) {
-  const branches = workspaceTree(source, "", currentPaneId);
+  const branches = workspaceTree(source, currentPaneId);
   if (branches.length === 0) return empty;
   return branches.map((branch) => (
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}

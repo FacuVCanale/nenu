@@ -274,7 +274,7 @@ function SidebarTree({ data, onNavigate, folded = false }: { data: HomeData; onN
   const loose = { ...data, ...looseWorkspaces(data) };
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
   useRevealProject(folded ? undefined : currentProject, setExpanded);
-  const hasWorkspaces = workspaceTree(loose, "", paneId).length > 0;
+  const hasWorkspaces = workspaceTree(loose, paneId).length > 0;
 
   return <>
     {projects.length > 0 && (

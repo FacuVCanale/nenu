@@ -29,7 +29,7 @@ describe("workspaceTree", () => {
       ],
       shellPanes: [],
     };
-    const branches = workspaceTree(herd, "", "here:p");
+    const branches = workspaceTree(herd, "here:p");
     expect(branches.map((branch) => branch.workspace.workspaceId)).toEqual(["busy", "here", "old", "visited"]);
     expect(branches.filter((branch) => branch.current).map((branch) => branch.workspace.workspaceId)).toEqual(["here"]);
   });
@@ -41,7 +41,7 @@ describe("workspaceTree", () => {
       agents: [pane("a:p", "a", { active: 50, seen: 50 }), pane("b:p", "b", { active: 40, seen })],
       shellPanes: [],
     });
-    const order = (seen: number, current: string) => workspaceTree(herd(seen), "", current).map((branch) => branch.workspace.workspaceId);
+    const order = (seen: number, current: string) => workspaceTree(herd(seen), current).map((branch) => branch.workspace.workspaceId);
     // Opening b's pane bumps when it was seen, never where its workspace sits.
     expect(order(40, "a:p")).toEqual(["a", "b"]);
     expect(order(999, "b:p")).toEqual(["a", "b"]);
