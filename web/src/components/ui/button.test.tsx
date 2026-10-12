@@ -32,6 +32,19 @@ describe("Button", () => {
     expect(declarations(indexCss, ".ui-button-default", [COMPONENTS]).height).toBe("2.25rem");
   });
 
+  it("has one large primary for a card or a sheet: full width, 40 fine and 44 coarse, its label centred at body 500, radius lg", () => {
+    // The same family as the option rows above it (lg, body/500), so a card's commit and its
+    // choices read as one system instead of a pill, a slab and a row (QA 1).
+    const classes = buttonVariants({ size: "block" }).split(" ");
+    expect(classes).toEqual(expect.arrayContaining(["w-full", "min-h-10", "coarse:min-h-11", "rounded-lg", "text-body", "font-medium", "justify-center", "text-center"]));
+    // A long label wraps inside the button instead of running past the card's edge.
+    expect(classes).toContain("whitespace-normal");
+    expect(classes).not.toEqual(expect.arrayContaining(["rounded-md"]));
+    expect(classes).not.toContain("text-sm");
+    render(<Button size="block">Submit 3</Button>);
+    expect(screen.getByRole("button", { name: "Submit 3" })).toHaveClass("bg-foreground", "w-full");
+  });
+
   it("draws unavailable from its own tokens, never as opacity over a fill", () => {
     for (const variant of variants) {
       const classes = buttonVariants({ variant }).split(" ");

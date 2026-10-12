@@ -41,3 +41,14 @@ it("lets the name and the place shorten inside the row while the status stays re
   expect(screen.getByText(PLACE)).toHaveClass("min-w-0", "truncate");
   expect(screen.getByText("waiting in the terminal")).toHaveClass("shrink-0");
 });
+
+// SYS-17 on the card: a tap on a question card's header waits on the thread's read like a row does,
+// so the card says it is opening instead of sitting still.
+it("says a question card's thread is opening while it loads", () => {
+  const interaction = { paneId: blocked.paneId, agent: "claude", signature: "sig", revision: 1, detectedAt: 0, kind: "question", family: "select",
+    question: "Which fruit?", options: [{ index: 0, label: "Apple", role: "neutral" }] } as const;
+  const element = <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId, interaction: { ...interaction, options: [...interaction.options] } }]}
+    receipts={[]} interactions={interactions} lockReason={undefined} opening="/pane/w5%3Aa2" />;
+  render(<RouterProvider router={createMemoryRouter([{ path: "/", element }])} />);
+  expect(screen.getByRole("button", { name: /open thread/i })).toHaveAttribute("aria-busy", "true");
+});
