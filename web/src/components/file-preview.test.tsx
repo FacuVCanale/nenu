@@ -203,16 +203,23 @@ it("reloads an open HTML frame when the file's ETag changes, and only then", asy
   }
 });
 
-it("steps through a gallery of journal images with previous, next and the arrow keys", () => {
+// The gallery ends where it ends, for the buttons and the arrow keys as for a swipe.
+it("steps through a gallery of journal images with previous, next and the arrow keys, and stops at its ends", () => {
   render(<FilePreview paneId="w1:p1" items={[
     { kind: "journal", entry: "e1", index: 0, label: "Image 1" },
     { kind: "journal", entry: "e1", index: 1, label: "Image 2" },
   ]} start={1} onClose={() => {}} />);
   expect(screen.getByRole("img", { name: "Image 2" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=1");
   expect(screen.getByText("2 of 2")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
+  expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
   expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
+  expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
+  expect(screen.getByText("1 of 2")).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
   expect(screen.getByRole("img", { name: "Image 2" })).toBeInTheDocument();
   expect(fetchFile).not.toHaveBeenCalled();
 });
