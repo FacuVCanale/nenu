@@ -1006,18 +1006,31 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(screen.queryByRole("button", { name: /terminal keys/i })).not.toBeInTheDocument();
   });
 
-  it("shows an unrecognised wait as one compact row that expands and dismisses", async () => {
+  it("says in words what an unrecognised wait is, and leads to the terminal and its keys", async () => {
     const user = userEvent.setup();
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
     const notice = await screen.findByRole("status", { name: "Terminal waiting" });
+    expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
+    // The screen's own hint stays, under the sentence.
     expect(within(notice).getByText("Enter to continue")).toBeVisible();
-    expect(within(notice).queryByText("Something new needs your attention")).not.toBeInTheDocument();
-    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
-    expect(within(notice).getByText(/Something new needs your attention/)).toBeVisible();
     expect(within(notice).getByRole("button", { name: "Keys" })).toBeVisible();
-    await user.click(within(notice).getByRole("button", { name: "Dismiss" }));
-    expect(screen.queryByRole("status", { name: "Terminal waiting" })).not.toBeInTheDocument();
+    // No key of its own until a declared cancel key exists (ADR 0053 rule 2 is still Proposed).
+    expect(within(notice).queryByRole("button", { name: /Esc|Dismiss/ })).not.toBeInTheDocument();
+    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
+    expect(screen.queryByRole("region", { name: "Live conversation" })).not.toBeInTheDocument();
+  });
+
+  it("collapses an unrecognised wait to a chip that still says the composer is paused", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
+    const notice = await screen.findByRole("status", { name: "Terminal waiting" });
+    await user.click(within(notice).getByRole("button", { name: "Collapse" }));
+    expect(within(notice).queryByText("Claude is showing a screen Nenu can't answer")).not.toBeInTheDocument();
+    const chip = within(notice).getByRole("button", { name: /Composer paused/ });
+    await user.click(chip);
+    expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
   });
 });
 
