@@ -647,7 +647,8 @@ describe("a first load that never reached Nenu", () => {
     expect(screen.getAllByText(/Can.t reach Nenu/)).toHaveLength(1);
     expect(main.queryByRole("button")).not.toBeInTheDocument();
     expect(main.getByRole("heading", { name: "Nothing to show yet" })).toBeInTheDocument();
-    expect(main.getByText("Your threads, questions and reviews show up here once Nenu answers.")).toBeVisible();
+    // The banner names the problem; the body adds what the operator can do about it.
+    expect(main.getByText("Your threads, questions and reviews show up here once Nenu answers. Check this device's network or VPN.")).toBeVisible();
   });
 
   it("leaves a refusal and its one Sign in to the banner", async () => {
