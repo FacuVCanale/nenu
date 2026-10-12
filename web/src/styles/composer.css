@@ -1,6 +1,7 @@
 /* The composer under a chat. */
-/* The home indicator's inset IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
-.workbench-composer { width: calc(100% - 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
+/* On the page gutter, the column the header, the prose and the cards share. The home indicator's inset
+   IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
+.workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
 /* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
 .composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
@@ -47,6 +48,9 @@
 .composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
 @media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
 .composer-quiet:disabled { opacity: 0.5; cursor: default; }
+/* The meta row's targets reach down into the home indicator's inset, not up into the box, where the
+   + needs its own 44px. */
+@media (pointer: coarse) { .composer-meta .hit-area::before { top: -4px; transform: translateX(-50%); } }
 .workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 
 /* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
@@ -66,7 +70,7 @@
 }
 
 @media (min-width: 1024px) {
-  .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
+  .workbench-composer { margin-bottom: max(env(safe-area-inset-bottom), 16px); }
   .workbench-composer > button[aria-label="Switch pane"] { display: none; }
   .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }
 }
