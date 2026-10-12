@@ -1190,7 +1190,7 @@ export function AgentChat({
                   <button
                     type="button"
                     onClick={() => navigate(historyPath(paneId, session))}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 coarse:min-h-11"
                   >
                     <ScrollText className="size-3.5" />
                     Show entire history
@@ -1203,7 +1203,7 @@ export function AgentChat({
                     onClick={loadOlder}
                     disabled={loadingOlder}
                     aria-busy={loadingOlder || undefined}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60 coarse:min-h-11"
                   >
                     {loadingOlder ? (
                       <Loader2 className="size-3.5 animate-spin" />
