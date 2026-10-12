@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.64.4] - 2026-10-12
+
+### Fixed
+- With only background work (subagent, workflow, monitor, goal) and no main turn, a message goes straight to the agent: no now/queue choice, "↓ to manage" no longer reads as a dialog, and queued rows no longer wait for the background work. (#66)
+- Scrolling up in a chat loads older messages on its own and keeps your place. (#67)
+
 ## [0.64.3] - 2026-10-12
 
 ### Fixed

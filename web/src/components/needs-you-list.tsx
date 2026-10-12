@@ -17,6 +17,8 @@ function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | 
   return { name: title, where: place };
 }
 
+const WAITING = "waiting in the terminal";
+
 /**
  * Home's "Needs you": each detected dialog as the compact card, answered in place, oldest first. A
  * blocked pane with no dialog the bridge could read is a row into its thread. Answers just sent stay
@@ -50,11 +52,16 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
           );
         }
         return (
-          <Link key={paneId} to={panePath(paneId, session)}
-            className="flex min-h-12 min-w-0 items-center gap-2.5 rounded-2xl border border-status-blocked/40 bg-status-blocked/[0.06] px-3.5 text-sm">
+          <Link key={paneId} to={panePath(paneId, session)} aria-label={[who.name, who.where, WAITING].filter(Boolean).join(", ")}
+            className="flex min-h-14 min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-status-blocked/40 bg-status-blocked/[0.06] px-3.5 py-2">
             <StatusDot status="blocked" surface="bg-card" className="size-2" />
-            <span className="shrink-0 font-medium">{who.name}</span>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{who.where ? `${who.where} · ` : ""}waiting in the terminal</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[0.9375rem] leading-5 font-medium">{who.name}</span>
+              <span className="flex min-w-0 items-baseline gap-1 text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+                {who.where && <><span className="min-w-0 truncate">{who.where}</span><span className="shrink-0">·</span></>}
+                <span className="shrink-0">{WAITING}</span>
+              </span>
+            </span>
             <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           </Link>
         );
