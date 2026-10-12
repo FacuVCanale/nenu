@@ -1,3 +1,4 @@
+import { onTestFinished } from "vitest";
 import { delay, http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
@@ -865,6 +866,19 @@ describe("loaders — a pane opens before its read lands", () => {
     expect(paneReads(fetchSpy)[0]!.signal?.aborted).toBe(false);
     await rootLoader({ request: new Request("http://localhost/") });
     expect(paneReads(fetchSpy)[0]!.signal?.aborted).toBe(true);
+  });
+
+  // iOS 16.0 to 17.3 have AbortSignal.timeout but not AbortSignal.any, and there fetchPane can't join
+  // a stop with its timeout. The read keeps the 10 s bound rather than the early stop.
+  it("keeps the read's timeout on a WebView that can't join two signals", async () => {
+    const any = AbortSignal.any;
+    Object.defineProperty(AbortSignal, "any", { value: undefined, configurable: true, writable: true });
+    onTestFinished(() => { Object.defineProperty(AbortSignal, "any", { value: any, configurable: true, writable: true }); });
+    slowPane("fresh text", slowRead);
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await open("w1:p1");
+    expect(paneReads(fetchSpy)[0]!.signal).toBe(timeout.mock.results[0]!.value);
   });
 
   it("keeps a quick read on the navigation itself, with nothing pending", async () => {
