@@ -502,6 +502,15 @@ describe("an outage", () => {
     expect(document.querySelector("[data-stale]")).toBeNull();
   });
 
+  // Known gap, pinned so it turns red the day it is fixed: a failed snapshot read makes canCreate
+  // (lib/types.ts, read by workbench-shell.tsx) false at once, so the composer greys out with no reason
+  // given, although only a sustained outage should block it. Both files are outside Home.
+  it.fails("known gap: keeps the composer usable through a brief failure", async () => {
+    const { update, main } = await setup();
+    await update({ ...data, error: true });
+    expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeEnabled();
+  });
+
   it("says Herdr can't be reached once it is sustained, and dims the last herd with when it was synced", async () => {
     const { update, main } = await setup();
     const since = sustained();
