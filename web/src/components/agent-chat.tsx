@@ -8,7 +8,7 @@ import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesChip, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare } from "lucide-react";
@@ -778,16 +778,18 @@ export function AgentChat({
   // for the bridge's first answer (or failure), so a dialog the card will cover never flashes first.
   const bridgeHeard = interactions.loaded || interactions.stale;
   const dialogInline = !subagent && showConversation && bridgeHeard && dialogPresent && !modelPresent && !unknownInteraction && !showCard && !receipt;
+  const inlineDialog = dialogInline ? (
+    <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
+      onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
+      onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
+      onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
+  ) : null;
+  // The footer only holds the block's slot, so a poll that redraws the block leaves it (and the
+  // memoised transcript around it) alone; the block itself arrives through InlineDialog.
   const conversationFooterWithDialog = useMemo(() => !dialogInline ? threadFooter : <>
     {threadFooter}
-    <div data-follow-stop className="mt-5">
-      <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
-        onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
-        onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
-        onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
-    </div>
-  </>, [dialogInline, threadFooter, modelSource.text, agent?.agent, handlePromptAction, handleWizardAction,
-    handlePreviewAction, handleMultiSelectAction, handleMenuAction, readOnly, gone, connecting]);
+    <div data-follow-stop className="mt-5"><InlineDialogSlot /></div>
+  </>, [dialogInline, threadFooter]);
   const dialogInThread = (showCard && cardCovers) || dialogInline;
 
   // NOTE: the composer is deliberately NOT auto-focused on open/switch — that would pop the Android
@@ -1051,13 +1053,13 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
+            <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
               onMatchCount={findOpen ? handleMatchCount : undefined}
-              footer={conversationFooterWithDialog} waiting={dialogInThread} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
+              footer={conversationFooterWithDialog} waiting={dialogInThread} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider></InlineDialog.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -1272,6 +1274,12 @@ export function AgentChat({
       </BottomSheet>
     </div>
   );
+}
+
+/** The dialog block drawn in the card's place, handed to the conversation's footer slot. */
+const InlineDialog = createContext<ReactNode>(null);
+function InlineDialogSlot() {
+  return <>{useContext(InlineDialog)}</>;
 }
 
 /**
