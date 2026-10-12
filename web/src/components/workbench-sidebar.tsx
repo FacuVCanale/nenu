@@ -335,7 +335,7 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
           expanded={prefs.workspaces} onExpand={setWorkspaceOpen} startFolded={folded} />
       </section>
     )}
-    {projects.length === 0 && !hasWorkspaces && <Empty onNewChat={onNewChat} />}
+    {projects.length === 0 && !hasWorkspaces && <Empty phone={folded} onNewChat={onNewChat} />}
   </>;
 }
 
@@ -552,12 +552,16 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
   );
 }
 
-/** An empty herd: what will be here, where it comes from, and on a phone, whose sheet has no New row, a way to start. */
-function Empty({ onNewChat }: { onNewChat?: () => void }) {
+/**
+ * An empty herd. On the desk Home sits beside the sidebar and leads the start, so the sidebar only
+ * says so; a phone's sheet or drawer, which has no New row, offers the way to start.
+ */
+function Empty({ phone, onNewChat }: { phone: boolean; onNewChat?: () => void }) {
+  if (!phone) return <p className="nav-empty">No agents yet.</p>;
   return (
     <EmptyState className="px-2.5 py-8" title="No agents yet"
       action={onNewChat && <Button type="button" onClick={onNewChat}><Plus aria-hidden />New agent</Button>}>
-      Start one with New. Agents you start in Herdr show up here too.
+      Agents you start in Herdr show up here too.
     </EmptyState>
   );
 }
