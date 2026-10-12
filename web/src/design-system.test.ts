@@ -62,12 +62,11 @@ describe("text colour", () => {
 });
 
 describe("radii", () => {
-  it("takes every radius in the app's own stylesheets from the scale, or a pill or circle", () => {
-    // file-preview.css belongs to the viewers and moves with them.
-    const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), ...stylesheets(resolve(src, "styles"))];
+  it("takes every radius in the app's own stylesheets from the scale, or a pill or circle, or none edge to edge", () => {
+    const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), resolve(src, "components/file-preview.css"), ...stylesheets(resolve(src, "styles"))];
     const offenders = files.flatMap((file) =>
       cssRules(readFileSync(file, "utf8"))
-        .filter((rule) => rule.decls["border-radius"] && !/^(var\(--radius-(sm|md|lg|xl|2xl)\)|9999px|50%)$/.test(rule.decls["border-radius"]))
+        .filter((rule) => rule.decls["border-radius"] && !/^(0|var\(--radius-(sm|md|lg|xl|2xl)\)|9999px|50%)$/.test(rule.decls["border-radius"]))
         .map((rule) => `${relative(src, file)}: ${rule.selectors.join(", ")} { border-radius: ${rule.decls["border-radius"]} }`),
     );
     expect(offenders).toEqual([]);
