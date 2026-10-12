@@ -334,7 +334,7 @@ describe("LiveConversation", () => {
     };
 
     act(() => draft.focus());
-    tap(screen.getByRole("button", { name: /1 tool call · Bash/ }));
+    tap(screen.getByRole("button", { expanded: false })); // the folded work log, whatever its label says
     expect(draft).toHaveFocus();
     tap(screen.getByText("One commit: abc1234."));
     expect(draft).not.toHaveFocus();
