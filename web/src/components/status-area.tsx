@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronRight, Info, X } from "lucide-react";
@@ -89,6 +89,18 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
   const lastOffset = useRef(0);
   const dragged = useRef(false);
   const Icon = ICONS[message.tone];
+  const textBox = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useLayoutEffect(() => {
+    const el = textBox.current;
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Touch only: a mouse drag over the text is a selection, and the desk has Dismiss and the timer.
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -115,9 +127,11 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
     else { lastOffset.current = 0; setOffset(0); }
   };
 
-  // touch-none here too: a scroller is where the browser decides a touch is its pan, so the card's
-  // own touch-none stops at it and a swipe that starts on the text would be cancelled as a scroll.
-  const text = <div className="max-h-[min(16rem,40dvh)] min-w-0 flex-1 touch-none overflow-y-auto overscroll-contain [overflow-wrap:anywhere]">
+  // A scroller is where the browser decides a touch is its pan, so the card's own touch-none stops at
+  // it. Text that fits takes touch-none too, so a swipe that starts on it dismisses. Text that
+  // overflows (a long raw error, which never times out) keeps the finger's scroll, and the swipe is
+  // taken from the icon and the card's edges.
+  const text = <div ref={textBox} className={cn("max-h-[min(16rem,40dvh)] min-w-0 flex-1 overflow-y-auto overscroll-contain [overflow-wrap:anywhere]", overflows ? "touch-pan-y" : "touch-none")}>
     <p className="whitespace-pre-wrap text-subhead font-semibold">{message.text}</p>
     {message.description && <p className="mt-0.5 whitespace-pre-wrap text-footnote text-muted-foreground">{message.description}</p>}
   </div>;
