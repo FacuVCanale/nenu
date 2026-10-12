@@ -13,6 +13,7 @@ import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { STATE_LABEL, flatten, orgTree } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // What a tap on a node with no live pane opens: the node itself, inside Nenu. A coordinator lists
 // the work it runs the way every organization view does; a live node offers its chat, never a jump.
@@ -35,8 +36,8 @@ export function NodeRoute() {
     body = <ProjectMissing session={data.session} />;
   } else if (!node) {
     body = <EmptyState icon={MessageSquareOff} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
-      <Link to={projectPath(project.slug, data.session)} className={buttonVariants()}>Open project</Link>
-      <Link to={homePath(data.session)} className={buttonVariants({ variant: "outline" })}>Go to Home</Link>
+      <Link to={projectPath(project.slug, data.session)} className={cn(buttonVariants({ size: "lg" }))}>Open project</Link>
+      <Link to={homePath(data.session)} className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>Go to Home</Link>
     </div>}>{project.name} no longer lists it.</EmptyState>;
   } else {
     const { thread, state } = node;
