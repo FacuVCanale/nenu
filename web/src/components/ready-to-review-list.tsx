@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Check, CircleDashed, GitPullRequest, X } from "lucide-react";
 
 import { FoldedList, HomeHeading, isOpening, OpeningSpinner, useOpeningPath } from "@/components/home-panels";
+import { buttonVariants } from "@/components/ui/button";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import type { ReviewEntry } from "@/lib/home-stats";
@@ -76,10 +77,10 @@ export function useHomeActivity(agents: readonly AgentView[], session?: string):
 function Checks({ checks }: { checks: NonNullable<ReviewEntry["checks"]> }) {
   // The phone keeps the icon and reads the words to a screen reader only: its row has no room for them.
   const words = "max-sm:sr-only";
-  if (checks.failed) return <span className="flex shrink-0 items-center gap-1 text-xs text-destructive"><X aria-hidden className="size-3.5" /><span className={words}>{checks.failed} failing</span></span>;
-  if (checks.pending) return <span className="flex shrink-0 items-center gap-1 text-xs text-status-working"><CircleDashed aria-hidden className="size-3.5" /><span className={words}>checks running</span></span>;
+  if (checks.failed) return <span className="flex shrink-0 items-center gap-1 text-footnote text-destructive"><X aria-hidden className="size-3.5" /><span className={words}>{checks.failed} failing</span></span>;
+  if (checks.pending) return <span className="flex shrink-0 items-center gap-1 text-footnote text-status-working"><CircleDashed aria-hidden className="size-3.5" /><span className={words}>checks running</span></span>;
   if (!checks.passed) return null;
-  return <span className="flex shrink-0 items-center gap-1 text-xs text-status-done"><Check aria-hidden className="size-3.5" /><span className={words}>checks</span></span>;
+  return <span className="flex shrink-0 items-center gap-1 text-footnote text-status-done"><Check aria-hidden className="size-3.5" /><span className={words}>checks</span></span>;
 }
 
 const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, string | undefined> = {
@@ -89,8 +90,8 @@ const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, string | undefine
   commented: undefined,
 };
 
-const rowClass = "grid min-h-13 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-0 px-1 py-1.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:rounded-[10px] sm:px-3.5";
-const actionClass = "inline-flex min-h-9 shrink-0 items-center rounded-lg border border-border bg-secondary px-3 text-[13px] font-medium text-foreground hover:bg-secondary/70 max-lg:min-h-10";
+const rowClass = "grid min-h-14 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-0 px-1 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:rounded-lg sm:px-3.5";
+const actionClass = cn(buttonVariants({ variant: "secondary", size: "sm" }), "shrink-0");
 
 /**
  * A pull request waiting for review. On a desk the line under the title reads "repo · #1342 · branch"
@@ -106,10 +107,10 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
     <li className={rowClass}>
       <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0", entry.draft ? "text-muted-foreground" : "text-status-done")} />
       <span className="col-start-2 flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-[13.5px] leading-tight text-foreground">{entry.title}</span>
-        {entry.draft && <span className="shrink-0 rounded border border-border px-1 text-[11px] leading-4 text-muted-foreground">Draft</span>}
+        <span className="truncate text-body">{entry.title}</span>
+        {entry.draft && <span className="shrink-0 rounded-sm border border-border px-1 text-micro text-muted-foreground">Draft</span>}
       </span>
-      <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-xs leading-tight text-muted-foreground">
+      <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
         <span className="shrink-0 max-sm:hidden">{entry.repo}{entry.number !== undefined && " ·"}</span>
         {entry.number !== undefined && <span className="shrink-0 font-mono">#{entry.number}</span>}
         {verdict && <span className={cn("min-w-0 truncate sm:shrink-0", entry.review === "approved" ? "text-status-done" : "text-destructive")}>· {verdict}</span>}
@@ -123,7 +124,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
         )}
       </span>
       {entry.diff && (
-        <span className="col-start-3 row-span-2 row-start-1 shrink-0 font-mono text-xs max-sm:hidden">
+        <span className="col-start-3 row-span-2 row-start-1 shrink-0 font-mono text-footnote max-sm:hidden">
           <span className="text-status-done">+{entry.diff.additions}</span> <span className="text-destructive">−{entry.diff.deletions}</span>
         </span>
       )}

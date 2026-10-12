@@ -135,6 +135,12 @@ function rememberTarget(value: string): void {
 /** What became of the last send: a quiet line when it went, a card naming the cause and the way on when it did not. */
 type Sent = { tone: "ok"; text: string; paneId: string } | { tone: "error"; title: string; detail: string; paneId: string };
 
+/** A reason from the bridge as a sentence: capitalised and ending in a stop. */
+const sentence = (text: string) => {
+  const trimmed = text.trim();
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}${/[.!?]$/.test(trimmed) ? "" : "."}`;
+};
+
 /** A send the bridge refused before anything was queued: the coordinator's queue is not reachable from here. */
 class Unavailable extends Error {}
 
@@ -182,12 +188,12 @@ function HomeComposer({ data, projects, disabled, offline }: { data: HomeData; p
       const row = next.available ? next.messages.find((m) => m.id === id) : undefined;
       setMessage("");
       setSent(row?.state === "paused"
-        ? { tone: "error", title: `Held for ${name}`, detail: `${row.error ?? "It could not take the message yet"}. It waits in the coordinator's queue.`, paneId }
+        ? { tone: "error", title: `Held for ${name}`, detail: `${sentence(row.error ?? "It could not take the message yet")} It waits in the coordinator's queue.`, paneId }
         : { tone: "ok", text: row ? `Queued for ${name}.` : `Sent to ${name}.`, paneId });
     } catch (err) {
       setSent(err instanceof Unavailable
         ? { tone: "error", title: `${name} can't take messages from Home`, detail: "Your message is still in the box. Open the coordinator to send it from its chat.", paneId }
-        : { tone: "error", title: `Couldn't send to ${name}`, detail: `${err instanceof Error && err.message ? err.message : "Check the connection and try again"}. Your message is still in the box.`, paneId });
+        : { tone: "error", title: `Couldn't send to ${name}`, detail: `${sentence(err instanceof Error && err.message ? err.message : "Check the connection and try again")} Your message is still in the box.`, paneId });
     } finally {
       setBusy(false);
     }

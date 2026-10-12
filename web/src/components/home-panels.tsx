@@ -46,8 +46,8 @@ export function OpeningSpinner({ className }: { className?: string }) {
 /** A Home section's heading: its name, how many, and an optional note at the far end. */
 export function HomeHeading({ id, label, count, note }: { id: string; label: string; count?: number; note?: ReactNode }) {
   return (
-    <h2 id={id} className="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
-      <span className="text-foreground/85">{label}</span>
+    <h2 id={id} className="flex items-center gap-2 text-footnote font-medium text-muted-foreground">
+      <span className="text-foreground">{label}</span>
       {count !== undefined && count > 0 && <span className="tabular-nums">{count}</span>}
       {note && <span className="ml-auto flex items-center gap-1.5 font-normal">{note}</span>}
     </h2>
@@ -61,7 +61,7 @@ export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; 
   return <>
     <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{shown.map(children)}</ul>
     {items.length > shown.length && (
-      <button type="button" onClick={() => setAll(true)} className="self-start px-1 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground sm:px-3.5">
+      <button type="button" onClick={() => setAll(true)} className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-3.5">
         Show all {items.length}
       </button>
     )}
