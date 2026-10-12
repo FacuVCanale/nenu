@@ -11,6 +11,7 @@ import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf, type LockReason } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
+import { useAutosize } from "@/hooks/use-autosize";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
@@ -181,6 +182,8 @@ function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; proj
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<Sent | null>(null);
   const unsure = useRef<Unsure | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useAutosize(box, message);
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const targets: Target[] = [
@@ -256,7 +259,7 @@ function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; proj
     <div className="flex flex-col">
       <form className="flex flex-col rounded-xl border border-input bg-card focus-within:border-ring/70"
         onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <textarea value={message} rows={1} disabled={locked} placeholder={placeholder} enterKeyHint={target.kind === "project" ? "send" : "go"}
+        <textarea ref={box} value={message} rows={1} disabled={locked} placeholder={placeholder} enterKeyHint={target.kind === "project" ? "send" : "go"}
           aria-label={target.kind === "project" ? `Message for ${target.project.name}'s coordinator` : "Task for a new agent"}
           onChange={(event) => { setMessage(event.target.value); setAsking(false); }}
           onKeyDown={(event) => {
