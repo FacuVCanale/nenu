@@ -419,12 +419,16 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       }
       const el = scrollRef.current;
       anchorHeight.current = el ? el.scrollHeight : null;
-      setFrozen({
-        ...base,
-        entries: [...older, ...base.entries],
-        hasMore: page.hasMore,
-        fileTruncated: base.fileTruncated || page.fileTruncated,
-        total: Math.max(base.total, page.total),
+      // Onto the window as it stands now: a result that landed while the page loaded stays on its row.
+      setFrozen((current) => {
+        const held = current?.available ? current : base;
+        return {
+          ...held,
+          entries: [...older, ...held.entries],
+          hasMore: page.hasMore,
+          fileTruncated: held.fileTruncated || page.fileTruncated,
+          total: Math.max(held.total, page.total),
+        };
       });
     } catch {
       if (request.current === controller && !controller.signal.aborted) setOlderError(true);
