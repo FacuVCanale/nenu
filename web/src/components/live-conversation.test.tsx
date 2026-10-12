@@ -45,7 +45,7 @@ describe("LiveConversation", () => {
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
     expect(draft).toHaveValue("Still writing");
-    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Scroll to latest/ }));
     expect(screen.getByText("New latest turn")).toBeInTheDocument();
   });
 
@@ -76,7 +76,7 @@ describe("LiveConversation", () => {
     rerender(view({ ...initial, entries: [{ uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "New latest turn" }] }] }));
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Scroll to latest/ }));
     expect(screen.getByText("New latest turn")).toBeInTheDocument();
     expect(screen.queryByText("what changed today?")).not.toBeInTheDocument();
   });
@@ -100,7 +100,7 @@ describe("LiveConversation", () => {
     rerender(view(asked, "working"));
     fireEvent.scroll(scroller);
 
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     expect(screen.getByText("Working…")).toBeInTheDocument();
     expect(box.top).toBe(764);
     rerender(view({ ...asked, entries: [...asked.entries, { uuid: "t4", ts: "", role: "assistant", parts: [{ kind: "text", text: "Looking." }] }] }, "working"));
@@ -134,7 +134,7 @@ describe("LiveConversation", () => {
     // Scrolled away, the way back names the question and lands on its first line.
     box.top = 300;
     fireEvent.scroll(scroller);
-    const back = screen.getByRole("button", { name: "Scroll to latest" });
+    const back = screen.getByRole("button", { name: /^Scroll to latest/ });
     expect(back).toHaveTextContent("Waiting on you");
     fireEvent.click(back);
     expect(box.top).toBe(988);
@@ -190,13 +190,155 @@ describe("LiveConversation", () => {
     fireEvent.scroll(scroller);
     box.top = 1000;
     fireEvent.scroll(scroller);
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     // Above the question the reader has left; the way back lands on its first line.
     box.top = 500;
     fireEvent.scroll(scroller);
-    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Scroll to latest/ }));
     expect(box.top).toBe(944);
     vi.restoreAllMocks();
+  });
+
+  // Measured on the e2e bench (T09): replacing an eight-line draft empties the composer for one
+  // layout. The list grows, the browser clamps scrollTop 148 px up, and the composer grows back
+  // before the frame, so no size changed and no ResizeObserver ran. The scroll event the clamp
+  // queued then read as the reader leaving the tail, and attaching an image after that left 50 px.
+  it("stays at the latest turn when an edit beside the list moves it for one layout", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3145, client: 439 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    expect(box.top).toBe(2706);
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Draft" }), { target: { value: "Línea 1" } });
+    box.client = 587;
+    scroller.scrollTop = box.top;
+    box.client = 439;
+    fireEvent.scroll(scroller);
+
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
+    expect(box.top).toBe(2706);
+  });
+
+  it("still lets the reader scroll away while a draft is being edited", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3145, client: 439 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Draft" }), { target: { value: "Línea 1" } });
+    fireEvent.touchStart(scroller, { touches: [{ clientX: 100, clientY: 200 }] });
+    box.top = 2400;
+    fireEvent.scroll(scroller);
+
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+    expect(box.top).toBe(2400);
+  });
+
+  // A screen reader or the browser's own find moves the list without touching it: long after an edit,
+  // a move up is the reader's.
+  it("lets a move up long after an edit leave the tail", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3145, client: 439 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Draft" }), { target: { value: "Línea 1" } });
+    now.mockReturnValue(3000);
+    box.top = 2400;
+    fireEvent.scroll(scroller);
+
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+    now.mockRestore();
+  });
+
+  // T22: the two ways back looked the same. New messages say how many; tool calls are not messages.
+  it("counts the messages that arrived while the reader was away", () => {
+    const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const view = (history: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(initial));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).not.toHaveTextContent(/\S/);
+
+    rerender(view({ ...initial, entries: [...fixtureTranscript,
+      { uuid: "n1", ts: "", role: "user", parts: [{ kind: "text", text: "Open the PR." }] },
+      { uuid: "n2", ts: "", role: "assistant", parts: [{ kind: "tool", name: "Bash", summary: "gh pr create" }] },
+      { uuid: "n3", ts: "", role: "assistant", parts: [{ kind: "text", text: "Opened." }] },
+    ] }));
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toHaveTextContent("2 new");
+  });
+
+  // T42: on a slow link the pane showed a spinner in its upper third until the history came back.
+  it("draws the thread's shape while the first load is slow, then the turns", () => {
+    const view = (history: PaneHistoryResponse | null, loading: boolean) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={loading} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(null, true));
+    const skeleton = screen.getByText("Loading conversation…").closest("[role='status']")!;
+    expect(skeleton.querySelectorAll("[data-skeleton-turn]")).toHaveLength(3);
+    expect(container.querySelector(".animate-spin")).toBeNull();
+
+    // The bridge names the session with its first page, which remounts the scoped list.
+    rerender(view({ paneId: "w1:p1", available: true, sessionKey: "codex:work", entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false }, false));
+    expect(screen.queryByText("Loading conversation…")).not.toBeInTheDocument();
+    expect(screen.getByText("what changed today?")).toBeInTheDocument();
+  });
+
+  // T18: two paragraphs said different things above the recovery form. One card, one line.
+  it("offers one card for a pane with no conversation linked and a way to link one", () => {
+    render(<MemoryRouter><LiveConversation paneId="w2:codex" history={{ paneId: "w2:codex", available: false, reason: "no-session" }} loading={false} error={false}
+      recovery={<button type="button">Find Codex conversations</button>} /></MemoryRouter>);
+    const card = screen.getByRole("region", { name: "No conversation linked" });
+    expect(card).toHaveTextContent("Send a message to start, or link the one already running.");
+    expect(screen.getByRole("button", { name: "Find Codex conversations" })).toBeInTheDocument();
+    expect(screen.queryByText(/connect an existing session/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer to connect a session where nothing can be connected", () => {
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" history={{ paneId: "w1:p1", available: false, reason: "no-session" }} loading={false} error={false} /></MemoryRouter>);
+    expect(screen.getByText("Send the first message to start the conversation.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
+  });
+
+  // iOS keeps the keyboard up over a tap on plain text; Messages and herdr-web-ui close it when the
+  // reader drags the thread down or taps it. The draft stays in the box.
+  it("closes the keyboard when the reader drags the thread down 32 px, and keeps the draft", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" defaultValue="Half a thought" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const draft = screen.getByRole("textbox", { name: "Draft" });
+    act(() => draft.focus());
+
+    fireEvent.touchStart(scroller, { touches: [{ clientX: 100, clientY: 200 }] });
+    fireEvent.touchMove(scroller, { touches: [{ clientX: 100, clientY: 160 }] });
+    fireEvent.touchMove(scroller, { touches: [{ clientX: 102, clientY: 220 }] });
+    expect(draft).toHaveFocus();
+    fireEvent.touchMove(scroller, { touches: [{ clientX: 104, clientY: 232 }] });
+    expect(draft).not.toHaveFocus();
+    expect(draft).toHaveValue("Half a thought");
+  });
+
+  it("closes the keyboard on a tap on the thread's text, not on its controls", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" defaultValue="Half a thought" /></MemoryRouter>);
+    const draft = screen.getByRole("textbox", { name: "Draft" });
+    const tap = (target: Element) => {
+      fireEvent.touchStart(target, { touches: [{ clientX: 50, clientY: 50 }] });
+      fireEvent.touchEnd(target, { changedTouches: [{ clientX: 52, clientY: 51 }] });
+    };
+
+    act(() => draft.focus());
+    tap(screen.getByRole("button", { name: /1 tool call · Bash/ }));
+    expect(draft).toHaveFocus();
+    tap(screen.getByText("One commit: abc1234."));
+    expect(draft).not.toHaveFocus();
+    expect(draft).toHaveValue("Half a thought");
   });
 
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
@@ -210,7 +352,7 @@ describe("LiveConversation", () => {
       box.top = top;
       fireEvent.scroll(scroller);
     }
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
   });
 });
 
@@ -248,7 +390,7 @@ describe("inline history pagination", () => {
     expect(screen.getByRole("textbox", { name: "Live draft" })).toBe(draft);
     expect(draft).toHaveValue("Keep writing");
     expect(scroller.scrollTop).toBe(650);
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load older messages" })).not.toBeInTheDocument();
   });
 
@@ -273,7 +415,7 @@ describe("inline history pagination", () => {
     expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 120, before: fixtureTranscript[0]!.uuid }, "work", expect.any(AbortSignal));
     // The page landed 400 px above the turn being read, so the list moved down by exactly that much.
     expect(box.top).toBe(600);
-    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
   });
 
   it("leaves a failed older page for the reader to retry and pages nothing while searching", async () => {
@@ -335,7 +477,7 @@ describe("inline history pagination", () => {
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     rerender(view(latest, 1));
     expect(screen.getByText("Latest reply")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     await act(async () => { resolvePage({ ...initialHistory, available: true, entries: [olderEntry] }); });
     expect(screen.queryByText("An older request")).not.toBeInTheDocument();
   });
