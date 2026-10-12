@@ -29,8 +29,9 @@ const buttonVariants = cva(
         icon: "ui-button-icon",
         // A card's or a sheet's one commit (Submit 3, Choose Boxy, Answer in thread): full width, the
         // option rows' radius and type, so the action and the choices above it read as one family.
-        // min-h, not h: a long label wraps instead of running past the card.
-        block: "min-h-10 w-full whitespace-normal rounded-lg px-4 py-2 text-center text-body coarse:min-h-11 has-[>svg]:px-4",
+        // min-h, not h: a long label wraps instead of running past the card. Its press is 0.98: the
+        // base 0.96 visibly jumps a bar this wide.
+        block: "min-h-10 w-full whitespace-normal rounded-lg px-4 py-2 text-center text-body coarse:min-h-11 has-[>svg]:px-4 active:scale-[0.98]",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
