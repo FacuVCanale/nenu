@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -106,6 +107,40 @@ describe("LiveConversation", () => {
     expect(box.top).toBe(764);
     rerender(view({ ...asked, entries: [...asked.entries, { uuid: "t4", ts: "", role: "assistant", parts: [{ kind: "text", text: "Looking." }] }] }, "working"));
     expect(screen.getByText("Looking.")).toBeInTheDocument();
+  });
+
+  // A question taller than the thread on a phone (measured: 579 px card, 48 px of thread left when
+  // it sat outside the scroller). Following lands on its first line, never past it.
+  it("follows to the top of a tall question at the tail and leaves the reader inside it", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const question = <section data-follow-stop aria-label="Which fruit?">Which fruit?</section>;
+    const view = (h: PaneHistoryResponse, footer?: ReactNode, waiting = false) => <MemoryRouter><LiveConversation paneId="w1:p1" history={h} loading={false} error={false} footer={footer} waiting={waiting} /></MemoryRouter>;
+    const { container, rerender } = render(view(history));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 400 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    expect(box.top).toBe(600);
+    // The card starts where the thread ended (1000) and is 700 px tall.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { top: this.hasAttribute("data-follow-stop") ? 1000 - box.top : 0 } as DOMRect;
+    });
+    box.height = 1700;
+    const more = (uuid: string) => ({ ...history, entries: [...history.entries, { uuid, ts: "", role: "assistant" as const, parts: [{ kind: "text" as const, text: uuid }] }] });
+    rerender(view(more("asked"), question, true));
+    expect(box.top).toBe(988);
+    // Reading down through the options is not leaving the tail: a refresh does not pull the view back up.
+    box.top = 1200;
+    fireEvent.scroll(scroller);
+    rerender(view(more("refreshed"), question, true));
+    expect(box.top).toBe(1200);
+    // Scrolled away, the way back names the question and lands on its first line.
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    const back = screen.getByRole("button", { name: "Scroll to latest" });
+    expect(back).toHaveTextContent("Waiting on you");
+    fireEvent.click(back);
+    expect(box.top).toBe(988);
+    vi.restoreAllMocks();
   });
 
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
