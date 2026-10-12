@@ -1,9 +1,9 @@
-import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronRight, Folder, TriangleAlert } from "lucide-react";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
+import type { NewPreset } from "@/components/new-dialog";
 import { Button } from "@/components/ui/button";
-import { BottomSheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { fetchHomeDirs } from "@/lib/api";
 import { baseName, tildePath } from "@/lib/dir-picker";
@@ -24,7 +24,7 @@ import {
   type SpawnAgent,
   type SpawnTarget,
 } from "@/lib/spawn";
-import { isReadOnly, type AgentView } from "@/lib/types";
+import type { AgentView } from "@/lib/types";
 
 // Only someone choosing a folder needs the picker; it stays out of the bundle every page loads.
 const DirPicker = lazy(() => import("@/components/dir-picker").then((m) => ({ default: m.DirPicker })));
@@ -37,20 +37,23 @@ export interface NewAgentValues {
   permission: string;
 }
 
-interface NewAgentSheetProps {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  defaultCwd: string;
-  defaultMessage?: string;
-  liveDirs: string[];
-  readOnly: boolean;
-  /** Resolves to an error to show inline, or null once the new pane is open. */
-  onSubmit: (values: NewAgentValues) => Promise<string | null>;
-}
-
 export const inputField =
-  "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
+  "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring coarse:h-11";
+
+export const selectField = cn(inputField, "appearance-auto");
+/** A text area grows from its rows, not the input's height. */
+export const textField = cn(inputField, "h-auto resize-none py-2 coarse:h-auto");
+
+/** A labelled field of the New flow: the label over its control, and an optional line under it. */
+export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5 text-footnote font-medium text-muted-foreground">
+      {label}
+      {children}
+      {hint && <span className="font-normal">{hint}</span>}
+    </label>
+  );
+}
 
 export function Segmented<T extends string>({ label, options, value, onChange, className }: {
   label: string;
@@ -69,7 +72,7 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
           aria-checked={value === o.id}
           onClick={() => onChange(o.id)}
           className={cn(
-            "h-8 flex-auto truncate rounded-md px-1.5 text-[13px] font-medium transition-colors",
+            "h-8 flex-auto truncate rounded-md px-1.5 text-footnote font-medium transition-colors coarse:h-11",
             value === o.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -80,17 +83,19 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
   );
 }
 
-/** The agent form on its own, so the New dialog can host it too. Mounting it starts a fresh form. */
-export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, onBrowsing, submitLabel }: {
+/**
+ * The agent form of the New flow. Mounting it starts a fresh form. The folder picker takes the form's
+ * place while `browsing`, and the host owns that switch, so its header can title the step and step back.
+ */
+export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing }: {
   defaultCwd: string;
   defaultMessage?: string;
   liveDirs: string[];
   readOnly: boolean;
+  /** Resolves to an error to show inline, or null once the new pane is open. */
   onSubmit: (values: NewAgentValues) => Promise<string | null>;
-  /** Told when the folder picker takes over the form, so the host can retitle and grow. */
-  onBrowsing?: (browsing: boolean) => void;
-  /** Replaces "Start <agent>" when the host creates something more than the agent. */
-  submitLabel?: string;
+  browsing: boolean;
+  onBrowsing: (browsing: boolean) => void;
 }) {
   const [agent, setAgent] = useState<SpawnAgent>(loadAgent);
   const [permissions, setPermissions] = useState(() => ({ claude: loadPermission("claude"), codex: loadPermission("codex") }));
@@ -99,13 +104,8 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
   const [message, setMessage] = useState(defaultMessage);
   const [recent] = useState(loadDirs);
   const [home, setHome] = useState("");
-  const [browsing, setBrowsingState] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setBrowsing = (next: boolean) => {
-    setBrowsingState(next);
-    onBrowsing?.(next);
-  };
 
   // A self-update reload would drop a half-typed first message; hold it while the form is up.
   useHoldReload("new-agent", true);
@@ -142,10 +142,9 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
           home={home}
           shortcuts={suggestDirs([cwd], liveDirs, recent)}
           onHome={setHome}
-          onBack={() => setBrowsing(false)}
           onPick={(path) => {
             setCwd(path);
-            setBrowsing(false);
+            onBrowsing(false);
           }}
         />
       </Suspense>
@@ -161,7 +160,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
     >
       <Segmented label="Agent" options={SPAWN_AGENTS} value={agent} onChange={setAgent} />
 
-      <FolderButton shown={shown} parent={parent} onClick={() => setBrowsing(true)} />
+      <FolderButton shown={shown} parent={parent} onClick={() => onBrowsing(true)} />
 
       {chosen && !shell && (
         <div className="flex flex-col gap-1.5">
@@ -171,7 +170,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
             value={chosen.id}
             onChange={(id) => setPermissions((p) => ({ ...p, [agent]: id }))}
           />
-          <p className={cn("flex items-start gap-1.5 px-0.5 text-xs", chosen.danger ? "text-status-working" : "text-muted-foreground")}>
+          <p className={cn("flex items-start gap-1.5 px-0.5 text-footnote", chosen.danger ? "text-status-working" : "text-muted-foreground")}>
             {chosen.danger && <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />}
             {chosen.hint}
           </p>
@@ -187,7 +186,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
           onChange={(e) => setMessage(e.target.value)}
           rows={3}
           placeholder={`First message (optional), sent when ${agentLabel(agent)} is ready`}
-          className={cn(inputField, "h-auto resize-none py-2")}
+          className={textField}
         />
       )}
 
@@ -198,7 +197,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
         </p>
       )}
       <Button type="submit" disabled={busy || readOnly} aria-busy={busy || undefined} className="h-11">
-        {busy ? "Creating…" : shell ? "Open shell" : (submitLabel ?? `Start ${agentLabel(agent)}`)}
+        {busy ? "Creating…" : shell ? "Open shell" : `Start ${agentLabel(agent)}`}
       </Button>
     </form>
   );
@@ -211,35 +210,15 @@ export function FolderButton({ shown, parent, onClick, label = "Directory" }: { 
       type="button"
       aria-label={`${label}: ${shown}`}
       onClick={onClick}
-      className="flex h-12 w-full items-center gap-3 rounded-lg border border-border bg-background px-3 text-left hover:bg-accent/60 active:bg-accent"
+      className="flex h-12 w-full items-center gap-3 rounded-lg border border-border bg-background px-3 text-left hover:bg-accent/60 active:bg-accent coarse:h-14"
     >
       <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="min-w-0 flex-1 leading-tight">
-        <span className="block truncate text-sm font-medium">{shown === "~" ? "Home" : baseName(shown)}</span>
-        <span className="block truncate text-xs text-muted-foreground">{parent}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-subhead font-medium">{shown === "~" ? "Home" : baseName(shown)}</span>
+        <span className="block truncate text-footnote text-muted-foreground">{parent}</span>
       </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" aria-hidden />
+      <ChevronRight className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
     </button>
-  );
-}
-
-/** Classes that turn a sheet into a full-height panel while the folder picker fills it. */
-export const BROWSING_SHEET = "flex h-dvh flex-col sm:h-[min(40rem,85dvh)] [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col";
-
-export function NewAgentSheet({ open, onClose, title, defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit }: NewAgentSheetProps) {
-  const [browsing, setBrowsing] = useState(false);
-  useEffect(() => {
-    if (open) setBrowsing(false);
-  }, [open]);
-  return (
-    <BottomSheet
-      open={open}
-      onClose={onClose}
-      title={browsing ? "Choose a folder" : title}
-      className={cn("sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-2xl sm:border sm:pb-4", browsing && BROWSING_SHEET)}
-    >
-      <NewAgentForm defaultCwd={defaultCwd} defaultMessage={defaultMessage} liveDirs={liveDirs} readOnly={readOnly} onSubmit={onSubmit} onBrowsing={setBrowsing} />
-    </BottomSheet>
   );
 }
 
@@ -288,57 +267,39 @@ export function useSpawnInto(onDone: () => void) {
   };
 }
 
-// ── The New dialog's request ──────────────────────────────────────────────────────────────────
-// The New entry points (sidebar, ⌘N, the phone's center +) open one dialog mounted here, at the app
-// root, so any of them can open it without threading state through their parents.
-let newOpen = false;
+// ── The New flow's request ────────────────────────────────────────────────────────────────────
+// Every way to create something (sidebar, ⌘N, the phone's center +, a tab strip's +, Home's composer,
+// a project's New thread) opens the one New flow mounted here, at the app root, preset to where the
+// person is, so none of them threads state through its parents.
+let newRequest: NewPreset | null = null;
 const newListeners = new Set<() => void>();
-export function openNewDialog(open = true): void {
-  newOpen = open;
+/** Opens the New flow on its list (`true`), preset to a kind and its place, or closes it (`false`). */
+export function openNewDialog(open: boolean | NewPreset = true): void {
+  newRequest = open === true ? {} : open === false ? null : open;
   for (const fn of newListeners) fn();
 }
-export function useNewDialogOpen(): boolean {
+function useNewDialogRequest(): NewPreset | null {
   return useSyncExternalStore(
     (fn) => (newListeners.add(fn), () => void newListeners.delete(fn)),
-    () => newOpen,
+    () => newRequest,
   );
 }
+export function useNewDialogOpen(): boolean {
+  return useNewDialogRequest() !== null;
+}
 
-// The dialog is only loaded once someone opens it, like the folder picker.
+// The flow is only loaded once someone opens it, like the folder picker.
 const NewDialog = lazy(() => import("@/components/new-dialog"));
 
-/** The create surfaces, mounted at the app root: the agent sheet ({@link openNewAgent}) and the New dialog. */
+/** The New flow, mounted at the app root. {@link openNewAgent} (lib/spawn) opens it on a tab or a workspace. */
 export function NewAgentHost() {
   const target = useNewAgentRequest();
-  const dialogOpen = useNewDialogOpen();
-  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
-  const spawnInto = useSpawnInto(() => openNewAgent(null));
-  // The sheet keeps rendering through its close so a failed re-open never flashes empty content.
-  const [last, setLast] = useState<SpawnTarget | null>(null);
-  useEffect(() => {
-    if (target) setLast(target);
-  }, [target]);
-  const shown = target ?? last;
-
+  const request = useNewDialogRequest();
+  const preset: NewPreset | null = request ?? target;
+  if (!preset) return null;
   return (
-    <>
-      {shown && (
-        <NewAgentSheet
-          open={target !== null}
-          onClose={() => openNewAgent(null)}
-          title={shown.kind === "tab" ? "New tab" : "New chat"}
-          defaultCwd={defaultCwdFor(shown, data)}
-          defaultMessage={shown.message}
-          liveDirs={liveDirsOf(data)}
-          readOnly={isReadOnly(data?.device)}
-          onSubmit={(values) => spawnInto(shown, values)}
-        />
-      )}
-      {dialogOpen && (
-        <Suspense fallback={null}>
-          <NewDialog onClose={() => openNewDialog(false)} />
-        </Suspense>
-      )}
-    </>
+    <Suspense fallback={null}>
+      <NewDialog preset={preset} onClose={() => { openNewDialog(false); openNewAgent(null); }} />
+    </Suspense>
   );
 }

@@ -76,7 +76,7 @@ function desktop() {
 }
 
 /** The kind rows of the list, by the name each one starts with. */
-const kinds = (create: ReturnType<typeof within>) => create.getAllByRole("button").map((row) => row.textContent);
+const kinds = (create: { getAllByRole: (role: "button") => HTMLElement[] }) => create.getAllByRole("button").map((row) => row.textContent);
 
 it("groups what it starts, naming the workspace on screen, and leaves the place picker to the Tab form", async () => {
   setup();
@@ -139,7 +139,8 @@ it("opens from New on the list, and closes from its header", async () => {
   onTestFinished(() => openNewDialog(false));
   act(() => openNewDialog());
   expect(await screen.findByRole("dialog", { name: "New" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Close" }));
+  // The flow's header replaces the sheet's own, which only CSS hides, and jsdom applies none.
+  await user.click(screen.getAllByRole("button", { name: "Close" }).at(-1)!);
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 

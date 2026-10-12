@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Folder, History } from "lucide-react";
+import { ChevronRight, Folder, History } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { fetchHomeDirs, type HomeDirs } from "@/lib/api";
@@ -13,15 +13,17 @@ interface DirPickerProps {
   shortcuts: string[];
   onHome: (home: string) => void;
   onPick: (path: string) => void;
-  onBack: () => void;
 }
 
 type Listing = { state: "loading" } | { state: "ready"; dirs: HomeDirs } | { state: "error" };
 
 const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm active:bg-accent hover:bg-accent/60";
 
-/** Browse folders under home: tap to go in, type to filter or to give any path, "Use" to choose. */
-export function DirPicker({ home, shortcuts, onHome, onPick, onBack }: DirPickerProps) {
+/**
+ * Browse folders under home: tap to go in, type to filter or to give any path, "Use" to choose. The
+ * host's header titles this step and steps back out of it.
+ */
+export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
   const [query, setQuery] = useState("~/");
   const [listing, setListing] = useState<Listing>({ state: "loading" });
   const input = useRef<HTMLInputElement>(null);
@@ -59,38 +61,33 @@ export function DirPicker({ home, shortcuts, onHome, onPick, onBack }: DirPicker
 
   return (
     <div className="flex flex-1 flex-col gap-2">
-      <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="icon" className="-ml-2 size-10 shrink-0" aria-label="Back" onClick={onBack}>
-          <ChevronLeft className="size-5" />
-        </Button>
-        <input
-          ref={input}
-          aria-label="Folder path"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
-            e.preventDefault();
-            if (filter && matches[0] && !exact) enter(matches[0]);
-            else if (target) onPick(target);
-          }}
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          enterKeyHint="go"
-          className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
+      <input
+        ref={input}
+        aria-label="Folder path"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          if (filter && matches[0] && !exact) enter(matches[0]);
+          else if (target) onPick(target);
+        }}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="go"
+        className="h-10 w-full rounded-lg border border-border bg-background px-3 font-mono text-code outline-none focus-visible:ring-2 focus-visible:ring-ring coarse:h-11"
+      />
 
       <nav aria-label="Breadcrumb" className="-mx-1 flex items-center overflow-x-auto px-1 text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {crumbs(shown).map((c, i, all) => (
           <span key={c.query} className="flex shrink-0 items-center">
-            {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/60" aria-hidden />}
+            {i > 0 && <ChevronRight className="size-3.5 text-subtle-foreground" aria-hidden />}
             <button
               type="button"
               onClick={() => setQuery(c.query)}
               aria-current={i === all.length - 1 ? "location" : undefined}
-              className={cn("h-8 rounded-md px-1.5", i === all.length - 1 ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("hit-area h-8 rounded-md px-1.5", i === all.length - 1 ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
               {c.label === "~" ? "Home" : c.label}
             </button>
@@ -100,7 +97,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick, onBack }: DirPicker
 
       {showShortcuts && (
         <section aria-label="Recent folders">
-          <h3 className="px-2 pb-1 text-xs font-medium text-muted-foreground">Recent</h3>
+          <h3 className="px-2 pb-1 text-footnote font-medium text-muted-foreground">Recent</h3>
           <ul>
             {shortcuts.map((path) => {
               const short = tildePath(path, home);
@@ -110,7 +107,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick, onBack }: DirPicker
                     <History className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                     <span className="min-w-0 flex-1 truncate">
                       <span className="font-medium">{baseName(short)}</span>{" "}
-                      <span className="text-xs text-muted-foreground">{short.slice(0, -baseName(short).length - 1) || "/"}</span>
+                      <span className="text-footnote text-muted-foreground">{short.slice(0, -baseName(short).length - 1) || "/"}</span>
                     </span>
                   </button>
                 </li>
@@ -121,7 +118,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick, onBack }: DirPicker
       )}
 
       <section aria-label="Folders" className="flex-1">
-        {showShortcuts && <h3 className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">In {shown === "~" ? "Home" : baseName(shown)}</h3>}
+        {showShortcuts && <h3 className="px-2 pt-2 pb-1 text-footnote font-medium text-muted-foreground">In {shown === "~" ? "Home" : baseName(shown)}</h3>}
         {listing.state === "loading" && <p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>}
         {listing.state === "error" && <p className="px-2 py-3 text-sm text-muted-foreground">Can't list this folder. You can still use the path as typed.</p>}
         {dirs && matches.length === 0 && <p className="px-2 py-3 text-sm text-muted-foreground">{filter ? `No folder starts with “${filter}”.` : "No folders here."}</p>}
@@ -131,15 +128,15 @@ export function DirPicker({ home, shortcuts, onHome, onPick, onBack }: DirPicker
               <button type="button" className={row} onClick={() => enter(name)}>
                 <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <span className="min-w-0 flex-1 truncate">{name}</span>
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" aria-hidden />
+                <ChevronRight className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
               </button>
             </li>
           ))}
         </ul>
-        {dirs?.truncated && <p className="px-2 py-2 text-xs text-muted-foreground">Showing the first {dirs.entries.length}. Type to narrow.</p>}
+        {dirs?.truncated && <p className="px-2 py-2 text-footnote text-muted-foreground">Showing the first {dirs.entries.length}. Type to narrow.</p>}
       </section>
 
-      <div className="sticky bottom-0 -mx-4 mt-auto border-t border-border/60 bg-background/95 px-4 pt-3 backdrop-blur-md">
+      <div className="sticky bottom-0 -mx-4 mt-auto border-t border-border/60 bg-background/95 px-4 pt-3 backdrop-blur-md lg:-mx-5 lg:px-5 lg:pb-4">
         <Button type="button" className="h-11 w-full" disabled={!target} onClick={() => target && onPick(target)}>
           {target ? `Use ${tildePath(target, home) === "~" ? "Home" : baseName(target)}` : "Use this folder"}
         </Button>
