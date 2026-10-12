@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { useStatus } from "@/lib/status";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,6 +19,7 @@ vi.mock("@/components/agent-chat", () => ({
 function agentView(paneId: string, kind: "agent" | "shell", tabId = "w1:t1"): AgentView {
   return {
     paneId,
+    paneLabel: `pane ${paneId}`,
     workspaceId: tabId.split(":")[0]!,
     workspaceLabel: "proj",
     workspaceNumber: 1,
@@ -49,6 +51,11 @@ const connected = (agents: AgentView[], shellPanes: AgentView[] = [], tabs: TabV
   authError: false,
 });
 
+/** The toast the route raised, as text. */
+function StatusProbe() {
+  return <p data-testid="status">{useStatus()?.text ?? ""}</p>;
+}
+
 function makeRouter(initialPath: string, homeLoader: () => HomeData) {
   return createMemoryRouter(
     [
@@ -56,7 +63,7 @@ function makeRouter(initialPath: string, homeLoader: () => HomeData) {
         id: ROOT_ROUTE_ID,
         path: "/",
         loader: () => homeLoader(),
-        element: <Outlet />,
+        element: <><Outlet /><StatusProbe /></>,
         children: [
           { index: true, element: <div data-testid="home">HOME</div> },
           {
@@ -158,6 +165,7 @@ describe("DetailRoute — the open pane closes", () => {
     const router = await closeUnder("w1:p3", herd(["w1:p1", "w1:p2", "w2:p1"]));
     expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p2:live");
     expect(router.state.location.pathname).toBe(panePath("w1:p2"));
+    expect(screen.getByTestId("status")).toHaveTextContent("Tab w1:t3 closed · showing pane w1:p2");
   });
 
   it("lands on the next tab when the first one closes", async () => {
@@ -173,11 +181,21 @@ describe("DetailRoute — the open pane closes", () => {
     const router = await closeUnder("w1:p1", after, before);
     expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1b:live");
     expect(router.state.location.pathname).toBe(panePath("w1:p1b"));
+    expect(screen.getByTestId("status")).toHaveTextContent("pane w1:p1 closed · showing pane w1:p1b");
   });
 
   it("goes Home when the last tab of its workspace closes, never into another workspace", async () => {
     const router = await closeUnder("w2:p1", herd(["w1:p1", "w1:p2", "w1:p3"]));
     await screen.findByTestId("home");
     expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByTestId("status")).toHaveTextContent("Tab w2:t1 closed · back to Home");
+  });
+
+  it("says a link to a pane this page never saw no longer exists, and lands Home", async () => {
+    const router = makeRouter(panePath("w9:nope"), () => herd(panes.map((p) => p.paneId)));
+    render(<RouterProvider router={router} />);
+    await screen.findByTestId("home");
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByTestId("status")).toHaveTextContent("That pane no longer exists");
   });
 });

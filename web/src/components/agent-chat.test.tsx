@@ -1016,6 +1016,37 @@ it("blocks sending immediately after access is refused, without waiting for the 
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 });
 
+// A pane that is gone, when the route cannot move off it (Herdr is not answering, or it never was):
+// say what happened and offer the way on, instead of a dead composer under "(agent gone)".
+describe("AgentChat — a pane that is gone", () => {
+  const closed = { ...fixtureAgents[0]!, paneLabel: "Codex" };
+  const next = { ...fixtureAgents[0]!, paneId: "w1:p9", paneLabel: "Blocked Claude" };
+
+  it("says the pane closed and opens the pane beside it or Home, with no composer", async () => {
+    const props = renderChat({ agent: undefined, closed, next, error: true });
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Pane closed");
+    expect(screen.getByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("(no recent output)")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Open Blocked Claude" }));
+    expect(props.onSelect).toHaveBeenCalledWith("w1:p9");
+    await userEvent.click(screen.getByRole("button", { name: "Home" }));
+    expect(props.onBack).toHaveBeenCalled();
+  });
+
+  it("says a link names a pane Herdr no longer has", () => {
+    renderChat({ agent: undefined });
+    expect(screen.getByRole("heading", { name: "That pane no longer exists" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open / })).toBeNull();
+  });
+
+  it("does not claim a pane is gone while Nenu cannot ask Herdr", () => {
+    renderChat({ agent: undefined, error: true });
+    expect(screen.getByRole("heading", { name: "Nenu can't find this pane yet" })).toBeInTheDocument();
+  });
+});
+
 // The composer names why it is locked, the same reason the question card gives: a refused sign-in is
 // not a device that was never authorised, and a silent Herdr is not a lost network.
 describe("AgentChat — why the composer is locked", () => {
