@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 /** One row's box: 44px on a coarse pointer, 40px on a fine one, a hairline above every row but the
  *  first. For a row that is itself a control (a disclosure, a menu), spread it on that element. */
 export const listRowClass =
-  "relative flex min-h-10 w-full items-center gap-3 px-4 py-2 text-left coarse:min-h-11 coarse:py-2.5 not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-4 not-first:before:h-px not-first:before:bg-border";
+  "relative flex min-h-10 w-full items-center gap-3 px-4 py-2 text-left coarse:min-h-11 not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-4 not-first:before:h-px not-first:before:bg-border";
 
 /** The press and hover tint of a row that is a control, clipped to the card's corners. */
 export const listRowPressable =
@@ -29,14 +29,14 @@ export function ListSection({
   return (
     <section aria-labelledby={title ? headingId : undefined} className={cn("flex flex-col", className)}>
       {title && (
-        <h2 id={headingId} className="px-4 pb-2 text-footnote font-medium text-muted-foreground">
+        <h2 id={headingId} className="px-4 pb-1.5 text-footnote font-medium text-muted-foreground">
           {title}
         </h2>
       )}
       <div data-slot="list-group" className="flex flex-col rounded-xl border bg-card text-card-foreground">
         {children}
       </div>
-      {footer && <div className="px-4 pt-2 text-footnote text-pretty text-muted-foreground">{footer}</div>}
+      {footer && <div className="px-4 pt-1.5 text-footnote text-pretty text-muted-foreground">{footer}</div>}
     </section>
   );
 }

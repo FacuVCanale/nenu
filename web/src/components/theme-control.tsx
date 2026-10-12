@@ -62,7 +62,7 @@ export function ThemeControl() {
             tabIndex={selected ? 0 : -1}
             onClick={() => setTheme(option.value)}
             className={cn(
-              "relative flex select-none items-center justify-center gap-1.5 rounded-sm text-subhead transition-colors duration-150 ease-out motion-reduce:transition-none",
+              "hit-area relative flex select-none items-center justify-center gap-1.5 rounded-sm text-subhead transition-colors duration-150 ease-out motion-reduce:transition-none",
               selected ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
