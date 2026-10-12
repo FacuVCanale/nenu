@@ -61,6 +61,19 @@ describe("text colour", () => {
   });
 });
 
+describe("radii", () => {
+  it("takes every radius in the app's own stylesheets from the scale, or a pill or circle", () => {
+    // file-preview.css belongs to the viewers and moves with them.
+    const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), ...stylesheets(resolve(src, "styles"))];
+    const offenders = files.flatMap((file) =>
+      cssRules(readFileSync(file, "utf8"))
+        .filter((rule) => rule.decls["border-radius"] && !/^(var\(--radius-(sm|md|lg|xl|2xl)\)|9999px|50%)$/.test(rule.decls["border-radius"]))
+        .map((rule) => `${relative(src, file)}: ${rule.selectors.join(", ")} { border-radius: ${rule.decls["border-radius"]} }`),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("type scale", () => {
   it("defines every step in rem, so the browser's text size scales it", () => {
     // The same list teaches cn() the scale (lib/utils.ts), so a step added here merges too.
