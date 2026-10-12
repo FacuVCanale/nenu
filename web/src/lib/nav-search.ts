@@ -74,7 +74,11 @@ export function navSearch(source: {
   shellPanes?: readonly AgentView[];
   projects?: readonly ProjectView[];
   workspaces?: readonly WorkspaceView[];
-}, query: string, limit = SEARCH_LIMIT): SearchGroup[] {
+}, query: string, { limit = SEARCH_LIMIT, order }: {
+  limit?: number;
+  /** Where each hit sat when this query was first answered: a poll that moves an agent leaves it there. */
+  order?: ReadonlyMap<string, number>;
+} = {}): SearchGroup[] {
   if (!query.trim()) return [];
   const projects = source.projects ?? [];
   const panes = [...source.agents, ...(source.shellPanes ?? [])];
@@ -123,10 +127,11 @@ export function navSearch(source: {
     (owner ? owned : loose).push({ hit: { kind: "pane", key: `pane:${pane.paneId}`, pane, title, place }, rank: paneRank, resolved: false, at: chatRecency(pane) });
   }
 
-  const order = (a: Ranked, b: Ranked) => Number(a.resolved) - Number(b.resolved) || a.rank - b.rank || b.at - a.at;
+  const sat = (item: Ranked) => order?.get(item.hit.key) ?? Number.MAX_SAFE_INTEGER;
+  const byMatch = (a: Ranked, b: Ranked) => sat(a) - sat(b) || Number(a.resolved) - Number(b.resolved) || a.rank - b.rank || b.at - a.at;
   const groups = ([["Projects", owned], ["Workspaces", containers], ["Chats", loose]] as const)
     .filter(([, list]) => list.length > 0)
-    .map(([label, list]) => ({ label, list: [...list].sort(order), best: Math.min(...list.map((item) => item.rank)) }));
+    .map(([label, list]) => ({ label, list: [...list].sort(byMatch), best: Math.min(...list.map((item) => item.rank)) }));
   // A stable sort: groups as close keep the sidebar's order.
   return groups.sort((a, b) => a.best - b.best).map(({ label, list }) => ({
     label, hits: list.slice(0, limit).map((item) => item.hit), more: Math.max(0, list.length - limit),

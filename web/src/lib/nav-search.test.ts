@@ -21,7 +21,7 @@ const project: ProjectView = {
 describe("navigation search", () => {
   const names = (hits: SearchHit[]) => hits.map((hit) => hit.title);
   const groups = (query: string, source = herd, limit?: number) =>
-    navSearch(source, query, limit).map((group) => [group.label, names(group.hits), group.more]);
+    navSearch(source, query, { limit }).map((group) => [group.label, names(group.hits), group.more]);
   const herd = {
     agents: [
       pane("idle", { paneLabel: "Idle Claude", lastActiveAt: 10 }),

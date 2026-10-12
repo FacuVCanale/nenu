@@ -57,7 +57,9 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 }) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState(0);
+  // The pick is a row, not a place in the list: a poll that adds or drops a row leaves it where it was.
+  const [picked, setPicked] = useState<string>();
+  const [answered, setAnswered] = useState<{ query: string; order: Map<string, number> }>();
   const [mode, setMode] = useState<SidebarMode>("browse");
   const searchBox = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -68,9 +70,11 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
   const { pathname, key } = useLocation();
   const attention = needsYou(data);
   const phone = variant !== "sidebar";
-  const results = searching ? navSearch(data, query) : [];
+  const results = searching ? navSearch(data, query, { order: answered?.query === query ? answered.order : undefined }) : [];
   const hits = results.flatMap((group) => group.hits);
-  const selected = Math.min(picked, hits.length - 1);
+  // A query's first answer fixes its order; the list only reorders when the query changes.
+  if (searching && answered?.query !== query) setAnswered({ query, order: new Map(hits.map((hit, index) => [hit.key, index])) });
+  const selected = Math.max(0, hits.findIndex((hit) => hit.key === picked));
 
   const target = request?.target;
   useEffect(() => {
@@ -92,6 +96,8 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 
   function closeSearch() {
     setQuery("");
+    setPicked(undefined);
+    setAnswered(undefined);
     setSearching(false);
   }
 
@@ -116,7 +122,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
     if (event.key === "Enter" && !event.nativeEvent.isComposing) openPicked();
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && hits.length > 0) {
       event.preventDefault();
-      setPicked(Math.max(0, Math.min(hits.length - 1, selected + (event.key === "ArrowDown" ? 1 : -1))));
+      setPicked(hits[Math.max(0, Math.min(hits.length - 1, selected + (event.key === "ArrowDown" ? 1 : -1)))]!.key);
     }
   }
 
@@ -132,7 +138,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
             <input ref={searchBox} type="search" autoFocus value={query} placeholder="Search" aria-label="Search projects and chats"
               aria-controls={hits.length ? listId : undefined} aria-autocomplete="list"
               aria-activedescendant={hits.length ? optionId(listId, selected) : undefined}
-              onChange={(event) => { setQuery(event.target.value); setPicked(0); }}
+              onChange={(event) => { setQuery(event.target.value); setPicked(undefined); }}
               onBlur={() => { if (!query.trim()) closeSearch(); }}
               onKeyDown={onSearchKey} />
           </label>
@@ -188,7 +194,7 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick 
   selected: number;
   herd: Herd;
   session?: string;
-  onPick: (index: number) => void;
+  onPick: (key: string) => void;
 }) {
   useEffect(() => {
     document.getElementById(optionId(listId, selected))?.scrollIntoView?.({ block: "nearest" });
@@ -207,7 +213,7 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick 
             const to = hitPath(hit, herd, session);
             return (
               <Link key={hit.key} id={optionId(listId, at)} role="option" aria-selected={at === selected} className="nav-pane nav-result"
-                to={to} onMouseMove={() => { if (at !== selected) onPick(at); }}>
+                to={to} onMouseMove={() => { if (at !== selected) onPick(hit.key); }}>
                 <RowBody mark={<OpeningMark to={to}><HitMark hit={hit} /></OpeningMark>} title={<Highlight text={hit.title} query={query} />}
                   detail={<PlaceText place={hit.place} query={query} />} end={<span className="sr-only">, {hitState(hit)}</span>} />
               </Link>
