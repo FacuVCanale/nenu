@@ -1,4 +1,4 @@
-import { chatRecency, matches } from "@/lib/projects";
+import { matches } from "@/lib/projects";
 import { groupPanesByTab, tabName, workspaceName, type Herd } from "@/lib/spaces";
 import { paneDisplayName, type AgentView, type WorkspaceView } from "@/lib/types";
 
@@ -20,15 +20,16 @@ export interface WorkspaceBranch {
 }
 
 /**
- * Workspace → tab → pane, narrowed to a search, the one whose pane moved or was opened last first
- * (the workspace on screen is marked, not pinned). A query matching a workspace or tab name keeps
+ * Workspace → tab → pane, narrowed to a search, the one whose agent moved last first and Herdr's
+ * order between the rest. Opening a pane never moves its workspace: the row you reach for stays put,
+ * and the workspace on screen is marked, not pinned. A query matching a workspace or tab name keeps
  * all of it; otherwise only the panes that match survive, and a workspace left with nothing is dropped.
  */
 export function workspaceTree(source: Herd, query = "", currentPaneId?: string): WorkspaceBranch[] {
   const shells = source.shellPanes ?? [];
   const all = [...source.agents, ...shells];
-  const recency = new Map<string, number>();
-  for (const pane of all) recency.set(pane.workspaceId, Math.max(recency.get(pane.workspaceId) ?? 0, chatRecency(pane)));
+  const moved = new Map<string, number>();
+  for (const pane of all) moved.set(pane.workspaceId, Math.max(moved.get(pane.workspaceId) ?? 0, pane.lastActiveAt ?? 0));
   const currentWorkspace = all.find((pane) => pane.paneId === currentPaneId)?.workspaceId;
 
   return source.workspaces
@@ -55,7 +56,7 @@ export function workspaceTree(source: Herd, query = "", currentPaneId?: string):
       };
     })
     .filter((branch) => branch.tabs.length > 0 || (!query.trim() && branch.counts.agents === 0))
-    .sort((a, b) => (recency.get(b.workspace.workspaceId) ?? 0) - (recency.get(a.workspace.workspaceId) ?? 0)
+    .sort((a, b) => (moved.get(b.workspace.workspaceId) ?? 0) - (moved.get(a.workspace.workspaceId) ?? 0)
       || a.workspace.number - b.workspace.number);
 }
 
