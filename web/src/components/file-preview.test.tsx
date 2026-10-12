@@ -365,6 +365,18 @@ describe("image viewer", () => {
     await waitFor(() => expect(viewer).toHaveAttribute("data-chrome", "shown"));
   });
 
+  // The stage holds the pointer capture, so every pointerup names the stage as its target: a click on
+  // the picture read as one beside it and closed the viewer halfway through a double click.
+  it("zooms on a double click on the picture on a desk, and stays open", () => {
+    const close = vi.fn();
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
+    const box = { left: 300, right: 700, top: 200, bottom: 500, x: 300, y: 200, width: 400, height: 300, toJSON: () => ({}) };
+    vi.spyOn(screen.getByRole("img", { name: "Image 1" }), "getBoundingClientRect").mockReturnValue(box as DOMRect);
+    tap(500, 300, "mouse"); tap(500, 300, "mouse");
+    expect(zoom()).toBe(2.5);
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it("closes on a click beside the picture on a desk", async () => {
     const close = vi.fn();
     render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
