@@ -1,3 +1,4 @@
+import { parseInline, type MdSpan } from "./markdown";
 import type { AgentStatus, TranscriptEntry } from "./types";
 
 export interface WorkTurn {
@@ -124,9 +125,20 @@ export function describeTool(name: string): ToolStepDescription {
   return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: own, doing: own, target: "text" };
 }
 
-/** The first line of `text` that has words, trimmed: what a one-line preview of a thought shows. */
+/** The words the renderer draws for `spans`, without their formatting. */
+function plain(spans: MdSpan[]): string {
+  return spans.map((span) => "text" in span ? span.text : span.kind === "image" ? span.alt : plain(span.spans)).join("");
+}
+
+// A heading's hashes and a quote's marker are syntax the renderer never prints.
+const BLOCK_MARK = /^(?:#{1,6}\s+|>\s?)/;
+
+/**
+ * The first line of `text` that has words, as the rendered thought reads it: Codex and pi open a
+ * thought with a `**bold title**`, and a preview must not show the asterisks.
+ */
 export function firstLine(text: string): string {
-  return text.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return text.split("\n").map((line) => plain(parseInline(line.trim().replace(BLOCK_MARK, ""))).trim()).find(Boolean) ?? "";
 }
 
 /**
