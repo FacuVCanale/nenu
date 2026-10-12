@@ -75,6 +75,24 @@ describe("QuestionCard", () => {
     expect(detail.parentElement).toHaveClass("py-2");
   });
 
+  it("never clamps a command Home lets you approve", () => {
+    setup({ interaction: { ...permission, detailComplete: true, context: "a\nb\nc\nd\nrm -rf build" }, compact: true });
+    const detail = screen.getByLabelText("Request details");
+    expect(detail).not.toHaveClass("line-clamp-3");
+    expect(detail).toHaveTextContent("rm -rf build");
+    expect(screen.getByRole("button", { name: /^Yes$/ })).toBeVisible();
+  });
+
+  it("folds a long subject behind Show all instead of a scroll box inside the thread", async () => {
+    const rows = Array.from({ length: 12 }, (_, n) => `line ${n + 1}`).join("\n");
+    const { user } = setup({ interaction: { ...permission, context: rows } });
+    const detail = screen.getByLabelText("Request details");
+    expect(detail.parentElement?.className ?? "").not.toMatch(/overflow-y-auto/);
+    expect(detail).not.toHaveTextContent("line 12");
+    await user.click(screen.getByRole("button", { name: "Show all 12 lines" }));
+    expect(screen.getByLabelText("Request details")).toHaveTextContent("line 12");
+  });
+
   it("answers with one call naming the option by index", async () => {
     const { onAnswer, user } = setup();
     await user.click(screen.getByRole("button", { name: /Apple/ }));
