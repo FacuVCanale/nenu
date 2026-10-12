@@ -3,12 +3,15 @@ import { useLoaderData, useNavigate, useParams, useRouteLoaderData } from "react
 import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search, X } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
+import { Button } from "@/components/ui/button";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
+import { EmptyState } from "@/components/ui/empty-state";
 import { FindBar } from "@/components/find-bar";
 import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
+import { displayName } from "@/lib/display-name";
 import { HISTORY_PAGE_SIZE, ROOT_ROUTE_ID, type HistoryData, type HomeData } from "@/lib/loaders";
-import { panePath } from "@/lib/nav";
+import { homePath, panePath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
 import { matchingEntries, step, userTurnIndices } from "@/lib/transcript-search";
 import type { TranscriptEntry } from "@/lib/types";
@@ -27,13 +30,24 @@ import type { TranscriptEntry } from "@/lib/types";
 // The loader is deliberately not revalidated (`shouldRevalidate: false` in router.tsx), so the 1.5 s
 // poll never re-pulls a several-hundred-turn transcript out from under the reader.
 
-/** Why the strip is empty, in the user's terms. Each is an ordinary state, not an error. */
-const UNAVAILABLE_COPY: Record<NonNullable<HistoryData["unavailable"]>, string> = {
-  disabled: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT).",
-  "no-session": "This pane has no agent session, so there's no transcript to read.",
-  "no-log": "No transcript file was found for this pane's session yet.",
-  error: "Couldn't read the transcript. Pull back and try again.",
-};
+/**
+ * Why there's nothing to read, in the user's terms. Each is an ordinary state, not an error. `name`
+ * may be "this pane", so it never starts a sentence; `offline` is why the snapshot can't be trusted.
+ */
+function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, offline: string | undefined) {
+  switch (reason) {
+    case "disabled":
+      return { title: "History is off", body: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT)." };
+    case "no-session":
+      return shell
+        ? { title: "Shells keep no transcript", body: `History shows an agent's conversation, and ${name} is a shell.` }
+        : { title: "No conversation yet", body: `There's no agent session in ${name}, so there's no transcript to read.` };
+    case "no-log":
+      return { title: "No transcript yet", body: `There's no transcript for ${name} yet.` };
+    case "error":
+      return { title: "Couldn't read the transcript", body: offline ? `${offline} Open History again once it's back.` : "Go back and open History again." };
+  }
+}
 
 /** Turns rendered on open — a few screens, so first paint stays instant on the longest threads. */
 const INITIAL_RENDER = 60;
@@ -49,9 +63,16 @@ export function HistoryRoute() {
   const navigate = useNavigate();
   const session = data.session;
 
-  const agent =
+  const pane =
     root.agents.find((a) => a.paneId === paneId) ??
     root.shellPanes.find((p) => p.paneId === paneId);
+  // The name every other view gives this pane. A pane missing from the snapshot has none, and its
+  // raw id means nothing to a reader, so the header then just says History.
+  const name = pane ? displayName(pane, root.projects) : undefined;
+  // Only a healthy snapshot can say the pane is gone, the guard DetailRoute closes a pane on. A failed
+  // read or a disconnected Herdr leaves a live pane out too, and is said in the connection banner's words.
+  const offline = root.error ? "Nenu can't reach its bridge right now." : root.bridge !== "connected" ? "Herdr is unavailable right now." : undefined;
+  const gone = !pane && !offline;
 
   // Pages walked back beyond the first request (only reachable on a log longer than HISTORY_PAGE_SIZE).
   const [older, setOlder] = useState<TranscriptEntry[]>([]);
@@ -181,15 +202,19 @@ export function HistoryRoute() {
     listRef.current?.scrollToBottom();
   }, []);
 
-  const title = agent?.paneLabel ?? agent?.sessionName ?? agent?.workspaceLabel ?? paneId;
   const matchCursor = matches.indexOf(cursor);
+  const back = () => navigate(panePath(paneId, session));
+  const total = Math.max(data.total, entries.length);
+  const empty = gone
+    ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
+    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", pane?.kind === "shell", offline);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AppHeader
         bridge={root.bridge}
         error={root.error}
-        onHome={() => navigate(panePath(paneId, session))}
+        onHome={back}
         override={
           findOpen ? (
             <FindBar
@@ -205,110 +230,107 @@ export function HistoryRoute() {
           ) : undefined
         }
         rightLead={
-          <>
-            {/* A PWA has no browser find, so the view has to provide its own. */}
-            <button
-              type="button"
-              onClick={() => setFindOpen(true)}
-              aria-label="Find in history"
-              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted/60"
-            >
-              <Search className="size-4" />
+          // A PWA has no browser find, so the view has to provide its own, once there is text to search.
+          entries.length > 0 && (
+            <button type="button" onClick={() => setFindOpen(true)} aria-label="Find in history" className="workbench-icon-button">
+              <Search aria-hidden="true" size={17} />
             </button>
-            {data.total > 0 && (
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {shown.length}/{data.total}
-              </span>
-            )}
-          </>
+          )
         }
         // Explicit exit from reading mode. The Nenu mark also returns to the pane, but this is a
         // full-screen reading view you deliberately entered — it should be as obvious to leave as it
         // was to open, without relying on the phone's back gesture.
         rightTrail={
-          <button
-            type="button"
-            onClick={() => navigate(panePath(paneId, session))}
-            aria-label="Close history"
-            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted/60"
-          >
-            <X className="size-4" />
+          <button type="button" onClick={back} aria-label="Close history" className="workbench-icon-button">
+            <X aria-hidden="true" size={17} />
           </button>
         }
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <ScrollText className="size-3.5 shrink-0 text-muted-foreground" />
+            <ScrollText aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate font-semibold leading-tight">History</span>
           </div>
-          <div className="truncate text-xs leading-tight text-muted-foreground">{title}</div>
+          {name && <div className="truncate text-xs leading-tight text-muted-foreground">{name}</div>}
         </div>
       </AppHeader>
 
-      <div className="relative min-h-0 min-w-0 flex-1">
-        <ChatMessageList ref={listRef} className="px-3 py-3">
-          {entries.length === 0 ? (
-            <div className="px-2 py-16 text-center text-sm text-muted-foreground">
-              {UNAVAILABLE_COPY[data.unavailable ?? "no-log"]}
-            </div>
-          ) : (
-            <>
+      {/* The text scrolls under the home indicator; everything that floats stops above it.
+          ChatMessageList pins its Latest pill to its own box, so that box ends at the inset (this
+          padding) while the scroller reaches past it to the screen's edge. */}
+      <main className="relative min-h-0 min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">
+        {entries.length === 0 ? (
+          <EmptyState
+            icon={ScrollText}
+            title={empty.title}
+            className="h-full justify-center"
+            action={
+              <Button onClick={() => (gone ? navigate(homePath(session)) : back())} className="max-w-[min(20rem,80vw)]">
+                <span className="truncate">{gone ? "Back to Home" : `Back to ${name ?? "the pane"}`}</span>
+              </Button>
+            }
+          >
+            {empty.body}
+          </EmptyState>
+        ) : (
+          <ChatMessageList
+            ref={listRef}
+            // 72px under the last turn clears the 44px controls with room to spare.
+            className="h-[calc(100%_+_env(safe-area-inset-bottom))] px-(--page-gutter) pt-6 pb-[calc(env(safe-area-inset-bottom)_+_72px)]"
+          >
+            <div className="mx-auto w-full max-w-(--chat-column)">
               {/* Sits at the very top of what's rendered, so scrolling up reaches it naturally. The
                   auto-grow above usually gets there first; this is the explicit fallback. */}
               {!allRendered || hasMore ? (
-                <button
-                  type="button"
-                  onClick={growUpward}
-                  disabled={loading}
-                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60"
-                >
-                  {loading ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <ArrowUpToLine className="size-3.5" />
-                  )}
-                  {loading ? "Loading…" : "Load older"}
-                </button>
+                <div className="mb-4 flex flex-col items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={growUpward} disabled={loading} aria-busy={loading || undefined} className="text-muted-foreground">
+                    {loading ? <Loader2 aria-hidden="true" className="animate-spin" /> : <ArrowUpToLine aria-hidden="true" />}
+                    {loading ? "Loading…" : "Load older"}
+                  </Button>
+                  <p className="text-footnote text-subtle-foreground tabular-nums">
+                    {`Showing ${shown.length.toLocaleString()} of ${total.toLocaleString()}`}
+                  </p>
+                </div>
               ) : (
-                <div className="mb-3 text-center text-[11px] text-muted-foreground">
+                <p className="mb-4 text-center text-footnote text-subtle-foreground">
                   {data.fileTruncated
                     ? "Start of the readable transcript (the log was clipped at the read cap)"
                     : "Start of the conversation"}
-                </div>
+                </p>
               )}
-              <TranscriptView
-                entries={shown}
-                query={query}
-                focusedUuid={focusedUuid}
-              />
-            </>
-          )}
-        </ChatMessageList>
+              <TranscriptView entries={shown} query={query} focusedUuid={focusedUuid} />
+            </div>
+          </ChatMessageList>
+        )}
 
         {/* Jump between the turns YOU wrote — in a thousand-turn thread those are the only landmarks
             (20 human turns in 900 is typical). Bottom-right so it's thumb-reachable and clear of the
-            centred "scroll to latest" button. Hidden while find is open, which owns prev/next then. */}
+            centred "scroll to latest" button, on the same line above the home indicator, at the reading
+            column's edge rather than the window's on a wide screen. Side by
+            side, so it is no taller than that button and the list's bottom padding clears both.
+            Hidden while find is open, which owns prev/next then. Each half rounds itself instead of
+            the pill clipping them, because a clip would also cut the focus ring drawn outside a button. */}
         {userTurns.length > 1 && !findOpen && (
-          <div className="absolute bottom-3 right-3 z-10 flex flex-col overflow-hidden rounded-full border bg-background/90 shadow-md backdrop-blur">
+          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)_+_0.75rem)] right-[max(var(--page-gutter),calc((100%_-_var(--chat-column))/2))] z-10 flex rounded-full border bg-popover shadow-(--shadow-float)">
             <button
               type="button"
               onClick={() => jumpTo(step(userTurns, cursor, -1))}
               aria-label="Previous message you sent"
-              className="flex size-9 items-center justify-center text-muted-foreground transition-colors active:bg-muted"
+              className="grid size-11 place-items-center rounded-l-full text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
             >
-              <ChevronUp className="size-4" />
+              <ChevronUp aria-hidden="true" className="size-5" />
             </button>
             <button
               type="button"
               onClick={() => jumpTo(step(userTurns, cursor, 1))}
               aria-label="Next message you sent"
-              className="flex size-9 items-center justify-center border-t text-muted-foreground transition-colors active:bg-muted"
+              className="grid size-11 place-items-center rounded-r-full border-l text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
             >
-              <ChevronDown className="size-4" />
+              <ChevronDown aria-hidden="true" className="size-5" />
             </button>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
