@@ -1,6 +1,7 @@
 // What the navigation's search finds: the agents, projects and nodes whose own name matches, each
 // called what every other view calls it (lib/display-name.ts), so the row you pick reads like the
-// screen it opens. Before this a search narrowed the tree to tab rows, and the name that matched
+// screen it opens; below them, the agents found by where they live, their folder, their terminal's
+// title or their kind. Before this a search narrowed the tree to tab rows, and the name that matched
 // was nowhere on screen.
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
 import { nodeState, type NodeState } from "./org-tree";
@@ -34,7 +35,7 @@ export interface SearchGroup {
 
 interface Ranked {
   hit: SearchHit;
-  /** 0 a word of the title starts with the query, 1 the title holds it, 2 only where it lives does. */
+  /** 0 a word of the title starts with the query, 1 the title holds it, 2 only something else about it does. */
   rank: number;
   resolved: boolean;
   at: number;
@@ -56,11 +57,15 @@ function rank(query: string, title: string, ...elsewhere: Array<string | null | 
   return elsewhere.some((field) => field && matchRange(field, query)) ? 2 : null;
 }
 
+/** An agent's kind (claude, codex) matches only as a whole word: "cla" is a name, not every Claude. */
+const isKind = (kind: string, query: string) => kind !== "" && kind.toLocaleLowerCase() === query.trim().toLocaleLowerCase();
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
- * The search's groups in the sidebar's order, Projects, Workspaces, then Chats, each ordered by how
- * well the title matches, open work before resolved, then the latest to move. A project's
+ * The search's groups, Projects, Workspaces, then Chats, except that the group holding the closest
+ * name leads, so the row Enter opens is the best match. Each group is ordered by how well the title
+ * matches, open work before resolved, then the latest to move. A project's
  * coordinator and threads are found under Projects only; Chats holds every other pane, shells
  * included. A workspace is found by its own name and opens the pane the sidebar's row would.
  */
@@ -113,16 +118,17 @@ export function navSearch(source: {
     if (owner?.thread) continue; // found as its node
     const title = displayName(pane, projects);
     const place = displayPlace(pane, projects);
-    const paneRank = rank(query, title, place.place, place.tab);
+    const paneRank = rank(query, title, place.place, place.tab, pane.cwd, pane.terminalTitle) ?? (isKind(pane.agent, query) ? 2 : null);
     if (paneRank === null) continue;
     (owner ? owned : loose).push({ hit: { kind: "pane", key: `pane:${pane.paneId}`, pane, title, place }, rank: paneRank, resolved: false, at: chatRecency(pane) });
   }
 
   const order = (a: Ranked, b: Ranked) => Number(a.resolved) - Number(b.resolved) || a.rank - b.rank || b.at - a.at;
-  const group = (label: SearchGroup["label"], list: Ranked[]): SearchGroup[] => {
-    if (list.length === 0) return [];
-    const sorted = [...list].sort(order);
-    return [{ label, hits: sorted.slice(0, limit).map((item) => item.hit), more: Math.max(0, sorted.length - limit) }];
-  };
-  return [...group("Projects", owned), ...group("Workspaces", containers), ...group("Chats", loose)];
+  const groups = ([["Projects", owned], ["Workspaces", containers], ["Chats", loose]] as const)
+    .filter(([, list]) => list.length > 0)
+    .map(([label, list]) => ({ label, list: [...list].sort(order), best: Math.min(...list.map((item) => item.rank)) }));
+  // A stable sort: groups as close keep the sidebar's order.
+  return groups.sort((a, b) => a.best - b.best).map(({ label, list }) => ({
+    label, hits: list.slice(0, limit).map((item) => item.hit), more: Math.max(0, list.length - limit),
+  }));
 }
