@@ -156,7 +156,7 @@ function Turn({
     const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
-        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
+        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
           {entry.parts.map((part, i) => part.kind === "context" ? null : (
             <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
           ))}

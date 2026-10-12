@@ -61,7 +61,7 @@ export function PendingTurns({ sends, actions }: { sends: readonly LocalSend[]; 
         const status = pendingStatus(send);
         return (
           <div key={send.id} data-pending-send={send.state} className="flex flex-col items-end">
-            <div className={cn("max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]", status.tone !== "problem" && "opacity-70")}>
+            <div className={cn("max-w-[85%] min-w-0 space-y-1.5 rounded-xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]", status.tone !== "problem" && "opacity-70")}>
               {text && <MarkdownText text={text} query="" />}
               <MessageImages paths={images} className="pt-1" />
             </div>
