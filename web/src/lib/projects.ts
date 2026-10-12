@@ -36,6 +36,12 @@ export function projectForPane(projects: readonly ProjectView[] | undefined, pan
   return undefined;
 }
 
+/** The coordinator's pane while it runs: a project then opens on that conversation instead of its organization. */
+export function liveCoordinator(project: ProjectView | undefined, panes: readonly AgentView[]): string | undefined {
+  const paneId = project?.coordinator?.paneId;
+  return paneId && panes.some((pane) => pane.paneId === paneId) ? paneId : undefined;
+}
+
 /** Chats are the agent panes outside any project; a project's panes live in its task list. */
 export function looseChats(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined): AgentView[] {
   return panes.filter((pane) => !projectForPane(projects, pane.paneId));
