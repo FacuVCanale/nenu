@@ -3,7 +3,7 @@ import { lockReasonOf, QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
 import { agentBusy, turnNote, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
-import { SubagentConversation } from "@/components/subagent-conversation";
+import { SubagentConversation, SubagentSubtitle } from "@/components/subagent-conversation";
 import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
@@ -911,6 +911,9 @@ export function AgentChat({
   const activity = useActivity(paneId, session, agent?.agent === "claude" && conversationCapable && !gone && !connecting);
   const subagents = useSubagents({ paneId, session, enabled: harnessWithSubagents && !gone && !connecting, open: processesOpen,
     selected: subagent, onLost: () => setSubagent(null) });
+  // The selected subagent as the list last read it, so the header's state stays current.
+  const subagentView = subagent && ((subagents.list?.available ? subagents.list.agents.find((a) => a.id === subagent.agent.id) : undefined) ?? subagent.agent);
+  const subagentHarness = agent?.agent === "codex" ? "codex" : "claude";
   const processes = useMemo(() => buildProcesses(activity.data, subagents.list, { activityStale: activity.stale, subagentsStale: subagents.stale }),
     [activity.data, subagents.list, activity.stale, subagents.stale]);
   const processesNow = useActivityClock(activity.data, processesOpen || processDetail !== null);
@@ -993,10 +996,10 @@ export function AgentChat({
         find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
         bridge={bridge}
         error={error}
-        back={{ label: "Home", onClick: onBack }}
-        override={findBar}
+        back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : { label: "Home", onClick: onBack }}
+        override={subagent ? undefined : findBar}
         rightLead={
-          agent ? (
+          subagent ? undefined : agent ? (
             <>
               {headerAction}
               {sessionTools}
@@ -1018,8 +1021,12 @@ export function AgentChat({
         }
       >
         {/* The screen's heading: the pane's name over its place. A project's title opens the
-            project's page; any other opens the navigation on a phone. */}
-        {agent ? <h1 className="flex min-w-0 flex-1">{project ? (
+            project's page; any other opens the navigation on a phone. A subagent's view names the
+            subagent and what it is. */}
+        {subagent ? <h1 className="flex min-w-0 flex-1 flex-col px-1">
+          <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{subagentView!.name}</span>
+          <span className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={subagentView!} harness={subagentHarness} /></span>
+        </h1> : agent ? <h1 className="flex min-w-0 flex-1">{project ? (
           <button
             type="button"
             onClick={() => openProject(project.slug)}
@@ -1051,7 +1058,8 @@ export function AgentChat({
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 
-        {strip !== undefined ? strip : <>
+        {/* A subagent's view steps the strips aside: its header leads back to Main, not to a tab. */}
+        {!subagent && (strip !== undefined ? strip : <>
         {/* In-pane tab bar: the current space's tabs above the mirror — switch tab without leaving the
             pane, or create one with +. */}
         {agent && (
@@ -1070,11 +1078,11 @@ export function AgentChat({
             onClosed={() => revalidator.revalidate()}
           />
         )}
-        </>}
+        </>)}
 
         {/* Pane switcher: the panes that share this tab (space › tab › pane). Mobile shows them as a
             tabbed row rather than tiling the panes; only appears when the tab holds more than one. */}
-        {agent && (
+        {agent && !subagent && (
           <PaneStrip
             panes={[...agents, ...shellPanes]
               .filter((p) => p.workspaceId === agent.workspaceId && p.tabId === agent.tabId)
@@ -1109,7 +1117,7 @@ export function AgentChat({
               onOpen={switchTo} onHome={onBack} />
           </div>
         ) : subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent}
-          harness={agent?.agent === "codex" ? "codex" : "claude"} onMain={() => setSubagent(null)}
+          harness={subagentHarness} ownHeader={Boolean(docked)} onMain={() => setSubagent(null)}
           onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
             <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}

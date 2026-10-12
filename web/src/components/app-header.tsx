@@ -87,7 +87,7 @@ export function AppHeader({
     <header className="workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted">
       {override ?? (
         <>
-          {home ? (
+          {home && !back ? (
             // With the workbench navigation, the sidebar carries the brand on a desktop.
             <CollieHome
               onHome={navigation?.onOpen ?? onHome}

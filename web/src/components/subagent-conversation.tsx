@@ -37,16 +37,27 @@ const STATUS_TONE: Partial<Record<SubagentStatus, string>> = {
   running: "text-status-working", waiting: "text-status-blocked", completed: "text-status-done", failed: "text-destructive",
 };
 
+/** What a subagent is, under its name: the kind, its model and a state worth naming. */
+export function SubagentSubtitle({ agent, harness = "claude" }: { agent: Pick<SubagentView, "model" | "status">; harness?: Harness }) {
+  return <>
+    {harness === "codex" ? "Sub-agent" : "Subagent"}{agent.model ? ` · ${modelDisplayName(agent.model)}` : ""}
+    {STATUS_WORD[agent.status] && <> · <span className={STATUS_TONE[agent.status]}>{STATUS_WORD[agent.status]}</span></>}
+  </>;
+}
+
 /**
  * A subagent's conversation in place of Main's. Only what it said can be selected; the bars around it
  * are controls. Writing to it goes through Main (`onWrite` returns there with a draft addressed to it),
- * and a device that cannot write gets the explanation without the button.
+ * and a device that cannot write gets the explanation without the button. The chat's own header says
+ * "‹ Main" and the subagent's name; a chat docked beside another, whose header is the dock's, keeps
+ * this view's own row for that (`ownHeader`). On a desk it reads in the chat's column.
  */
 export function SubagentConversation({
   paneId,
   session,
   selection,
   harness = "claude",
+  ownHeader = true,
   onMain,
   onWrite,
 }: {
@@ -54,6 +65,7 @@ export function SubagentConversation({
   session?: string;
   selection: SubagentSelection;
   harness?: Harness;
+  ownHeader?: boolean;
   onMain: () => void;
   onWrite?: (draft: string) => void;
 }) {
@@ -150,27 +162,25 @@ export function SubagentConversation({
       aria-label={`${child.name} conversation`}
       className="flex min-h-0 flex-1 flex-col border-t border-border/40 select-none"
     >
-      <div className="flex min-h-12 items-center gap-1 border-b border-border/40 py-1 pr-4 pl-1 [-webkit-touch-callout:none]">
+      {ownHeader && <div className="flex min-h-12 items-center gap-1 border-b border-border/40 py-1 pr-4 pl-1 [-webkit-touch-callout:none]">
         <button
           type="button"
           onClick={onMain}
           aria-label="Back to Main"
-          className="flex min-h-11 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1 text-sm text-muted-foreground hover:text-foreground"
+          className="flex min-h-11 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1 text-subhead text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft aria-hidden className="size-5" />
           Main
         </button>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-medium">{child.name}</h2>
-          <p className="truncate text-xs text-muted-foreground">
-            {harness === "codex" ? "Sub-agent" : "Subagent"}{child.model ? ` · ${modelDisplayName(child.model)}` : ""}
-            {STATUS_WORD[child.status] && <> · <span className={STATUS_TONE[child.status]}>{STATUS_WORD[child.status]}</span></>}
-          </p>
+          <h2 className="truncate text-subhead font-medium">{child.name}</h2>
+          <p className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={child} harness={harness} /></p>
         </div>
-      </div>
+      </div>}
       {/* The list takes what the bars leave: at full height it pushed the footer out and the whole chat scrolled. */}
       <div className="min-h-0 flex-1">
-      <ChatMessageList dep={page} className="px-4 py-3">
+      <ChatMessageList dep={page} className="px-(--page-gutter) py-3">
+      <div className="mx-auto w-full max-w-(--chat-column)">
         {failed && (
           <div
             role="status"
@@ -199,6 +209,7 @@ export function SubagentConversation({
             </p>
           )
         )}
+      </div>
       </ChatMessageList>
       </div>
       <div className="workbench-composer flex flex-col gap-1.5 pt-2">
