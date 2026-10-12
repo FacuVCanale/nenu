@@ -19,7 +19,8 @@ export function scrollToLatestIsPill({ waiting = false, count = 0 }: Pick<Scroll
 
 // The way back to the live tail, floating over the list (a floating layer, so it takes the float
 // shadow). With nothing new it is a quiet 44 px circle in the corner, as in Messages. New messages
-// fill it with the accent and say how many; a question at the tail names itself, its dot the one red.
+// fill it with ink, the primary action's pair (white on the blue accent misses AA in dark), and say
+// how many; a question at the tail names itself, its dot the one red.
 export function ScrollToLatest({ onClick, waiting = false, count = 0, changed = false }: ScrollToLatestProps) {
   const pill = scrollToLatestIsPill({ waiting, count });
   const fresh = pill && !waiting;
@@ -28,7 +29,7 @@ export function ScrollToLatest({ onClick, waiting = false, count = 0, changed = 
       className={cn(
         "pointer-events-auto relative flex h-11 shrink-0 items-center justify-center rounded-full shadow-(--shadow-float) transition-[scale,background-color] duration-150 ease-out active:scale-[0.97] animate-in fade-in slide-in-from-bottom-1 motion-reduce:animate-none motion-reduce:transition-none",
         pill ? "gap-1.5 px-4 text-footnote font-medium" : "w-11",
-        fresh ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border bg-popover text-popover-foreground hover:bg-accent",
+        fresh ? "bg-foreground text-background hover:bg-foreground/90" : "border bg-popover text-popover-foreground hover:bg-accent",
       )}>
       {pill && <><span className="sr-only">Scroll to latest,</span>{" "}</>}
       {waiting
