@@ -52,9 +52,11 @@ interface AppHeaderProps {
   override?: ReactNode;
 }
 
-/** The one route whose phone header leads with the mark, which opens navigation. Every other screen,
- *  a chat included, goes back; a chat's title opens the navigation instead. */
+/** The routes whose phone header leads with the mark, which opens navigation, unless the caller gives
+ *  a back: Home, and a chat route. The chat itself passes its back (its title opens the navigation);
+ *  the chat route stays only for callers that draw a bare header there (workbench-shell's tests). */
 const HOME_ROUTE = "/";
+const CHAT_ROUTE = "/pane/:paneId";
 
 // A real 44 px box on a phone, its chevron at the leading edge so the stroke lines up with the 16 px page
 // gutter without a negative margin (which would push the focus ring off screen). On a desk the sidebar
@@ -81,13 +83,14 @@ export function AppHeader({
   const lost = useConnectionLost(isConnecting({ bridge, error }));
   // Home's bar is the brand: the page's headline sits right under it, so it carries no title of its own.
   const home = matchPath(HOME_ROUTE, pathname) !== null;
+  const mark = !back && (home || matchPath(CHAT_ROUTE, pathname) !== null);
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
   const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : "lg:hidden");
   return (
     <header className="workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted">
       {override ?? (
         <>
-          {home && !back ? (
+          {mark ? (
             // With the workbench navigation, the sidebar carries the brand on a desktop.
             <CollieHome
               onHome={navigation?.onOpen ?? onHome}

@@ -33,7 +33,7 @@ describe("AppHeader — the one shared header shell", () => {
         </WorkbenchNavigationContext>
       </MemoryRouter>,
     );
-    expect(screen.getByRole("link", { name: "Back to Home" })).toBeInTheDocument(); // a chat goes back like any screen
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull(); // no connection pill of any kind
     expect(container.querySelector(".dog-gallop")).toBeNull(); // mark at rest (static icon)
     expect(screen.getByText("webapp › main")).toBeInTheDocument(); // the breadcrumb slot
@@ -106,7 +106,7 @@ describe("AppHeader — the one shared header shell", () => {
 });
 
 // A phone has no browser back in an installed PWA, so every screen but Home leads with one, and Home
-// keeps the mark. A chat goes back too: its title opens the navigation the mark used to.
+// keeps the mark. A chat passes its own back, and its title opens the navigation the mark used to.
 describe("AppHeader — the phone's leading control", () => {
   function renderAt(path: string, ui: ReactElement) {
     const onOpen = vi.fn();
@@ -148,8 +148,14 @@ describe("AppHeader — the phone's leading control", () => {
     expect(within(screen.getByRole("banner")).queryByText("Home")).toBeNull();
   });
 
-  it("leads a chat with a back, not the mark: the chat's title opens the navigation", () => {
-    renderAt("/pane/p1", <AppHeader bridge="connected" error={false}><span>Working Claude</span></AppHeader>);
+  it("keeps the mark for a bare header on a chat route", () => {
+    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} onHome={() => {}}><span>Working Claude</span></AppHeader>);
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
+  it("leads with the back a caller passes, even where the mark would sit", () => {
+    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} back={{ label: "Home", to: "/" }}><span>Working Claude</span></AppHeader>);
     expect(screen.getByRole("link", { name: "Back to Home" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
