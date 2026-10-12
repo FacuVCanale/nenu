@@ -26,7 +26,7 @@ import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/cha
 import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useKeyboardOpen } from "@/hooks/use-keyboard";
-import { AppHeader } from "@/components/app-header";
+import { AppHeader, type HeaderBack } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
 import { AgentsFooter } from "@/components/agents-footer";
@@ -73,7 +73,8 @@ import { shortCwd } from "@/lib/format";
 import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
-import { historyPath, projectPath } from "@/lib/nav";
+import { historyPath, nodePath, panePath, projectPath } from "@/lib/nav";
+import { projectForPane } from "@/lib/projects";
 import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
@@ -87,6 +88,21 @@ import type {
 
 /** The chat title's box, whether it opens the navigation, the project's page or nothing. */
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
+
+/**
+ * Where a project thread's back leads, one level up as its node page's does: the coordinator it runs
+ * under (its chat while that runs, else its page), else its project. The project's own coordinator
+ * has none: the project opens on it, so its back stays Home.
+ */
+function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], session?: string): HeaderBack | undefined {
+  const owner = projectForPane(projects, paneId);
+  if (!owner?.thread) return undefined;
+  const { project, thread } = owner;
+  const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
+  if (!parent) return { label: project.name, to: projectPath(project.slug, session) };
+  const chat = parent.paneId !== undefined && panes.some((pane) => pane.paneId === parent.paneId) ? parent.paneId : undefined;
+  return { label: parent.title, to: chat ? panePath(chat, session) : nodePath(project.slug, parent.id, session) };
+}
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
 const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
@@ -1014,7 +1030,7 @@ export function AgentChat({
           find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
           bridge={bridge}
           error={error}
-          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : { label: "Home", onClick: onBack }}
+          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : threadBack(projects, paneId, agents, session) ?? { label: "Home", onClick: onBack }}
           override={subagent ? undefined : findBar}
           rightLead={
             subagent ? undefined : agent ? (
