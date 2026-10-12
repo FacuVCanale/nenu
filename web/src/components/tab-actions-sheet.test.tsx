@@ -69,11 +69,30 @@ describe("TabActionsSheet — rename", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("name this tab")).toHaveFocus());
   });
 
-  it("Back returns to the action list without saving", async () => {
+  it("edits under an iOS edit header, Cancel · Rename tab · Save, with no Back link", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "Rename tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Tab name" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
+  it("can clear the field, but a blank tab name can't be saved", async () => {
+    const user = userEvent.setup();
+    renderSheet({ tab: { ...tab, label: "review" } });
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Clear name" }));
+    expect(screen.getByRole("textbox", { name: "Tab name" })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("Cancel returns to the action list without saving", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByPlaceholderText("name this tab")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();

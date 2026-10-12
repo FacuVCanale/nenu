@@ -51,3 +51,11 @@ describe("strips on a touch screen", () => {
     expect(Number(band("panes")["z-index"])).toBeGreaterThan(Number(band("tabs")["z-index"]));
   });
 });
+
+describe("the tab and pane sheets", () => {
+  it("give the sheet's title row over to the edit header while renaming, and never hide the edit header", () => {
+    const rule = cssRules(css).find((r) => r.selectors.some((sel) => sel.startsWith(".sheet-bottom-panel:has([data-sheet-edit-header])")));
+    expect(rule?.decls.display).toBe("none");
+    expect(rule?.selectors.every((sel) => sel.endsWith(":not(:has([data-sheet-edit-header]))"))).toBe(true);
+  });
+});

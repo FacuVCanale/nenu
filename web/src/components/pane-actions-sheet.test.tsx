@@ -70,11 +70,32 @@ describe("PaneActionsSheet — rename", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("name this pane")).toHaveFocus());
   });
 
-  it("Back returns to the action list without saving", async () => {
+  it("edits under an iOS edit header, Cancel · Rename pane · Save, with no Back link", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "Rename pane" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Pane name" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
+  it("clears the field in one tap and keeps the keyboard on it", async () => {
+    const user = userEvent.setup();
+    renderSheet({ pane: { ...agent, paneLabel: "deploy" } });
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Clear name" }));
+    expect(screen.getByRole("textbox", { name: "Pane name" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Pane name" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Clear name" })).toBeNull();
+  });
+
+  it("Cancel returns to the action list without saving", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
