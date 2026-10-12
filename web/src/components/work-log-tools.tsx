@@ -22,7 +22,7 @@ function matches(part: ToolPart, query: string) {
   return !!needle && [part.name, part.summary, part.result?.text ?? ""].some((text) => text.toLowerCase().includes(needle));
 }
 
-function Highlight({ text, query }: { text: string; query: string }) {
+export function Highlight({ text, query }: { text: string; query: string }) {
   return <>{splitHighlight(text, query).map((piece, index) => piece.hit
     ? <mark key={index} className="rounded-sm bg-amber-300/70 text-inherit dark:bg-amber-500/40">{piece.text}</mark>
     : <span key={index}>{piece.text}</span>)}</>;
