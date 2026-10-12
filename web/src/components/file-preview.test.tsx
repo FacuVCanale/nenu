@@ -84,7 +84,8 @@ it("surfaces unavailable files and retries without leaving the chat", async () =
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(await screen.findByText("hello")).toBeInTheDocument();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-  expect(close).toHaveBeenCalledOnce();
+  // The layer stays for its exit, then goes.
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
 });
 
 it("explains a file outside the pane's folder with its path instead of a Retry that cannot work", async () => {
@@ -116,7 +117,8 @@ it("opens a refused file from the pane whose folder holds it", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Open from worker" }));
   expect(await screen.findByText("Report")).toBeInTheDocument();
   expect(fetchFile).toHaveBeenLastCalledWith("w1:p2", path, undefined, expect.any(AbortSignal));
-  expect(screen.getByText(`${path} · from worker`)).toBeInTheDocument();
+  // The file sits at the top of the worker's folder, so the line under its name only says whose it is.
+  expect(screen.getByText("from worker")).toBeInTheDocument();
 });
 
 it("replaces a refused HTML frame with the reason once the frame has loaded", async () => {
@@ -210,4 +212,52 @@ it("steps through a gallery of journal images with previous, next and the arrow 
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
   expect(screen.getByRole("img", { name: "Image 2" })).toBeInTheDocument();
   expect(fetchFile).not.toHaveBeenCalled();
+});
+
+// T07: the agent's own folder is where the operator thinks from, so the header reads from there and
+// the file's name is never the part that gets cut.
+it("shows where a file is from the agent's folder, never cutting its name", async () => {
+  fetchFile.mockResolvedValue(new Response("export {}", { headers: { "content-type": "text/plain" } }));
+  const panes = [{ paneId: "w1:p1", cwd: "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-s76Uzr", label: "coordinator" }];
+  const { unmount } = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
+  expect(screen.getByRole("heading", { name: "use-app-viewport.ts" })).toBeInTheDocument();
+  expect(screen.getByText("web/src/hooks/use-app-viewport.ts")).toBeInTheDocument();
+  expect(screen.queryByText(/\/var\/folders/)).not.toBeInTheDocument();
+  await screen.findByText("export {}");
+  unmount();
+  // At the top of the folder the path is the name, which the heading already says.
+  render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/reporte-auditoria.md`} panes={panes} onClose={() => {}} />);
+  expect(screen.getByRole("heading", { name: "reporte-auditoria.md" })).toBeInTheDocument();
+  expect(screen.queryByText("reporte-auditoria.md")).not.toBeInTheDocument();
+  await screen.findByText("export {}");
+});
+
+// T28: on a phone the viewer is a screen of its own: Done leaves it, and what a desk header shows as
+// buttons waits behind one menu.
+it("closes on Done and keeps Reload and Copy path behind More actions", async () => {
+  const path = "/repo/docs/guide.md";
+  fetchFile.mockImplementation(async () => new Response("# Guide", { headers: { "content-type": "text/markdown" } }));
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  const close = vi.fn();
+  render(<FilePreview paneId="w1:p1" path={path} panes={[{ paneId: "w1:p1", cwd: "/repo", label: "coordinator" }]} onClose={close} />);
+  expect(await screen.findByText("Guide")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Refresh preview" })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+  await waitFor(() => expect(fetchFile).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(path));
+  expect(await screen.findByRole("button", { name: "Copied path" })).toBeInTheDocument();
+  // Escape closes the menu first, and only then the viewer.
+  fireEvent.keyDown(screen.getByRole("button", { name: "Copied path" }), { key: "Escape" });
+  expect(screen.queryByRole("button", { name: "Copied path" })).not.toBeInTheDocument();
+  expect(close).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
 });
