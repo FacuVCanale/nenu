@@ -279,10 +279,11 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
             </select>
           </label>
           <span className="flex-1" />
-          {/* Ink once there is something to send; until then Start still opens the sheet, quietly. */}
+          {/* The thread's own Send (composer.tsx): ink once there is something to send; until then
+              Start still opens the sheet, quietly. */}
           <Button type="submit" size="icon" variant={message.trim() ? "default" : "secondary"} disabled={locked || (target.kind === "project" && !message.trim())}
-            aria-label={target.kind === "project" ? "Send" : "Start"} aria-busy={busy || undefined} className="rounded-md">
-            {busy ? <Loader2 aria-hidden className="animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden />}
+            aria-label={target.kind === "project" ? "Send" : "Start"} aria-busy={busy || undefined} className="composer-action composer-send hit-area">
+            {busy ? <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden className="size-4" strokeWidth={2.5} />}
           </Button>
         </div>
       </form>
