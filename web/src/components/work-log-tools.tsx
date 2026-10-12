@@ -99,7 +99,8 @@ const QUESTION_TOOL = /^(?:AskUserQuestion|(?:.+\.)?request_user_input(?:_async)
  */
 function describeCall(part: ToolPart): CallStep {
   if (QUESTION_TOOL.test(part.name)) return { kind: "question", done: "Question", doing: "Question", ask: "Question", target: "text", text: part.questions?.[0]?.title ?? part.summary };
-  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "text", text: firstLine(part.summary) };
+  // Claude titles most plans "Plan: …", and the line already says Plan.
+  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "text", text: firstLine(part.summary).replace(/^Plan:\s*/i, "") };
   const step = describeTool(part.name);
   return { ...step, ask: ASK[step.done] ?? step.doing, text: part.summary };
 }
