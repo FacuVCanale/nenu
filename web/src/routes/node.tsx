@@ -50,14 +50,14 @@ export function NodeRoute() {
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
           to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
-      <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
-        <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
+      <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-subhead">
+        <p className="flex items-center gap-2 text-body"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
           {age && <span className="text-muted-foreground">· {age}</span>}</p>
         {thread.note && <p className="mt-1.5 text-muted-foreground">{thread.note}</p>}
         {thread.pr && <p className="mt-1.5 flex items-center gap-1.5">{prSummary(thread.pr)}
           {thread.pr.url && <a className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" href={thread.pr.url} target="_blank" rel="noreferrer">
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}
-        {thread.branch && <p className="mt-1.5 truncate font-mono text-xs text-muted-foreground">{thread.branch}</p>}
+        {thread.branch && <p className="mt-1.5 truncate font-mono text-code text-muted-foreground">{thread.branch}</p>}
         {(live || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {live && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <MessageSquare aria-hidden className="size-4" />Open chat</Button>}
