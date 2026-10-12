@@ -27,6 +27,8 @@
 .strip-chip[data-focused]:not([aria-current="true"]) { border-style: dashed; border-color: var(--border); }
 .strip-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .strip-chip-tag { flex-shrink: 0; color: var(--subtle-foreground); font-variant-numeric: tabular-nums; }
+/* Says the open chip opens its actions. */
+.strip-chip-more { flex-shrink: 0; width: 14px; height: 14px; margin-inline-end: -4px; color: var(--muted-foreground); }
 
 .strip-add { position: relative; display: inline-grid; flex-shrink: 0; place-items: center; width: 32px; height: 28px; border-radius: 9999px; color: var(--muted-foreground); transition: background-color 150ms ease-out, color 150ms ease-out; }
 

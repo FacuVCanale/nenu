@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { useLongPress } from "@/hooks/use-long-press";
 import { StatusDot } from "@/components/status-badge";
@@ -26,18 +27,20 @@ interface ChipProps {
   onClick: () => void;
   /** Long-press (or right-click / Android contextmenu) opens the chip's actions. Inert when unset. */
   onLongPress?: () => void;
-  /** A tap on the chip while it is `active` opens its actions instead of a dead re-select. */
+  /** A tap on the chip while it is `active` opens its actions instead of a dead re-select, and the
+   *  chip shows a chevron saying so: long-press alone was a gesture nobody found. */
   onTapActive?: () => void;
 }
 
 export function Chip({ label, tag, active, focused, status, icon, onClick, onLongPress, onTapActive }: ChipProps) {
   const longPress = useLongPress(onLongPress);
+  const opensActions = active && !!onTapActive;
 
   // A long-press already suppresses the click that follows (longPress.onClickCapture), so this only
   // sees a genuine tap.
   function handleClick() {
-    if (active && onTapActive) {
-      onTapActive();
+    if (opensActions) {
+      onTapActive!();
       return;
     }
     onClick();
@@ -49,6 +52,7 @@ export function Chip({ label, tag, active, focused, status, icon, onClick, onLon
       onClick={handleClick}
       {...longPress}
       aria-current={active ? "true" : undefined}
+      aria-haspopup={opensActions ? "dialog" : undefined}
       data-focused={focused || undefined}
       title={label}
       className="strip-chip"
@@ -57,6 +61,7 @@ export function Chip({ label, tag, active, focused, status, icon, onClick, onLon
       <span className="strip-chip-label">{label}</span>
       {tag && <span className="strip-chip-tag"> · {tag}</span>}
       {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
+      {opensActions && <ChevronDown data-chip-actions aria-hidden="true" className="strip-chip-more" />}
     </button>
   );
 }
