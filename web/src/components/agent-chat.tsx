@@ -1197,8 +1197,7 @@ export function AgentChat({
             agent={agent?.agent}
             isShell={isShell}
             placeholder={project && COMPOSER_PLACEHOLDER[project.role]}
-            working={agentBusy(agent, modelSource.text)}
-            turnRunning={turnRunning(agent, modelSource.text)}
+            working={turnRunning(agent, modelSource.text)}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}

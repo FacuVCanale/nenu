@@ -54,6 +54,9 @@ describe("Claude 2.1.296 composer while a background agent runs", () => {
     const rule = "─".repeat(60);
     const screen = (footer: string) => splitLines(parseAnsi([rule, "❯ ", rule, footer].join("\n")));
     expect(claudeAdapter.composerReady!(screen("  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents · ↓ to manage"))).toBe(true);
+    // The "/rc" Claude right-aligns on the same row, as in the capture.
+    expect(claudeAdapter.composerReady!(screen(`  ← for agents · ↓ to manage${" ".repeat(40)}/rc`))).toBe(true);
+    expect(claudeAdapter.composerReady!(screen(`  ↓ to manage${" ".repeat(40)}Enter to confirm`))).toBe(false);
     expect(claudeAdapter.composerReady!(screen("  ↑/↓ to navigate · Enter to select"))).toBe(false);
     expect(claudeAdapter.composerReady!(screen("  ↓ to select"))).toBe(false);
   });
