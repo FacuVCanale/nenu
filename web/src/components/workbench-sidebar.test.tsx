@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,6 +95,37 @@ describe("the sidebar's workspaces, with no projects", () => {
     expect(options()[0]).toHaveAttribute("aria-selected", "false");
     await user.keyboard("{Enter}");
     expect(router.state.location.pathname).toBe("/pane/d3");
+  });
+
+  it("keeps the results in place and the pick on its row while polls move the agents", async () => {
+    let poll!: (data: HomeData) => void;
+    function Live() {
+      const [data, setData] = useState(herd);
+      poll = setData;
+      return <WorkbenchSidebar data={data} />;
+    }
+    router = createMemoryRouter([{ path: "/", element: <Live /> }, { path: "/pane/:paneId", element: <Live /> }]);
+    render(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^Search/ }));
+    await user.type(screen.getByRole("searchbox"), "a");
+    const titles = () => screen.getAllByRole("option").map((option) => option.querySelector(".nav-pane-title")?.textContent);
+    const picked = () => screen.getAllByRole("option").find((option) => option.getAttribute("aria-selected") === "true")?.querySelector(".nav-pane-title")?.textContent;
+    expect(titles()).toEqual(["Workspaces brief", "Landing vs Max", "Panel prod", "Panel ventas"]);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(picked()).toBe("Panel prod");
+
+    // Panel ventas moves: the list does not reorder under the pick.
+    act(() => poll({ ...herd, agents: herd.agents.map((agent) => agent.paneId === "d3" ? { ...agent, lastActiveAt: 100 } : agent) }));
+    expect(titles()).toEqual(["Workspaces brief", "Landing vs Max", "Panel prod", "Panel ventas"]);
+    expect(picked()).toBe("Panel prod");
+
+    // A row above it closes: the pick stays on the row it was on.
+    act(() => poll({ ...herd, agents: herd.agents.filter((agent) => agent.paneId !== "n1") }));
+    expect(titles()).toEqual(["Landing vs Max", "Panel prod", "Panel ventas"]);
+    expect(picked()).toBe("Panel prod");
+    await user.keyboard("{Enter}");
+    expect(router.state.location.pathname).toBe("/pane/d2");
   });
 
   it("says when nothing matches", async () => {
