@@ -44,20 +44,22 @@ describe("displayName", () => {
 });
 
 describe("displayPlace", () => {
-  it("places a loose pane in its workspace and tab", () => {
-    expect(displayPlace(pane("p", { tabLabel: "redesign" }), projects)).toBe("nenu › redesign");
+  // Parts, not one string: at 390px a joined "moonward_os › redesign-…" loses the tab, the only part
+  // that tells rows apart, so a view lets the place shrink first (lib/pane-name.ts).
+  it("places a loose pane in its workspace and tab, as separate parts", () => {
+    expect(displayPlace(pane("p", { tabLabel: "redesign" }), projects)).toEqual({ place: "nenu", tab: "redesign" });
   });
 
   it("drops a tab whose label says nothing, and names an unlabelled workspace by number", () => {
-    expect(displayPlace(pane("p"), projects)).toBe("nenu");
-    expect(displayPlace(pane("p", { workspaceLabel: "", workspaceNumber: 2 }), projects)).toBe("Workspace 2");
+    expect(displayPlace(pane("p"), projects)).toEqual({ place: "nenu", tab: null });
+    expect(displayPlace(pane("p", { workspaceLabel: "", workspaceNumber: 2 }), projects)).toEqual({ place: "Workspace 2", tab: null });
   });
 
   it("places a project's worker in its project", () => {
-    expect(displayPlace(pane("worker", { tabLabel: "redesign" }), projects)).toBe("Awam");
+    expect(displayPlace(pane("worker", { tabLabel: "redesign" }), projects)).toEqual({ place: "Awam", tab: null });
   });
 
   it("places the coordinator where it runs, since its name already says the project", () => {
-    expect(displayPlace(pane("coord", { tabLabel: "coordinator" }), projects)).toBe("nenu › coordinator");
+    expect(displayPlace(pane("coord", { tabLabel: "coordinator" }), projects)).toEqual({ place: "nenu", tab: "coordinator" });
   });
 });
