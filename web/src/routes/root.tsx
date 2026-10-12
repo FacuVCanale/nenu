@@ -69,7 +69,7 @@ export function RootLayout() {
   // routine fast polls/navigations stay invisible. Mounted here so the whole app shares one
   // detector inside the router context.
   usePollBusy();
-  useAgentTransitions(data.agents, paneId ?? null, data.session);
+  useAgentTransitions(data.agents, paneId ?? null, data.session, data.projects);
   usePushSetup();
 
   // A viewport-height flex column: the top banners (when shown) are in-flow rows at the top and the
