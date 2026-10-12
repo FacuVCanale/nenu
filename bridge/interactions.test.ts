@@ -271,6 +271,32 @@ describe("what a permission asks for, as the dialog draws it", () => {
     expect(i.detailComplete).toBe(true);
   });
 
+  test("an indented command wrapped onto its last row keeps that row: a full row above it is no description's", () => {
+    const command = "touch /tmp/claude-lab/project/scratch-one.txt";
+    const screen = fixture("claude-lab--permission-bash--w40.txt").replace(/^.*Create empty file scratch-one\.txt.*\n/m, "");
+    const plain = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [], 0).interaction;
+    expect(plain.subject).toEqual({ tool: "Bash", command });
+    const hinted = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], 0).interaction;
+    expect(hinted.subject).toEqual({ tool: "Bash", command });
+    expect(hinted.detailComplete).toBe(true);
+  });
+
+  test("an agreeing hint says where an indented command ends, so its second line is never read as the description", () => {
+    const command = "mkfifo fixture-fifo\nls -la fixture-fifo";
+    const screen = fixture("claude--permission-bash.txt").replace("Create a named pipe (FIFO)", "ls -la fixture-fifo");
+    const i = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], 0).interaction;
+    expect(i.subject).toEqual({ tool: "Bash", command });
+    expect(i.detailComplete).toBe(true);
+  });
+
+  test("a hint the card's command does not spell never makes the card whole", () => {
+    // The hint is a row of the dialog, but the description's row, not the command's.
+    const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "Create a named pipe (FIFO)" }]);
+    expect(i.subject).toEqual({ tool: "Bash", command: "mkfifo fixture-fifo", description: "Create a named pipe (FIFO)" });
+    expect(i.detailComplete).toBe(false);
+    expect(pushActions(i)).toEqual([]);
+  });
+
   test("Codex: the reason as the description, the $ row as the command, the environment as a fact", () => {
     expect(detect("codex--approval-exec.txt").subject).toEqual({
       description: "Do you want to allow creating /tmp/collie-codex-probe.txt outside the sandbox?",
