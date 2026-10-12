@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { recommendedLabel } from "@/components/recommended-badge";
 import { answerInteraction, fetchInteractions, isApiErrorStatus } from "@/lib/api";
 import { isLiveHealthy } from "@/lib/live-events";
 import { useLivePoll } from "./use-live-poll";
@@ -23,11 +24,9 @@ export interface Receipt {
   at: number;
 }
 
-const RECOMMENDED = /\s*\(recommended\)\s*$/i;
-
 /** What an answer did, said with what it was about: the command approved, the answer chosen. */
 export function receiptSummary(i: Interaction, option: InteractionOption, text?: string): string {
-  const label = option.label.replace(RECOMMENDED, "");
+  const label = recommendedLabel(option.label).text;
   const verdict = option.role === "deny" ? "Declined" : "Approved";
   switch (i.kind) {
     case "permission": {
@@ -41,7 +40,7 @@ export function receiptSummary(i: Interaction, option: InteractionOption, text?:
       return option.role === "freeText" && text ? `Sent · ${text}` : `${verdict} · ${label}`;
     case "multi-select":
       if (option.role === "primary" && !i.answers && !i.incomplete) {
-        const ticked = i.options.filter((o) => o.checked).map((o) => o.label.replace(RECOMMENDED, ""));
+        const ticked = i.options.filter((o) => o.checked).map((o) => recommendedLabel(o.label).text);
         return `${label} · ${ticked.join(", ") || "nothing ticked"}`;
       }
       break;

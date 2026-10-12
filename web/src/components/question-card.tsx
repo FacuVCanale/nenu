@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
+import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
@@ -30,8 +31,6 @@ const ANSWER_KINDS = new Set<InteractionKind>(["question", "wizard", "multi-sele
 const SUBJECT_ROWS = 8;
 /** A multi-select's advance that sends the answers, as opposed to a wizard step's Next. */
 const SUBMIT = /^submit\b/i;
-/** The agent's own marker for the option it suggests; the card shows it as a badge. */
-const RECOMMENDED = /\s*\(recommended\)\s*$/i;
 
 /** Why answers are paused, so the card names the real cause and never blames the device for an outage. */
 export type LockReason = "read-only" | "offline" | "herdr" | "refused";
@@ -577,7 +576,7 @@ function StaticOptions({ options }: { options: InteractionOption[] }) {
     <ul aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
       {options.map((option) => (
         <li key={option.index} className="flex min-w-0 flex-col">
-          <span className="text-[15px] leading-5 text-foreground">{labelOf(option).text}</span>
+          <span className="text-[15px] leading-5 text-foreground">{recommendedLabel(option.label).text}</span>
           {option.description && <span className="text-[13px] leading-[18px] text-muted-foreground">{option.description}</span>}
         </li>
       ))}
@@ -626,14 +625,9 @@ function toneClass(tone: InteractionOption["role"]) {
   );
 }
 
-/** The label without the agent's "(Recommended)" suffix, and whether it carried one. */
-function labelOf(option: InteractionOption): { text: string; recommended: boolean } {
-  return { text: option.label.replace(RECOMMENDED, ""), recommended: RECOMMENDED.test(option.label) };
-}
-
 /** One answer of a question: title, the agent's description in small grey, a quiet Recommended. */
 function AnswerRow({ option, toggle, busy, failed, disabled, onPress }: RowProps & { toggle: boolean }) {
-  const { text, recommended } = labelOf(option);
+  const { text, recommended } = recommendedLabel(option.label);
   const dim = disabled && !busy;
   return (
     <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined}
@@ -643,9 +637,7 @@ function AnswerRow({ option, toggle, busy, failed, disabled, onPress }: RowProps
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className={cn("min-w-0 break-words font-medium", dim ? "text-muted-foreground" : "text-foreground")}>{text}</span>
-          {recommended && (
-            <span className="shrink-0 rounded-full bg-primary/12 px-1.5 py-px text-[11px] font-medium leading-4 text-primary">Recommended</span>
-          )}
+          {recommended && <RecommendedBadge />}
         </span>
         {option.description && <span className="text-[13px] leading-[18px] text-muted-foreground">{option.description}</span>}
       </span>

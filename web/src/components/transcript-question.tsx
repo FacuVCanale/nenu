@@ -1,8 +1,7 @@
 import { createContext, useContext } from "react";
 
+import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { cn } from "@/lib/utils";
-
-const RECOMMENDED = /\s*\(recommended\)\s*$/i;
 
 export const QuestionReplyContext = createContext<((text: string) => void) | null>(null);
 /** Who owns this pane's live dialog: the card at the thread's tail, another dialog surface, or nobody. */
@@ -21,15 +20,15 @@ export function TranscriptQuestion({ title, options, descriptions, active }: { t
     {options.length > 0 && <div className={described ? "flex flex-col gap-2" : "flex flex-wrap gap-2"}>
       {options.map((option, index) => {
         // The agent's "(Recommended)" reads as a badge, as on the live card.
-        const label = option.replace(RECOMMENDED, "");
+        const { text, recommended } = recommendedLabel(option);
         const description = descriptions?.[index];
         return <button key={index} type="button" disabled={!active || !prepare}
-          className={cn("inline-flex min-h-11 items-center gap-2 rounded-md border bg-background px-3 text-left text-sm disabled:opacity-60",
+          className={cn("inline-flex min-h-11 items-center gap-2 rounded-md border bg-background px-3 text-left text-sm disabled:text-muted-foreground",
             described && "w-full flex-col items-start justify-center gap-0.5 py-2")}
           onClick={() => prepare?.(`${title}\n${option}`)}>
           <span className="inline-flex flex-wrap items-center gap-2">
-            {label}
-            {label !== option && <span className="rounded-full bg-primary/12 px-1.5 py-px text-[11px] font-medium leading-4 text-primary">Recommended</span>}
+            {text}
+            {recommended && <RecommendedBadge />}
           </span>
           {description && <span className="text-[13px] leading-[18px] text-muted-foreground">{description}</span>}
         </button>;
