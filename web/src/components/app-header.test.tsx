@@ -162,6 +162,11 @@ describe("AppHeader — the bar title", () => {
     expect(screen.getByText("nenu › review")).toHaveClass("text-footnote");
   });
 
+  it("is the screen's heading, so a route that hands its name over keeps it", () => {
+    render(<MemoryRouter initialEntries={["/settings"]}><AppHeader bridge="connected" error={false} title="Settings" /></MemoryRouter>);
+    expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+  });
+
   it("hides a title the page is showing as its own heading", () => {
     const visible = { ignore: '[aria-hidden="true"], [aria-hidden="true"] *' };
     const { rerender } = render(<MemoryRouter initialEntries={["/project/awam"]}><AppHeader bridge="connected" error={false} title="AWAM" titleHidden /></MemoryRouter>);

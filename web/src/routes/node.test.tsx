@@ -86,3 +86,15 @@ it("says so when the node is not in the project", async () => {
   setup("/project/hub/node/t-9");
   expect(await screen.findByText("This node is not in the project any more.")).toBeInTheDocument();
 });
+
+it("goes back one level, to the node's parent or its project, and names the node in the bar", async () => {
+  const { router, user } = setup("/project/hub/node/t-2");
+  // The app's bar comes first; the page's own heading block is a <header> too.
+  const bar = async () => within((await screen.findAllByRole("banner"))[0]!);
+  // jsdom cannot watch the page's heading, so the bar keeps its title in view here.
+  expect((await bar()).getByRole("heading", { level: 1, name: "Step" })).toBeInTheDocument();
+  await user.click((await bar()).getByRole("link", { name: "Back to Plan" }));
+  expect(router.state.location.pathname).toBe("/project/hub/node/t-1");
+  await user.click((await bar()).getByRole("link", { name: "Back to Hub" }));
+  expect(router.state.location.pathname).toBe("/project/hub");
+});
