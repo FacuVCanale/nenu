@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, RouterProvider, useParams } from "react-router";
+import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
 import { __resetConnectionHealth } from "@/lib/connection-health";
 
@@ -1168,6 +1168,69 @@ describe("AgentChat — bridge-detected dialog", () => {
     const card = await within(conversation).findByRole("region", { name: "Which widget design should we use?" });
     expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+});
+
+// Pointing at a preview row is the first of two taps: the digit moves the pointer, the guard sees it
+// land, and the card is drawn again from the next read. Until that read lands the tapped row stays
+// busy, so a second tap can never act on the old pointer; nothing was answered, so no "Sent".
+describe("AgentChat — pointing at a preview option", () => {
+  const PLAIN = readFileSync("src/fixtures/panes/claude--select-preview.txt", "utf8").replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "");
+  const ON_ROUNDED = PLAIN.replace("❯ 1. Boxy ", "  1. Boxy ").replace("  2. Rounded", "❯ 2. Rounded").replace("| WIDGET           [X] |", "( WIDGET           (x) )");
+
+  it("keeps the row busy until the refreshed card shows its preview and Choose, and says nothing was sent", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    let pane = PLAIN;
+    const keys: string[][] = [];
+    let hold = false;
+    let held = 0;
+    const waiting: Array<() => void> = [];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+        paneId: agent.paneId, agent: "claude", kind: "question", family: "claude", question: "Which widget design should we use?", signature: "sig-p", revision: 1, detectedAt: 0,
+        options: [{ index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" }],
+      }] })),
+      http.get(/\/api\/pane\/[^/]+$/, () => HttpResponse.json({ paneId: agent.paneId, text: pane, truncated: false, revision: 1 })),
+      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+        const body = (await request.json()) as { keys: string[] };
+        keys.push(body.keys);
+        if (body.keys.join() === "2") pane = ON_ROUNDED;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    function PaneRoute() {
+      const { text } = useLoaderData() as { text: string };
+      return <><AgentChat paneId={agent.paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={text} revision={1} onBack={vi.fn()} onSelect={vi.fn()} /><StatusArea /></>;
+    }
+    const router = createMemoryRouter([{
+      path: "/",
+      loader: async () => {
+        if (hold) { held++; await new Promise<void>((resolve) => waiting.push(resolve)); }
+        return { text: pane };
+      },
+      element: <PaneRoute />,
+    }]);
+    render(<RouterProvider router={router} />);
+    const card = await screen.findByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
+
+    hold = true;
+    await user.click(within(card).getByRole("button", { name: /^Rounded/ }));
+    await waitFor(() => expect(held).toBeGreaterThan(0));
+    expect(keys).toEqual([["2"]]);
+    // The pointer moved, but the card on screen is still the old read: nothing in it can be pressed.
+    expect(within(card).getByRole("button", { name: /^Rounded/ })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeDisabled();
+
+    hold = false;
+    act(() => { for (const resolve of waiting.splice(0)) resolve(); });
+    const refreshed = await screen.findByRole("region", { name: "Which widget design should we use?" });
+    expect(await within(refreshed).findByRole("button", { name: "Choose Rounded" })).toBeEnabled();
+    expect(within(within(refreshed).getByRole("group", { name: "Preview of Rounded" })).getByText(/\( WIDGET/)).toBeVisible();
+    expect(keys).toEqual([["2"]]);
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dialog changed/)).not.toBeInTheDocument();
   });
 });
 
