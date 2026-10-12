@@ -5,12 +5,12 @@ import { ExternalLink, MessageSquare, MessageSquareOff } from "lucide-react";
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
 import { NodeDot } from "@/components/node-row";
+import { ProjectMissing } from "@/components/project-missing";
 import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { ProjectMissing } from "@/routes/project";
 import { STATE_LABEL, flatten, orgTree } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
