@@ -1,8 +1,9 @@
 import { useContext, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
-import { ArrowUp, Check, ChevronDown, Folder, LayoutGrid, Plus } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
+import { Button } from "@/components/ui/button";
 import { HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
@@ -126,8 +127,7 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
   ];
   const target = targets.find((candidate) => valueOf(candidate) === choice) ?? targets[0]!;
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
-  const Icon = target.kind === "project" ? Folder : target.kind === "workspace" ? LayoutGrid : Plus;
-  const placeholder = target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Start a thread…";
+  const placeholder = target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
   async function send(mode: DeliveryMode) {
     if (target.kind !== "project") return;
@@ -166,10 +166,10 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
   const locked = disabled || busy;
   return (
     <div className="flex flex-col gap-2">
-      <form className="flex flex-col rounded-[18px] border border-input bg-card shadow-[0_8px_24px_rgb(0_0_0/0.25)] focus-within:border-ring/70 sm:rounded-[14px]"
+      <form className="flex flex-col rounded-xl border border-input bg-card focus-within:border-ring/70"
         onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <textarea value={message} rows={1} disabled={locked} placeholder={placeholder} enterKeyHint="send"
-          aria-label={target.kind === "project" ? `Message for ${target.project.name}'s coordinator` : "First message for a new chat"}
+        <textarea value={message} rows={1} disabled={locked} placeholder={placeholder} enterKeyHint={target.kind === "project" ? "send" : "go"}
+          aria-label={target.kind === "project" ? `Message for ${target.project.name}'s coordinator` : "Task for a new agent"}
           onChange={(event) => { setMessage(event.target.value); setAsking(false); }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -177,12 +177,12 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
               if (!locked) submit();
             }
           }}
-          className="field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-base outline-none placeholder:text-muted-foreground sm:text-sm" />
+          className="field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-body outline-none placeholder:text-muted-foreground disabled:placeholder:text-disabled-foreground" />
         <div className="flex items-center gap-2 px-2.5 pt-1 pb-2.5">
-          <label className="relative inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg bg-muted px-2.5 text-[12.5px] text-foreground/85 focus-within:ring-2 focus-within:ring-ring max-sm:h-9 max-sm:text-[13px]">
-            <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="max-w-[16rem] truncate">{label}</span>
-            <ChevronDown aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+          <label className="relative inline-flex h-9 min-w-0 items-center gap-1 rounded-md bg-muted px-2.5 text-footnote focus-within:ring-2 focus-within:ring-ring coarse:h-11">
+            <span className="shrink-0 text-muted-foreground">{target.kind === "project" ? "To:" : "In:"}</span>
+            <span className="max-w-[16rem] truncate font-medium">{label}</span>
+            <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
             <select aria-label="Send to" value={valueOf(target)} disabled={locked}
               onChange={(event) => { setChoice(event.target.value); rememberTarget(event.target.value); setAsking(false); setSent(null); }}
               className="absolute inset-0 cursor-pointer opacity-0">
@@ -196,11 +196,10 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
             </select>
           </label>
           <span className="flex-1" />
-          <button type="submit" disabled={locked || (target.kind === "project" && !message.trim())} aria-label={target.kind === "project" ? "Send" : "New chat"}
-            className={cn("inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] transition-colors disabled:opacity-40 max-sm:size-10",
-              message.trim() ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-            <ArrowUp aria-hidden className="size-4" />
-          </button>
+          <Button type="submit" size="icon" disabled={locked || (target.kind === "project" && !message.trim())} aria-label={target.kind === "project" ? "Send" : "Start"}
+            aria-busy={busy || undefined} className="rounded-md">
+            {busy ? <Loader2 aria-hidden className="animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden />}
+          </Button>
         </div>
       </form>
       {asking && target.kind === "project" && (
