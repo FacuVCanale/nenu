@@ -28,8 +28,7 @@ export function BottomTabBar({ active, homeTo, attention, onNeedsYou, onNew, onB
         <Inbox {...ICON} />Needs you
         {attention > 0 && <span className="bottom-tab-badge" aria-hidden>{attention}</span>}
       </button>
-      {/* bottom-tab-new carries no style of its own; routes/root.test.tsx finds New by it. */}
-      <button type="button" className="bottom-tab bottom-tab-new" onClick={onNew} disabled={!onNew}>
+      <button type="button" className="bottom-tab" onClick={onNew} disabled={!onNew}>
         <CirclePlus {...ICON} />New
       </button>
       <button type="button" className="bottom-tab" aria-pressed={active === "browse"} onClick={onBrowse}>
