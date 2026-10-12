@@ -695,7 +695,7 @@ const bare = (label: string) => label.replace(/[.…]+$/, "");
  * permission's or a plan's Yes and No. Its title, what it means in small grey, a quiet Recommended.
  * A decline is an answer like any other, so it stays neutral: red reads as an error, and the dot
  * already says it is your turn. A persistent answer says it changes a setting and asks for a second
- * tap, its Confirm pill running out at the row's end.
+ * tap: armed, the row takes the selected fill and its Confirm pill runs out on the detail line.
  */
 function ChoiceRow({ option, toggle, armed, busy, failed, disabled, onPress, clamp = false }: RowProps & { toggle: boolean; clamp?: boolean }) {
   const detail = armed ? "Applies to future prompts" : option.role === "persistent" ? "Changes a setting beyond this answer" : option.description;
@@ -703,13 +703,18 @@ function ChoiceRow({ option, toggle, armed, busy, failed, disabled, onPress, cla
   return (
     <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined}
       aria-pressed={toggle ? checked : undefined} aria-label={armed ? `Confirm: ${option.label}` : undefined}
-      className={cn(optionRow(busy || checked ? "selected" : "default"), failed && FAILED)}>
+      className={cn(optionRow(busy || checked || armed ? "selected" : "default"), failed && FAILED)}>
       {toggle && <OptionCheckbox checked={checked} />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <OptionLabel label={option.label} dim={disabled && !busy} />
-        {detail && <OptionDescription clamp={clamp && !armed}>{detail}</OptionDescription>}
+        {/* Armed, the pill runs out on the detail line, so the label keeps the row's width. */}
+        {(detail || armed) && (
+          <span className="flex min-w-0 items-center justify-between gap-3">
+            {detail && <OptionDescription clamp={clamp && !armed}>{detail}</OptionDescription>}
+            {armed && <ConfirmPill />}
+          </span>
+        )}
       </span>
-      {armed && <ConfirmPill />}
       {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin text-muted-foreground" />}
     </button>
   );
