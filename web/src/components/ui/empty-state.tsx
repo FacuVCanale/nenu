@@ -15,8 +15,7 @@ interface EmptyStateProps {
 }
 
 // A not-found or empty screen: an icon, what is missing, why, and one way forward. Replaces the bare
-// sentence that left a dead end. The title and body classes stay out of cn(): tailwind-merge does not
-// know the type-scale names and would drop the size as a colour clash.
+// sentence that left a dead end.
 export function EmptyState({ icon: Icon, title, children, action, className }: EmptyStateProps) {
   return (
     <div data-slot="empty-state" className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 import { META_COLOR } from "./hooks/use-theme";
+import { TYPE_SCALE } from "./lib/utils";
 
 // The design tokens' contracts that fail silently: a text tone mixed with transparent (it measured
 // 3.16:1 in light), a browser chrome colour that drifts from the page, type sizes that ignore the
@@ -58,7 +59,8 @@ describe("text colour", () => {
 
 describe("type scale", () => {
   it("defines every step in rem, so the browser's text size scales it", () => {
-    for (const step of ["micro", "caption", "footnote", "subhead", "body", "headline", "title", "large-title", "code"]) {
+    // The same list teaches cn() the scale (lib/utils.ts), so a step added here merges too.
+    for (const step of TYPE_SCALE) {
       expect(indexCss, step).toMatch(new RegExp(`--text-${step}:\\s*[\\d.]+rem;`));
     }
   });

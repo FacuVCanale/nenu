@@ -1,5 +1,14 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+/** The type scale's steps, as index.css names them (`--text-body` gives `text-body`). */
+export const TYPE_SCALE = ["micro", "caption", "footnote", "subhead", "body", "headline", "title", "large-title", "code"] as const;
+
+// Told about the scale, so text-body counts as a size: it then replaces text-sm and sits beside a
+// text colour, where an unknown text-* would be taken for a colour and dropped.
+const twMerge = extendTailwindMerge({
+  extend: { classGroups: { "font-size": [{ text: [...TYPE_SCALE] }] } },
+});
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
