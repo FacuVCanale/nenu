@@ -188,7 +188,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     setAttempt((value) => value + 1);
   };
 
-  const step = (by: number) => setIndex((current) => (current + by + list.length) % list.length);
+  const step = (by: number) => setIndex((current) => Math.min(list.length - 1, Math.max(0, current + by)));
   const downloadUrl = error ? undefined : imageSrc || (data?.url ?? (html ? paneFileUrl(source, filePath, session) : undefined));
   const failure = error && <FileUnavailable failure={error} path={filePath} paneId={source} session={session} owner={owner} onRetry={retry}
     onOpenFrom={(paneId) => setFrom({ itemKey, paneId })} />;

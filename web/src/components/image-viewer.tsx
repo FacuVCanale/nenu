@@ -338,9 +338,9 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
       </div>
     </header>
     {counter && <nav aria-label="Gallery" className="image-viewer-bar image-viewer-bottom">
-      <button type="button" aria-label="Previous" onClick={() => onStep(-1)} className="image-viewer-action"><ChevronLeft className="size-5" aria-hidden="true" /></button>
+      <button type="button" aria-label="Previous" disabled={index === 0} onClick={() => onStep(-1)} className="image-viewer-action"><ChevronLeft className="size-5" aria-hidden="true" /></button>
       <span aria-live="polite" className="image-viewer-count">{counter}</span>
-      <button type="button" aria-label="Next" onClick={() => onStep(1)} className="image-viewer-action"><ChevronRight className="size-5" aria-hidden="true" /></button>
+      <button type="button" aria-label="Next" disabled={index === images.length - 1} onClick={() => onStep(1)} className="image-viewer-action"><ChevronRight className="size-5" aria-hidden="true" /></button>
     </nav>}
   </div>;
 }

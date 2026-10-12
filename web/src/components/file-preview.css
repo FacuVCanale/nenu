@@ -95,8 +95,9 @@
 .image-viewer-title { position: absolute; inset-inline: 96px; bottom: 0; height: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: var(--text-headline); line-height: 48px; font-weight: 600; letter-spacing: -0.01em; pointer-events: none; }
 .image-viewer-actions { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
 .image-viewer-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-md); transition: background-color 120ms ease-out, scale 120ms ease-out; }
-@media (hover: hover) and (pointer: fine) { .image-viewer-action:hover { background: rgb(255 255 255 / 12%); } }
-.image-viewer-action:active { scale: 0.96; }
+@media (hover: hover) and (pointer: fine) { .image-viewer-action:not(:disabled):hover { background: rgb(255 255 255 / 12%); } }
+.image-viewer-action:not(:disabled):active { scale: 0.96; }
+.image-viewer-action:disabled { color: #71717a; }
 .image-viewer-count { min-width: 4.5rem; text-align: center; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); font-variant-numeric: tabular-nums; }
 .image-viewer[data-chrome="hidden"] .image-viewer-bar, .image-viewer[data-gesture] .image-viewer-bar { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 200ms ease-out, visibility 0s linear 200ms; }
 @media (max-width: 639px) { .image-viewer .preview-close { display: none; } }
