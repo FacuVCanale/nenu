@@ -1,7 +1,7 @@
 import { clampView, dragIntent, pageStep, project, resist, rubberband, shouldDismiss, velocity, zoomAt } from "./image-gestures";
 
 const stage = { width: 390, height: 844 };
-const portrait = { width: 390, height: 845 };
+const portrait = { width: 390, height: 844 };
 
 describe("rubberband", () => {
   it("follows less the further past the edge, and never as far as the finger", () => {
@@ -39,7 +39,7 @@ describe("clampView", () => {
   it("keeps a zoomed picture covering the screen and a whole one centred", () => {
     expect(clampView({ scale: 1, x: 80, y: -40 }, portrait, stage)).toEqual({ scale: 1, x: 0, y: 0 });
     const zoomed = clampView({ scale: 2, x: 900, y: -900 }, portrait, stage);
-    expect(zoomed).toEqual({ scale: 2, x: 195, y: -423 });
+    expect(zoomed).toEqual({ scale: 2, x: 195, y: -422 });
     expect(clampView({ scale: 9, x: 0, y: 0 }, portrait, stage).scale).toBe(4);
     expect(clampView({ scale: 0.4, x: 0, y: 0 }, portrait, stage).scale).toBe(1);
   });
