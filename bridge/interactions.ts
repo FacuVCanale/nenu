@@ -408,9 +408,13 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   // A permission hint only agrees when its command is whole rows of the screen's subject, so that
   // subject (tool header, command, description) already shows it in full. A plan hint is longer.
   const context = base.kind === "permission" ? base.context : (detail ?? base.context);
-  // An agreeing hint's command is exact where the screen's had to be unwrapped.
-  const subject = base.subject?.command !== undefined && detail !== undefined && compact(detail) === compact(base.subject.command)
-    ? { ...base.subject, command: detail } : base.subject;
+  // An agreeing hint says which rows are the command, and its text is exact where the screen's had to
+  // be unwrapped. It completes the card only when it is the command or file the card shows: a hint
+  // that matches the description's row instead completes nothing.
+  const subject = base.kind === "permission" && detail !== undefined && dialog.kind === "prompt-select"
+    ? permissionSubject(pane.agent, dialog.model, detail) : base.subject;
+  const shown = subject?.command ?? subject?.file;
+  const whole = detail !== undefined && (shown === undefined || compact(shown) === compact(detail));
   const interaction: Interaction = {
     paneId: pane.paneId,
     agent: pane.agent,
@@ -428,7 +432,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     revision,
     ...(kept.length ? { hints: kept } : {}),
     detectedAt: now,
-    detailComplete: (base.kind === "permission" || base.kind === "plan") && detail !== undefined,
+    detailComplete: base.kind === "permission" ? whole : base.kind === "plan" && detail !== undefined,
     ...(typing(dialog) ? { typing: true as const } : {}),
   };
   return { interaction, dialog, choices };

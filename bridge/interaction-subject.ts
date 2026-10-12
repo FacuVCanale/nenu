@@ -142,6 +142,9 @@ function withoutChrome(rows: readonly string[]): string[] {
   return out;
 }
 
+/** A row that reaches the pane's edge: Claude carried what follows it onto the next row. */
+const fillsRow = (row: string, width: number) => row.trimEnd().length >= width - 4;
+
 /**
  * Rows a terminal wrapped back into one string. Claude cuts a command at the pane's edge mid-word, so
  * a full row joins the next with nothing; Codex wraps at spaces, so a row joins the next with a space
@@ -153,10 +156,21 @@ function unwrap(rows: readonly string[], width: number, by: "char" | "word"): st
     const prev = rows[i - 1]!.trimEnd();
     const next = rows[i]!.trim();
     const firstWord = next.split(/\s/, 1)[0]!;
-    const wrapped = by === "char" ? prev.length >= width - 4 : prev.length + 1 + firstWord.length > width;
+    const wrapped = by === "char" ? fillsRow(prev, width) : prev.length + 1 + firstWord.length > width;
     out += wrapped ? (by === "char" ? "" : " ") + next : `\n${next}`;
   }
   return out;
+}
+
+/** How many of `rows`, from the first, spell `command` with the terminal's wrapping undone; 0 when none do. */
+function rowsSpelling(rows: readonly string[], command: string): number {
+  const want = compact(command);
+  let run = "";
+  for (let n = 0; n < rows.length && run.length < want.length; n++) {
+    run += compact(rows[n]!);
+    if (run === want) return n + 1;
+  }
+  return 0;
 }
 
 /** Common leading indentation removed, so a preview keeps its own alignment and no more. */
@@ -167,7 +181,7 @@ function dedent(rows: readonly string[]): string {
 
 const FILE_TOOL = /\bfile$/i;
 
-function claudeSubject(above: readonly string[], width: number): InteractionSubject | null {
+function claudeSubject(above: readonly string[], width: number, hinted?: string): InteractionSubject | null {
   if (above.length < 2) return null;
   const tool = above[0]!.trim().replace(/\s+command$/i, "");
   const rest = above.slice(1);
@@ -187,11 +201,14 @@ function claudeSubject(above: readonly string[], width: number): InteractionSubj
     if (body.length) subject.preview = dedent(body);
     return subject;
   }
-  if (meta.length) subject.description = meta.map((r) => r.trim()).join(" ");
-  // Indented layout: the command, then its description as the last row.
-  const commandRows = !fenced && !subject.description && body.length > 1 ? body.slice(0, -1) : body;
-  if (!fenced && commandRows !== body) subject.description = body.at(-1)!.trim();
-  if (commandRows.length) subject.command = unwrap(commandRows, width, "char");
+  // Indented layout: the command first, then its description. An agreeing hint says where the command
+  // ends. Without one, the last row is the description, unless the row above reaches the pane's edge:
+  // then it is the command's own wrapped tail.
+  const spelled = !fenced && hinted !== undefined ? rowsSpelling(body, hinted) : 0;
+  const split = spelled || (!fenced && !meta.length && body.length > 1 && !fillsRow(body.at(-2)!, width) ? body.length - 1 : body.length);
+  const described = [...meta, ...body.slice(split)].map((r) => r.trim());
+  if (described.length) subject.description = described.join(" ");
+  if (split) subject.command = unwrap(body.slice(0, split), width, "char");
   return subject;
 }
 
@@ -221,12 +238,14 @@ function codexSubject(below: readonly string[], width: number): InteractionSubje
 
 /**
  * A permission's subject from its rows: Claude's tool header, description and fenced command or file
- * preview; Codex's Reason, `$ command` and Destination. Other harnesses keep the plain rows.
+ * preview; Codex's Reason, `$ command` and Destination. Other harnesses keep the plain rows. `hinted`
+ * is an agreeing hint's command: where the screen's rows spell it, it is the exact command.
  */
-export function permissionSubject(agent: string, p: PromptModel): InteractionSubject | undefined {
+export function permissionSubject(agent: string, p: PromptModel, hinted?: string): InteractionSubject | undefined {
   if (p.family !== "permission") return undefined;
   const rows = subjectRows(p);
   if (!rows) return undefined;
-  const subject = agent === "claude" ? claudeSubject(rows.above, rows.width) : agent === "codex" ? codexSubject(rows.below, rows.width) : null;
+  const subject = agent === "claude" ? claudeSubject(rows.above, rows.width, hinted) : agent === "codex" ? codexSubject(rows.below, rows.width) : null;
+  if (subject?.command !== undefined && hinted !== undefined && compact(subject.command) === compact(hinted)) subject.command = hinted;
   return subject ?? undefined;
 }
