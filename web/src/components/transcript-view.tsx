@@ -12,7 +12,7 @@ import { ChevronRight } from "lucide-react";
 import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
 import { searchableText } from "@/lib/transcript-search";
-import { Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
+import { Highlight, holds, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
 import { buildWorkTimeline, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -38,12 +38,6 @@ function dayKey(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" });
-}
-
-/** Whether a folded body holds the searched words, so the hit is on screen. */
-function holds(text: string, query: string): boolean {
-  const needle = query.trim().toLowerCase();
-  return needle !== "" && text.toLowerCase().includes(needle);
 }
 
 const META_LINE = "flex min-h-8 max-w-full items-center gap-2 text-left text-footnote text-muted-foreground coarse:min-h-11";

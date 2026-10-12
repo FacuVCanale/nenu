@@ -19,9 +19,14 @@ import { Elapsed, LiveGlyph } from "./work-activity-label";
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
 
-function matches(part: ToolPart, query: string) {
+/** Whether `text` holds the searched words: a folded body that does opens, so the hit is on screen. */
+export function holds(text: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
-  return !!needle && [part.name, part.summary, part.result?.text ?? ""].some((text) => text.toLowerCase().includes(needle));
+  return needle !== "" && text.toLowerCase().includes(needle);
+}
+
+function matches(part: ToolPart, query: string) {
+  return [part.name, part.summary, part.result?.text ?? ""].some((text) => holds(text, query));
 }
 
 export function Highlight({ text, query }: { text: string; query: string }) {
@@ -79,9 +84,9 @@ function StepLine({ icon, label, expanded, controls, onToggle, children }: {
 }) {
   if (!onToggle) return <div className={LINE}>{icon}{children}</div>;
   return <button type="button" data-work-toggle aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
-    className={cn(LINE, "rounded-md hover:text-foreground")}>
+    className={cn(LINE, "group")}>
     {icon}{children}
-    <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} />
+    <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} />
   </button>;
 }
 
@@ -154,8 +159,7 @@ export function ToolStep({ id, part, owner, query, active, focused }: { id: stri
 export function ThinkingStep({ text, truncated = false, query, focused = false }: { text: string; truncated?: boolean; query: string; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
-  const needle = query.trim().toLowerCase();
-  const open = expanded || focused || (needle !== "" && text.toLowerCase().includes(needle));
+  const open = expanded || focused || holds(text, query);
   const preview = firstLine(text);
   return <div data-step="thinking" className="min-w-0">
     <StepLine icon={<StepIcon kind="thinking" />} label={truncated ? "Thinking · truncated" : "Thinking"} expanded={open} controls={contentId}
