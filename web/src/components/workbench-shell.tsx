@@ -123,8 +123,9 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // A pane or project has its own composer at the bottom; the tab bar steps aside there.
-  const tabBar = !/^\/(pane|project)\//.test(location.pathname);
+  // A pane's chat draws its composer on the bottom edge, and its History is a view of that chat; the
+  // tab bar steps aside there only. A project page never draws one: a live coordinator opens its pane.
+  const tabBar = useParams().paneId === undefined;
   const active: TabBarTab = sheet ?? (location.pathname === "/" ? "home" : null);
 
   return (

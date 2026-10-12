@@ -1,10 +1,12 @@
 import { Link } from "react-router";
-import { House, Inbox, Layers, Plus, Search } from "lucide-react";
+import { CirclePlus, House, Inbox, Layers, Search } from "lucide-react";
 
 /** Which tab reads as selected: a sheet the bar opened, else Home while Home is on screen. */
 export type TabBarTab = "home" | "needs-you" | "browse" | "search" | null;
 
-/** The phone's primary navigation: Home, Needs you, New in the middle, Browse and Search. */
+const ICON = { "aria-hidden": true, size: 24, strokeWidth: 1.75 } as const;
+
+/** The phone's primary navigation: Home, Needs you, New in the middle, Browse and Search, all one weight. */
 export function BottomTabBar({ active, homeTo, attention, onNeedsYou, onNew, onBrowse, onSearch }: {
   active: TabBarTab;
   homeTo: string;
@@ -19,21 +21,22 @@ export function BottomTabBar({ active, homeTo, attention, onNeedsYou, onNew, onB
   return (
     <nav className="bottom-tab-bar" aria-label="Primary">
       <Link className="bottom-tab" to={homeTo} aria-current={active === "home" ? "page" : undefined}>
-        <House aria-hidden size={22} strokeWidth={1.6} />Home
+        <House {...ICON} />Home
       </Link>
       <button type="button" className="bottom-tab" aria-pressed={active === "needs-you"} onClick={onNeedsYou}
         aria-label={attention > 0 ? `Needs you, ${attention}` : "Needs you"}>
-        <Inbox aria-hidden size={22} strokeWidth={1.6} />Needs you
+        <Inbox {...ICON} />Needs you
         {attention > 0 && <span className="bottom-tab-badge" aria-hidden>{attention}</span>}
       </button>
-      <button type="button" className="bottom-tab-new" aria-label="New" onClick={onNew} disabled={!onNew}>
-        <Plus aria-hidden size={22} strokeWidth={2} />
+      {/* bottom-tab-new carries no style of its own; routes/root.test.tsx finds New by it. */}
+      <button type="button" className="bottom-tab bottom-tab-new" onClick={onNew} disabled={!onNew}>
+        <CirclePlus {...ICON} />New
       </button>
       <button type="button" className="bottom-tab" aria-pressed={active === "browse"} onClick={onBrowse}>
-        <Layers aria-hidden size={22} strokeWidth={1.6} />Browse
+        <Layers {...ICON} />Browse
       </button>
       <button type="button" className="bottom-tab" aria-pressed={active === "search"} onClick={onSearch}>
-        <Search aria-hidden size={22} strokeWidth={1.6} />Search
+        <Search {...ICON} />Search
       </button>
     </nav>
   );
