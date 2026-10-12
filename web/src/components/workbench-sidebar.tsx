@@ -399,6 +399,8 @@ function ProjectSection({ project, data, open, expanded, onExpand, onNavigate, p
   };
   const historyKey = `${project.slug}/history`;
   const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
+  const historyTotal = tree.resolved.coordinators + tree.resolved.threads;
+  const history = historyPreview(tree.history, (node) => holds(node, isCurrent));
   return (
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
@@ -441,14 +443,33 @@ function ProjectSection({ project, data, open, expanded, onExpand, onNavigate, p
           {tree.history.length > 0 && <>
             <button type="button" className="nav-row nav-row-nested nav-history" aria-expanded={historyOpen}
               title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
-              <ChevronRight aria-hidden size={14} />History <span className="nav-count">{tree.resolved.coordinators + tree.resolved.threads}</span>
+              <ChevronRight aria-hidden size={14} />History <span className="nav-count">{historyTotal}</span>
             </button>
-            {historyOpen && tree.history.map((node) => branch(node, 2))}
+            {historyOpen && history.map((node) => branch(node, 2))}
+            {historyOpen && history.length < tree.history.length && (
+              <Link className="nav-row nav-tree-row nav-history-all" style={depthStyle(2)} to={projectPath(project.slug, session)} onClick={onNavigate}>
+                <span className="nav-row-text">Show all {historyTotal} in project</span><ChevronRight aria-hidden size={14} />
+              </Link>
+            )}
           </>}
         </div>
       )}
     </section>
   );
+}
+
+/** How many resolved nodes the sidebar's History lists before handing the rest to the project page. */
+const HISTORY_PREVIEW = 5;
+
+/**
+ * History as the sidebar shows it: the nodes that moved last, plus any holding what is on screen,
+ * still in the tree's own order (coordinators first, newest first).
+ */
+function historyPreview(history: OrgNode[], onScreen: (node: OrgNode) => boolean): OrgNode[] {
+  if (history.length <= HISTORY_PREVIEW) return history;
+  const updated = (node: OrgNode) => Date.parse(node.thread.updated ?? "") || 0;
+  const keep = new Set([...history].sort((a, b) => updated(b) - updated(a)).slice(0, HISTORY_PREVIEW));
+  return history.filter((node) => keep.has(node) || onScreen(node));
 }
 
 /** Panes in a project's workspaces that run neither its coordinator nor one of its threads. */
