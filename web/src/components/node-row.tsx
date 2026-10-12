@@ -71,13 +71,16 @@ export function TaskRow({ state, title, detail, age, current, onOpen, opens = "d
   );
 }
 
+/** Where a row's words would wait for a hover that never comes: no hover at all, or a finger first. */
+const NO_HOVER = "(hover: none), (pointer: coarse)";
+
 /**
  * A row's actions. A desk names them in words over the row's age while the pointer rests on it (or a
- * key reaches them); a touch screen, with no hover, keeps a ⋯ that opens them in an action sheet with
+ * key reaches them); a screen that cannot hover keeps a ⋯ that opens them in an action sheet with
  * the row's own Open first. Only resolved work wears a check.
  */
 function RowActions({ title, opens, onOpen, actions }: { title: string; opens: "chat" | "details"; onOpen: () => void; actions: RowAction[] }) {
-  const touch = useMediaQuery("(pointer: coarse)");
+  const touch = useMediaQuery(NO_HOVER);
   const [sheet, setSheet] = useState(false);
   if (!touch) {
     return (
