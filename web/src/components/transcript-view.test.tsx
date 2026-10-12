@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { render, screen, within } from "@testing-library/react";
@@ -681,6 +682,18 @@ describe("TranscriptView — the work timeline", () => {
   it("opens the running step when search focus lands on its entry", () => {
     const { container } = render(<TranscriptView focusedUuid="now" entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
     expect(within(liveRow(container)).getByRole("button", { name: /^Running/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  // A toggle reports itself so the thread can hold still and stop following, and a held thread
+  // draws no turn as running. The live row is the tail the thread follows: opening it must keep the
+  // turn live, so it does not report.
+  it("opens the running step without holding the thread still, and a finished step still does", async () => {
+    const onWorkToggle = vi.fn();
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" onWorkToggle={onWorkToggle} />);
+    await userEvent.click(within(liveRow(container)).getByRole("button", { name: /^Running/ }));
+    expect(onWorkToggle).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /^Read / }));
+    expect(onWorkToggle).toHaveBeenCalledTimes(1);
   });
 
   it("draws no bottom row between steps, where the turn's line already says it is working", () => {
