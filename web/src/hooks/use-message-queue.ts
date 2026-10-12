@@ -93,6 +93,8 @@ function blockedBeyondTurn(reason: QueueWaitReason | undefined): boolean {
 }
 
 function waitingLabel(name: string, row: QueueRowView): string {
+  // One phrasing for a row held for the turn, whether or not the bridge has said it is waiting on it.
+  const afterTurn = `Waiting for ${name} to finish this turn.`;
   switch (row.waitingFor) {
     case "dialog":
       return "Waiting. Answer the dialog first.";
@@ -105,9 +107,9 @@ function waitingLabel(name: string, row: QueueRowView): string {
     case "turn-start":
       return `Waiting for ${name} to start on the previous message.`;
     case "working":
-      return row.deliveryMode === "afterTurn" ? `Waiting for ${name} to finish this turn.` : `Waiting for ${name}'s input box.`;
+      return row.deliveryMode === "afterTurn" ? afterTurn : `Waiting for ${name}'s input box.`;
     default:
-      if (row.deliveryMode === "afterTurn") return `Queued. It goes when ${name} finishes this turn.`;
+      if (row.deliveryMode === "afterTurn") return afterTurn;
       return row.deliveryMode ? `Goes as soon as ${name}'s input box is free.` : "Waiting";
   }
 }

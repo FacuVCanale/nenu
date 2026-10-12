@@ -73,8 +73,6 @@ export function QueuedMessage({
   // The ⋯ is described by the message it manages, so two of them read apart.
   const bubbleId = useId();
   const queued = tone === "waiting";
-  // The badge already says it is queued; the status copy's own "Queued." would repeat it.
-  const detail = queued ? label.replace(/^Queued\.\s*/, "") : label;
   return (
     <div className="flex flex-col items-end">
       <div
@@ -110,7 +108,7 @@ export function QueuedMessage({
             TONE_ICON[tone]
           )}{" "}
           <span className="min-w-0">
-            {detail}
+            {label}
             {device ? <> · from {device}</> : null}
           </span>
         </p>
