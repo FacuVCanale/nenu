@@ -56,7 +56,7 @@ function ContextLine({ label, text, truncated, query, focused = false }: { label
       <ChevronRight aria-hidden="true" className={`size-4 shrink-0 p-px ${open ? "rotate-90" : ""}`} />
       {caption}
     </button>
-    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
+    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere] select-text"><MarkdownText text={text} query={query} />
       {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
@@ -173,7 +173,7 @@ function Turn({
     const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
-        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
+        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere] select-text">
           {entry.parts.map((part, i) => part.kind === "context" ? null : (
             <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
           ))}
@@ -185,7 +185,7 @@ function Turn({
     );
   }
   return (
-    <div data-speaker="assistant" className="space-y-1.5 px-0.5" title={time || undefined}>
+    <div data-speaker="assistant" className="space-y-1.5 px-0.5 select-text" title={time || undefined}>
       {entry.parts.map((part, i) => (
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
@@ -201,7 +201,7 @@ function stepParts(entry: TranscriptEntry, live: LiveStep | null) {
 
 /** A turn's work, one step per row, in the order it happened. */
 function ActivityLog({ entries, query, focusedUuid, active, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; live: LiveStep | null }) {
-  return <ol className="min-w-0">
+  return <ol className="min-w-0 select-text">
     {entries.map((entry) => {
       const steps = stepParts(entry, live);
       if (!steps.length && !journalImages(entry).length) return null;

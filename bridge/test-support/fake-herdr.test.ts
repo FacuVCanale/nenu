@@ -39,6 +39,14 @@ describe("FakeHerdr", () => {
     expect(fake.writes()).toEqual([]);
   });
 
+  test("answers a herd larger than one socket write in full", async () => {
+    for (let n = 2; n <= 80; n++) {
+      fake.addPane({ paneId: `w1:p${n}`, workspaceId: "w1", tabId: `w1:t${n}`, agent: "claude", label: `A pane with a long enough title ${n}`, lines: [] });
+    }
+    const snap = await client.sessionSnapshot();
+    expect(snap.panes).toHaveLength(80);
+  });
+
   test("echoes typed text into the composer and submits it on Enter, logging both writes", async () => {
     await client.sendPaneText("w1:p1", "ship it");
     await sleep(20);
