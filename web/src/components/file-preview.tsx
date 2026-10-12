@@ -139,6 +139,12 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const source = from?.itemKey === itemKey ? from.paneId : paneId;
   const owner = error?.outside ? paneOwningPath(panes, filePath, source) : undefined;
   const sourceLabel = source === paneId ? "" : panes.find((pane) => pane.paneId === source)?.label ?? source;
+  const imageUrl = (entry: PreviewItem, target = entry.kind === "file" ? entry.path : "", through = paneId) =>
+    entry.kind === "journal" ? journalImageUrl(paneId, entry.entry, entry.index, session) : paneFileUrl(through, target, session);
+  const imageSrc = image && item ? imageUrl(item, filePath, source) : "";
+  // Pictures whose <img> failed, the shown one or one waiting beside it. Shown again, the same
+  // element with the same src fires no second error, so the failure is kept until it loads or Retry.
+  const failedImages = useRef(new Set<string>());
   const fail = (cause: unknown) => {
     const failure: FileFailure = cause instanceof PaneFileError
       ? { message: cause.message, outside: cause.outside, status: cause.status }
@@ -158,6 +164,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     const controller = new AbortController();
     let url: string | undefined;
     setError(null); setData(null);
+    if (imageSrc && failedImages.current.has(imageSrc)) { imageFailed(); return; }
     // HTML loads in its frame and a picture in its <img>, each by its own request.
     if (!item || html || image) return;
     if (/\.(mp4|m4v|mov|webm)$/i.test(filePath)) { setData({ kind: "video", url: paneFileUrl(source, filePath, session) }); return; }
@@ -178,7 +185,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     })().catch((cause: unknown) => { if (!controller.signal.aborted) fail(cause); });
     return () => { controller.abort(); probe.current?.abort(); if (url) URL.revokeObjectURL(url); };
     // itemKey and filePath name the item; the object itself is rebuilt on every render of a one-file preview.
-  }, [paneId, source, session, itemKey, filePath, html, image, attempt]);
+  }, [paneId, source, session, itemKey, filePath, html, image, imageSrc, attempt]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -214,11 +221,18 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     try { await navigator.clipboard.writeText(filePath); setCopied(true); } catch { setCopied(false); }
   };
 
+  const imageError = (src: string) => {
+    failedImages.current.add(src);
+    if (src === imageSrc) imageFailed();
+  };
+  const retry = () => {
+    failedImages.current.delete(imageSrc);
+    setAttempt((value) => value + 1);
+  };
+
   const step = (by: number) => setIndex((current) => (current + by + list.length) % list.length);
-  const imageUrl = (entry: PreviewItem, target = entry.kind === "file" ? entry.path : "", through = paneId) =>
-    entry.kind === "journal" ? journalImageUrl(paneId, entry.entry, entry.index, session) : paneFileUrl(through, target, session);
-  const downloadUrl = error ? undefined : image && item ? imageUrl(item, filePath, source) : data?.url ?? (html ? paneFileUrl(source, filePath, session) : undefined);
-  const failure = error && <FileUnavailable failure={error} path={filePath} paneId={source} session={session} owner={owner} onRetry={() => setAttempt((value) => value + 1)}
+  const downloadUrl = error ? undefined : imageSrc || (data?.url ?? (html ? paneFileUrl(source, filePath, session) : undefined));
+  const failure = error && <FileUnavailable failure={error} path={filePath} paneId={source} session={session} owner={owner} onRetry={retry}
     onOpenFrom={(paneId) => setFrom({ itemKey, paneId })} />;
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -242,7 +256,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
 
   const gallery: (ViewerImage | null)[] = image ? list.map((entry, i) => !isImage(entry) ? null : {
     key: keyOf(entry),
-    src: i === at ? imageUrl(entry, filePath, source) : imageUrl(entry),
+    src: i === at ? imageSrc : imageUrl(entry),
     label: entry.kind === "journal" ? entry.label : fileName(entry.path),
   }) : [];
   const cwd = panes.find((pane) => pane.paneId === source)?.cwd;
@@ -256,7 +270,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     <div ref={panel} role="dialog" aria-modal="true" aria-label={name} tabIndex={-1} onKeyDown={onKeyDown}
       className={cn("file-preview-panel", html && "file-preview-panel--full", image && "file-preview-panel--image")}>
       {image ? <ImageViewer images={gallery} index={at} name={name} downloadUrl={downloadUrl} error={failure || undefined}
-        onStep={step} onClose={close} onDismissed={onClose} onImageError={imageFailed} />
+        onStep={step} onClose={close} onDismissed={onClose} onImageError={imageError} onImageLoad={(src) => failedImages.current.delete(src)} />
       : <>
         <header className="file-preview-header">
           <button type="button" className="preview-done" onClick={close}><ChevronLeft className="size-6" aria-hidden="true" />Done</button>

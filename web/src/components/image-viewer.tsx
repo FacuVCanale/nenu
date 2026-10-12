@@ -53,7 +53,7 @@ interface Gesture {
 
 const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
-export function ImageViewer({ images, index, name, downloadUrl, error, onStep, onClose, onDismissed, onImageError }: {
+export function ImageViewer({ images, index, name, downloadUrl, error, onStep, onClose, onDismissed, onImageError, onImageLoad }: {
   images: readonly (ViewerImage | null)[];
   index: number;
   name: string;
@@ -65,7 +65,9 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
   onClose: () => void;
   /** The picture was swiped away and is already off screen: unmount now. */
   onDismissed: () => void;
-  onImageError: () => void;
+  /** A picture, shown or waiting beside the one shown, failed or loaded: an <img> says so once. */
+  onImageError: (src: string) => void;
+  onImageLoad: (src: string) => void;
 }) {
   const [chrome, setChrome] = useState(true);
   const root = useRef<HTMLDivElement>(null);
@@ -318,7 +320,7 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
           <div className="image-viewer-zoom" data-image-zoom={offset === 0 ? "" : undefined}>
             {/* The pictures beside this one wait for a swipe, out of the reading order. */}
             <img src={image.src} alt={offset === 0 ? image.label : ""} aria-hidden={offset === 0 ? undefined : true} draggable={false} decoding="async"
-              onError={offset === 0 ? onImageError : undefined} />
+              onError={() => onImageError(image.src)} onLoad={() => onImageLoad(image.src)} />
           </div>
         </div>)}
       </div>}
