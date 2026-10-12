@@ -55,7 +55,6 @@
    + needs its own 44px: its reach ends 1px above the box's edge on a phone and 1px below it from 768px,
    where the lead's padding is 4px. */
 @media (pointer: coarse) { .composer-meta .hit-area::before { top: -2px; transform: translateX(-50%); } }
-.workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 
 /* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
    keyboard can shrink the visual viewport without changing `dvh` on older iOS Safari, so
@@ -75,7 +74,6 @@
 
 @media (min-width: 1024px) {
   .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
-  .workbench-composer > button[aria-label="Switch pane"] { display: none; }
   .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }
 }
 
