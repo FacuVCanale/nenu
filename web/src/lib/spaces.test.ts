@@ -2,7 +2,6 @@ import {
   groupPanesByTab,
   neighborTab,
   paneAfterClose,
-  spaceLastSeenMap,
   tabName,
   workspaceEntry,
 } from "./spaces";
@@ -63,23 +62,6 @@ describe("groupPanesByTab", () => {
     const other = agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1" });
     const groups = groupPanesByTab("w1", tabs, [other], []);
     expect(groups.every((g) => g.panes.length === 0)).toBe(true);
-  });
-});
-
-describe("spaceLastSeenMap", () => {
-  it("agrees with spaceLastSeen for every space, in one pass", () => {
-    const panes = [
-      agent({ paneId: "w1:p1", workspaceId: "w1", tabId: "w1:t1", lastSeenAt: 100 }),
-      agent({ paneId: "w1:p2", workspaceId: "w1", tabId: "w1:t1", lastSeenAt: 900 }),
-      agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1", lastSeenAt: 400 }),
-    ];
-    const map = spaceLastSeenMap(panes);
-    expect(map.get("w1")).toBe(900);
-    expect(map.get("w2")).toBe(400);
-  });
-
-  it("omits spaces with no panes, which callers read as 0", () => {
-    expect(spaceLastSeenMap([]).get("w1")).toBeUndefined();
   });
 });
 

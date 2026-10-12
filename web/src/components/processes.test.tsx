@@ -204,6 +204,39 @@ it("opens a subagent's conversation in place of the chat, and Back to Main retur
   expect(screen.queryByText("Child result")).not.toBeInTheDocument();
 });
 
+it("says a Claude subagent takes messages only through Main, and Write through Main returns addressed to it", async () => {
+  const { user } = renderChat();
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
+  await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
+  const view = screen.getByRole("region", { name: "reviewer conversation" });
+  await within(view).findByText("Child result");
+  expect(within(view).getByText(/Claude Code takes messages for a subagent only from its main chat/)).toBeVisible();
+  expect(within(view).queryByRole("textbox")).not.toBeInTheDocument();
+  await user.click(within(view).getByRole("button", { name: "Write to reviewer through Main" }));
+  expect(screen.queryByRole("region", { name: "reviewer conversation" })).not.toBeInTheDocument();
+  // Main's own composer, focused, with the message addressed to the subagent: the operator writes the rest.
+  await waitFor(() => expect(document.activeElement?.closest(".workbench-composer")).not.toBeNull());
+  expect(document.activeElement).toHaveValue('Send to subagent "reviewer" (a1) with SendMessage: ');
+});
+
+it("offers no way to write to a subagent from a read-only device", async () => {
+  const { user } = renderChat({ device: { enforced: true, device: "phone", authorized: false } });
+  await user.click(await chip());
+  await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
+  await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
+  const view = screen.getByRole("region", { name: "reviewer conversation" });
+  await within(view).findByText("Child result");
+  expect(within(view).queryByRole("button", { name: /through Main/ })).not.toBeInTheDocument();
+});
+
+it("tells a Codex sub-agent's reader the same, in Codex's words", async () => {
+  render(<SubagentConversation paneId="parent" harness="codex" selection={{ parentKey: "parent-key", agent: { ...reviewer, status: "running" } }} onMain={() => {}} onWrite={() => {}} />);
+  await screen.findByText("Child result");
+  expect(screen.getByRole("button", { name: "Write to reviewer through Main" })).toBeInTheDocument();
+  expect(screen.getByText(/Nenu does not write to a Codex sub-agent directly yet/)).toBeVisible();
+});
+
 it("does not present a stale subagent as running after a refresh fails", async () => {
   activityList = { ...list, workflows: [], tasks: [] };
   renderChat();
