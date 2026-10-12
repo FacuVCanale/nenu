@@ -161,6 +161,54 @@ describe("inline history pagination", () => {
     expect(screen.queryByRole("button", { name: "Load older messages" })).not.toBeInTheDocument();
   });
 
+  it("fetches the next older page on its own as the reader scrolls up near the top, keeping their place", async () => {
+    vi.mocked(fetchHistory).mockResolvedValue({ ...initialHistory, available: true, entries: [olderEntry], hasMore: true });
+    const { container } = render(<LiveConversation paneId="w1:p1" session="work" history={initialHistory} loading={false} error={false} />);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => screen.queryByText("An older request") ? 3400 : 3000 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    box.top = 1500;
+    fireEvent.scroll(scroller);
+    expect(fetchHistory).not.toHaveBeenCalled();
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    box.top = 200;
+    fireEvent.scroll(scroller);
+
+    await screen.findByText("An older request");
+    expect(fetchHistory).toHaveBeenCalledOnce();
+    expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 120, before: fixtureTranscript[0]!.uuid }, "work", expect.any(AbortSignal));
+    // The page landed 400 px above the turn being read, so the list moved down by exactly that much.
+    expect(box.top).toBe(600);
+    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+  });
+
+  it("leaves a failed older page for the reader to retry and pages nothing while searching", async () => {
+    vi.mocked(fetchHistory).mockRejectedValue(new Error("offline"));
+    const view = (searching: boolean) => <LiveConversation paneId="w1:p1" history={initialHistory} loading={false} error={false} searching={searching} query={searching ? "changed" : ""} />;
+    const { container, rerender } = render(view(false));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry older messages" })).toBeEnabled());
+    box.top = 100;
+    fireEvent.scroll(scroller);
+    expect(fetchHistory).toHaveBeenCalledOnce();
+
+    vi.mocked(fetchHistory).mockClear();
+    Element.prototype.scrollIntoView = vi.fn();
+    rerender(view(true));
+    box.top = 2400;
+    fireEvent.scroll(scroller);
+    box.top = 200;
+    fireEvent.scroll(scroller);
+    expect(fetchHistory).not.toHaveBeenCalled();
+  });
+
   it("stops paging when a capped log returns no new entries", async () => {
     vi.mocked(fetchHistory).mockResolvedValue({ ...initialHistory, available: true, entries: fixtureTranscript, fileTruncated: true });
     render(<LiveConversation paneId="w1:p1" history={initialHistory} loading={false} error={false} />);
