@@ -1,10 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
 import { HomeRoute } from "./home";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
+import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
+import { clockTime } from "@/lib/format";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";
@@ -56,17 +58,35 @@ const projectData: HomeData = {
   projects: [hub],
 };
 
+function Shell() {
+  const value = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  return <WorkbenchShell data={value}><Outlet /></WorkbenchShell>;
+}
+
 async function setup(value = data) {
-  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => value, element: <WorkbenchShell data={value}><Outlet /></WorkbenchShell>, children: [
+  let current = value;
+  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell />, children: [
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
     { path: "/pane/:paneId", element: <p>Pane opened</p> },
     { path: "/project/:projectSlug", element: <p>Project page</p> },
   ] }], { initialEntries: ["/?s=work"] });
   render(<RouterProvider router={router} />);
-  await screen.findByRole("heading", { level: 1 });
-  return { router, user: userEvent.setup(), main: within(document.querySelector("main")!) };
+  await screen.findAllByRole("heading");
+  /** The next poll returns `next`. */
+  const update = async (next: HomeData) => {
+    current = next;
+    await act(() => router.revalidate());
+  };
+  return { router, update, user: userEvent.setup(), main: within(document.querySelector("main")!) };
 }
+
+/** The connection has not been live for longer than the sustained-outage threshold. */
+const sustained = () => {
+  const since = Date.now() - CONNECTION_LOST_MS - 5_000;
+  __resetConnectionHealth(since);
+  return since;
+};
 
 const headline = () => screen.getByRole("heading", { level: 1 }).textContent;
 /** The line under the headline: the facts the headline leaves out. */
@@ -390,10 +410,76 @@ it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one 
 
 it("does not claim an empty live herd or allow creation from stale disconnected data", async () => {
   const { main } = await setup({ ...data, error: true, agents: [], workspaces: [] });
-  expect(screen.getByText(/Showing your last workspace snapshot/)).toBeInTheDocument();
   expect(main.getByRole("button", { name: "Start" })).toBeDisabled();
   expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeDisabled();
-  expect(screen.queryByText(/Describe a task to start your first agent/)).not.toBeInTheDocument();
+  expect(main.queryByRole("region", { name: "Get started" })).not.toBeInTheDocument();
+});
+
+describe("an outage", () => {
+  it("stays quiet through a brief failure: the same headline and lists", async () => {
+    const { update, main } = await setup();
+    await update({ ...data, error: true });
+    expect(headline()).toBe("1 thread needs you");
+    expect(main.queryByText(/Can't reach/)).not.toBeInTheDocument();
+    expect(document.querySelector("[data-stale]")).toBeNull();
+  });
+
+  it("says Herdr can't be reached once it is sustained, and dims the last herd with when it was synced", async () => {
+    const { update, main } = await setup();
+    const since = sustained();
+    await update({ ...data, bridge: "disconnected" });
+    expect(headline()).toBe("Can't reach Herdr");
+    expect(subline()).toBe(`Last synced ${clockTime(since)}`);
+    expect(main.getByRole("region", { name: /^Recent/ }).closest("[data-stale]")).not.toBeNull();
+    expect(main.queryByText(/working now/)).not.toBeInTheDocument();
+    expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
+  });
+
+  it("says Nenu can't be reached when the bridge stops answering, dated by the cached herd", async () => {
+    sustained();
+    const at = Date.now() - 3 * 60_000;
+    await setup({ ...data, error: true, lastSeenAt: at });
+    expect(headline()).toBe("Can't reach Nenu");
+    expect(subline()).toBe(`Last synced ${clockTime(at)}`);
+    expect(document.querySelector("[data-stale]")).not.toBeNull();
+  });
+
+  it("tells each Needs you card the real reason answers are paused", async () => {
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
+    const { update, main } = await setup();
+    await main.findByText("Do you want to proceed?");
+    await update({ ...data, bridge: "disconnected" });
+    expect(await main.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    await update({ ...data, error: true });
+    expect(await main.findByText("Answers are paused until Nenu reconnects.")).toBeVisible();
+    await update({ ...data, error: true, authError: true });
+    expect(await main.findByText("Sign in again to answer.")).toBeVisible();
+  });
+});
+
+describe("a first load that never reached Nenu", () => {
+  const never: HomeData = { ...data, error: true, bridge: undefined, agents: [], workspaces: [], projects: [] };
+
+  it("says it is connecting while it retries quietly, with nothing to start", async () => {
+    const { main } = await setup(never);
+    expect(main.getByRole("heading", { name: "Connecting to Nenu…" })).toBeInTheDocument();
+    expect(main.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(main.queryByText(/snapshot/)).not.toBeInTheDocument();
+  });
+
+  it("names the host it can't reach once the outage is sustained, with a Retry", async () => {
+    sustained();
+    const { main } = await setup(never);
+    expect(main.getByRole("heading", { name: `Can't reach Nenu at ${location.host}` })).toBeInTheDocument();
+    expect(main.getByText("Nenu keeps trying. Check Tailscale on this device.")).toBeVisible();
+    expect(main.getByRole("button", { name: "Retry" })).toBeEnabled();
+  });
+
+  it("says access was refused rather than blaming the connection", async () => {
+    const { main } = await setup({ ...never, authError: true });
+    expect(main.getByRole("heading", { name: "Access refused" })).toBeInTheDocument();
+    expect(main.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
+  });
 });
 
 it("keeps existing threads navigable while answering and creating are read-only", async () => {
