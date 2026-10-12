@@ -107,7 +107,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
   }
 
   return (
-    <nav className="workbench-navigation" aria-label="Projects and chats">
+    <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant}>
       {(!phone || searching) && <div className="nav-top">
         {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
           <Plus aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
@@ -141,17 +141,18 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
           ? <SearchResults groups={results} query={query} listId={listId} selected={selected} session={data.session} onPick={setPicked}
               onNavigate={() => { closeSearch(); onNavigate?.(); }} />
           : mode === "needs-you"
-          ? <NeedsYouList data={data} panes={attention} onNavigate={onNavigate} />
+          ? <NeedsYouList data={data} panes={attention} labelled={!phone} onNavigate={onNavigate} />
           : <>
             {variant === "drawer" && <DrawerSections data={data} onNavigate={onNavigate} />}
             <SidebarTree data={data} onNavigate={onNavigate} folded={phone} />
           </>}
       </div>
 
-      <div className="nav-footer">
+      {/* The host belongs to browsing; a phone's Needs you or Search sheet keeps to its list. */}
+      {(!phone || (mode === "browse" && !searching)) && <div className="nav-footer">
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
         <HostRow data={data} onNavigate={onNavigate} />
-      </div>
+      </div>}
     </nav>
   );
 }
@@ -220,13 +221,14 @@ export function needsYou(data: Pick<HomeData, "agents">): AgentView[] {
   return data.agents.filter((pane) => isAttention(pane.status));
 }
 
-function NeedsYouList({ data, panes, onNavigate }: { data: HomeData; panes: AgentView[]; onNavigate?: () => void }) {
+/** `labelled` is the sidebar's: a phone's Needs you sheet already carries the name as its title. */
+function NeedsYouList({ data, panes, labelled, onNavigate }: { data: HomeData; panes: AgentView[]; labelled: boolean; onNavigate?: () => void }) {
   const { paneId } = useParams();
   if (panes.length === 0) return <p className="nav-empty">Nothing needs you right now.</p>;
   const now = Date.now();
   return (
     <section aria-label="Needs you">
-      <h3 className="nav-label">Needs you</h3>
+      {labelled && <h3 className="nav-label">Needs you</h3>}
       {panes.map((pane) => <ChatRow key={pane.paneId} pane={pane} projects={data.projects} current={pane.paneId === paneId} now={now}
         session={data.session} onNavigate={onNavigate} />)}
     </section>
