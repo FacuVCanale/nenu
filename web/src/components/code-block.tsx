@@ -4,7 +4,7 @@ import { Check, Copy, WrapText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CONFIRM_MS = 2000;
-const COPY_LABEL = { idle: "Copy", copied: "Copied", failed: "Copy failed" } as const;
+const COPY_LABEL = { idle: "Copy", copied: "Copied", failed: "Failed" } as const;
 
 const HEADER_BUTTON = "hit-area inline-flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-caption text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:bg-accent aria-pressed:bg-accent aria-pressed:text-foreground [&_svg]:size-3.5";
 
@@ -62,10 +62,12 @@ export function CodeBlock({ lang, text, children }: { lang: string; text: string
           </button>
           <button type="button" onClick={onCopy} className={HEADER_BUTTON}>
             {copy === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            {/* As wide as "Copied" from the start, so the confirmation does not move Wrap under the finger. */}
+            {/* As wide as its widest label from the start, so no answer moves Wrap under the finger. */}
             <span className="grid justify-items-center">
               <span aria-live="polite" className="col-start-1 row-start-1">{COPY_LABEL[copy]}</span>
-              <span aria-hidden="true" className="invisible col-start-1 row-start-1">{COPY_LABEL.copied}</span>
+              {Object.values(COPY_LABEL).map((label) => (
+                <span key={label} aria-hidden="true" className="invisible col-start-1 row-start-1">{label}</span>
+              ))}
             </span>
           </button>
         </div>
