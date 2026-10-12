@@ -358,6 +358,20 @@ it("marks the tapped row as opening while a slow pane read holds the navigation"
   expect(await screen.findByText("Pane opened")).toBeInTheDocument();
 });
 
+it("waits its own 120ms again when the same row is tapped a second time", async () => {
+  const { user, router, main } = await setup(data, { paneLoader: () => new Promise(() => {}) });
+  const row = () => within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ });
+  await user.click(row());
+  await waitFor(() => expect(row()).toHaveAttribute("aria-busy", "true"));
+  // Back on Home before the read came back (the tab bar's Home, or a redirect), then the same row again.
+  await act(() => router.navigate("/?s=work"));
+  const tapped = performance.now();
+  await user.click(row());
+  expect(row()).not.toHaveAttribute("aria-busy");
+  await waitFor(() => expect(row()).toHaveAttribute("aria-busy", "true"));
+  expect(performance.now() - tapped).toBeGreaterThanOrEqual(120);
+});
+
 it("marks a Needs you row as opening too", async () => {
   const { user, main } = await setup(data, { paneLoader: () => new Promise(() => {}) });
   const row = within(main.getByRole("region", { name: /^Needs you/ })).getByRole("link", { name: /^Review changes/ });
