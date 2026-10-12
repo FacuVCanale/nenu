@@ -440,12 +440,15 @@ describe("QuestionCard", () => {
     expect(screen.getByRole("button", { name: /^Yes$/ })).not.toHaveClass("bg-foreground");
   });
 
-  it("asks the question in the same headline on Home and in the thread", () => {
+  // Home answers on the card, so it never cuts the question those answers reply to.
+  it("asks the whole question in the same headline on Home and in the thread", () => {
     const { unmount } = render(<QuestionCard interaction={question} onAnswer={ok} />);
     expect(screen.getByText("Which fruit?")).toHaveClass("text-headline");
     unmount();
     render(<QuestionCard compact title="panel depo" interaction={question} onAnswer={ok} onOpen={() => {}} />);
-    expect(screen.getByText("Which fruit?")).toHaveClass("text-headline", "line-clamp-3");
+    expect(screen.getByText("Which fruit?")).toHaveClass("text-headline");
+    expect(screen.getByText("Which fruit?").className).not.toMatch(/line-clamp/);
+    expect(within(screen.getByRole("group", { name: "Answers" })).getByRole("button", { name: /Apple/ })).toBeEnabled();
   });
 
   describe("a note on an answer that accepts text (Tab-amend, Codex notes)", () => {
