@@ -298,7 +298,7 @@ export function QuestionCard({
         )}
 
         {staticList ? <>
-          <StaticOptions options={choices} />
+          <StaticOptions options={compact ? choices.filter((o) => !escapes.includes(o)) : choices} labelsOnly={compact} />
           {compact && onOpen && (
             <button type="button" onClick={onOpen} className={cn(PILL, OUTLINED, "self-start")}>
               <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabel}
@@ -568,14 +568,14 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
   </>;
 }
 
-/** A read-only device's options: what the agent offers, with nothing to press. */
-function StaticOptions({ options }: { options: InteractionOption[] }) {
+/** A read-only device's options: what the agent offers, with nothing to press. Home's keeps the labels. */
+function StaticOptions({ options, labelsOnly }: { options: InteractionOption[]; labelsOnly: boolean }) {
   return (
     <ul aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
       {options.map((option) => (
         <li key={option.index} className="flex min-w-0 flex-col">
           <span className="text-[15px] leading-5 text-foreground">{recommendedLabel(option.label).text}</span>
-          {option.description && <span className="text-[13px] leading-[18px] text-muted-foreground">{option.description}</span>}
+          {option.description && !labelsOnly && <span className="text-[13px] leading-[18px] text-muted-foreground">{option.description}</span>}
         </li>
       ))}
     </ul>
