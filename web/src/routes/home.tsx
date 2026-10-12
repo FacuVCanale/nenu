@@ -114,14 +114,14 @@ export function HomeRoute() {
 
 /**
  * Home before any herd was read. While the first reads retry quietly it says it is connecting; once
- * the banner names an outage or a refusal, and holds its Retry or Sign in, the body only says what
- * will be here, so the problem and its one way out are never stated twice.
+ * the banner names an outage or a refusal, and holds its Retry or Sign in, the body says what will be
+ * here and, for an outage, what to check, so the problem and its one way out are never stated twice.
  */
 function HomeWithoutHerd({ refused, lost }: { refused: boolean; lost: boolean }) {
   if (!refused && !lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {window.location.host}.</EmptyState>;
   return (
     <EmptyState icon={MessagesSquare} title="Nothing to show yet">
-      Your threads, questions and reviews show up here once {refused ? "you sign in again" : "Nenu answers"}.
+      Your threads, questions and reviews show up here once {refused ? "you sign in again." : "Nenu answers. Check this device's network or VPN."}
     </EmptyState>
   );
 }
