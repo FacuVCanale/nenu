@@ -30,9 +30,13 @@ export function receiptSummary(i: Interaction, option: InteractionOption, text?:
   const label = option.label.replace(RECOMMENDED, "");
   const verdict = option.role === "deny" ? "Declined" : "Approved";
   switch (i.kind) {
-    case "permission":
-      // Without parts (Grok, agy) the plain subject's last row is the command.
-      return `${verdict} · ${i.subject?.command ?? i.subject?.file ?? i.context?.split("\n").at(-1) ?? label}`;
+    case "permission": {
+      // A request in parts names its command or file. Without parts only a lone plain row is known
+      // to be the command (Grok); a longer one ends on a fold, a link or a sentence, so the answer
+      // names itself instead, and so does a folder's trust.
+      const rows = i.family === "trust" ? [] : i.context?.split("\n") ?? [];
+      return `${verdict} · ${i.subject?.command ?? i.subject?.file ?? (rows.length === 1 ? rows[0] : label)}`;
+    }
     case "plan":
       return option.role === "freeText" && text ? `Sent · ${text}` : `${verdict} · ${label}`;
     case "multi-select":
