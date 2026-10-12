@@ -278,6 +278,21 @@ describe("QuestionCard", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  it("keeps one commit on the card while a reply is written: its Send, not the multi-select's Submit", async () => {
+    const withText: Interaction = { ...multi, options: [...multi.options.slice(0, 2), { index: 2, label: "Type something", role: "freeText", acceptsText: true }, { ...multi.options[2]!, index: 3 }] };
+    const { onAnswer, user } = setup({ interaction: withText });
+    expect(screen.getByRole("button", { name: "Submit 1" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Type something…" }));
+    await user.type(screen.getByRole("textbox", { name: "Type something" }), "Pineapple");
+    // Submit here would send the ticks without the typed text, and the draft would leave with the card.
+    expect(screen.queryByRole("button", { name: /^Submit/ })).not.toBeInTheDocument();
+    const ink = screen.getAllByRole("button").filter((b) => b.classList.contains("bg-foreground"));
+    expect(ink.map((b) => b.textContent)).toEqual(["Send"]);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Submit 1" })).toBeVisible();
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
   describe("what a permission asks for", () => {
     const bash: Interaction = {
       ...permission, context: "Bash command\nWrite hi into hello.txt\necho hi > hello.txt",
