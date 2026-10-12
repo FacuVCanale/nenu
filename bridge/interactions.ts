@@ -18,6 +18,7 @@ import type {
   Interaction,
   InteractionHint,
   InteractionKind,
+  InteractionAnswer,
   InteractionOption,
   InteractionStep,
   LivePublisher,
@@ -73,6 +74,7 @@ interface Described {
   question: string;
   context?: string;
   steps?: InteractionStep[];
+  answers?: InteractionAnswer[];
   choices: Draft[];
 }
 
@@ -157,9 +159,12 @@ function describe(dialog: Dialog, agent: string): Described {
     case "prompt-select": return describePrompt(dialog.model, agent);
     case "wizard": {
       const w = dialog.model;
-      if (w.phase === "review") return { ...review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps) };
+      if (w.phase === "review") {
+        const answers = w.answers.map(({ question, answer }) => ({ question, answer }));
+        return { ...review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps), ...(answers.length ? { answers } : {}) };
+      }
       return {
-        kind: "wizard", family: agent, question: w.question, ...stepsOf(w.steps),
+        kind: "wizard", family: agent, question: w.question, ...stepsOf(w.steps, true),
         choices: w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
       };
     }
@@ -168,7 +173,7 @@ function describe(dialog: Dialog, agent: string): Described {
       if (m.phase === "review") return review(agent, "multi-select");
       const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
       return {
-        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps),
+        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps, true),
         choices: [
           ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
           ...(textRow !== null ? [pick("Type something", { type: "typeSomething", n: textRow }, {}, true)] : []),
@@ -178,7 +183,7 @@ function describe(dialog: Dialog, agent: string): Described {
       };
     }
     case "preview-select":
-      return { kind: "question", family: agent, question: dialog.model.question, ...stepsOf(dialog.model.steps), choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
+      return { kind: "question", family: agent, question: dialog.model.question, ...stepsOf(dialog.model.steps, true), choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
     case "menu":
       return {
         kind: "menu", family: agent, question: dialog.model.title,
@@ -218,8 +223,17 @@ function describePrompt(p: PromptModel, agent: string): Described {
   return { kind, family: p.family, question: p.question, ...(context ? { context } : {}), ...stepsOf(steps), choices };
 }
 
-const stepsOf = (steps: readonly InteractionStep[] | null | undefined): { steps?: InteractionStep[] } =>
-  steps?.length ? { steps: steps.map(({ label, answered, current }) => ({ label, answered, current })) } : {};
+/**
+ * The chips as served. On a question step one of them is on screen; a read without colours loses
+ * the highlight, so `asking` falls back to the first unanswered one. A review marks none.
+ */
+function stepsOf(steps: readonly InteractionStep[] | null | undefined, asking = false): { steps?: InteractionStep[] } {
+  if (!steps?.length) return {};
+  const served = steps.map(({ label, answered, current }) => ({ label, answered, current }));
+  const fallback = served.find((s) => !s.answered);
+  if (asking && fallback && !served.some((s) => s.current)) fallback.current = true;
+  return { steps: served };
+}
 
 /** Header chips as Claude draws them above a question: `☐ Fruit`, `☒` once answered. */
 const CHIP = /([☐☒☑])\s+([^☐☒☑✔←→]+)/g;
@@ -247,7 +261,7 @@ function promptContext(p: PromptModel): { context?: string; steps?: InteractionS
   const rows = [...lines.slice(top, q), ...(first > q ? lines.slice(q + 1, first) : [])]
     .map((l) => l.replace(/^[\s│┃]+|[\s│┃]+$/g, ""))
     .filter((l) => l && !/^[─━▔═╌]+$/.test(l));
-  // A select question's header chip names it; it is not part of what the operator decides on.
+  // A select question's header chip names it, and a repeat of the question is not the subject.
   let steps: InteractionStep[] | undefined;
   const subject = rows.filter((l) => {
     const chips = p.family === "select" ? headerChips(l) : null;
@@ -332,6 +346,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     question: asked?.question && asked.question.length > base.question.length ? asked.question : base.question,
     ...(context ? { context } : {}),
     ...(base.steps ? { steps: base.steps } : {}),
+    ...(base.answers ? { answers: base.answers } : {}),
     options: choices.map((c) => c.option),
     signature: dialogSignature(dialog),
     revision,

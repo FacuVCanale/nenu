@@ -608,6 +608,11 @@ export interface InteractionStep {
   current: boolean;
 }
 
+export interface InteractionAnswer {
+  question: string;
+  answer: string;
+}
+
 export interface Interaction {
   paneId: string;
   agent: string;
@@ -619,6 +624,8 @@ export interface Interaction {
   context?: string;
   /** The question's header chips: one names a lone AskUserQuestion, several are a wizard's steps. */
   steps?: InteractionStep[];
+  /** A wizard's review: what Submit sends, one pair per question. */
+  answers?: InteractionAnswer[];
   options: InteractionOption[];
   /** Identity of the exact dialog on screen; an answer carrying another signature is refused (409). */
   signature: string;
