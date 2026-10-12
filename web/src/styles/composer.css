@@ -52,8 +52,9 @@
 @media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
 .composer-quiet:disabled { opacity: 0.5; cursor: default; }
 /* The meta row's targets reach down into the home indicator's inset, not up into the box, where the
-   + needs its own 44px. */
-@media (pointer: coarse) { .composer-meta .hit-area::before { top: -4px; transform: translateX(-50%); } }
+   + needs its own 44px: its reach ends 1px above the box's edge on a phone and 1px below it from 768px,
+   where the lead's padding is 4px. */
+@media (pointer: coarse) { .composer-meta .hit-area::before { top: -2px; transform: translateX(-50%); } }
 .workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 
 /* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
