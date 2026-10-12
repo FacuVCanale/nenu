@@ -112,6 +112,8 @@ export function QuestionCard({
     if (refused) setNotice({ tone: "warn", text: refused, at: "options" });
   }, [refused]);
   const [failed, setFailed] = useState<number | null>(null);
+  /** Home: the thread was opened by the card's large primary, so that is what spins, not the header. */
+  const [openedByPrimary, setOpenedByPrimary] = useState(false);
   /** The operator unfolded the command or plan. */
   const [opened, setOpened] = useState(false);
   /** Whether this plan text is taller than its fold; unknown until measured, and unknown counts as folded. */
@@ -278,10 +280,17 @@ export function QuestionCard({
       <span className="min-w-0 flex-1 break-words text-body font-medium text-muted-foreground">{replyLabel(option)}</span>
     </button>
   );
+  // One spinner while the thread opens, on what was tapped: the large primary, else the header.
+  const openFrom = (primary: boolean) => () => {
+    setOpenedByPrimary(primary);
+    onOpen?.();
+  };
+  const primaryOpening = opening && openedByPrimary;
+  const openingSpinner = <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />;
   // Home's one way into the thread from the card, as its one large primary.
   const toThread = onOpen && (
-    <Button type="button" size="block" aria-busy={opening || undefined} onClick={onOpen}>
-      {opening && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />}{TO_THREAD}
+    <Button type="button" size="block" aria-busy={primaryOpening || undefined} onClick={openFrom(true)}>
+      {primaryOpening && openingSpinner}{TO_THREAD}
     </Button>
   );
   // A multi-select's advance says how much it sends; a review with a gap says it sends it anyway. A
@@ -325,7 +334,7 @@ export function QuestionCard({
   return (
     <Frame ref={setFrame} compact={compact} label={i.question} busy={opening}>
       {compact ? <>
-        <CompactHeader title={title} onOpen={onOpen} opening={opening} />
+        <CompactHeader title={title} onOpen={onOpen && openFrom(false)} opening={opening && !openedByPrimary} />
         {/* The question's header chip, or where a wizard stands, as a quiet line over the question. */}
         {steps.length > 0 && (
           <div className="-mt-1 flex min-w-0 items-center gap-2 text-footnote font-medium text-muted-foreground">
@@ -361,8 +370,8 @@ export function QuestionCard({
             </div>
           </div>
           {onOpen && (
-            <Button type="button" size="block" aria-busy={(compact && opening) || undefined} onClick={onOpen}>
-              {compact ? opening && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <TerminalSquare aria-hidden className="size-4 shrink-0" />}{openLabelFor}
+            <Button type="button" size="block" aria-busy={(compact && primaryOpening) || undefined} onClick={openFrom(true)}>
+              {compact ? primaryOpening && openingSpinner : <TerminalSquare aria-hidden className="size-4 shrink-0" />}{openLabelFor}
             </Button>
           )}
         </div>
@@ -441,7 +450,7 @@ export function QuestionCard({
             ))}
             {answerable && notable && !writing && <NoteButton locked={locked} textId={textId} className={SECONDARY} onClick={() => write({ to: "note" })} />}
             {compact ? answerable && onOpen && inTerminal.map((option) => (
-              <button key={option.index} type="button" data-in-terminal onClick={onOpen} className={SECONDARY} title={`${bare(option.label)} in the thread`}>
+              <button key={option.index} type="button" data-in-terminal onClick={openFrom(false)} className={SECONDARY} title={`${bare(option.label)} in the thread`}>
                 Type your own answer<ChevronRight aria-hidden className="size-4 shrink-0" />
               </button>
             )) : onKeys && inTerminal.map((option) => (
