@@ -33,7 +33,7 @@ function setup(overrides: Partial<Props> = {}) {
     gone: false, readOnly: false, disconnected: false, nativeWorkbench: false, dialogPresent: false,
     text: "pane output", terminalDraft: null, rawTerminalDraft: null,
     prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
-    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), displaySurface: "terminal",
+    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(),
     onSent: vi.fn(), ...overrides,
   };
   // The same mounted composer across prop changes, as a poll would deliver them.

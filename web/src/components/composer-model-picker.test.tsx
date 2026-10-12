@@ -18,7 +18,7 @@ function mount(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
     gone: false, readOnly: false, dialogPresent: false, text: "pane output",
     terminalDraft: null, rawTerminalDraft: null,
     prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
-    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), displaySurface: "terminal", onSent: vi.fn(),
+    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), onSent: vi.fn(),
     ...overrides,
   };
   const router = createMemoryRouter([{ path: "/", element: <Composer {...props} ref={ref} /> }]);

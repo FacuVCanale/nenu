@@ -18,7 +18,7 @@ import { useSkillComposer } from "@/hooks/use-skill-composer";
 import { NavTray } from "@/components/nav-tray";
 import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
-import { DisplayPrefsContent, type DisplaySurface } from "@/components/display-prefs";
+import { DisplayPrefsContent } from "@/components/display-prefs";
 import { SectionLabel } from "@/components/ui/section-label";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
@@ -121,6 +121,8 @@ interface ComposerProps {
   /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
   workingSince?: string;
   usageControls?: ReactNode;
+  /** The conversation is on screen rather than the terminal mirror: sends can queue, and Display
+   *  offers the chat's own settings. */
   nativeWorkbench?: boolean;
   prepareSend?: () => Promise<boolean>;
   onInputFocus?: () => void;
@@ -144,8 +146,6 @@ interface ComposerProps {
   stepFontSize: (delta: number) => void;
   setRawTerminal: (raw: boolean) => void;
   setTapToFocus: (tapToFocus: boolean) => void;
-  /** What the pane shows, which decides what the Display dock offers. */
-  displaySurface: DisplaySurface;
   /** Snap the mirror to the live tail (follow + revalidate + scroll) after a successful send. */
   onSent: () => void;
   /** Receives the secondary controls whenever their state changes (see ComposerControl). */
@@ -287,7 +287,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, displaySurface, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1264,7 +1264,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {drawer === "display" && (
           <ComposerDock title="Display" onClose={closeDrawer}>
             <DisplayPrefsContent
-              surface={displaySurface}
+              surface={nativeWorkbench ? "chat" : "terminal"}
               prefs={prefs}
               setWrap={setWrap}
               stepFontSize={stepFontSize}

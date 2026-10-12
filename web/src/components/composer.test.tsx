@@ -120,7 +120,6 @@ function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}
     stepFontSize: vi.fn(),
     setRawTerminal: vi.fn(),
     setTapToFocus: vi.fn(),
-    displaySurface: "terminal",
     onSent: vi.fn(),
     ...overrides,
   };
@@ -151,7 +150,6 @@ function renderComposerWithStatus(overrides: Partial<ComponentProps<typeof Compo
     stepFontSize: vi.fn(),
     setRawTerminal: vi.fn(),
     setTapToFocus: vi.fn(),
-    displaySurface: "terminal",
     onSent: vi.fn(),
     ...overrides,
   };
@@ -434,7 +432,7 @@ describe("Composer — send", () => {
         <Composer paneId="w1:p1" agent="claude" isShell={false} gone={gone} readOnly={false} dialogPresent={false}
           text="pane output" terminalDraft={null} rawTerminalDraft={null} prepareSend={prepareSend}
           prefs={{ wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true }}
-          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} displaySurface="terminal" onSent={vi.fn()} />
+          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()} />
       );
     }
     render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Harness /> }])} />);
@@ -736,7 +734,6 @@ describe("Composer — typing into the terminal", () => {
             stepFontSize={vi.fn()}
             setRawTerminal={vi.fn()}
             setTapToFocus={vi.fn()}
-            displaySurface="terminal"
             onSent={vi.fn()}
           />
         </>
@@ -869,7 +866,6 @@ describe("Composer — typing into the terminal", () => {
             stepFontSize={vi.fn()}
             setRawTerminal={vi.fn()}
             setTapToFocus={vi.fn()}
-            displaySurface="terminal"
             onSent={vi.fn()}
           />
         </>
@@ -1063,7 +1059,6 @@ describe("Composer — typing into the terminal", () => {
             stepFontSize={vi.fn()}
             setRawTerminal={vi.fn()}
             setTapToFocus={vi.fn()}
-            displaySurface="terminal"
             onSent={vi.fn()}
           />
         </>
@@ -1349,7 +1344,6 @@ function renderDraftHarness(overrides: Partial<ComponentProps<typeof Composer>> 
       stepFontSize: vi.fn(),
       setRawTerminal: vi.fn(),
       setTapToFocus: vi.fn(),
-      displaySurface: "terminal",
       onSent: vi.fn(),
       ...rest,
       terminalDraft: stable,
@@ -1613,7 +1607,6 @@ describe("Composer — in-flight echo suppression (match-last-sent)", () => {
       stepFontSize: vi.fn(),
       setRawTerminal: vi.fn(),
       setTapToFocus: vi.fn(),
-      displaySurface: "terminal",
       onSent: vi.fn(),
     };
     return (
@@ -1984,7 +1977,7 @@ describe("Composer — display prefs behind the gear", () => {
 
   it("over the chat, the Display dock holds only the chat's text size", async () => {
     const user = userEvent.setup();
-    renderComposer({ displaySurface: "chat" });
+    renderComposer({ nativeWorkbench: true });
     await user.click(control("Display"));
     expect(screen.getByRole("radiogroup", { name: "Text size" })).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Wrap lines" })).not.toBeInTheDocument();
@@ -2129,7 +2122,6 @@ describe("Composer — draft persistence", () => {
       stepFontSize: vi.fn(),
       setRawTerminal: vi.fn(),
       setTapToFocus: vi.fn(),
-      displaySurface: "terminal",
       onSent: vi.fn(),
       ...overrides,
     };

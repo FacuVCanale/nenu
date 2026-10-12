@@ -41,7 +41,7 @@ function setup(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
     gone: false, readOnly: false, disconnected: false, nativeWorkbench: true, dialogPresent: false,
     text: "pane output", terminalDraft: null, rawTerminalDraft: null,
     prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
-    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), displaySurface: "terminal",
+    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(),
     onSent, onControlsChange, ...overrides,
   };
   const router = createMemoryRouter([{ path: "/", element: <><Composer {...props} ref={ref} /><StatusLine /></> }]);
@@ -256,7 +256,7 @@ it("closes the + menu when the pane locks, so it does not come back by itself on
     paneId: "w1:p1", agent: "codex", isShell: false, gone: false, readOnly: false, nativeWorkbench: true, dialogPresent: false,
     text: "pane output", terminalDraft: null, rawTerminalDraft: null,
     prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
-    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), displaySurface: "terminal", onSent: vi.fn(),
+    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), onSent: vi.fn(),
   };
   render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Lockable {...props} /> }])} />);
   const user = userEvent.setup();
