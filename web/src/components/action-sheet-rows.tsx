@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { Loader2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -95,26 +95,34 @@ export function ConfirmView({
 }
 
 /**
- * The rename view behind the "Rename" tap: a Back row, a prefilled label input (autofocused by the
- * caller via `inputRef`), and Save. `canSave` lets a sheet refuse a blank field — tabs have no
- * "clear" so they pass `canSave = trimmed.length > 0`, while a pane passes `true` always so saving a
- * blank field clears its label. Enter in the input saves.
+ * The rename view behind "Rename", as an iOS edit sheet: an edit header (Cancel · title · Save, 44px
+ * controls) that stands in for the sheet's own title row while it shows (strips.css), and the field
+ * alone, at 16px so iOS doesn't zoom, with a clear button. The caller autofocuses the field through
+ * `inputRef`. `canSave` lets a sheet refuse a blank field — tabs have no "clear" so they pass
+ * `canSave = trimmed.length > 0`, while a pane passes `true` so saving a blank field clears its
+ * label. Enter in the field saves.
  */
 export function RenameView({
   inputRef,
+  title,
+  fieldLabel,
   label,
   onLabelChange,
   onSave,
-  onBack,
+  onCancel,
   saving,
   canSave,
   placeholder,
 }: {
   inputRef: RefObject<HTMLInputElement | null>;
+  /** "Rename pane", "Rename tab". */
+  title: string;
+  /** The field's accessible name: "Pane name", "Tab name". */
+  fieldLabel: string;
   label: string;
   onLabelChange: (value: string) => void;
   onSave: () => void;
-  onBack: () => void;
+  onCancel: () => void;
   saving: boolean;
   canSave: boolean;
   placeholder: string;
@@ -128,28 +136,54 @@ export function RenameView({
 
   return (
     <div className="flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex items-center gap-1 self-start rounded-md py-1 pr-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted"
-      >
-        <ChevronLeft className="size-3.5" />
-        Back
-      </button>
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted-foreground">Label</span>
+      {/* Bleeds through the sheet body's padding (16px sides, 12px top) to sit where the title row was. */}
+      <div data-sheet-edit-header className="sticky top-0 z-10 -mx-4 -mt-3 border-b border-border/60 bg-background">
+        <div aria-hidden="true" className="flex justify-center pt-2 pb-1">
+          <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
+        </div>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pb-1">
+          <button type="button" onClick={onCancel} className="h-11 justify-self-start rounded-md px-2 text-headline font-normal text-muted-foreground">
+            Cancel
+          </button>
+          <h2 className="truncate text-headline">{title}</h2>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || !canSave}
+            aria-busy={saving || undefined}
+            className="h-11 justify-self-end rounded-md px-2 text-headline disabled:not-aria-busy:text-disabled-foreground"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+      <div className="relative">
         <input
           ref={inputRef}
+          aria-label={fieldLabel}
           value={label}
           onChange={(e) => onLabelChange(e.target.value)}
           onKeyDown={onInputKeyDown}
           placeholder={placeholder}
-          className="h-11 rounded-lg border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          enterKeyHint="done"
+          className="h-11 w-full rounded-lg border border-border bg-background pr-11 pl-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
-      </label>
-      <Button onClick={onSave} disabled={saving || !canSave} className="h-11">
-        {saving ? <Loader2 className="size-4 animate-spin" /> : "Save"}
-      </Button>
+        {label && (
+          <button
+            type="button"
+            aria-label="Clear name"
+            // Keep focus (and the phone keyboard) in the field.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onLabelChange("");
+              inputRef.current?.focus({ preventScroll: true });
+            }}
+            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-subtle-foreground hover:text-foreground"
+          >
+            <XCircle aria-hidden="true" className="size-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

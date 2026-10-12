@@ -145,10 +145,12 @@ export function TabActionsSheet({
       ) : (
         <RenameView
           inputRef={inputRef}
+          title="Rename tab"
+          fieldLabel="Tab name"
           label={label}
           onLabelChange={setLabel}
           onSave={() => void save()}
-          onBack={() => setMode("actions")}
+          onCancel={() => setMode("actions")}
           saving={saving}
           // A tab has no "clear" (herdr stores "" literally, rejects null), so a blank field can't be
           // saved — Save disables. This is the one rename difference from a pane.

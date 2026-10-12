@@ -143,10 +143,12 @@ export function PaneActionsSheet({
       ) : (
         <RenameView
           inputRef={inputRef}
+          title="Rename pane"
+          fieldLabel="Pane name"
           label={label}
           onLabelChange={setLabel}
           onSave={() => void save()}
-          onBack={() => setMode("actions")}
+          onCancel={() => setMode("actions")}
           saving={saving}
           // A blank pane field clears the label (blank → null on the bridge), so Save stays enabled.
           canSave={true}
