@@ -125,9 +125,9 @@ export function useDirectTyping({
     activeRef.current = true;
     setActive(true);
     // No toast: the armed strip above the composer says it, and stays while the mode does.
-    // Focus synchronously while the long-press/contextmenu gesture still carries browser user
-    // activation; a deferred focus selects the field but mobile browsers may refuse to open their
-    // software keyboard once that activation has expired. The existing callback still runs after
+    // Focus synchronously while the tap on the + menu's "Type into terminal" row still carries
+    // browser user activation; a deferred focus selects the field but mobile browsers may refuse to
+    // open their software keyboard once that activation has expired. The existing callback still runs after
     // React swaps the controlled value so selection lands at the end.
     inputRef.current?.focus({ preventScroll: true });
     focusInput();

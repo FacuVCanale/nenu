@@ -1222,10 +1222,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </div>
         )}
 
-        {/* File input stays mounted here (not inside the keyboard-only key row) so the picker
-            callback survives the keyboard collapsing. Attach-image fires it from the reply-input row
-            below (always visible, not gated behind the keyboard-open quick keys); structural commands
-            (New tab/space, Kill) and Stop (Esc, in the Keys dock) live elsewhere. */}
+        {/* File input stays mounted here, outside the + menu, so the picker callback survives the
+            menu closing. The menu's Photo row fires it inside its own tap. */}
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickImage} />
         {/* Keys / Quick / Display / Usage dock — one in-flow site above the input, so the panel
             grows over the conversation, not the draft. Whichever of the mutually exclusive drawers is
@@ -1364,8 +1362,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </div>
         )}</Fold>
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
-        {/* One rounded box: the draft grows upward to its cap and the single action sits inside on
-            the right (send, stop, or the confirm pill). Quiet controls live in the row below it. */}
+        {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
+            it (Send or its confirm pill; Stop has the row above). Quiet controls live in the row
+            below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">

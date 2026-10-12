@@ -16,7 +16,8 @@ export function DirectTypingStrip({ onStop }: { onStop: () => void }) {
   return (
     <div className="flex items-center gap-2 px-1 pb-1 text-xs text-primary">
       <Keyboard className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">
+      {/* Wraps rather than truncates: on a phone, "Stop typing" leaves the sentence no room. */}
+      <span className="min-w-0 flex-1">
         <span className="font-medium">Typing into terminal</span>
         <span className="text-muted-foreground"> — keys go straight through</span>
       </span>
