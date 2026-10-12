@@ -322,6 +322,24 @@ describe("image viewer", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("outside this agent's folder");
   });
 
+  // A picture that fails while it waits beside the current one never fails again once it is the
+  // current one: the same <img> with the same src fires no second error. The viewer remembers it.
+  it("explains a picture that failed while it waited beside the current one, and retries it", async () => {
+    fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): File unavailable in this workspace.", 404, false));
+    inspect.mockImplementation(async (_pane, [path]) => [{ path: path!, state: "missing" as const }]);
+    render(<FilePreview paneId="w1:p1" items={[{ kind: "file", path: "shots/a.png" }, { kind: "file", path: "shots/b.png" }]} onClose={() => {}} />);
+    fireEvent.error(document.querySelector('img[src*="b.png"]')!);
+    expect(fetchFile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
+    expect(fetchFile).toHaveBeenCalledWith("w1:p1", "shots/b.png", undefined, expect.any(AbortSignal));
+    expect(screen.queryByRole("link", { name: "Download image" })).not.toBeInTheDocument();
+    // Retry loads the picture again instead of answering from memory.
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("img", { name: "b.png" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("closes on a long pull down and settles back after a short one", async () => {
     const close = vi.fn();
     render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
