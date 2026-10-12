@@ -83,7 +83,7 @@ it("opens a workspace that holds a single pane straight onto it", async () => {
 
 it("shows a workspace without a pane as an empty chat that starts one", async () => {
   const { user } = setup("/space/w3", herd);
-  expect(await screen.findByText("Nothing runs in this workspace yet.")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Nothing runs in this workspace yet" })).toBeInTheDocument();
   expect(screen.getByText("empty")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Start an agent or a shell" }));
   expect(openNewAgent).toHaveBeenCalledWith({ kind: "tab", workspaceId: "w3" });
@@ -91,7 +91,7 @@ it("shows a workspace without a pane as an empty chat that starts one", async ()
 
 it("offers nothing to start on a read-only device", async () => {
   setup("/space/w3", { ...herd, device: { enforced: true, device: "spare-phone", authorized: false } });
-  expect(await screen.findByText("Nothing runs in this workspace yet.")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Nothing runs in this workspace yet" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Start an agent or a shell" })).toBeNull();
 });
 

@@ -38,6 +38,7 @@ import { adapterFor } from "@/lib/harness";
 import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { terminalWait } from "@/lib/terminal-wait";
 import { FindBar } from "@/components/find-bar";
+import { PaneGone } from "@/components/pane-gone";
 import { Composer, type ComposerControl, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
 import { LiveConversation } from "@/components/live-conversation";
@@ -96,6 +97,10 @@ interface AgentChatProps {
   /** The session this pane lives in (undefined = primary) — scopes every read/write + the safety chip. */
   session?: string;
   agent: AgentView | undefined;
+  /** Once the pane is gone: the pane as it was last listed (it closed under this page), and the one
+   *  beside it, which the closed view opens. */
+  closed?: AgentView;
+  next?: AgentView;
   agents: AgentView[];
   shellPanes: AgentView[];
   tabs: TabView[];
@@ -163,6 +168,8 @@ export function AgentChat({
   paneId,
   session,
   agent,
+  closed,
+  next,
   agents,
   shellPanes,
   tabs,
@@ -1001,9 +1008,7 @@ export function AgentChat({
             {titleLabel}
           </button>
         ) : <span className={TITLE_SHAPE}>{titleLabel}</span>}</h1> : (
-          <div className="min-w-0 flex-1 px-1">
-            <span className="truncate font-semibold">(agent gone)</span>
-          </div>
+          <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : "Pane not found"}</h1>
         )}
       </AppHeader>}
       {overlay}
@@ -1064,7 +1069,13 @@ export function AgentChat({
             straight into terminal output — the chrome and the mirror read as one surface. Drawing it
             here rather than as a border-b on PaneStrip covers the case where that strip is absent
             (a tab holding a single pane), which is the common one. */}
-        {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent}
+        {gone ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto border-t border-border/40">
+            <PaneGone closed={closed !== undefined} unsure={connecting}
+              next={next && { paneId: next.paneId, name: displayName(next, projects) }}
+              onOpen={switchTo} onHome={onBack} />
+          </div>
+        ) : subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent}
           harness={agent?.agent === "codex" ? "codex" : "claude"} onMain={() => setSubagent(null)}
           onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
@@ -1146,8 +1157,9 @@ export function AgentChat({
           </ChatMessageList>
         </div>}
 
-        {/* Composer and its controls stay mounted while the workbench's inspectors open and close. */}
-        <div className="workbench-composer relative" hidden={Boolean(subagent)} inert={Boolean(subagent)}>
+        {/* Composer and its controls stay mounted while the workbench's inspectors open and close. A gone
+            pane has nothing to write to, so it has none. */}
+        {!gone && <div className="workbench-composer relative" hidden={Boolean(subagent)} inert={Boolean(subagent)}>
           {!subagent && showConversation && <WorkbenchModelPanel scope={JSON.stringify([paneId, session])}
             open={panels.panel === "model"} anchorRef={modelTriggerRef} agent={agent?.agent}
             text={modelSource.text} menu={liveModelBlock} modelPresent={modelPresent} catalog={catalog}
@@ -1248,7 +1260,7 @@ export function AgentChat({
             onSent={() => { onSent(); setFollowKey((key) => key + 1); conversation.refresh(); }}
             onControlsChange={setComposerControls}
           />
-        </div>
+        </div>}
       </div>
       {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
       </div>
