@@ -6,13 +6,12 @@ import { cn } from "@/lib/utils";
 
 // The chip pill, identical for a question and for the trailing Submit — the only difference is which
 // one is current, which the callers know and this component does not infer.
-const CHIP_CLASS = "flex min-w-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] leading-tight";
+const CHIP_CLASS = "flex min-w-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs leading-4";
 const CHIP_CURRENT = "border-primary/60 bg-primary/15 font-medium text-foreground";
 const CHIP_IDLE = "border-border/60 text-muted-foreground";
-// 28px keeps the strip slim; the hit area is bled into the gap around it so the target is 44px
-// without the visual weight — the same trick the mirror's tap-to-open links use.
+// 28px keeps the strip slim; `hit-area` gives a touch screen the 44px target without the visual weight.
 const CHEVRON_CLASS =
-  "relative flex size-7 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-colors active:bg-muted disabled:opacity-50 after:absolute after:-inset-2 after:content-['']";
+  "hit-area flex size-7 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-colors active:bg-muted disabled:opacity-50";
 
 /**
  * The multi-question stepper strip — chips for each question plus the Left/Right step navigation.
