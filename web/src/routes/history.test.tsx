@@ -95,6 +95,13 @@ describe("history with nothing to read", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("says a shell keeps no transcript, without promising one later", async () => {
+    setup("w2:shell", { unavailable: "no-session" }, [], { shellPanes: [pane("w2:shell", { kind: "shell", paneLabel: "Shell" })] });
+    expect(await screen.findByRole("heading", { name: "Shells keep no transcript" })).toBeInTheDocument();
+    expect(screen.queryByText(/\byet\b/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to Shell" })).toBeInTheDocument();
+  });
+
   // A pane missing from a snapshot that failed, or from one taken while Herdr is down, may be alive.
   it("does not call a pane closed when the snapshot could not be read", async () => {
     const { router, user } = setup("w1:idle", { unavailable: "error" }, [], { bridge: undefined, error: true });
