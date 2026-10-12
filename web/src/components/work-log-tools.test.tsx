@@ -157,3 +157,92 @@ describe("LiveStepRow", () => {
     expect(container.querySelector("[data-live-step]")).toHaveTextContent("ThinkingAhora ajusto el chip.");
   });
 });
+
+// A call the agent cannot run until the operator answers (a permission, a question, a plan) has not
+// run: its line asks in the present, carries the blocked dot, and never says Ran or No output.
+describe("a call waiting on the operator", () => {
+  const bash: Call = { kind: "tool", name: "Bash", summary: "echo hi > hello.txt" };
+
+  it("reads as the request, Waiting on you, not as a finished call", async () => {
+    render(<ToolStep id="c" part={bash} query="" active={false} focused={false} waiting />);
+    const row = screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" });
+    expect(row).not.toHaveTextContent("Ran");
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    await userEvent.click(row);
+    // The opened call says the same thing its line says, in the same words.
+    expect(screen.getAllByText("Waiting on you")).toHaveLength(2);
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    expect(screen.queryByText("Running…")).not.toBeInTheDocument();
+  });
+
+  it("waits without a spinner or a clock even while the turn runs", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
+    const { container } = render(<LiveStepRow step={{ part: bash, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} waiting />);
+    expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+    expect(screen.queryByText("12s")).not.toBeInTheDocument();
+  });
+
+  it("keeps a finished call in the past even inside a waiting turn", () => {
+    render(<ToolStep id="c" part={status} query="" active={false} focused={false} waiting />);
+    expect(screen.getByRole("button", { name: "Ran git status" })).toBeInTheDocument();
+    expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
+  });
+
+  // Every verb the timeline knows has its present form; one it lacks falls back to "…ing", never to a past.
+  it.each([
+    ["Bash", "Run"], ["Read", "Read"], ["Edit", "Edit"], ["apply_patch", "Edit"], ["Write", "Write"], ["Grep", "Search"],
+    ["ls", "List"], ["WebFetch", "Fetch"], ["WebSearch", "Search the web"], ["Task", "Run agent"], ["TodoWrite", "Update the plan"],
+    ["mcp__plugin_playwright_playwright__browser_click", "browser_click"],
+  ])("asks %s as %s", (name, verb) => {
+    render(<ToolStep id="c" part={{ kind: "tool", name, summary: "x" }} query="" active={false} focused={false} waiting />);
+    expect(screen.getByRole("button", { name: `${verb} x Waiting on you` })).toBeInTheDocument();
+  });
+});
+
+// The dialogs a call opens on the operator read by what they are, not by the CLI's tool name.
+describe("dialog calls", () => {
+  const asked: Call = { kind: "tool", name: "AskUserQuestion", summary: "", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] };
+  const plan: Call = { kind: "tool", name: "ExitPlanMode", summary: "# Plan: Add haiku.txt ## Context The user wants a haiku." };
+
+  it("names a question Question, with the question it asks", () => {
+    render(<Steps calls={[{ ...asked, result: { text: "User answered: Web" } }]} />);
+    const row = screen.getByRole("button", { name: "Question Which source?" });
+    expect(row).not.toHaveTextContent("AskUserQuestion");
+  });
+
+  it("names Codex's question tool Question too", () => {
+    render(<Steps calls={[{ kind: "tool", name: "functions.request_user_input", summary: "", questions: [{ title: "Pick a fruit?", options: ["Apple"] }], result: { text: "Apple" } }]} />);
+    expect(screen.getByRole("button", { name: "Question Pick a fruit?" })).toBeInTheDocument();
+  });
+
+  it("names a plan Plan, with its title and no heading marks", () => {
+    render(<Steps calls={[{ ...plan, result: { text: "User approved" } }]} />);
+    // The journal keeps the plan on one line; its title ends at the next heading.
+    expect(screen.getByRole("button", { name: "Plan Add haiku.txt" })).not.toHaveTextContent("ExitPlanMode");
+  });
+
+  // Claude titles most plans "Plan: …"; the line already says Plan once.
+  it("does not say Plan twice when the plan's title starts with it", () => {
+    render(<Steps calls={[{ ...plan, summary: "# Plan: Add haiku.txt", result: { text: "User approved" } }, { ...plan, summary: "# Planning the parser", result: { text: "ok" } }]} />);
+    expect(screen.getByRole("button", { name: "Plan Add haiku.txt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Plan Planning the parser" })).toBeInTheDocument();
+  });
+
+  it("says a pending question waits on you", () => {
+    render(<ToolStep id="c" part={asked} query="" active={false} focused={false} waiting />);
+    expect(screen.getByRole("button", { name: "Question Which source? Waiting on you" })).toBeInTheDocument();
+  });
+});
+
+// Find's current match is drawn solid; every other hit keeps the plain amber.
+it("draws the current find match's hits apart from the others", () => {
+  render(<>
+    <ToolStep id="a" part={status} query="git" active={false} focused={false} />
+    <ToolStep id="b" part={{ ...status, summary: "git diff" }} query="git" active={false} focused />
+  </>);
+  const [other, current] = [screen.getByRole("button", { name: /^Ran git status/ }), screen.getByRole("button", { name: /^Ran git diff/ })];
+  expect(other.querySelector("mark")).not.toHaveAttribute("aria-current");
+  expect(current.querySelector("mark")).toHaveAttribute("aria-current", "true");
+});

@@ -17,7 +17,8 @@ export function searchableText(entry: TranscriptEntry): string {
   for (const part of entry.parts) {
     if (part.kind === "image") continue;
     if (part.kind === "tool") {
-      parts.push(part.name, part.summary);
+      // A question's line in the work log shows the first question it asks.
+      parts.push(part.name, part.summary, part.questions?.[0]?.title ?? "");
     } else if (part.kind === "context") {
       // Its body is folded, but a hit there opens the line (like Thinking), so the hit is seen.
       parts.push(part.label, part.text);

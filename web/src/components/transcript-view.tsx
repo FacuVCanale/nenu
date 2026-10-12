@@ -1,4 +1,4 @@
-import { TranscriptQuestion } from "./transcript-question";
+import { QuestionLiveContext, TranscriptQuestion } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { filePathsInText, sentFiles } from "@/lib/chat-files";
 import { IMAGE_EXTENSION, imageLabel, journalImages, splitMessageImages } from "@/lib/message-images";
@@ -14,7 +14,7 @@ import { clockTime as formatClock } from "@/lib/format";
 import { searchableText } from "@/lib/transcript-search";
 import { containsQuery, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
-import { buildWorkTimeline, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
+import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 // Renders an agent transcript — the conversation history a Claude pane's terminal structurally
@@ -45,7 +45,7 @@ const META_LINE = "flex min-h-8 max-w-full items-center gap-2 text-left text-foo
 /** Injected text as one quiet line: a loaded skill, a notification. It opens onto its body when it has more than its caption. */
 function ContextLine({ label, text, truncated, query, focused = false }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const caption = <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>;
+  const caption = <span className="min-w-0 truncate"><Highlight text={label} query={query} current={focused} /></span>;
   if (text.trim() === "" || text.trim() === label) return <div data-notice className={META_LINE}>
     <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
     {caption}
@@ -56,7 +56,7 @@ function ContextLine({ label, text, truncated, query, focused = false }: { label
       <ChevronRight aria-hidden="true" className={`size-4 shrink-0 p-px ${open ? "rotate-90" : ""}`} />
       {caption}
     </button>
-    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere] select-text"><MarkdownText text={text} query={query} />
+    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere] select-text"><MarkdownText text={text} query={query} current={focused} />
       {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
@@ -66,7 +66,7 @@ function CompactionLine({ text, time, truncated, query, focused = false }: { tex
   const [expanded, setExpanded] = useState(false);
   const open = expanded || focused || containsQuery(text, query);
   const rule = <span aria-hidden="true" className="h-px min-w-6 flex-1 bg-border" />;
-  const caption = <span className="shrink-0"><Highlight text="Context compacted" query={query} />{time && ` · ${time}`}</span>;
+  const caption = <span className="shrink-0"><Highlight text="Context compacted" query={query} current={focused} />{time && ` · ${time}`}</span>;
   if (!text) return <div data-notice className="flex min-h-8 items-center gap-3 text-footnote text-muted-foreground">{rule}{caption}{rule}</div>;
   return <div data-notice>
     <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)}
@@ -77,7 +77,7 @@ function CompactionLine({ text, time, truncated, query, focused = false }: { tex
       </span>
       {rule}
     </button>
-    {open && <div className="pb-2 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
+    {open && <div className="pb-2 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} current={focused} />
       {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
@@ -93,7 +93,7 @@ function NoteLine({ part, query, focused }: { part: TranscriptPart; query: strin
   return <ContextLine label={first} text={part.text} truncated={part.truncated} query={query} focused={focused} />;
 }
 
-function Part({ part, entryId, id = entryId, query, focused = false, active = false, compactMedia = false, uploads = true, delivers = true }: {
+function Part({ part, entryId, id = entryId, query, focused = false, active = false, waiting = false, compactMedia = false, uploads = true, delivers = true }: {
   part: TranscriptPart;
   entryId: string;
   /** The step's own key in the timeline, when an entry holds several. */
@@ -101,6 +101,8 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
   query: string;
   focused?: boolean;
   active?: boolean;
+  /** This call is what a live dialog asks the operator about. */
+  waiting?: boolean;
   compactMedia?: boolean;
   /** False when the entry's journal already holds its images, so upload paths don't show them twice. */
   uploads?: boolean;
@@ -111,7 +113,7 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
   // Inline journal images render as one strip per entry (EntryImages), not part by part.
   if (part.kind === "image") return null;
   // Tool output is COMMAND output, not prose — it stays verbatim in a monospace block (see ToolPart).
-  if (part.kind === "tool") return <ToolStep id={id} part={part} owner={entryId} query={query} active={active} focused={focused} />;
+  if (part.kind === "tool") return <ToolStep id={id} part={part} owner={entryId} query={query} active={active} focused={focused} waiting={waiting} />;
   if (part.kind === "thinking") return <ThinkingStep text={part.text} truncated={part.truncated} query={query} focused={focused} />;
   if (part.kind === "context") return <ContextLine {...part} query={query} focused={focused} />;
   // Prose is Markdown, so it renders formatted. MarkdownText emits React elements only — never
@@ -121,6 +123,7 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
       <MarkdownText
         text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
+        current={focused}
       />
       {delivers && <ChatMedia text={part.text} compact={compactMedia} uploads={uploads} />}
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}
@@ -199,22 +202,36 @@ function stepParts(entry: TranscriptEntry, live: LiveStep | null) {
   return entry.parts.flatMap((part, index) => part.kind === "image" || (live?.entry === entry.uuid && live.index === index) ? [] : [{ part, index }]);
 }
 
+/**
+ * The call a live dialog asks the operator about, as `entry:index`: a question the turn asks, or else
+ * the first call still without its result, the one the agent stopped at. Never a subagent's call: what
+ * waits there is a call inside the subagent, so its own call runs on.
+ */
+function askedCall(turn: WorkTurn): string | undefined {
+  const pending = turn.activity.flatMap((entry) => entry.parts.flatMap((part, index) =>
+    part.kind === "tool" && !part.result && describeTool(part.name).kind !== "agent" ? [{ part, id: `${entry.uuid}:${index}` }] : []));
+  return (pending.find(({ part }) => part.questions?.length) ?? pending[0])?.id;
+}
+
 /** A turn's work, one step per row, in the order it happened. */
-function ActivityLog({ entries, query, focusedUuid, active, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; live: LiveStep | null }) {
+function ActivityLog({ entries, query, focusedUuid, active, asked, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; asked?: string; live: LiveStep | null }) {
   return <ol className="min-w-0 select-text">
     {entries.map((entry) => {
       const steps = stepParts(entry, live);
       if (!steps.length && !journalImages(entry).length) return null;
       const focused = focusedUuid === entry.uuid;
       return <li key={entry.uuid} data-turn={entry.uuid} className={focused ? "rounded ring-2 ring-primary/60" : undefined}>
-        {steps.map(({ part, index }) => <Part key={index} part={part} entryId={entry.uuid} id={`${entry.uuid}:${index}`} query={query} focused={focused} active={active} />)}
+        {steps.map(({ part, index }) => {
+          const id = `${entry.uuid}:${index}`;
+          return <Part key={index} part={part} entryId={entry.uuid} id={id} query={query} focused={focused} active={active} waiting={id === asked} />;
+        })}
         <EntryImages entry={entry} />
       </li>;
     })}
   </ol>;
 }
 
-function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean }) {
+function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean; waiting: boolean }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const needle = query.trim().toLowerCase();
   const searching = turn.activity.some((entry) => entry.uuid === focusedUuid || (needle !== "" && searchableText(entry).toLowerCase().includes(needle)));
@@ -222,6 +239,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
   const tools = turn.activity.flatMap((entry) => entry.parts.filter((part) => part.kind === "tool"));
   const failures = tools.filter((part) => part.result?.isError).length;
   const live = liveStep(turn);
+  // A turn held up by a dialog has not ended: the call the dialog asks about waits, the others run on.
+  const asked = waiting ? askedCall(turn) : undefined;
   const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
   const label = turn.interrupted ? "Stopped" : turn.settled ? "Worked" : "Work log";
   const duration = turn.durationMs !== undefined ? ` ${turn.interrupted ? "after" : "for"} ${formatWorkDuration(turn.durationMs)}` : "";
@@ -257,8 +276,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
       <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />))}
     {/* The rail under the turn's line ties its steps to it; a running turn keeps its live row under it, open or folded. */}
     {(open || live) && <div className="ml-[7px] min-w-0 border-l pl-3">
-      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} live={live} />}
-      {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} />}
+      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live} />}
+      {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     </div>}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
@@ -284,6 +303,10 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
   const questionOpen = entries[questionIndex]?.parts.some((part) => part.kind === "tool" && !!part.questions?.length && !part.result);
   const pendingQuestion = questionOpen && questionIndex > entries.findLastIndex((entry) => entry.role === "user") ? entries[questionIndex]?.uuid : undefined;
   const rows = useMemo(() => buildWorkTimeline(entries, activityStatus), [entries, activityStatus]);
+  // While a dialog waits on the operator, the newest turn, if it has not ended, is the one it holds up.
+  const dialogLive = useContext(QuestionLiveContext) !== null;
+  const tail = rows.at(-1);
+  const waitingTurn = dialogLive && tail?.kind === "work" && !tail.settled ? tail.id : undefined;
   let lastDay = "";
   let lastRole = "";
   const last = entries.at(-1);
@@ -304,7 +327,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
         className={`${showHeader ? "space-y-3 pt-1" : "space-y-3"} ${row.kind === "message" && entry.uuid === focusedUuid ? "rounded-lg ring-2 ring-primary/60 ring-offset-2 ring-offset-background" : ""}`}>
         {newDay && <div className="pt-1 text-center text-footnote text-muted-foreground"><time dateTime={entry.ts}>{day}</time></div>}
         {row.kind === "message" ? <Turn entry={entry} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
-          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} />}
+          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} />}
       </div>;
     })}
     {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}

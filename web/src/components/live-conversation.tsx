@@ -75,6 +75,29 @@ function spoken(entry: TranscriptEntry): boolean {
   return (entry.role === "user" || entry.role === "assistant") && entry.parts.some((part) => part.kind === "text" || part.kind === "image");
 }
 
+/**
+ * The held window with each call's result where the live window has it: a call that finished while
+ * the reader held the thread says so on its row. Nothing else in the window moves. The same window
+ * comes back when no result landed, so a held thread does not redraw on every poll.
+ */
+function withResults(held: AvailableHistory, live: TranscriptEntry[]): AvailableHistory {
+  const now = new Map(live.map((entry) => [entry.uuid, entry]));
+  const landed = (entry: TranscriptEntry, index: number) => {
+    const part = now.get(entry.uuid)?.parts[index];
+    return part?.kind === "tool" ? part.result : undefined;
+  };
+  let changed = false;
+  const entries = held.entries.map((entry) => {
+    if (!entry.parts.some((part, index) => part.kind === "tool" && !part.result && landed(entry, index))) return entry;
+    changed = true;
+    return { ...entry, parts: entry.parts.map((part, index) => {
+      const result = part.kind === "tool" && !part.result ? landed(entry, index) : undefined;
+      return result ? { ...part, result } : part;
+    }) };
+  });
+  return changed ? { ...held, entries } : held;
+}
+
 /** The operator is typing in a box inside the question (a reply, a note). */
 function typingIn(el: HTMLElement): boolean {
   const active = document.activeElement;
@@ -142,12 +165,19 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     latest?.uuid !== lastShown?.uuid || latest?.turn?.status !== lastShown?.turn?.status ||
     latest?.turn?.durationMs !== lastShown?.turn?.durationMs
   );
-  // How many messages arrived below the frozen window; null when the live window slid past it.
-  const newCount = useMemo(() => {
-    if (!hasNew || !history?.available) return 0;
+  // What the live window holds below the frozen one; null when it slid past it.
+  const below = useMemo(() => {
+    if (!frozen || !history?.available) return null;
     const from = lastShown ? history.entries.findIndex((entry) => entry.uuid === lastShown.uuid) : -1;
-    return from < 0 ? null : history.entries.slice(from + 1).filter(spoken).length;
-  }, [hasNew, history, lastShown]);
+    return from < 0 ? null : history.entries.slice(from + 1);
+  }, [frozen, history, lastShown]);
+  // How many messages arrived below the frozen window; null when the live window slid past it.
+  const newCount = !hasNew ? 0 : below ? below.filter(spoken).length : null;
+  // The frozen window still ends on the live turn when only the agent's own steps came after it.
+  const onLiveTurn = below?.every((entry) => entry.role === "assistant") ?? false;
+  useEffect(() => {
+    if (history?.available) setFrozen((current) => current?.available ? withResults(current, history.entries) : current);
+  }, [history]);
   const matches = useMemo(() => matchingEntries(entries, query), [entries, query]);
   // This client's sends the journal has not caught up with yet. Reconciled against the LIVE window,
   // not a frozen one, so scrolling back to read never holds a delivered bubble on screen.
@@ -183,7 +213,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const timer = setTimeout(() => setStarting(null), TURN_PENDING_MS);
     return () => clearTimeout(timer);
   }, [starting, activityStatus]);
-  const activity = error || frozen ? undefined : starting ? "working" : activityStatus;
+  // A frozen window shows its turn running only while that turn is the live one and still runs: any
+  // other state would draw the reader's window as something it is not, or fold a turn they are reading.
+  const activity = error ? undefined : frozen ? (onLiveTurn && activityStatus === "working" ? "working" : undefined)
+    : starting ? "working" : activityStatus;
   // Under this client's bubble while the journal does not show it yet; the transcript's own after that.
   const labelUnderSend = activity === "working" && delivered !== null;
   const startingLabel = labelUnderSend && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
@@ -386,12 +419,16 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       }
       const el = scrollRef.current;
       anchorHeight.current = el ? el.scrollHeight : null;
-      setFrozen({
-        ...base,
-        entries: [...older, ...base.entries],
-        hasMore: page.hasMore,
-        fileTruncated: base.fileTruncated || page.fileTruncated,
-        total: Math.max(base.total, page.total),
+      // Onto the window as it stands now: a result that landed while the page loaded stays on its row.
+      setFrozen((current) => {
+        const held = current?.available ? current : base;
+        return {
+          ...held,
+          entries: [...older, ...held.entries],
+          hasMore: page.hasMore,
+          fileTruncated: held.fileTruncated || page.fileTruncated,
+          total: Math.max(held.total, page.total),
+        };
       });
     } catch {
       if (request.current === controller && !controller.signal.aborted) setOlderError(true);
@@ -409,7 +446,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const empty = entries.length === 0 && localSends.length === 0;
   // The skeleton and the turns sit at the list's foot, where the tail will land.
   const skeleton = empty && loading;
-  // A conversation the operator can link: one card, centred, instead of a sentence over a form.
+  // A conversation the operator can link: one card, centred, instead of a sentence over a form. While a
+  // question waits in the thread the card folds to one line at the foot, so the question is the one card.
   const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
@@ -424,7 +462,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       )}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && "flex min-h-full flex-col justify-center")}>
+          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && cn("flex min-h-full flex-col", waiting ? "justify-end" : "justify-center"))}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
@@ -445,13 +483,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
               {footer}
             </> : linkable ? <>
-              <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
+              {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
+                <MessageSquare aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />No conversation linked
+              </p> : <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
                 <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
                 <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
                 <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
                 {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
-              </section>
+              </section>}
               {footer}
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               <MessageSquare className="size-5" />

@@ -718,3 +718,110 @@ describe("TranscriptView — the work timeline", () => {
     expect(faded).toEqual([]);
   });
 });
+
+// While a dialog waits on the operator, the newest turn's calls without a result are what it waits
+// for: they have not run. Older turns and the history page keep what the journal says.
+describe("TranscriptView — a turn waiting on the operator", () => {
+  const at = (hm: string) => `2026-07-25T${hm}:00`;
+  const old = [
+    turn({ uuid: "q0", ts: at("08:00"), parts: [{ kind: "text", text: "Earlier." }] }),
+    turn({ uuid: "old", ts: at("08:01"), role: "assistant", turnId: "t0", parts: [{ kind: "tool", name: "Bash", summary: "sleep 9" }] }),
+    turn({ uuid: "old-end", ts: at("08:02"), role: "assistant", turnId: "t0", phase: "final_answer", parts: [{ kind: "text", text: "Done earlier." }] }),
+  ];
+  const blocked = [
+    ...old,
+    turn({ uuid: "q1", ts: at("09:00"), parts: [{ kind: "text", text: "Seguí con lo que haga falta." }] }),
+    turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "text", text: "Antes de seguir necesito una decisión tuya." },
+      { kind: "tool", name: "Bash", summary: "echo hi > hello.txt" },
+    ] }),
+  ];
+  const view = (live: "card" | "dialog" | null, entries = blocked, status: "blocked" | "working" = "blocked") =>
+    <QuestionLiveContext.Provider value={live}><TranscriptView entries={entries} activityStatus={status} /></QuestionLiveContext.Provider>;
+
+  it("says the pending call waits on you, in the present, under a live card", () => {
+    render(view("card"));
+    expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Ran echo hi/ })).not.toBeInTheDocument();
+  });
+
+  it("says so for a dialog drawn elsewhere too", () => {
+    render(view("dialog"));
+    expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+  });
+
+  it("names the question it waits on", () => {
+    const asked = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "tool", name: "AskUserQuestion", summary: "", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] },
+    ] })];
+    render(view("card", asked));
+    expect(screen.getByRole("button", { name: "Question Which source? Waiting on you" })).toBeInTheDocument();
+    expect(screen.queryByText("AskUserQuestion")).not.toBeInTheDocument();
+  });
+
+  it("waits on the bottom row of a turn the agent's state still calls running", () => {
+    const running = blocked.map((entry) => entry.uuid === "a1" ? { ...entry, turn: { status: "running" as const, startedAt: at("09:00") } } : entry);
+    const { container } = render(view("card", running, "working"));
+    expect(within(container.querySelector<HTMLElement>("[data-live-step]")!).getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+  });
+
+  // Claude runs subagents side by side; when one of them asks for a permission, the dialog is the
+  // subagent's. Their own calls keep running, and none of them is the request.
+  it("keeps parallel subagents running while a dialog inside one waits", () => {
+    const agents = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "tool", name: "Task", summary: "Review the parser" },
+      { kind: "tool", name: "Task", summary: "Review the UI" },
+      { kind: "tool", name: "Task", summary: "Review the tests" },
+    ] })];
+    render(view("card", agents));
+    for (const name of ["Review the parser", "Review the UI", "Review the tests"]) {
+      expect(screen.getByRole("button", { name: `Running agent ${name}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+  });
+
+  // The agent stops at the first call it needs an answer for; the ones after it have not been reached.
+  it("puts the wait on one call, the first the agent stopped at", () => {
+    const two = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "tool", name: "Bash", summary: "rm -rf build" },
+      { kind: "tool", name: "Bash", summary: "bun run build" },
+    ] })];
+    render(view("card", two));
+    expect(screen.getByRole("button", { name: "Run rm -rf build Waiting on you" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Running bun run build" })).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting on you")).toHaveLength(1);
+  });
+
+  it("leaves an older turn's missing output as it was", async () => {
+    render(view("card"));
+    await userEvent.click(screen.getByRole("button", { name: /^Worked/ }));
+    expect(screen.getByRole("button", { name: "Ran sleep 9 No output recorded" })).toBeInTheDocument();
+  });
+
+  it("claims no wait without a live dialog", () => {
+    render(view(null));
+    expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
+  });
+});
+
+// Find's current match is drawn solid wherever its words are: prose, a fold, a step.
+describe("TranscriptView — the current find match", () => {
+  const entries = [
+    turn({ uuid: "u1", parts: [{ kind: "text", text: "Fix the composer." }] }),
+    turn({ uuid: "n1", role: "note", parts: [{ kind: "context", label: "Message from nenustop", text: "The composer is green." }] }),
+    turn({ uuid: "a1", role: "assistant", turnId: "t1", parts: [{ kind: "thinking", text: "The composer gap.\nCounted twice." }] }),
+    turn({ uuid: "a2", role: "assistant", turnId: "t1", parts: [{ kind: "tool", name: "Bash", summary: "bun run test composer", result: { text: "ok" } }] }),
+    turn({ uuid: "a3", role: "assistant", turnId: "t1", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "The composer is fixed." }] }),
+  ];
+  const current = (container: HTMLElement) => [...container.querySelectorAll("mark")].filter((mark) => mark.getAttribute("aria-current") === "true");
+
+  it.each(["u1", "n1", "a1", "a2", "a3"])("marks only the hits of %s as current", (uuid) => {
+    const { container } = render(<TranscriptView entries={entries} query="composer" focusedUuid={uuid} activityStatus="done" />);
+    const marks = current(container);
+    expect(marks.length).toBeGreaterThan(0);
+    for (const mark of marks) expect(mark.closest("[data-turn]")).toHaveAttribute("data-turn", uuid);
+    expect(container.querySelectorAll("mark").length).toBeGreaterThan(marks.length);
+  });
+});

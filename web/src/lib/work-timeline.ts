@@ -90,30 +90,37 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
 }
 
 /** What a tool call is to the reader: its icon, and the verbs a row says it with. */
-export type StepKind = "terminal" | "read" | "edit" | "write" | "search" | "web" | "agent" | "plan" | "tool";
+export type StepKind = "terminal" | "read" | "edit" | "write" | "search" | "web" | "agent" | "plan" | "question" | "tool";
 export interface ToolStepDescription {
   kind: StepKind;
   /** Past tense for a finished step ("Ran"), present for the one in progress ("Running"). */
   done: string;
   doing: string;
-  /** How the call's summary is drawn: a path keeps its file name whole, code stays monospace. */
-  target: "path" | "code" | "text";
+  /** The request, while a dialog asks the operator about the call ("Run"): it has not run yet. */
+  ask: string;
+  /** How the call's summary is drawn: a path keeps its file name whole, code stays monospace, a document by its title. */
+  target: "path" | "code" | "text" | "title";
 }
 
 // Names across harnesses: Claude Code, Codex and pi spell the same few tools differently.
 const TOOL_STEPS: Array<[RegExp, ToolStepDescription]> = [
-  [/^(bash|shell|exec|exec_command|local_shell|run_shell_command)$/, { kind: "terminal", done: "Ran", doing: "Running", target: "code" }],
-  [/^(read|read_file|view|notebookread)$/, { kind: "read", done: "Read", doing: "Reading", target: "path" }],
-  [/^(edit|multiedit|edit_file|notebookedit|str_replace_editor|str_replace_based_edit_tool)$/, { kind: "edit", done: "Edited", doing: "Editing", target: "path" }],
-  [/^apply_patch$/, { kind: "edit", done: "Edited", doing: "Editing", target: "text" }],
-  [/^(write|write_file|create_file)$/, { kind: "write", done: "Wrote", doing: "Writing", target: "path" }],
-  [/^(grep|glob|find|rg|search|search_files|codebase_search)$/, { kind: "search", done: "Searched", doing: "Searching", target: "code" }],
-  [/^(ls|list_dir|list_directory)$/, { kind: "search", done: "Listed", doing: "Listing", target: "path" }],
-  [/^(webfetch|web_fetch|fetch)$/, { kind: "web", done: "Fetched", doing: "Fetching", target: "text" }],
-  [/^(websearch|web_search)$/, { kind: "web", done: "Searched the web", doing: "Searching the web", target: "text" }],
-  [/^(task|agent|spawn_agent)$/, { kind: "agent", done: "Ran agent", doing: "Running agent", target: "text" }],
-  [/^(todowrite|update_plan)$/, { kind: "plan", done: "Updated the plan", doing: "Updating the plan", target: "text" }],
+  [/^(bash|shell|exec|exec_command|local_shell|run_shell_command)$/, { kind: "terminal", done: "Ran", doing: "Running", ask: "Run", target: "code" }],
+  [/^(read|read_file|view|notebookread)$/, { kind: "read", done: "Read", doing: "Reading", ask: "Read", target: "path" }],
+  [/^(edit|multiedit|edit_file|notebookedit|str_replace_editor|str_replace_based_edit_tool)$/, { kind: "edit", done: "Edited", doing: "Editing", ask: "Edit", target: "path" }],
+  [/^apply_patch$/, { kind: "edit", done: "Edited", doing: "Editing", ask: "Edit", target: "text" }],
+  [/^(write|write_file|create_file)$/, { kind: "write", done: "Wrote", doing: "Writing", ask: "Write", target: "path" }],
+  [/^(grep|glob|find|rg|search|search_files|codebase_search)$/, { kind: "search", done: "Searched", doing: "Searching", ask: "Search", target: "code" }],
+  [/^(ls|list_dir|list_directory)$/, { kind: "search", done: "Listed", doing: "Listing", ask: "List", target: "path" }],
+  [/^(webfetch|web_fetch|fetch)$/, { kind: "web", done: "Fetched", doing: "Fetching", ask: "Fetch", target: "text" }],
+  [/^(websearch|web_search)$/, { kind: "web", done: "Searched the web", doing: "Searching the web", ask: "Search the web", target: "text" }],
+  [/^(task|agent|spawn_agent)$/, { kind: "agent", done: "Ran agent", doing: "Running agent", ask: "Run agent", target: "text" }],
+  [/^(todowrite|update_plan)$/, { kind: "plan", done: "Updated the plan", doing: "Updating the plan", ask: "Update the plan", target: "text" }],
+  // Claude's plan, shown to the operator to approve: the line says Plan once, with the plan's title.
+  [/^exitplanmode$/, { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "title" }],
 ];
+
+/** A call the bridge read questions from (its `questions`) reads as the question it asks. */
+export const QUESTION_STEP: ToolStepDescription = { kind: "question", done: "Question", doing: "Question", ask: "Question", target: "text" };
 
 // Claude Code's spelling of an MCP tool: mcp__<server>__<tool>.
 const MCP_TOOL = /^mcp__.+?__(.+)$/;
@@ -122,7 +129,7 @@ const MCP_TOOL = /^mcp__.+?__(.+)$/;
 export function describeTool(name: string): ToolStepDescription {
   const key = name.toLowerCase();
   const own = MCP_TOOL.exec(name)?.[1] ?? name;
-  return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: own, doing: own, target: "text" };
+  return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: own, doing: own, ask: own, target: "text" };
 }
 
 /** The words the renderer draws for `spans`, without their formatting. */
