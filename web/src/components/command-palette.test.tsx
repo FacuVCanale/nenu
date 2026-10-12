@@ -25,6 +25,13 @@ describe("CommandPalette", () => {
     expect(screen.queryByText("/doctor")).toBeNull();
   });
 
+  it("names the common list the way the docks name theirs: sentence case, never tracked capitals", () => {
+    setup();
+    const label = screen.getByText(/^Common · type to search all \d+$/);
+    expect(label).toHaveClass("text-footnote", "font-medium", "text-subtle-foreground");
+    expect(label.className).not.toMatch(/\buppercase\b|\btracking-/);
+  });
+
   it("filters across the full catalog as you type", async () => {
     const user = userEvent.setup();
     setup();
