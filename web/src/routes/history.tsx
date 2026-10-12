@@ -310,14 +310,15 @@ export function HistoryRoute() {
             (20 human turns in 900 is typical). Bottom-right so it's thumb-reachable and clear of the
             centred "scroll to latest" button, on the same line above the home indicator. Side by
             side, so it is no taller than that button and the list's bottom padding clears both.
-            Hidden while find is open, which owns prev/next then. */}
+            Hidden while find is open, which owns prev/next then. Each half rounds itself instead of
+            the pill clipping them, because a clip would also cut the focus ring drawn outside a button. */}
         {userTurns.length > 1 && !findOpen && (
-          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)_+_0.75rem)] right-(--page-gutter) z-10 flex overflow-hidden rounded-full border bg-popover shadow-(--shadow-float)">
+          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)_+_0.75rem)] right-(--page-gutter) z-10 flex rounded-full border bg-popover shadow-(--shadow-float)">
             <button
               type="button"
               onClick={() => jumpTo(step(userTurns, cursor, -1))}
               aria-label="Previous message you sent"
-              className="grid size-11 place-items-center text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
+              className="grid size-11 place-items-center rounded-l-full text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
             >
               <ChevronUp aria-hidden="true" className="size-5" />
             </button>
@@ -325,7 +326,7 @@ export function HistoryRoute() {
               type="button"
               onClick={() => jumpTo(step(userTurns, cursor, 1))}
               aria-label="Next message you sent"
-              className="grid size-11 place-items-center border-l text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
+              className="grid size-11 place-items-center rounded-r-full border-l text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
             >
               <ChevronDown aria-hidden="true" className="size-5" />
             </button>
