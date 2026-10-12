@@ -33,7 +33,7 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { containedRealpath, exists, head, loadTail, readRange, rootList, statFile } from "./files.ts";
-import { clamp, MAX_RESULT_CHARS, MAX_TEXT_CHARS, stripAnsi, summarizeToolInput } from "./text.ts";
+import { clamp, contextPart, MAX_RESULT_CHARS, MAX_TEXT_CHARS, stripAnsi, summarizeToolInput } from "./text.ts";
 import {
   MAX_QUEUE_EVENTS,
   type AgentSessionRef,
@@ -68,62 +68,96 @@ function isEnvelope(tag: string, text: string): boolean {
   return text.trimStart().startsWith(`<${tag}>`);
 }
 
+/** What a `user` row's text is: the operator's own words, or one injected line. */
+export type ClassifiedText =
+  | { role: "user"; text: string; /** The slash command it ran, when it ran one. */ command?: string }
+  | { role: "note"; part: ContextPart };
+
+/** The marks Claude Code stamps on a row about who put it there. */
+interface RowMarks {
+  origin?: unknown;
+  isMeta?: unknown;
+}
+
+/** Claude Code's own wording when the operator stops a turn; its constants, not prose. */
+const INTERRUPTED = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
+
 /**
- * Classify a `user` row's string content.
+ * Classify a `user` row's text.
  *
- * Only about half of these are things a human typed — Claude Code reuses the user role as the
- * carrier for injected plumbing. Measured across 60 session logs: 1196 string-content user rows, of
- * which 359 `task-notification`, 82 `local-command-caveat`, 82 `command-name`, 78
- * `local-command-stdout` and 21 `system-reminder` were envelopes rather than speech. Rendering those
- * verbatim as "You" would be actively wrong, so each is handled on its merits:
+ * Claude Code reuses the user role as the carrier for injected plumbing, and stamps each row with
+ * who put it there: `origin.kind` (`human`, `task-notification`, `peer`, `auto-continuation`) and
+ * `isMeta` for text written for the model. Measured on 160 logs from one week (2026-10-12): 1075
+ * human rows against 795 task notifications, 50 messages from other sessions, 37 meta notices and 36
+ * interruption markers. Those marks decide; the text is read only to caption the line:
  *
  *  - `system-reminder` / `local-command-caveat` → DROPPED. Both are addressed to the model, never
  *    shown to the operator in the TUI (the caveat literally says "DO NOT respond to these").
- *  - `command-name` → a slash command the user really did run; shown as `/compact`, args included.
- *  - `local-command-stdout` → that command's output. Real, but not speech → a `note`.
- *  - `bash-input` / `bash-stdout` → the same pair for `!` shell mode: `! pwd`, then a `note`.
- *  - `task-notification` → a background agent finishing. Reduced to its `<summary>` line → a `note`.
+ *  - `origin.kind: human` → the operator's words, slash commands shown as `/compact`, args included.
+ *  - `task-notification` → a background task finishing, reduced to its `<summary>` line.
+ *  - `peer` → another session's message, captioned by its sender, its body behind the line.
+ *  - any other origin, or `isMeta` → a line captioned by the text's first line.
+ *
+ * A row without `origin` is a local command's (or comes from a log older than the stamp) and falls
+ * back to its envelope: `command-name` and `bash-input` are the operator's, their output a line.
  *
  * Returns null for "drop this row entirely".
  */
-export function classifyUserText(
-  raw: string,
-): { role: "user" | "note"; text: string } | null {
+export function classifyUserText(raw: string, marks: RowMarks = {}): ClassifiedText | null {
   const text = stripAnsi(raw);
 
   if (isEnvelope("system-reminder", text)) return null;
   if (isEnvelope("local-command-caveat", text)) return null;
 
+  const origin = marks.origin !== null && typeof marks.origin === "object" ? marks.origin as Record<string, unknown> : {};
+  if (origin.kind === "human") return spoken(text);
+  if (origin.kind === "task-notification" || (origin.kind === undefined && isEnvelope("task-notification", text))) {
+    const summary = inner("summary", text);
+    return summary ? note(summary) : null;
+  }
+  if (origin.kind === "peer") {
+    const sender = str(origin.name);
+    return note(sender ? `Message from ${sender}` : "Message from another session", typeof origin.body === "string" ? origin.body : text);
+  }
+  if (origin.kind !== undefined || marks.isMeta === true) return text.trim() === "" ? null : note(null, text);
+
+  if (INTERRUPTED.has(text.trim())) return note("Interrupted");
+  if (isEnvelope("local-command-stdout", text)) {
+    const stdout = inner("local-command-stdout", text) ?? "";
+    return stdout === "" ? null : note(null, stdout);
+  }
+  if (isEnvelope("bash-stdout", text)) {
+    const output = [inner("bash-stdout", text), inner("bash-stderr", text)].filter(Boolean).join("\n");
+    return output === "" ? null : note(null, output);
+  }
+  return spoken(text);
+}
+
+const note = (label: string | null, text = ""): ClassifiedText => ({ role: "note", part: contextPart(label, text) });
+
+/** The operator's own row: a slash command or `!` shell line reads as what they typed. */
+function spoken(text: string): ClassifiedText | null {
   // Claude Code writes a slash command's tags in either order (both seen across 2.1.280–2.1.295).
   if (isEnvelope("command-name", text) || isEnvelope("command-message", text)) {
     const name = inner("command-name", text) ?? "";
     const args = inner("command-args", text) ?? "";
     const line = `${name} ${args}`.trim();
-    return line === "" ? null : { role: "user", text: line };
+    const command = inner("command-message", text) || name.replace(/^\//, "");
+    return line === "" ? null : { role: "user", text: line, ...(command ? { command } : {}) };
   }
-
-  if (isEnvelope("local-command-stdout", text)) {
-    const stdout = inner("local-command-stdout", text) ?? "";
-    return stdout === "" ? null : { role: "note", text: stdout };
-  }
-
-  // `!` shell mode: the command the user ran, then its output in a row of its own.
   if (isEnvelope("bash-input", text)) {
     const command = inner("bash-input", text) ?? "";
     return command === "" ? null : { role: "user", text: `! ${command}` };
   }
-
-  if (isEnvelope("bash-stdout", text)) {
-    const output = [inner("bash-stdout", text), inner("bash-stderr", text)].filter(Boolean).join("\n");
-    return output === "" ? null : { role: "note", text: output };
-  }
-
-  if (isEnvelope("task-notification", text)) {
-    const summary = inner("summary", text);
-    return summary ? { role: "note", text: summary } : null;
-  }
-
   return text.trim() === "" ? null : { role: "user", text };
+}
+
+/** A content list's text blocks as one string (images and tool results have their own paths). */
+function listText(content: unknown[]): string {
+  return content
+    .flatMap((b) => (b && typeof b === "object" && (b as { type?: unknown }).type === "text" && typeof (b as { text?: unknown }).text === "string"
+      ? [(b as { text: string }).text] : []))
+    .join("\n");
 }
 
 /** Flatten a `tool_result.content`, which is either a plain string or a list of text blocks. */
@@ -146,10 +180,14 @@ interface RawRow extends Record<string, unknown> {
   isCompactSummary?: unknown;
   isMeta?: unknown;
   turnCompanion?: unknown;
+  sourceToolUseID?: unknown;
+  parentUuid?: unknown;
+  origin?: unknown;
   message?: { role?: unknown; content?: unknown } | unknown;
 }
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
+type ContextPart = Extract<TranscriptPart, { kind: "context" }>;
 type Usage = Omit<SessionTelemetry, "fileTruncated">;
 
 const QUEUE_OPERATIONS = new Set(["enqueue", "dequeue", "remove", "popAll"]);
@@ -220,6 +258,11 @@ export class ClaudeParser implements JournalParser {
   private readonly turns = new ClaudeTurnTracker();
   // tool_use id → the part awaiting its result, so a `tool_result` row lands on the call that made it.
   private readonly pendingTools = new Map<string, { part: ToolPart; entry: string }>();
+  // Calls whose result already landed, for the text Claude Code writes right after it (a skill's
+  // body). Bounded: that text follows its result within a few rows.
+  private readonly answered = new Map<string, ToolPart>();
+  // The newest slash command the operator ran, which a skill they typed unfolds under.
+  private lastCommand: { uuid: string; name: string; entry: TranscriptEntry } | undefined;
   private readonly pendingQuestions = new Map<string, InteractionHint>();
   private readonly imageIndex = new Map<string, ImageLocator[]>();
   private readonly queue: NativeQueueEvent[] = [];
@@ -306,30 +349,28 @@ export class ClaudeParser implements JournalParser {
     if (message === null || typeof message !== "object") return;
     const content = (message as { content?: unknown }).content;
     // `isMeta` marks text Claude Code wrote for the model, never typed by the operator; its own
-    // human-turn test excludes it. Text riding along with a call (`turnCompanion`: an image's
-    // dimensions, a loaded skill's body) has nothing to show. Text that drives the agent (another
-    // session's message, a scheduled prompt, hook feedback) explains its next step, so it is a note.
+    // human-turn test excludes it. Text that drives the agent (another session's message, a
+    // scheduled prompt, hook feedback) explains its next step, so it is a note (see classifyUserText).
     const meta = type === "user" && row.isMeta === true;
-    const human = type === "user" && !meta && row.isCompactSummary !== true && (
-      typeof content === "string" ? classifyUserText(content)?.role === "user" :
-      Array.isArray(content) && content.some((block) => block?.type === "text" && typeof block.text === "string" && classifyUserText(block.text)?.role === "user")
-    );
+    const words = typeof content === "string" ? content : Array.isArray(content) ? listText(content) : "";
+    const said = type === "user" ? classifyUserText(words, row) : undefined;
+    const human = type === "user" && !meta && row.isCompactSummary !== true && said?.role === "user";
     this.turns.observe(row, human);
-    if (meta && row.turnCompanion === true) return;
+    if (meta && row.turnCompanion === true) { this.companion(row, words); return; }
     const parts: TranscriptPart[] = [];
-    // Set by a meta row, or a `user` row whose string content turns out to be injected plumbing.
-    let roleOverride: "note" | undefined = meta ? "note" : undefined;
+    let roleOverride: "note" | undefined;
     // Counts every image of the row in claudeRowImages' order, whether or not it lands on a part.
     let nth = 0;
     const locate = (): ImageLocator => ({ offset, bytes, nth: nth++ });
 
+    // A user row's words are what classifyUserText made of them: the operator's, or one line.
+    if (said?.role === "note") {
+      roleOverride = "note";
+      parts.push(said.part);
+    }
     if (typeof content === "string") {
-      // A string content is the HUMAN-turn carrier — but Claude Code also routes injected plumbing
-      // through it, so classify before believing it (see classifyUserText).
-      const classified = classifyUserText(content);
-      if (classified === null) return;
-      if (classified.role === "note") roleOverride = "note";
-      parts.push({ kind: "text", ...clamp(classified.text, MAX_TEXT_CHARS) });
+      const text = said === undefined ? stripAnsi(content) : said?.role === "user" ? said.text : "";
+      if (text.trim() !== "") parts.push({ kind: "text", ...clamp(text, MAX_TEXT_CHARS) });
     } else if (Array.isArray(content)) {
       const results = content.filter((block) => block?.type === "tool_result").length;
       for (const block of content) {
@@ -340,7 +381,7 @@ export class ClaudeParser implements JournalParser {
           const index = this.addImage(uuid, locate());
           if (index !== null) parts.push({ kind: "image", index, ...(image.mediaType ? { mediaType: image.mediaType } : {}) });
         } else if (b.type === "text" && typeof b.text === "string") {
-          if (b.text.trim() !== "")
+          if (b.text.trim() !== "" && (said === undefined || said?.role === "user"))
             parts.push({ kind: "text", ...clamp(stripAnsi(b.text), MAX_TEXT_CHARS) });
         } else if (b.type === "thinking" && typeof b.thinking === "string") {
           if (b.thinking.trim() !== "")
@@ -383,6 +424,8 @@ export class ClaudeParser implements JournalParser {
           if (target) {
             this.pendingTools.delete(id);
             target.part.result = result;
+            this.answered.set(id, target.part);
+            if (this.answered.size > 256) this.answered.delete(this.answered.keys().next().value!);
           } else if (resultText.trim() !== "" || attachments.length) {
             // Orphan result (its call fell outside a tail-read window) — keep it, unattached, so the
             // window never silently drops output.
@@ -402,7 +445,29 @@ export class ClaudeParser implements JournalParser {
     const stop = (message as { stop_reason?: unknown }).stop_reason;
     const phase = role === "assistant" && parts.some((part) => part.kind === "text")
       ? stop === "end_turn" ? "final_answer" : stop === "tool_use" ? "commentary" : undefined : undefined;
-    this.push({ uuid, ts, role, parts, ...(phase ? { phase } : {}) });
+    const entry: TranscriptEntry = { uuid, ts, role, parts, ...(phase ? { phase } : {}) };
+    this.push(entry);
+    if (role === "user" && said?.role === "user" && said.command) this.lastCommand = { uuid, name: said.command, entry };
+  }
+
+  /**
+   * Text riding along with a call or a command (`turnCompanion`). A skill's body joins what loaded
+   * it: appended to the Skill call's result, or folded under the slash command the operator typed.
+   * Anything else riding along (an image's dimensions) has nothing to show.
+   */
+  private companion(row: RawRow, raw: string): void {
+    const text = stripAnsi(raw);
+    if (text.trim() === "") return;
+    if (typeof row.sourceToolUseID === "string") {
+      // Its call may sit outside a tail-read window; then the text has nowhere to go.
+      const result = this.answered.get(row.sourceToolUseID)?.result;
+      if (!result) return;
+      const merged = clamp(`${result.text}\n\n${text}`, MAX_RESULT_CHARS);
+      Object.assign(result, merged, result.truncated || merged.truncated ? { truncated: true } : {});
+      return;
+    }
+    const command = this.lastCommand;
+    if (command && row.parentUuid === command.uuid) command.entry.parts.push(contextPart(`Skill · ${command.name}`, text));
   }
 
   /**
@@ -424,7 +489,7 @@ export class ClaudeParser implements JournalParser {
     });
     const origin = a.origin && typeof a.origin === "object" ? (a.origin as { kind?: unknown }).kind : undefined;
     if (origin !== "human" || !prompt || uuid === "") return;
-    const classified = classifyUserText(prompt);
+    const classified = classifyUserText(prompt, { origin: a.origin });
     if (classified?.role !== "user") return;
     this.push({ uuid, ts, role: "user", parts: [{ kind: "text", ...clamp(classified.text, MAX_TEXT_CHARS) }] });
   }
