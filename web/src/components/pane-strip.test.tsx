@@ -70,8 +70,9 @@ describe("PaneStrip", () => {
     render(
       <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} />,
     );
-    expect(screen.getByRole("button", { name: "claude" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "codex" })).toBeInTheDocument();
+    // The name, then its status in words (the dot is colour only), and nothing else.
+    expect(screen.getByRole("button", { name: "claude, idle" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "codex, idle" })).toBeInTheDocument();
     expect(screen.queryByText(/p1|p2/)).toBeNull();
   });
 
@@ -88,9 +89,9 @@ describe("PaneStrip", () => {
       />,
     );
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "idlePayments adapter · 1",
-      "idledeploy",
-      "idlePayments adapter · 2",
+      "Payments adapter · 1, idle",
+      "deploy, idle",
+      "Payments adapter · 2, idle",
     ]);
   });
 

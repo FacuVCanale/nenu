@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 
-import { Chip, ChipStatus, ChipStrip } from "@/components/ui/chip";
+import { Chip, ChipStrip } from "@/components/ui/chip";
 import { TabActionsSheet } from "@/components/tab-actions-sheet";
 import { tabName } from "@/lib/spaces";
 import { TRIAGE_STATUS, worstTriage } from "@/lib/triage";
@@ -63,7 +63,7 @@ export function TabStrip({
               label={tabName(t.label, index + 1)}
               active={selected === t.tabId}
               focused={t.focused}
-              leading={status && <ChipStatus status={TRIAGE_STATUS[status]} />}
+              status={status && TRIAGE_STATUS[status]}
               onClick={() => onSelect(t.tabId)}
               // Long-press, or a tap on the open tab, opens its actions when the parent wired them.
               onLongPress={actionsEnabled ? () => setSheetTab(t) : undefined}

@@ -18,8 +18,11 @@ interface ChipProps {
   active: boolean;
   /** Dashed outline for the item focused in the desktop TUI. */
   focused?: boolean;
-  /** Before the name: a status dot ({@link ChipStatus}) or a glyph. */
-  leading?: ReactNode;
+  /** Drawn as a leading dot and said after the name ("claude, idle"); omit when there is no agent,
+   *  since empty is not idle. */
+  status?: AgentStatus | null;
+  /** A glyph in place of the dot (a shell's). */
+  icon?: ReactNode;
   onClick: () => void;
   /** Long-press (or right-click / Android contextmenu) opens the chip's actions. Inert when unset. */
   onLongPress?: () => void;
@@ -27,7 +30,7 @@ interface ChipProps {
   onTapActive?: () => void;
 }
 
-export function Chip({ label, tag, active, focused, leading, onClick, onLongPress, onTapActive }: ChipProps) {
+export function Chip({ label, tag, active, focused, status, icon, onClick, onLongPress, onTapActive }: ChipProps) {
   const longPress = useLongPress(onLongPress);
 
   // A long-press already suppresses the click that follows (longPress.onClickCapture), so this only
@@ -50,20 +53,11 @@ export function Chip({ label, tag, active, focused, leading, onClick, onLongPres
       title={label}
       className="strip-chip"
     >
-      {leading}
+      {icon ?? (status && <StatusDot status={status} surface="bg-transparent" className="size-2" />)}
       <span className="strip-chip-label">{label}</span>
       {tag && <span className="strip-chip-tag"> · {tag}</span>}
+      {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
     </button>
-  );
-}
-
-/** A chip's status: the dot, and the word for it for screen readers (the dot is colour only). */
-export function ChipStatus({ status }: { status: AgentStatus }) {
-  return (
-    <>
-      <StatusDot status={status} surface="bg-transparent" className="size-2" />
-      <span className="sr-only">{STATUS_LABEL[status]}</span>
-    </>
   );
 }
 
