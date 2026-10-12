@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
 import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
@@ -13,7 +13,7 @@ import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
-import { changeMessageQueue, fetchMessageQueue } from "@/lib/api";
+import { changeMessageQueue, fetchMessageQueue, isDefiniteRefusal } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
 import { useConnectionHealth } from "@/lib/connection-health";
 import { clockTime } from "@/lib/format";
@@ -142,6 +142,9 @@ const sentence = (text: string) => {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}${/[.!?]$/.test(trimmed) ? "" : "."}`;
 };
 
+/** A queue add whose answer never came: the same text to the same pane goes again under its id. */
+type Unsure = { paneId: string; text: string; id: string };
+
 /** A send the bridge refused before anything was queued: the coordinator's queue is not reachable from here. */
 class Unavailable extends Error {}
 
@@ -159,6 +162,7 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<Sent | null>(null);
+  const unsure = useRef<Unsure | null>(null);
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const targets: Target[] = [
@@ -184,20 +188,31 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
     setAsking(false);
     setBusy(true);
     setSent(null);
+    // Set once the add is on the wire: from then on a lost answer may hide a row already queued.
+    let attempt: Unsure | null = null;
     try {
       const page = await fetchMessageQueue(paneId, data.session);
       if (!page.available) throw new Unavailable();
-      const id = crypto.randomUUID();
-      const next = await changeMessageQueue(paneId, { scope: page.scope, action: "add", id, text, deliveryMode: mode }, data.session);
-      const row = next.available ? next.messages.find((m) => m.id === id) : undefined;
+      const previous = unsure.current;
+      attempt = previous?.paneId === paneId && previous.text === text ? previous : { paneId, text, id: crypto.randomUUID() };
+      unsure.current = attempt;
+      const next = await changeMessageQueue(paneId, { scope: page.scope, action: "add", id: attempt.id, text, deliveryMode: mode }, data.session);
+      unsure.current = null;
+      const row = next.available ? next.messages.find((m) => m.id === attempt?.id) : undefined;
       setMessage("");
       setSent(row?.state === "paused"
         ? { tone: "error", title: `Held for ${name}`, detail: `${sentence(row.error ?? "It could not take the message yet")} It waits in the coordinator's queue.`, paneId }
         : { tone: "ok", text: row ? `Queued for ${name}.` : `Sent to ${name}.`, paneId });
     } catch (err) {
+      // A network error, a timeout or a 5xx after the add went out leaves its fate unknown (ADR 0025):
+      // say so, and keep its id so sending the same text again is that same row to the bridge.
+      const lost = attempt !== null && !isDefiniteRefusal(err);
+      if (attempt && !lost) unsure.current = null;
       setSent(err instanceof Unavailable
         ? { tone: "error", title: `${name} can't take messages from Home`, detail: "Your message is still in the box. Open the coordinator to send it from its chat.", paneId }
-        : { tone: "error", title: `Couldn't send to ${name}`, detail: `${sentence(err instanceof Error && err.message ? err.message : "Check the connection and try again")} Your message is still in the box.`, paneId });
+        : lost
+          ? { tone: "error", title: `Not sure it reached ${name}`, detail: "Nenu didn't answer, so it may already be in the coordinator's queue. Open the coordinator to check.", paneId }
+          : { tone: "error", title: `Couldn't send to ${name}`, detail: `${sentence(err instanceof Error && err.message ? err.message : "Check the connection and try again")} Your message is still in the box.`, paneId });
     } finally {
       setBusy(false);
     }
