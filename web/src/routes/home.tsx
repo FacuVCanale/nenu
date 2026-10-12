@@ -1,10 +1,11 @@
 import { useContext, useRef, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
-import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Loader2, MessagesSquare, Wifi } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
+import { EmptyState } from "@/components/ui/empty-state";
+import { BusySendSheet, HomeHeading, HomeStarters, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf, type LockReason } from "@/components/question-card";
@@ -51,7 +52,7 @@ export function HomeRoute() {
   if (data.bridge === undefined) {
     return <ColumnPage data={data} title="Home">
       <h1 className="sr-only">Home</h1>
-      <HomeUnreachable refused={data.authError} lost={lost} />
+      <HomeWithoutHerd refused={data.authError} lost={lost} />
     </ColumnPage>;
   }
 
@@ -105,6 +106,20 @@ export function HomeRoute() {
       </div>
     </div>
   </ColumnPage>;
+}
+
+/**
+ * Home before any herd was read. While the first reads retry quietly it says it is connecting; once
+ * the banner names an outage or a refusal, and holds its Retry or Sign in, the body only says what
+ * will be here, so the problem and its one way out are never stated twice.
+ */
+function HomeWithoutHerd({ refused, lost }: { refused: boolean; lost: boolean }) {
+  if (!refused && !lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {window.location.host}.</EmptyState>;
+  return (
+    <EmptyState icon={MessagesSquare} title="Nothing to show yet">
+      Your threads, questions and reviews show up here once {refused ? "you sign in again" : "Nenu answers"}.
+    </EmptyState>
+  );
 }
 
 /** What unlocks the composer, said as what to do: "<verb> to start an agent". */
