@@ -246,6 +246,32 @@ describe("a project's coordinator", () => {
     expect(router.state.location.pathname).toBe("/pane/c1");
   });
 
+  it("says a send whose answer was lost may already be queued, and resends it as the same row", async () => {
+    const posts: Array<Record<string, unknown>> = [];
+    let lose = true;
+    server.use(
+      http.get("/api/pane/:pane/queue", () => HttpResponse.json({ available: true, scope: "s1", messages: [] })),
+      http.post("/api/pane/:pane/queue", async ({ request }) => {
+        posts.push(await request.json() as Record<string, unknown>);
+        return lose ? HttpResponse.error() : HttpResponse.json({ available: true, scope: "s1", messages: [] });
+      }),
+    );
+    const { user, main } = await setup(projectData);
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Start phase two{Enter}");
+    const notice = within(await main.findByRole("alert"));
+    expect(notice.getByText("Not sure it reached Hub's coordinator")).toBeVisible();
+    expect(notice.getByText(/it may already be in the coordinator's queue/)).toBeVisible();
+    expect(notice.queryByText(/still in the box/)).not.toBeInTheDocument();
+    expect(box).toHaveValue("Start phase two");
+    // The same text again is the same row to the bridge, which keeps one copy.
+    lose = false;
+    await user.type(box, "{Enter}");
+    expect(await main.findByText("Sent to Hub's coordinator.")).toBeInTheDocument();
+    expect(posts).toHaveLength(2);
+    expect(posts[1]!.id).toBe(posts[0]!.id);
+  });
+
   it("sends at once while only background work runs, as the terminal does", async () => {
     const posts = queue();
     const waiting = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1"
