@@ -16,8 +16,9 @@
 .rail-link[aria-current="page"] { --rail-surface: var(--workbench-row-selected); }
 .rail-tile { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); background: light-dark(oklch(0.93 0.035 var(--rail-hue, 250)), oklch(0.31 0.045 var(--rail-hue, 250))); color: light-dark(oklch(0.42 0.1 var(--rail-hue, 250)), oklch(0.9 0.05 var(--rail-hue, 250))); font-size: var(--text-caption); line-height: 1; font-weight: 600; letter-spacing: 0.02em; }
 .rail-tile-dot { position: absolute; top: 3px; right: 3px; box-shadow: 0 0 0 2px var(--rail-surface); }
-/* A floating label, so it takes the popover surface and the float shadow; it never takes the pointer. */
-.rail-tip { position: fixed; z-index: 60; max-width: 280px; padding: 4px 8px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); white-space: nowrap; text-overflow: ellipsis; pointer-events: none; translate: 0 -50%; animation: rail-tip-in 150ms ease-out; }
+/* A floating label, so it takes the popover surface and the float shadow; it never takes the pointer.
+   A long name wraps rather than losing its end, which is what tells client-x-events from client-x-orders. */
+.rail-tip { position: fixed; z-index: 60; max-width: 20rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); overflow-wrap: anywhere; pointer-events: none; translate: 0 -50%; animation: rail-tip-in 150ms ease-out; }
 
 /* The phone's tab bar: in flow under the route, so nothing scrolls behind it, clear of the home indicator,
    and pinned to the bottom even when the route draws nothing yet (a redirect on its way).
