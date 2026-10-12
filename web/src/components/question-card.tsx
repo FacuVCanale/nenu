@@ -384,7 +384,8 @@ export function QuestionCard({
               {!reply && replies.map(replyRow)}
             </OptionList>
           )}
-          {advance.map((option) => (
+          {/* While a reply is written its Send is the one commit: Submit would go without the typed text. */}
+          {writing?.to !== "reply" && advance.map((option) => (
             <Button key={option.index} type="button" size="block" variant={quiet(option) ? "secondary" : "default"}
               data-role={option.role} data-quiet={quiet(option) || undefined} data-failed={failed === option.index || undefined}
               disabled={rowProps(option).disabled} aria-busy={busy === option.index || undefined} onClick={() => press(option)}
