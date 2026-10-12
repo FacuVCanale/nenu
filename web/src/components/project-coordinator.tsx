@@ -29,10 +29,8 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   return <>
     <ul className="task-list mb-2">
       <TaskRow state={liveState(coordinator.liveStatus) ?? "idle"} title="Coordinator" detail={`${coordinator.agent} · ${doing}`}
-        current={current === coordinator.paneId} onOpen={() => onOpenPane(coordinator.paneId)}
-        action={replaceable && <button type="button" className="task-close" aria-label="Replace coordinator" title="Replace coordinator" onClick={() => setReplacing(true)}>
-          <RefreshCw aria-hidden className="size-4" />
-        </button>} />
+        current={current === coordinator.paneId} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat"
+        actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined} />
     </ul>
     {replacing && <ReplaceCoordinatorDialog project={project} agent={coordinator.agent} session={session}
       onReplaced={() => { setReplacing(false); void onChanged(); }} onCancel={() => setReplacing(false)} />}

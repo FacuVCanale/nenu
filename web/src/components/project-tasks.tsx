@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { ChevronRight, XCircle } from "lucide-react";
 
 import { TaskRow } from "@/components/node-row";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
@@ -150,10 +150,10 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
     const toggle = () => setFolds((current) => ({ ...current, [thread.id]: !open }));
     return (
       <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes)} age={threadAge(thread, now)} current={onScreen(node)}
-        onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}
+        onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} opens={thread.paneId ? "chat" : "details"}
         fold={resolved && node.children.length > 0 ? { open, onToggle: toggle } : undefined}
-        action={!resolved && !readOnly && <button type="button" className="task-close" aria-label={`Close ${thread.title}`}
-          title={thread.role === "coordinator" ? "Close coordinator" : "Close thread"} onClick={() => setClosing(node)}><Check aria-hidden className="size-4" /></button>}>
+        actions={resolved || readOnly ? undefined : [{ label: "Close", name: `Close ${thread.title}`, icon: XCircle, run: () => setClosing(node),
+          menuLabel: thread.role === "coordinator" ? "Close coordinator…" : "Close thread…" }]}>
         {open && node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>}
       </TaskRow>
     );

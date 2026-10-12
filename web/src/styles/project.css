@@ -9,13 +9,22 @@
 .task-list { display: flex; flex-direction: column; gap: 1px; }
 /* The threads a coordinator runs, hung under its row on a guide line aligned with its dot. */
 .task-branch { margin-left: 11px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
-.task-row { display: flex; align-items: flex-start; border-radius: var(--radius-md); }
-.task-row:hover { background: var(--workbench-row-hover); }
+.task-row { position: relative; display: flex; align-items: flex-start; border-radius: var(--radius-md); }
+@media (hover: hover) { .task-row:hover { background: var(--workbench-row-hover); } }
+/* A key on the row lights it as a pointer would, so the actions it reveals sit on a fill too. */
+.task-row:has(:focus-visible) { background: var(--workbench-row-hover); }
 [aria-current="true"] > .task-row { background: var(--workbench-row-selected); }
 .task-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 7px 8px; text-align: left; border-radius: var(--radius-md); }
-.task-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); opacity: 0; cursor: pointer; }
-.task-row:hover .task-close, .task-close:focus-visible { opacity: 1; }
-.task-close:hover { color: var(--foreground); background: var(--workbench-row-selected); }
+/* A desk's row actions: words laid over the row's age while the pointer rests on the row, on the
+   row's own fill so the age underneath never shows through. Out of reach until then, except to a key. */
+.task-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; padding-left: 4px; border-radius: var(--radius-md); background: inherit; opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; }
+@media (hover: hover) { .task-row:hover .task-actions { opacity: 1; pointer-events: auto; } }
+.task-actions:focus-within { opacity: 1; pointer-events: auto; }
+.task-action { height: 28px; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
+.task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); }
+/* A touch screen's ⋯, always there: there is no hover to find it by. */
+.task-more { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-md); color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }
+.task-more:active { background: var(--workbench-row-selected); }
 .task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
 .task-fold:hover { color: var(--foreground); background: var(--workbench-row-selected); }
 /* History: everything resolved, in grey, behind one row that opens and closes in place. */
@@ -26,12 +35,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-fold > svg, .task-history-toggle > svg { transition: none; }
+  .task-fold > svg, .task-history-toggle > svg, .task-actions, .task-action { transition: none; }
 }
 
-/* Touch: every target reaches 44px, and the hover-only close is always visible. */
+/* Touch: every target reaches 44px. */
 @media (max-width: 1023px), (pointer: coarse) {
   .quiet-action, .task-main { min-height: 44px; }
-  .task-close, .task-fold { opacity: 1; width: 44px; height: 44px; margin: 0; }
+  .task-fold { width: 44px; height: 44px; margin: 0; }
   .task-history-toggle { min-height: 44px; }
 }
