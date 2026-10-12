@@ -183,7 +183,7 @@ function Block({ block }: { block: MdBlock }) {
       // own scroller — the same thing a mobile browser does with a table on any normal page. Its Copy
       // sits above it, right-aligned like a code block's.
       return (
-        <div data-md-table>
+        <div>
           <div className="flex justify-end">
             <CopyButton what="table" payload={() => ({ text: tableMarkdown(block), html: tableHtml(block) })} className={cn(QUIET_ACTION, "-mr-2")} />
           </div>

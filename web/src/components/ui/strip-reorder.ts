@@ -65,7 +65,7 @@ interface Gesture {
   timer: ReturnType<typeof setTimeout>;
   lifted: boolean;
   /** Set once the chip moves: the order it started from and the slots measured then. */
-  drag: { keys: string[]; slots: ReorderSlot[]; chips: HTMLElement[]; from: number; to: number; scroll0: number } | null;
+  drag: { keys: string[]; slots: ReorderSlot[]; chips: HTMLElement[]; from: number; to: number; x0: number; scroll0: number } | null;
 }
 
 interface Options {
@@ -148,7 +148,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
 
     // The dragged chip under the pointer, the others aside, and the slot it would drop into.
     const place = (drag: NonNullable<Gesture["drag"]>, x: number) => {
-      const dx = x - (g?.x0 ?? x) + el.scrollLeft - drag.scroll0;
+      const dx = x - drag.x0 + el.scrollLeft - drag.scroll0;
       drag.to = dropIndex(drag.slots, drag.from, dx);
       drag.chips.forEach((chip, i) => {
         chip.style.translate = `${i === drag.from ? dx : shiftFor(drag.slots, drag.from, drag.to, i)}px 0`;
@@ -169,7 +169,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
       const chips = [...el.querySelectorAll<HTMLElement>("[data-reorder-key]")];
       const slots = chips.map((chip) => ({ key: chip.dataset.reorderKey!, start: chip.offsetLeft, width: chip.offsetWidth }));
       const from = slots.findIndex((slot) => slot.key === gesture.key);
-      gesture.drag = { keys: slots.map((slot) => slot.key), slots, chips, from, to: from, scroll0: el.scrollLeft };
+      gesture.drag = { keys: slots.map((slot) => slot.key), slots, chips, from, to: from, x0: gesture.x0, scroll0: el.scrollLeft };
       if (!gesture.lifted) {
         gesture.lifted = true;
         setLifted(gesture.key);
