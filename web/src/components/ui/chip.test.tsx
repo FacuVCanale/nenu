@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
+import { declarations } from "@/test/css-rules";
 import { Chip, ChipStrip } from "./chip";
 
 // jsdom lays nothing out, so here a strip is 300px wide and its chips sit in a row 8px apart, each as
@@ -94,6 +97,17 @@ describe("ChipStrip keeps the open chip in view", () => {
     widths.c = 140;
     layoutChanged();
     expect(scroller().scrollLeft).toBe(80 + 8 + 80 + 8 + 140 - STRIP);
+  });
+
+  // An edge the strip can still scroll toward fades over the width strips.css gives it, and a chip
+  // ending inside that fade is not in view: its fill and its actions chevron are half gone.
+  it("clear of the fade strips.css draws on an edge it can still scroll toward", () => {
+    const css = readFileSync(resolve(import.meta.dirname, "../../styles/strips.css"), "utf8");
+    const fade = Number.parseFloat(declarations(css, '.strip-scroller[data-overflow~="end"]', ["@layer components"])["--fade-end"] ?? "");
+    widths.c = 100;
+    render(<Strip chips={items("a", "b", "c", "d")} open="c" />);
+    // c spans 176 to 276 in a 300px strip that scrolls on to d's end at 364.
+    expect(scroller().scrollLeft).toBe(276 - STRIP + fade);
   });
 
   it("but leaves a strip the user scrolled by hand where they left it while the open chip stays put", () => {
