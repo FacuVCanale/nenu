@@ -103,6 +103,7 @@ export function QuestionCard({
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
   const noticeLine = useRef<HTMLParagraphElement>(null);
+  const detail = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (armed === null) return;
@@ -118,6 +119,10 @@ export function QuestionCard({
   useEffect(() => {
     if (notice) noticeLine.current?.scrollIntoView?.({ block: "nearest" });
   }, [notice]);
+  // "Show all" and "Read the full plan" leave once pressed; focus moves to what they opened.
+  useEffect(() => {
+    if (opened) detail.current?.focus({ preventScroll: true });
+  }, [opened]);
 
   if (!i) {
     if (!receipt) return null;
@@ -270,10 +275,12 @@ export function QuestionCard({
       </div>
       {steps.length > 1 && !compact && <Stepper steps={steps} />}
       <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-[17px] leading-[22px] font-semibold tracking-[-0.01em] text-pretty")}>{i.question}</p>
-      {i.answers || i.incomplete ? <ReviewAnswers answers={i.answers ?? []} incomplete={Boolean(i.incomplete)} />
-        : i.subject ? <Subject subject={i.subject} folded={codeFolded} onOpenAll={() => setOpened(true)} />
-        : plan !== undefined ? <PlanText text={plan} compact={compact} folded={planFolded} overflows={planOverflows} onMeasure={(overflows) => setPlanMeasure({ text: plan, overflows })} onOpenAll={() => setOpened(true)} />
-        : i.context && <Context interaction={i} text={i.context} compact={compact} clamp={clampOnly} folded={codeFolded} onOpenAll={() => setOpened(true)} />}
+      <div ref={detail} tabIndex={-1} className="flex min-w-0 flex-col gap-[inherit] outline-none empty:hidden">
+        {i.answers || i.incomplete ? <ReviewAnswers answers={i.answers ?? []} incomplete={Boolean(i.incomplete)} />
+          : i.subject ? <Subject subject={i.subject} folded={codeFolded} onOpenAll={() => setOpened(true)} />
+          : plan !== undefined ? <PlanText text={plan} compact={compact} folded={planFolded} overflows={planOverflows} onMeasure={(overflows) => setPlanMeasure({ text: plan, overflows })} onOpenAll={() => setOpened(true)} />
+          : i.context && <Context interaction={i} text={i.context} compact={compact} clamp={clampOnly} folded={codeFolded} onOpenAll={() => setOpened(true)} />}
+      </div>
 
       {typing ? (
         <div className="flex flex-col items-start gap-3">
@@ -464,8 +471,8 @@ function Subject({ subject, folded, onOpenAll }: { subject: InteractionSubject; 
     <div data-subject className="flex min-w-0 flex-col items-start gap-1.5">
       {subject.tool && <p className="text-[13px] leading-[18px] font-semibold text-muted-foreground">{subject.tool}</p>}
       {subject.description && <p className="text-[15px] leading-5 text-foreground text-pretty">{subject.description}</p>}
-      {subject.file && <p aria-label="File" className="w-full min-w-0 font-mono text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{subject.file}</p>}
-      {subject.command !== undefined && <pre aria-label="Command" className={CODE}>{visible.join("\n")}</pre>}
+      {subject.file && <p role="group" aria-label="File" className="w-full min-w-0 font-mono text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{subject.file}</p>}
+      {subject.command !== undefined && <pre role="group" aria-label="Command" className={CODE}>{visible.join("\n")}</pre>}
       {subject.preview !== undefined && <Preview rows={visible} />}
       {folded && <ShowAll count={rows.length} onClick={onOpenAll} />}
       {subject.meta && subject.meta.length > 0 && <p className="text-[13px] leading-[18px] text-muted-foreground">{subject.meta.join(" · ")}</p>}
@@ -478,7 +485,7 @@ function Preview({ rows }: { rows: string[] }) {
   const lines = rows.map((row) => /^(\d+)(?:\s(.*))?$/.exec(row));
   const gutter = Math.max(1, ...lines.map((m) => m?.[1]?.length ?? 0));
   return (
-    <div aria-label="Preview" className="w-full min-w-0 rounded-lg bg-muted py-2 font-mono text-[13px] leading-5 text-foreground">
+    <div role="group" aria-label="Preview" className="w-full min-w-0 rounded-lg bg-muted py-2 font-mono text-[13px] leading-5 text-foreground">
       {rows.map((row, n) => (
         <div key={n} className="flex gap-3 px-3">
           <span aria-hidden="true" className="shrink-0 text-right tabular-nums text-muted-foreground select-none" style={{ width: `${gutter}ch` }}>{lines[n]?.[1] ?? ""}</span>
@@ -506,7 +513,7 @@ function PlanText({ text, compact, folded, overflows, onMeasure, onOpenAll }: {
   // Its own surface, so the plan's headings read as the document under the question, not as more questions.
   return (
     <div className="flex min-w-0 flex-col items-start rounded-xl border border-border px-3.5 pt-3 pb-1">
-      <div ref={box} aria-label="Plan" className={cn(
+      <div ref={box} role="group" aria-label="Plan" className={cn(
         "w-full min-w-0 pb-2 [&>div]:text-[15px] [&_li]:leading-6 [&_p]:leading-6",
         // The fade reaches nothing before the edge, so a cut line never peeks through.
         folded && "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-4rem),transparent_calc(100%-0.5rem))]",
@@ -538,7 +545,7 @@ function Context({ interaction: i, text, compact, clamp, folded, onOpenAll }: {
     // The padding sits outside the clamped box: a clamp only cuts at its own padding edge, so
     // padding on the clamped element itself shows the top half of the next line.
     <div className="flex min-w-0 flex-col items-start gap-1 rounded-lg bg-muted/60 px-2.5 py-2">
-      <pre aria-label="Request details" className={cn(
+      <pre role="group" aria-label="Request details" className={cn(
         "w-full min-w-0 whitespace-pre-wrap break-words font-mono text-[13px] leading-5 text-foreground",
         clamp && "line-clamp-3",
       )}>{folded ? rows.slice(0, SUBJECT_ROWS).join("\n") : text}</pre>
