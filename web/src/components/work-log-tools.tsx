@@ -155,7 +155,8 @@ export function ToolStep({ id, part, owner, query, active, focused, live }: { id
         {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
       </StepLine>
       <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
-      {open && <div id={contentId} className="mb-2 ml-6 min-w-0 space-y-2 rounded-lg bg-muted px-3 py-2">
+      {/* Under a finger the output takes the row's full width: a phone fits few characters of code a line. */}
+      {open && <div id={contentId} className="mb-2 ml-6 min-w-0 space-y-2 rounded-lg bg-muted px-3 py-2 coarse:ml-0">
         <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} /></p>
         {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} /></pre>}
         {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
