@@ -12,6 +12,7 @@ const COARSE = "@media (pointer: coarse)";
 const px = (value: string | undefined) => Number(/^(-?[\d.]+)px$/.exec(value ?? "")?.[1] ?? Number.NaN);
 const band = (name: "tabs" | "panes", at: string[] = [LAYER]) =>
   declarations(css, `.strip[data-workbench-navigation-band="${name}"]`, at);
+const chipReach = () => cssRules(css).find((rule) => rule.selectors.includes(".strip-chip::after"))?.decls ?? {};
 
 describe("strip chips", () => {
   it("mark the selected tab or pane with the neutral selection fill, never the accent", () => {
@@ -30,25 +31,23 @@ describe("strip chips", () => {
 });
 
 describe("strips on a touch screen", () => {
-  it("take 32px each, so both bands together leave the thread more room than one did with the pane row", () => {
+  it("take 32px each, so both bands together leave the thread more room than the two old ones did", () => {
     expect(declarations(css, ".strip", [LAYER, COARSE]).height).toBe("32px");
-    expect(declarations(css, ".strip-chip", [LAYER, COARSE]).height).toBe("32px");
   });
 
-  it("give every chip a 44px reach that hangs off its band", () => {
-    for (const name of ["tabs", "panes"] as const) {
-      const reach = band(name, [LAYER, COARSE]);
-      expect(32 + px(reach["--reach-up"]) + px(reach["--reach-down"]), name).toBe(44);
-    }
-    const chipReach = cssRules(css).find((rule) => rule.selectors.includes(".strip-chip::after"));
-    expect(chipReach?.decls).toMatchObject({ top: "calc(-1 * var(--reach-up))", bottom: "calc(-1 * var(--reach-down))" });
+  it("give every chip a 44px reach that hangs below its band, from the chip's outer edge", () => {
+    const chip = px(declarations(css, ".strip-chip", [LAYER]).height);
+    // Two open chips stacked keep a gap between them.
+    expect(chip).toBeLessThan(32);
+    expect(chip + px(declarations(css, ".strip", [LAYER, COARSE])["--reach"])).toBe(44);
+    // The pseudo-element sits in the chip's padding box, so the 1px border is added back.
+    expect(chipReach()).toMatchObject({ inset: "-1px", bottom: "calc(-1px - var(--reach))" });
   });
 
-  it("never reach over another control: the pane row reaches down only, the tab row no further up than the header's slack", () => {
-    // The header's 44px buttons sit 2px clear of its 48px bottom edge.
-    expect(px(band("panes", [LAYER, COARSE])["--reach-up"])).toBe(0);
-    expect(px(band("tabs", [LAYER, COARSE])["--reach-up"])).toBeLessThanOrEqual(2);
-    // The tab row's downward reach goes under the pane row, never over its pills.
+  it("never reach over another control: up into the header, or over a pane pill from the tab row", () => {
+    // Reaching up would gain nothing anyway: the header paints over its own bottom edge.
+    expect(chipReach().top).toBeUndefined();
+    // The tab row's reach goes under the pane row, never over its pills.
     expect(Number(band("panes")["z-index"])).toBeGreaterThan(Number(band("tabs")["z-index"]));
   });
 });

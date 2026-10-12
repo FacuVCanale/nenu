@@ -1,43 +1,37 @@
-import { cn } from "@/lib/utils";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+
 import { useLongPress } from "@/hooks/use-long-press";
 import { StatusDot } from "@/components/status-badge";
-import { TRIAGE_STATUS, type TriageKey } from "@/lib/triage";
-import { STATUS_LABEL } from "@/lib/types";
+import { revealScrollLeft } from "@/components/ui/strip-reveal";
+import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
+
+// The tab and pane strips above a chat share this one chip, styled in styles/strips.css: a pill with
+// a leading glyph, a name capped so it can't hide its siblings, and a neutral fill on the open one.
+
+/** The fade a strip draws on an edge it can still scroll toward (strips.css: --fade-start/--fade-end). */
+const EDGE_FADE = 24;
 
 interface ChipProps {
   label: string;
+  /** Tells same-named siblings apart, drawn quieter than the name. Omit when the name is unique. */
+  tag?: string;
   active: boolean;
-  /** Subtle ring marking the item focused in the desktop TUI. */
-  ring?: boolean;
-  /**
-   * The most urgent thing happening inside this tab ({@link worstTriage}) — drawn as a leading
-   * dot in the same palette as the pane rows, so a chip and a row can't mean different things by
-   * the same colour. Omit (or pass null) when the container holds no agent at all: that's not the
-   * same as idle, and a resting dot would claim otherwise.
-   */
-  status?: TriageKey | null;
+  /** Dashed outline for the item focused in the desktop TUI. */
+  focused?: boolean;
+  /** Before the name: a status dot ({@link ChipStatus}) or a glyph. */
+  leading?: ReactNode;
   onClick: () => void;
-  /**
-   * Long-press (or right-click / Android contextmenu) opens actions for this chip — the tab's
-   * rename/close sheet. Inert when unset, so the handlers are safe to spread unconditionally.
-   */
+  /** Long-press (or right-click / Android contextmenu) opens the chip's actions. Inert when unset. */
   onLongPress?: () => void;
-  /**
-   * A plain tap when the chip is already `active` — opens actions instead of a no-op re-select,
-   * mirroring the pane pill. Only meaningful alongside {@link onLongPress}.
-   */
+  /** A tap on the chip while it is `active` opens its actions instead of a dead re-select. */
   onTapActive?: () => void;
 }
 
-// A tab in a quiet underline row, as in a pane's tab bar: the active tab
-// underlined, a dashed underline for the tab focused in the desktop TUI, and a leading status dot
-// saying what's going on inside. A long-press opens the tab's actions when the parent wires them.
-export function Chip({ label, active, ring, status, onClick, onLongPress, onTapActive }: ChipProps) {
+export function Chip({ label, tag, active, focused, leading, onClick, onLongPress, onTapActive }: ChipProps) {
   const longPress = useLongPress(onLongPress);
 
-  // A long-press already suppresses the ensuing click (via longPress.onClickCapture), so this only
-  // ever sees a genuine tap. Tapping the already-active chip opens actions (when wired) rather than a
-  // dead re-select.
+  // A long-press already suppresses the click that follows (longPress.onClickCapture), so this only
+  // sees a genuine tap.
   function handleClick() {
     if (active && onTapActive) {
       onTapActive();
@@ -52,24 +46,83 @@ export function Chip({ label, active, ring, status, onClick, onLongPress, onTapA
       onClick={handleClick}
       {...longPress}
       aria-current={active ? "true" : undefined}
-      className={cn(
-        // select-none + -webkit-touch-callout:none stop iOS Safari's selection loupe / touch callout,
-        // whose native long-press gesture otherwise fires pointercancel and kills the hold timer.
-        // A slim 36px underline row: the ::after reaches 8px (past the 2px underline) into the row's
-        // bottom padding, so a thumb still gets a 44px target.
-        "relative flex h-9 min-w-11 shrink-0 select-none items-center justify-center gap-1 whitespace-nowrap rounded-none border-b-2 border-transparent bg-transparent px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors [-webkit-touch-callout:none] after:absolute after:inset-x-0 after:top-0 after:-bottom-2.5 after:content-[''] hover:text-foreground sm:gap-1.5",
-        active && "border-primary text-foreground",
-        ring && !active && "border-dashed border-muted-foreground/40",
-      )}
+      data-focused={focused || undefined}
+      title={label}
+      className="strip-chip"
     >
-      {status && (
-        <>
-          <StatusDot status={TRIAGE_STATUS[status]} className="size-2" />
-          {/* The dot is colour-only; say it in words for screen readers. */}
-          <span className="sr-only">{STATUS_LABEL[TRIAGE_STATUS[status]]}</span>
-        </>
-      )}
-      {label}
+      {leading}
+      <span className="strip-chip-label">{label}</span>
+      {tag && <span className="strip-chip-tag"> · {tag}</span>}
     </button>
+  );
+}
+
+/** A chip's status: the dot, and the word for it for screen readers (the dot is colour only). */
+export function ChipStatus({ status }: { status: AgentStatus }) {
+  return (
+    <>
+      <StatusDot status={status} surface="bg-transparent" className="size-2" />
+      <span className="sr-only">{STATUS_LABEL[status]}</span>
+    </>
+  );
+}
+
+interface ChipStripProps {
+  /** Which strip this is: also the hook the keyboard rule and the bench use. */
+  band: "tabs" | "panes";
+  /** The open item's key: when it changes, the strip scrolls its chip into view. */
+  activeKey: string;
+  /** Before the scroller, outside it (the desk's "Panes" label). */
+  lead?: ReactNode;
+  children: ReactNode;
+}
+
+// One row of chips that scrolls sideways. The open chip is kept in view, and an edge the row can
+// still scroll toward fades, so a sibling past it is seen to exist.
+export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const chip = scroller?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!scroller || !chip) return;
+    const left = revealScrollLeft({
+      scrollLeft: scroller.scrollLeft,
+      width: scroller.clientWidth,
+      max: scroller.scrollWidth - scroller.clientWidth,
+      fade: EDGE_FADE,
+      start: chip.offsetLeft,
+      end: chip.offsetLeft + chip.offsetWidth,
+    });
+    if (left !== null) scroller.scrollLeft = left;
+  }, [activeKey]);
+
+  // Which edges fade, written straight to the DOM: it follows every scroll frame and needs no render.
+  // Runs after every render too, since a rename or a new chip changes what overflows.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const update = () => {
+      const max = scroller.scrollWidth - scroller.clientWidth;
+      const edges = [scroller.scrollLeft > 1 && "start", scroller.scrollLeft < max - 1 && "end"].filter(Boolean);
+      scroller.dataset.overflow = edges.join(" ");
+    };
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    resize?.observe(scroller);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      resize?.disconnect();
+    };
+  });
+
+  return (
+    <div data-workbench-navigation-band={band} className="strip">
+      {lead}
+      <div ref={scrollerRef} className="strip-scroller">
+        {children}
+      </div>
+    </div>
   );
 }
