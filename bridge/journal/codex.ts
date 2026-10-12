@@ -36,7 +36,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { containedRealpath, exists, loadTail, readRange, rootList, statFile } from "./files.ts";
-import { clamp, MAX_RESULT_CHARS, MAX_TEXT_CHARS, oneLine, stripAnsi, summarizeToolInput } from "./text.ts";
+import { clamp, contextPart, MAX_RESULT_CHARS, MAX_TEXT_CHARS, oneLine, stripAnsi, summarizeToolInput } from "./text.ts";
 import type {
   AgentSessionRef,
   ImageLocator,
@@ -153,6 +153,47 @@ export function isInjectedContext(text: string): boolean {
     && /<\/INSTRUCTIONS>(?:\s*<environment_context>[\s\S]*<\/environment_context>)?$/.test(body);
 }
 
+/**
+ * What Codex says a user-role message carries: `content_item_kinds` and its turn, stamped on
+ * `internal_chat_message_metadata_passthrough` (seen on every rollout from 2026-09-12 to 2026-10-12,
+ * cli 0.160). Only `user.*` items are something the operator typed. Undefined on older rollouts,
+ * which keep the text checks above.
+ */
+function userStamp(p: Record<string, unknown>): { kinds: string[]; turn?: string } | undefined {
+  const stamp = p.internal_chat_message_metadata_passthrough;
+  if (stamp === null || typeof stamp !== "object") return undefined;
+  const { content_item_kinds: kinds, turn_id: turn } = stamp as Record<string, unknown>;
+  if (!Array.isArray(kinds) || !kinds.every((kind) => typeof kind === "string")) return undefined;
+  return { kinds, ...(typeof turn === "string" ? { turn } : {}) };
+}
+
+const SKILL_KIND = "skills.selected_skill_instructions";
+
+/**
+ * The injected kinds that explain what the agent does next, as the line each one reads. Every other
+ * kind no `user.*` item rides with is context for the model (AGENTS.md, the environment, plugin
+ * lists, app state), which Codex's own conversation view never shows either.
+ */
+const CODEX_NOTICES = new Map([
+  ["goal.internal_context", "Goal check-in"],
+  ["daemon_recovery.internal_context", "Resumed after a restart"],
+  ["generic.turn_aborted", "Interrupted"],
+]);
+
+/** The inside of a message that is one `<tag …>…</tag>` envelope, else the message as it is. */
+function unwrap(text: string): string {
+  const m = /^\s*<([a-z_-]+)\b[^>]*>([\s\S]*)<\/\1>\s*$/.exec(text);
+  return (m ? m[2]! : text).trim();
+}
+
+/** `<skill><name>…</name><path>…</path>body</skill>` as its line: the name, the body behind it. */
+function skillPart(text: string) {
+  const inside = unwrap(text);
+  const name = /^<name>([^<]*)<\/name>/.exec(inside)?.[1]?.trim();
+  const body = inside.replace(/^<name>[^<]*<\/name>\s*(?:<path>[^<]*<\/path>\s*)?/, "");
+  return contextPart(name ? `Skill · ${name}` : "Skill", body);
+}
+
 /** Codex app metadata appended to final answers is not part of the visible assistant message. */
 export function visibleAssistantText(text: string, phase: unknown): string {
   if (phase !== "final_answer") return text;
@@ -215,6 +256,8 @@ export class CodexParser implements JournalParser {
   private readonly pendingTools = new Map<string, { part: ToolPart; entry: string }>();
   private readonly imageIndex = new Map<string, ImageLocator[]>();
   private usageState: Omit<SessionTelemetry, "fileTruncated"> | undefined;
+  // The newest message the operator typed and its turn: a skill Codex attaches in that turn folds under it.
+  private lastUser: { entry: TranscriptEntry; turn?: string } | undefined;
 
   entries(): TranscriptEntry[] {
     return this.turns.finish(this.list);
@@ -250,6 +293,19 @@ export class CodexParser implements JournalParser {
   private emit(entry: TranscriptEntry): void {
     this.turns.attach(entry);
     this.list.push(entry);
+  }
+
+  /** A user-role message the operator did not type (see userStamp): one line, or nothing. */
+  private injected(stamp: { kinds: string[]; turn?: string }, text: string, uuid: string, ts: string): void {
+    if (stamp.kinds.includes(SKILL_KIND)) {
+      const part = skillPart(text);
+      const under = this.lastUser;
+      if (under && stamp.turn !== undefined && under.turn === stamp.turn) under.entry.parts.push(part);
+      else this.emit({ uuid, ts, role: "note", parts: [part] });
+      return;
+    }
+    const label = stamp.kinds.map((kind) => CODEX_NOTICES.get(kind)).find(Boolean);
+    if (label) this.emit({ uuid, ts, role: "note", parts: [contextPart(label, unwrap(text))] });
   }
 
   line(line: string, offset: number, bytes: number): void {
@@ -294,12 +350,19 @@ export class CodexParser implements JournalParser {
       const rawBody = stripAnsi(blockText(blocks));
       const body = role === "assistant" ? visibleAssistantText(rawBody, p.phase) : rawBody;
       if (body.trim() === "" && !images.length) return;
+      const stamp = role === "user" ? userStamp(p) : undefined;
+      if (stamp && !stamp.kinds.some((kind) => kind.startsWith("user."))) {
+        this.injected(stamp, body, uuid, ts);
+        return;
+      }
       if (role === "user" && isInjectedContext(body)) return;
       const parts: TranscriptPart[] = images.map((image) => ({ ...image, kind: "image" as const }));
       if (body.trim() !== "") parts.push({ kind: "text", ...clamp(body, MAX_TEXT_CHARS) });
-      this.emit({ uuid, ts, role, parts,
+      const entry: TranscriptEntry = { uuid, ts, role, parts,
         ...(role === "assistant" && (p.phase === "commentary" || p.phase === "final_answer") ? { phase: p.phase } : {}),
-      });
+      };
+      this.emit(entry);
+      if (role === "user") this.lastUser = { entry, ...(stamp?.turn ? { turn: stamp.turn } : {}) };
       return;
     }
 
