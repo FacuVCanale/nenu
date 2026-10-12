@@ -61,7 +61,7 @@ it("keeps a slow successful poll usable, but reports a failed poll and recovers 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
-    expect(screen.getByText("Connection is unstable. Retrying…")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Can’t reach Nenu. Retrying…");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     response = home;
     await act(async () => { await router.revalidate(); });
