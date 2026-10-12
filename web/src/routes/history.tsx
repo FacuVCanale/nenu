@@ -34,14 +34,16 @@ import type { TranscriptEntry } from "@/lib/types";
  * Why there's nothing to read, in the user's terms. Each is an ordinary state, not an error. `name`
  * may be "this pane", so it never starts a sentence; `offline` is why the snapshot can't be trusted.
  */
-function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, offline: string | undefined) {
+function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, offline: string | undefined) {
   switch (reason) {
     case "disabled":
       return { title: "History is off", body: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT)." };
     case "no-session":
-      return { title: "No conversation yet", body: `There's no agent session in ${name}, so there's no transcript to read.` };
+      return shell
+        ? { title: "Shells keep no transcript", body: `History shows an agent's conversation, and ${name} is a shell.` }
+        : { title: "No conversation yet", body: `There's no agent session in ${name}, so there's no transcript to read.` };
     case "no-log":
-      return { title: "No transcript yet", body: `No transcript file was found for ${name}'s session yet.` };
+      return { title: "No transcript yet", body: `There's no transcript for ${name} yet.` };
     case "error":
       return { title: "Couldn't read the transcript", body: offline ? `${offline} Open History again once it's back.` : "Go back and open History again." };
   }
@@ -208,7 +210,7 @@ export function HistoryRoute() {
   const total = Math.max(data.total, entries.length);
   const empty = gone
     ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
-    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", offline);
+    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", pane?.kind === "shell", offline);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
