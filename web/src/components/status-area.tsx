@@ -14,7 +14,7 @@ const TONE: Record<StatusTone, string> = {
 };
 const ICONS = { info: Info, success: CheckCircle2, warn: AlertTriangle, error: AlertCircle } as const;
 
-/** A dismissed toast stays drawn this long while it fades and drifts 8px toward its edge. */
+/** A dismissed toast stays drawn this long while it fades and drifts 8px back up. */
 export const TOAST_EXIT_MS = 150;
 /** Under reduced motion the exit is an opacity fade only, and shorter. */
 export const TOAST_EXIT_REDUCED_MS = 120;
@@ -27,8 +27,10 @@ const reducedMotion = () => typeof window.matchMedia === "function" && window.ma
 
 /**
  * One app-wide, nonmodal notification surface. On a phone it drops in over the header, under the
- * status bar, so it never covers the transcript or the card it is reporting on; on a desk it sits
- * bottom-right. A swipe up dismisses it, and a notice with a destination is one control that opens it.
+ * status bar, so it never covers the transcript or the card it is reporting on. On a desk it sits
+ * top-right under the 52px header: bottom-right measured on top of the composer's Send and model
+ * row, and an error stays until dismissed. A swipe up dismisses it, and a notice with a destination
+ * is one control that opens it.
  */
 export function StatusArea() {
   const status = useStatus();
@@ -65,7 +67,7 @@ export function StatusArea() {
   };
   return createPortal(
     <section aria-label="Notifications" data-notification-viewport=""
-      className="pointer-events-none fixed inset-x-0 top-[calc(var(--app-viewport-top,0px)+env(safe-area-inset-top,0px)+0.5rem)] z-50 flex justify-center px-2 lg:inset-x-auto lg:top-auto lg:right-[max(1.5rem,env(safe-area-inset-right,0px))] lg:bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:px-0">
+      className="pointer-events-none fixed inset-x-0 top-[calc(var(--app-viewport-top,0px)+env(safe-area-inset-top,0px)+0.5rem)] z-50 flex justify-center px-2 lg:top-[calc(var(--app-viewport-top,0px)+env(safe-area-inset-top,0px)+4rem)] lg:justify-end lg:px-6">
       {shown && <Toast key={shown.id} ref={card} message={shown} leaving={leaving}
         onHover={(on) => { hovered.current = on; syncInteraction(); }}
         onFocusChange={(on) => { focused.current = on; syncInteraction(); }} />}
@@ -83,6 +85,8 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const start = useRef<{ id: number; y: number } | null>(null);
+  // The release reads the last move, which may not have rendered yet.
+  const lastOffset = useRef(0);
   const dragged = useRef(false);
   const Icon = ICONS[message.tone];
 
@@ -100,14 +104,15 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
     dragged.current = true;
     setDragging(true);
     // Up follows the finger; down resists, since there is nowhere to go but onto the content.
-    setOffset(dy < 0 ? dy : dy / (1 + dy / 40));
+    lastOffset.current = dy < 0 ? dy : dy / (1 + dy / 40);
+    setOffset(lastOffset.current);
   };
   const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
     if (start.current?.id !== event.pointerId) return;
     start.current = null;
     setDragging(false);
-    if (offset < -SWIPE_DISMISS_PX) clearStatus(message.id);
-    else setOffset(0);
+    if (lastOffset.current < -SWIPE_DISMISS_PX) clearStatus(message.id);
+    else { lastOffset.current = 0; setOffset(0); }
   };
 
   const text = <div className="max-h-[min(16rem,40dvh)] min-w-0 flex-1 overflow-y-auto overscroll-contain [overflow-wrap:anywhere]">
@@ -133,8 +138,8 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
       style={offset ? { translate: `0 ${leaving ? offset - 8 : offset}px`, transitionDuration: dragging ? "0ms" : undefined } : undefined}
       className={cn(
         "pointer-events-auto relative w-full max-w-[22.375rem] touch-none rounded-xl border border-border bg-popover text-popover-foreground shadow-(--shadow-float) lg:w-90 lg:max-w-none",
-        "animate-in fade-in duration-150 ease-out motion-safe:slide-in-from-top-2 lg:motion-safe:slide-in-from-bottom-2 motion-reduce:duration-[120ms]",
-        "transition-[opacity,translate] data-leaving:opacity-0 motion-safe:data-leaving:-translate-y-2 lg:motion-safe:data-leaving:translate-y-2",
+        "animate-in fade-in duration-150 ease-out motion-safe:slide-in-from-top-2 motion-reduce:duration-[120ms]",
+        "transition-[opacity,translate] data-leaving:opacity-0 motion-safe:data-leaving:-translate-y-2",
       )}>
       {message.to ? (
         <Link to={message.to} onClick={() => clearStatus(message.id)}
