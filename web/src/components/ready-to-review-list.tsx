@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Check, CircleDashed, GitPullRequest, X } from "lucide-react";
 
-import { FoldedList, HomeHeading, isOpening, OpeningSpinner, useOpeningPath } from "@/components/home-panels";
+import { BusyLabel, FoldedList, HomeHeading, isOpening } from "@/components/home-panels";
 import { buttonVariants } from "@/components/ui/button";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
@@ -131,7 +131,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
       <span className="col-start-3 row-span-2 row-start-1 sm:col-start-4">{entry.checks && <Checks checks={entry.checks} />}</span>
       {to ? (
         <Link to={to} aria-busy={busy || undefined}
-          className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>{busy && <OpeningSpinner className="text-current" />}Review</Link>
+          className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}><BusyLabel busy={busy}>Review</BusyLabel></Link>
       ) : entry.url ? (
         <a href={entry.url} target="_blank" rel="noopener noreferrer" className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>Review</a>
       ) : null}
@@ -143,8 +143,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
 export const REVIEW_ROWS = 5;
 
 /** Home's "Ready to review": the pull requests waiting on you, nothing else. */
-export function ReadyToReviewList({ entries, session }: { entries: readonly ReviewEntry[]; session?: string }) {
-  const opening = useOpeningPath();
+export function ReadyToReviewList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
   if (!entries.length) return null;
   return (
     <section aria-labelledby="home-review" className="flex flex-col gap-1.5">

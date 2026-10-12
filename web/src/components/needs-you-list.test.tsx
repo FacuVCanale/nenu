@@ -18,7 +18,7 @@ const interactions: InteractionsState = {
 
 // A data router, as in the app: a row reads the navigation to say when it is opening.
 function renderRow() {
-  const element = <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId }]} receipts={[]} interactions={interactions} lockReason={undefined} />;
+  const element = <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId }]} receipts={[]} interactions={interactions} lockReason={undefined} opening={null} />;
   render(<RouterProvider router={createMemoryRouter([{ path: "/", element }])} />);
   return screen.getByRole("link");
 }

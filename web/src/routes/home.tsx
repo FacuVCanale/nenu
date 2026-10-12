@@ -4,7 +4,7 @@ import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, Reveal, RunningWorkCard, SendNotice } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
@@ -49,6 +49,7 @@ export function HomeRoute() {
   const activity = useHomeActivity(live ? data.agents : [], data.session);
   const lost = useConnectionLost(isConnecting(data));
   const anchor = useConnectionHealth();
+  const opening = useOpeningPath();
   useEffect(() => { if (live) sawLive = true; }, [live]);
 
   const outage: Outage | null = data.authError ? "refused" : !lost ? null : data.error ? "nenu" : "herdr";
@@ -98,14 +99,14 @@ export function HomeRoute() {
         {calm
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
-            interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} />}
-        <RecentChats chats={recent} session={data.session} now={now} />
-        <ReadyToReviewList entries={reviews} session={data.session} />
+            interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} opening={opening} />}
+        <RecentChats chats={recent} session={data.session} now={now} opening={opening} />
+        <ReadyToReviewList entries={reviews} session={data.session} opening={opening} />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
             <HomeHeading id="home-running" label="Running in background" count={running.length} />
             <div className="grid gap-3 sm:grid-cols-2">
-              {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} />)}
+              {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} opening={opening} />)}
             </div>
           </section>
         )}

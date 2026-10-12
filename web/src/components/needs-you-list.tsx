@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { ChevronRight } from "lucide-react";
 
-import { HomeHeading, isOpening, OpeningSpinner, useOpeningPath } from "@/components/home-panels";
+import { HomeHeading, isOpening, OpeningSpinner } from "@/components/home-panels";
 import { QuestionCard, type LockReason } from "@/components/question-card";
 import { StatusDot } from "@/components/status-badge";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
@@ -24,7 +24,7 @@ const WAITING = "waiting in the terminal";
  * blocked pane with no dialog the bridge could read is a row into its thread. Answers just sent stay
  * as receipts until the pane's next dialog.
  */
-export function NeedsYouList({ agents, projects, session, items, receipts, interactions, lockReason }: {
+export function NeedsYouList({ agents, projects, session, items, receipts, interactions, lockReason, opening }: {
   agents: readonly AgentView[];
   projects?: readonly ProjectView[];
   session?: string;
@@ -33,9 +33,10 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
   interactions: InteractionsState;
   /** Why answers are paused, if they are. */
   lockReason: LockReason | undefined;
+  /** The path a tap is opening (useOpeningPath). */
+  opening: string | null;
 }) {
   const navigate = useNavigate();
-  const opening = useOpeningPath();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
   if (!items.length && !receipts.length) return null;
 

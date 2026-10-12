@@ -22,6 +22,7 @@ export const OPENING_MS = 120;
 /**
  * The path a navigation is loading (no query), once it has run for OPENING_MS; null otherwise. The
  * pane route waits for its read, so over a slow link the tapped row is the only place to say so.
+ * Home reads it once and hands it to every list.
  */
 export function useOpeningPath(): string | null {
   const navigation = useNavigation();
@@ -142,8 +143,7 @@ function RecentRow({ chat, session, now, opening }: { chat: RecentChat; session?
  * Home's "Recent": the chats that moved or were opened last, each one tap from its thread. "New" marks
  * one that finished since you last opened it. How many are working is the headline's to say.
  */
-export function RecentChats({ chats, session, now }: { chats: readonly RecentChat[]; session?: string; now: number }) {
-  const opening = useOpeningPath();
+export function RecentChats({ chats, session, now, opening }: { chats: readonly RecentChat[]; session?: string; now: number; opening: string | null }) {
   if (!chats.length) return null;
   return (
     <section aria-labelledby="home-recent" className="flex flex-col gap-1.5">
@@ -156,8 +156,14 @@ export function RecentChats({ chats, session, now }: { chats: readonly RecentCha
 }
 
 /** A workflow still running, with how far its agents got. */
-export function RunningWorkCard({ paneId, workflow, agent, session, now }: { paneId: string; workflow: ActivityWorkflow; agent?: AgentView; session?: string; now: number }) {
-  const opening = useOpeningPath();
+export function RunningWorkCard({ paneId, workflow, agent, session, now, opening }: {
+  paneId: string;
+  workflow: ActivityWorkflow;
+  agent?: AgentView;
+  session?: string;
+  now: number;
+  opening: string | null;
+}) {
   const agents = allAgents(workflow);
   const running = agents.filter((a) => a.state === "running").slice(0, 3);
   const elapsed = formatDuration(workflowElapsed(workflow, now));
