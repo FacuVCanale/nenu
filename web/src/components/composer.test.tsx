@@ -1536,8 +1536,7 @@ describe("Composer — reload-guard hold (no-SW self-update safety gate)", () =>
 });
 
 describe("Composer — quick keys / image attach", () => {
-  it("shows the attach button on the reply-input row without the quick-key strip being visible", async () => {
-    const user = userEvent.setup();
+  it("attaches from the Photo row without the quick-key strip being visible", async () => {
     renderComposer();
 
     // The quick-key strip only renders once composerFocused && keyboardOpen — keyboardOpen defaults
@@ -1545,10 +1544,10 @@ describe("Composer — quick keys / image attach", () => {
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tab" })).not.toBeInTheDocument();
 
-    // The attach button now lives on the always-visible reply-input row instead of the strip.
-    const attach = screen.getByRole("button", { name: "Attach image" });
+    // Attaching is the menu's first row, a named choice like the others.
+    const attach = control(/^photo$/i);
     expect(attach).toBeEnabled();
-    await user.click(attach); // clickable without throwing (opens the hidden file input)
+    fireEvent.click(attach); // clickable without throwing (opens the hidden file input)
   });
 
   it("does not render digit shortcut buttons in the composer (they live on the Keys dock's 123 tab)", () => {
@@ -2019,14 +2018,14 @@ describe("conversation composer", () => {
     renderComposer({nativeWorkbench:true,dialogPresent:true,modelControl:<button>Choose model</button>,usageControls:<button>Usage</button>});
     // What Send does now is said in the box: the message waits for the answer.
     expect(await screen.findByPlaceholderText("Message for after you answer…")).toBeInTheDocument();
-    // The model chip sits in the toolbar under the draft; usage stays behind the ⋯ menu.
+    // The model chip sits in the row under the draft; attach and usage are rows of the + menu.
     const row = screen.getByRole("group",{name:"Message tools"});
     expect(within(row).getByRole("button",{name:"Choose model"})).toBeInTheDocument();
-    expect(within(row).getByRole("button",{name:"Attach image"})).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Message shortcuts"})).toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Usage"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"More message actions"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Add to queue"})).not.toBeInTheDocument();
-    expect(screen.getByRole("button",{name:"Attach image"})).toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Attach image"})).not.toBeInTheDocument();
     await userEvent.type(screen.getByRole("textbox"),"keep this message");
     await userEvent.click(screen.getByRole("button",{name:"Send"}));
     await waitFor(() => expect(adds).toEqual(["keep this message"]));

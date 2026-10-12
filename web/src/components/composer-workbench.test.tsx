@@ -101,10 +101,10 @@ it("publishes its secondary controls, grouped, instead of rendering them", async
   const input = screen.getByRole("textbox");
   await user.type(input, "draft survives navigation");
   expect(controls().map(({ group, label }) => `${group}: ${label}`)).toEqual([
-    "Terminal: Keys", "Terminal: Type into terminal", "Shortcuts: Quick replies", "Shortcuts: Commands",
-    "View: Display", "Session: Context and usage",
+    "Attach: Photo", "Replies: Quick replies", "Replies: Commands", "Terminal: Keys", "Terminal: Type into terminal",
+    "Session: Context and usage", "View: Display",
   ]);
-  for (const name of ["Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  for (const name of ["Photo", "Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   expect(input).toHaveValue("draft survives navigation");
 });
 
@@ -160,32 +160,33 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
   expect(sent()).toEqual([expect.objectContaining({ text: "Keep me" })]);
 });
 
-it("keeps the draft and its one action in a box, with quiet controls in a row beneath it", () => {
-  setup({ modelControl: <button>Choose model</button> });
+it("puts one + at the start of the box and Send at its end; the row beneath holds only the session", () => {
+  setup({ modelControl: <button>Choose model</button>, processesControl: <button>Processes: 1 done</button> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
   const input = screen.getByRole("textbox");
-  const toolbar = screen.getByRole("group", { name: "Message tools" });
   const box = input.parentElement!;
-  // Regression: the draft used to share a row with the tools and wrapped every few words. Only the
-  // single action shares the box, after the draft.
-  expect(toolbar).not.toContainElement(input);
-  expect(within(box).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Send"]);
+  // One box: the + leads, the draft grows in the middle, Send closes it. No second menu anywhere.
+  expect(within(box).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Message shortcuts", "Send"]);
+  const plus = within(box).getByRole("button", { name: "Message shortcuts" });
+  expect(plus.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(input.compareDocumentPosition(within(box).getByRole("button", { name: "Send" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(box.parentElement!.nextElementSibling).toBe(toolbar);
-  const order = ["Attach image", "Message shortcuts", "Choose model"].map((name) => within(toolbar).getByRole("button", { name }));
-  expect(order[0]!.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(order[1]!.compareDocumentPosition(order[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(within(toolbar).queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Message shortcuts" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Attach image" })).not.toBeInTheDocument();
+  const toolbar = screen.getByRole("group", { name: "Message tools" });
+  expect(toolbar).not.toContainElement(input);
+  expect(within(toolbar).getAllByRole("button").map((button) => button.textContent)).toEqual(["Choose model", "Processes: 1 done"]);
 });
 
-it("opens the message shortcuts from the chevron and runs a row like the header menu does", async () => {
-  const { user } = setup();
+it("opens one menu from the +, grouped Attach, Replies, Terminal and Session, and runs a row like the header menu does", async () => {
+  const { user } = setup({ usageControls: <button>Session metrics</button> });
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep writing here");
   await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
   const menu = screen.getByRole("dialog", { name: "Message shortcuts" });
-  expect(within(menu).getByRole("button", { name: "Keys" })).toBeVisible();
+  const groups = [...menu.querySelectorAll("section")].map((section) =>
+    `${section.getAttribute("aria-label")}: ${within(section).getAllByRole("button").map((button) => button.textContent).join(", ")}`);
+  expect(groups).toEqual(["Attach: Photo", "Replies: Quick replies, Commands", "Terminal: Keys, Type into terminal", "Session: Context and usage"]);
+  // "Type into terminal" stays a row with its name, never a gesture; Display stays in the header.
   expect(within(menu).getByRole("button", { name: "Type into terminal" })).toBeVisible();
   expect(within(menu).queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
   await user.click(within(menu).getByRole("button", { name: "Quick replies" }));
@@ -195,13 +196,27 @@ it("opens the message shortcuts from the chevron and runs a row like the header 
   expect(sendMessage).not.toHaveBeenCalled();
 });
 
+it("opens the image picker from the menu's Photo row", async () => {
+  const { user } = setup();
+  const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const click = vi.spyOn(picker, "click").mockImplementation(() => {});
+  await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Message shortcuts" })).getByRole("button", { name: "Photo" }));
+  expect(click).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
+});
+
 it("gives every small composer control a 44px touch target", () => {
   setup({ modelControl: <button>Choose model</button> });
-  const toolbar = screen.getByRole("group", { name: "Message tools" });
-  for (const name of ["Attach image", "Message shortcuts"]) expect(within(toolbar).getByRole("button", { name })).toHaveClass("hit-area");
+  expect(screen.getByRole("button", { name: "Message shortcuts" })).toHaveClass("hit-area");
   expect(screen.getByRole("button", { name: "Send" })).toHaveClass("hit-area");
   const css = readFileSync(resolve(import.meta.dirname, "../workbench.css"), "utf8");
   expect(declarations(css, ".hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ width: "max(100%, 44px)", height: "max(100%, 44px)" });
+});
+
+it("gives the thread the meta row's height while the phone keyboard is up", () => {
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
 });
 
 it("paints the armed Send in the accent its box wears, so armed reads as one signal", async () => {
