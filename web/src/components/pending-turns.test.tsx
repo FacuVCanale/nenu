@@ -52,6 +52,14 @@ describe("PendingTurns", () => {
     expect(screen.queryByRole("dialog", { name: "Queued message" })).toBeNull();
   });
 
+  it("tells two queued messages' ⋯ apart by the message each one manages", () => {
+    const second: LocalSend = { ...queued, id: "s4", queueId: "q2", text: "and then deploy" };
+    render(<PendingTurns sends={[queued, second]} actions={actions()} />);
+    const menus = screen.getAllByRole("button", { name: "Queued message actions" });
+    expect(menus[0]).toHaveAccessibleDescription("after this turn");
+    expect(menus[1]).toHaveAccessibleDescription("and then deploy");
+  });
+
   it("keeps a failed send's remedy on the line, where the failure is", async () => {
     const user = userEvent.setup();
     const handlers = actions();

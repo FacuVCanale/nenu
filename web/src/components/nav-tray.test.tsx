@@ -268,6 +268,19 @@ describe("NavTray", () => {
     expect(isLocked()).toBe(false);
   });
 
+  it("says which of its two armed states a modifier is in, not only that it is pressed", async () => {
+    const user = userEvent.setup();
+    render(<NavTray onSend={vi.fn()} />);
+    const shift = () => screen.getByRole("button", { name: "⇧ Shift" });
+    expect(shift()).toHaveAccessibleDescription("");
+    await user.click(shift());
+    expect(shift()).toHaveAccessibleDescription("Next key only");
+    await user.click(shift());
+    expect(shift()).toHaveAccessibleDescription("Locked");
+    await user.click(shift());
+    expect(shift()).toHaveAccessibleDescription("");
+  });
+
   it("modifiers are checkboxes: arming Shift then Ctrl leaves BOTH armed and combines into one chord", async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();
