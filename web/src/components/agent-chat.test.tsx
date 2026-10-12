@@ -1200,6 +1200,26 @@ it("shows a work step's file relative to the pane's folder", async () => {
   expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
 });
 
+// A subagent works in its parent's folder, so its work log names the same file the same way.
+it("shows a subagent's work step file relative to the pane's folder too", async () => {
+  const reviewer = { id: "a1", parentId: "", name: "reviewer", task: "Review the diff", status: "running" };
+  server.use(
+    http.get(/\/api\/pane\/[^/]+\/subagents$/, () => HttpResponse.json({ available: true, sessionKey: "parent-key", agents: [reviewer], truncated: false })),
+    http.get(/\/api\/pane\/[^/]+\/subagent-history$/, () => HttpResponse.json({ sessionKey: "parent-key", agent: reviewer, truncated: false, entries: [
+      { uuid: "c1", ts: "2026-07-25T06:22:21.253Z", role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "ok" } }] },
+    ] })),
+  );
+  const user = userEvent.setup();
+  const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
+  renderChat({ agent, agents: [agent] });
+  await user.click(await screen.findByRole("button", { name: /^Processes/ }));
+  await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
+  await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
+  const work = await screen.findByRole("button", { name: /^(Worked|Work log|Working)/ });
+  if (work.getAttribute("aria-expanded") === "false") await user.click(work);
+  expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+});
+
 // Find names what it searches, in the menu and in the bar (T31).
 describe("AgentChat — find says what it searches", () => {
   it("finds in the chat while the conversation shows", async () => {
