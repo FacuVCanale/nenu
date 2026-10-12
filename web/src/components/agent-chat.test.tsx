@@ -1125,6 +1125,42 @@ it("names a project's pane in the pane strip as its rows do", () => {
   expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
 });
 
+// A project thread's back climbs one level, as its node page's does (NAV-03): to the coordinator it
+// runs under, else to its project. Only the project's own coordinator leads Home, since the project
+// opens on it.
+describe("AgentChat — a project thread's back", () => {
+  const coordinatorPane = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
+  const thread = (id: string, title: string, parentId: string, role: "worker" | "coordinator", paneId?: string) =>
+    ({ id, title, parentId, role, status: "open" as const, ...(paneId ? { paneId } : {}) });
+  const shop = (threads: ReturnType<typeof thread>[], coordinator?: string) => [{
+    slug: "shop", name: "Shop", status: "active" as const, threads,
+    ...(coordinator ? { coordinator: { paneId: coordinator, agent: "claude", liveStatus: "idle" as const } } : {}),
+  }];
+  const worker = { slug: "shop", name: "Shop", role: "worker" as const };
+
+  it("leads a worker back to its coordinator's chat while that runs", () => {
+    renderChat({ session: "work", agents: [fixtureAgents[0]!, coordinatorPane], project: worker,
+      projects: shop([thread("t-1", "Checkout", "root", "coordinator", "w1:p2"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) }, { open: false, onOpen: vi.fn() });
+    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
+    expect(screen.queryByRole("button", { name: "Back to Home" })).toBeNull();
+  });
+
+  it("leads a worker back to its coordinator's page when the coordinator has no chat", () => {
+    renderChat({ project: worker, projects: shop([thread("t-1", "Checkout", "root", "coordinator"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) });
+    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/project/shop/node/t-1");
+  });
+
+  it("leads a thread of the project itself back to the project", () => {
+    renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
+  });
+
+  it("leads the project's own coordinator Home", () => {
+    renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([], "w1:p1") });
+    expect(screen.getByRole("button", { name: "Back to Home" })).toBeInTheDocument();
+  });
+});
+
 // A project lays its Threads and PRs over the chat (ProjectFrame) and brings its own tabs into the
 // overlay, so only the header stays above it: the strips belong to the chat underneath.
 describe("AgentChat — a project's overlay", () => {
