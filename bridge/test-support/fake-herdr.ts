@@ -71,6 +71,10 @@ export class FakeHerdr {
   private readonly panes = new Map<string, FakePane>();
   private readonly workspaceLabels = new Map<string, string>();
   private readonly tabLabels = new Map<string, string>();
+  /** Tabs in Herdr's array order, which `tab.move` changes, and in the order they were made, which
+   *  numbers them: Herdr keeps a tab's `number` through a move (HERDR_API.md "Move methods"). */
+  private readonly tabOrder: string[] = [];
+  private readonly tabsMade: string[] = [];
   private readonly subscribers = new Set<{ socket: Socket<unknown>; types: Set<string>; panes: Set<string> }>();
   private readonly counters = new Map<string, number>();
   private readonly pending = new Map<Socket<unknown>, string>();
@@ -108,10 +112,12 @@ export class FakeHerdr {
 
   addTab(tabId: string, label: string): this {
     this.tabLabels.set(tabId, label);
+    this.noteTab(tabId);
     return this;
   }
 
   addPane(init: FakePaneInit): this {
+    this.noteTab(init.tabId);
     this.panes.set(init.paneId, {
       status: "idle", cwd: "/tmp", lines: [], ...init,
       draft: "", dialog: null, revision: 1, workingSince: Date.now(),
@@ -193,6 +199,24 @@ export class FakeHerdr {
     if (panes.length === 0) throw new FakeError("tab_not_found", `tab ${tabId} not found`);
     for (const pane of panes) this.panes.delete(pane.paneId);
     this.broadcast("tab.closed", "tab_closed", { tab_id: tabId, workspace_id: panes[0]!.workspaceId });
+  }
+
+  /**
+   * Reorder a tab within its workspace, as `tab.move` does: `insertIndex` counts the workspace's tabs
+   * before this one is taken out and is clamped at the end, so its own index or the next is a no-op.
+   */
+  moveTab(tabId: string, insertIndex: number): void {
+    const workspaceId = [...this.panes.values()].find((p) => p.tabId === tabId)?.workspaceId;
+    if (!workspaceId) throw new FakeError("tab_not_found", `tab ${tabId} not found`);
+    const inWorkspace = (id: string) => [...this.panes.values()].some((p) => p.tabId === id && p.workspaceId === workspaceId);
+    const slots = this.tabOrder.flatMap((id, i) => (inWorkspace(id) ? [i] : []));
+    const order = slots.map((i) => this.tabOrder[i]!);
+    const from = order.indexOf(tabId);
+    const gap = Math.max(0, Math.min(order.length, Math.trunc(insertIndex)));
+    order.splice(from, 1);
+    order.splice(gap > from ? gap - 1 : gap, 0, tabId);
+    slots.forEach((slot, i) => { this.tabOrder[slot] = order[i]!; });
+    this.broadcast("tab.moved", "tab_moved", { tab_id: tabId, workspace_id: workspaceId, insert_index: insertIndex });
   }
 
   /** Close one pane, as `pane.close` does. Tabs are derived from panes, so an emptied tab goes too. */
@@ -294,6 +318,9 @@ export class FakeHerdr {
       case "tab.close":
         this.closeTab(String(params.tab_id ?? ""));
         return { type: "ok" };
+      case "tab.move":
+        this.moveTab(String(params.tab_id ?? ""), Number(params.insert_index));
+        return { type: "tab_list", tabs: this.lists().tabs };
       default:
         throw new FakeError("invalid_request", `invalid request: unknown variant \`${method}\``);
     }
@@ -429,14 +456,26 @@ export class FakeHerdr {
     };
   }
 
+  private noteTab(tabId: string): void {
+    if (this.tabsMade.includes(tabId)) return;
+    this.tabsMade.push(tabId);
+    this.tabOrder.push(tabId);
+  }
+
   private lists() {
     const panes = [...this.panes.values()];
     const rollup = (group: FakePane[]): AgentStatus =>
       (["blocked", "working", "done", "idle"] as const).find((s) => group.some((p) => p.status === s)) ?? "unknown";
-    const tabs = [...new Set(panes.map((p) => p.tabId))].map((tabId, i) => {
+    const workspaceOf = (tabId: string) => panes.find((p) => p.tabId === tabId)?.workspaceId;
+    const open = this.tabOrder.filter((tabId) => workspaceOf(tabId) !== undefined);
+    const tabs = open.map((tabId) => {
       const group = panes.filter((p) => p.tabId === tabId);
+      const workspaceId = group[0]!.workspaceId;
+      const number = this.tabsMade.filter((id) => workspaceOf(id) === workspaceId).indexOf(tabId) + 1;
+      // An unlabelled tab reads as its position, as Herdr's does.
+      const position = open.filter((id) => workspaceOf(id) === workspaceId).indexOf(tabId) + 1;
       return {
-        tab_id: tabId, workspace_id: group[0]!.workspaceId, number: i + 1, label: this.tabLabels.get(tabId) ?? String(i + 1),
+        tab_id: tabId, workspace_id: workspaceId, number, label: this.tabLabels.get(tabId) ?? String(position),
         focused: false, pane_count: group.length, agent_status: rollup(group),
       };
     });
