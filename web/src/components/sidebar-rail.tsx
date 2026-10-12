@@ -111,7 +111,9 @@ function useRailTip() {
     onPointerOver(event: PointerEvent) {
       if (event.pointerType === "touch") return;
       const item = itemOf(event.target);
-      if (item && item === (shown.current ?? pending.current)) return;
+      // Back on the item already named, from the gap: keep its label, cancelling the hide the gap armed.
+      if (item && item === shown.current) return void clearTimeout(timer.current);
+      if (item && item === pending.current) return;
       clearTimeout(timer.current);
       pending.current = item;
       // Crossing the gap between two items keeps the label up, so it moves instead of fading again.
