@@ -2,7 +2,6 @@
 // pane belongs to, and how chats are grouped by recency. Kept free of React so the sidebar, the
 // home list and the project panel share one definition and the rules stay unit-testable.
 import type { AgentView, ProjectThreadView, ProjectView } from "./types";
-import { paneDisplayName } from "./types";
 
 export const isOpenThread = (thread: ProjectThreadView) => thread.status !== "resolved";
 
@@ -74,12 +73,3 @@ export function groupChats(panes: readonly AgentView[], now: number): ChatGroup[
     .filter((group) => group.chats.length > 0);
 }
 
-/**
- * A project pane goes by its task (or "Coordinator"); any other pane by its own name.
- * @deprecated Use displayName (lib/display-name.ts): one name per agent in every view. This goes
- * once the sidebar and Home have moved to it.
- */
-export function paneTitle(pane: AgentView, owner: PaneProject | undefined): string {
-  if (!owner) return paneDisplayName(pane);
-  return owner.thread?.title ?? "Coordinator";
-}

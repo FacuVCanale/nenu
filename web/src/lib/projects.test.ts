@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, looseChats, paneTitle, projectForPane, projectSummary, recencyOf } from "./projects";
+import { groupChats, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -65,13 +65,5 @@ describe("pane ownership", () => {
     expect(projectForPane([project], "b")?.thread?.id).toBe("T2");
     expect(projectForPane([project], "nope")).toBeUndefined();
     expect(looseChats([pane("c"), pane("b"), pane("x")], [project]).map((chat) => chat.paneId)).toEqual(["x"]);
-  });
-});
-
-describe("pane titles", () => {
-  it("names a project pane after its task, or the coordinator", () => {
-    expect(paneTitle(pane("b", { paneLabel: "raw" }), projectForPane([project], "b"))).toBe("Review");
-    expect(paneTitle(pane("c"), projectForPane([project], "c"))).toBe("Coordinator");
-    expect(paneTitle(pane("x", { paneLabel: "Loose" }), undefined)).toBe("Loose");
   });
 });
