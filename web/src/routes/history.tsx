@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLoaderData, useParams, useRouteLoaderData } from "react-router";
-import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search } from "lucide-react";
+import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search, X } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -242,6 +242,15 @@ export function HistoryRoute() {
               <Search aria-hidden="true" size={17} />
             </button>
           )
+        }
+        // The header's back hides on a desk, where the sidebar is the way around; History is a reading
+        // view you chose to open, so the desk gets its own way out, and each width has exactly one.
+        rightTrail={
+          <div className="flex max-lg:hidden">
+            <Link to={back.to} aria-label="Close history" className="workbench-icon-button">
+              <X aria-hidden="true" size={17} />
+            </Link>
+          </div>
         }
       />
 
