@@ -153,7 +153,8 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   ) : undefined;
 
   const chipCoordinator = scope.coordinatorPane ? { paneId: scope.coordinatorPane, label: "coordinator" } : undefined;
-  const chips = !scope.coordinating && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
+  // The panel lists the siblings (and their coordinator) already; chips take its place when it is put away.
+  const chips = !scope.coordinating && !panelShown && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
     <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
@@ -178,7 +179,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
         headerAction,
         overlay,
         conversationFooter: cards,
-        // Project chips or tabs replace the workspace tabs; on a wide coordinator the panel stands in for them.
+        // Project chips or tabs replace the workspace tabs; on a wide screen the panel stands in for them.
         strip: phoneTabs ?? chips ?? (wide ? null : undefined),
         composerTop: thread?.pr && !scope.coordinating
           ? <PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={refresh} />
