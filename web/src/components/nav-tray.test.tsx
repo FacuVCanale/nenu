@@ -272,13 +272,14 @@ describe("NavTray", () => {
     const user = userEvent.setup();
     render(<NavTray onSend={vi.fn()} />);
     const shift = () => screen.getByRole("button", { name: "⇧ Shift" });
-    expect(shift()).toHaveAccessibleDescription("");
+    // Off, it is described by its own title, like every key.
+    expect(shift()).not.toHaveAccessibleDescription(/Next key only|Locked/);
     await user.click(shift());
     expect(shift()).toHaveAccessibleDescription("Next key only");
     await user.click(shift());
     expect(shift()).toHaveAccessibleDescription("Locked");
     await user.click(shift());
-    expect(shift()).toHaveAccessibleDescription("");
+    expect(shift()).not.toHaveAccessibleDescription(/Next key only|Locked/);
   });
 
   it("modifiers are checkboxes: arming Shift then Ctrl leaves BOTH armed and combines into one chord", async () => {

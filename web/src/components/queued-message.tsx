@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, Check, Clock, Loader2, MoreHorizontal, type LucideIcon } from "lucide-react";
 
 import { ActionGroups } from "@/components/conversation-actions";
@@ -68,12 +68,15 @@ export function QueuedMessage({
   // it stays closed if the ⋯ comes back.
   if (open && !menu.length) setOpen(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  // The ⋯ is described by the message it manages, so two of them read apart.
+  const bubbleId = useId();
   const queued = tone === "waiting";
   // The badge already says it is queued; the status copy's own "Queued." would repeat it.
   const detail = queued ? label.replace(/^Queued\.\s*/, "") : label;
   return (
     <div className="flex flex-col items-end">
       <div
+        id={bubbleId}
         className={cn(
           "max-w-[85%] min-w-0 space-y-1.5 rounded-xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]",
           // Not in the conversation yet: a quieter ink, never a translucent one.
@@ -128,6 +131,7 @@ export function QueuedMessage({
             ref={trigger}
             type="button"
             aria-label={menuLabel}
+            aria-describedby={bubbleId}
             aria-haspopup="dialog"
             aria-expanded={open}
             onClick={() => setOpen(!open)}

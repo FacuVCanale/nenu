@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Command, Delete, Lock, Option } from "lucide-react";
 
@@ -93,6 +93,7 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
     useKeyQueue();
   const { pending, confirm, reset } = usePendingConfirm(); // danger ctrl two-tap (immediate path only)
   const echo = useActionEcho();
+  const modStateId = useId();
   // Hold-to-repeat, WHITELISTED to the arrows (see navBtn's `repeat` flag). Deliberately a whitelist
   // rather than a blacklist: Enter/Esc/Space/digits/Ctrl-presets structurally must not repeat, and
   // the danger presets' two-tap guard lives on a different code path (pressCtrl) that a future
@@ -195,6 +196,8 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
   // 15px label needs; ink clears it in both themes. Tapping cycles off → once → locked → off.
   const modBtn = ({ m, glyph, label, aria }: ModifierKey) => {
     const mode = mods[m];
+    // aria-pressed says armed; the description says which of the two armed states it is.
+    const stateId = `${modStateId}-${m}`;
     return (
       <Button
         key={m}
@@ -206,6 +209,7 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
         aria-label={aria}
         title={aria}
         aria-pressed={mode !== "off"}
+        aria-describedby={mode === "off" ? undefined : stateId}
         data-state={mode}
         className={cn(
           DOCK_TILE,
@@ -216,6 +220,7 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
       >
         {mode === "locked" ? <Lock aria-hidden="true" className="size-3.5 shrink-0" /> : glyph}
         {label}
+        {mode !== "off" && <span id={stateId} className="sr-only">{mode === "locked" ? "Locked" : "Next key only"}</span>}
       </Button>
     );
   };
