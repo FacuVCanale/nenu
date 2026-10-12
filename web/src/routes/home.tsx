@@ -165,7 +165,8 @@ class Unavailable extends Error {}
  * Type here and pick where it goes. A project sends to its live coordinator through the shared
  * queue; while the coordinator is mid-turn an action sheet asks, at every send, whether it reads the
  * message now or after this turn, when its CLI has both measured (ADR 0056; the bridge maps each to
- * the CLI's own key). A send that
+ * the CLI's own key). It asks only once the queue is known to take the message: a coordinator that
+ * can't goes straight to the card that opens it. A send that
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
@@ -195,7 +196,8 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
   const placeholder = lock ? `${LOCKED_VERB[lock]} to ${action}`
     : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
-  async function send(mode: DeliveryMode) {
+  /** Send in `mode`, or with "ask" only check that the queue takes it and then ask when it is read. */
+  async function send(mode: DeliveryMode | "ask") {
     if (target.kind !== "project") return;
     const text = message.trim();
     const paneId = target.coordinator.paneId;
@@ -208,6 +210,7 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
     try {
       const page = await fetchMessageQueue(paneId, data.session);
       if (!page.available) throw new Unavailable();
+      if (mode === "ask") return setAsking(true);
       const previous = unsure.current;
       attempt = previous?.paneId === paneId && previous.text === text ? previous : { paneId, text, id: crypto.randomUUID() };
       unsure.current = attempt;
@@ -240,7 +243,7 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
     else if (!text) return;
     // A turn running asks when to read it, if the CLI's two behaviours were measured (ADR 0056);
     // otherwise the row waits for the turn to end, as the queue always did.
-    else if (turnRunning(target.coordinator, "")) return busyChoice ? setAsking(true) : void send("afterTurn");
+    else if (turnRunning(target.coordinator, "")) return void send(busyChoice ? "ask" : "afterTurn");
     else return void send("asap");
     setMessage("");
   }
