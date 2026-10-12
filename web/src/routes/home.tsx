@@ -13,6 +13,7 @@ import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runnin
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
+import { turnRunning } from "@/lib/turn";
 import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
@@ -161,7 +162,7 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
     if (target.kind === "new") openNewAgent(text ? { kind: "workspace", message: text } : { kind: "workspace" });
     else if (target.kind === "workspace") openNewAgent({ kind: "tab", workspaceId: target.workspaceId, ...(text ? { message: text } : {}) });
     else if (!text) return;
-    else if (target.coordinator.status === "working") return setAsking(true);
+    else if (turnRunning(target.coordinator, "")) return setAsking(true);
     else return void send("asap");
     setMessage("");
   }

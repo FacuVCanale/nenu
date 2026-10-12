@@ -229,7 +229,8 @@ the unit name; the Herdr action runs from anywhere.
 - **The CLI's own state decides whether a turn runs; the screen is the fallback** — Claude's
   `sessions/<pid>.json` (plus its transcript while busy) and Codex's rollout, kept per pane by
   `bridge/agent-state.ts`, watched not polled, attached to the snapshot as `turn`. Stop's button and
-  Stop's press read that same entry. Don't add a screen regex for something these files say; the
+  Stop's press read that same entry, and so does every send decision (`turnRunning`): background work
+  alone is no turn, so Send goes directly. Don't add a screen regex for something these files say; the
   screen keeps only what no file records (dialog keys, the input box, Codex's own queue). Hooks only
   speed up a re-read ([ADR 0067](./.adr/0067-the-clis-own-state-decides-the-screen-is-the-fallback.md)).
 - **A generically-detected menu emits only the keys the screen printed** — the footer's
