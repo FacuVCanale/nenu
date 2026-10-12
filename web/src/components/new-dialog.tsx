@@ -92,6 +92,8 @@ export function projectCommand(name: string, goal: string, repo: string): string
 
 type KindRow = { id: NewKind; label: string; hint: string; icon: LucideIcon };
 
+const canStart = (project: ProjectView) => startableRoles(project).length > 0;
+
 /**
  * The one place to start an agent or organize work, whichever button opened it: a bottom sheet on a
  * phone whose header names the step and steps back, a two-pane dialog of one fixed size on a desk.
@@ -101,9 +103,12 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   const params = useParams();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const workspaces = data?.workspaces ?? [];
+  const projects = data?.projects ?? [];
   const [context] = useState(() => newContext(data, params));
   const [workspaceId, setWorkspaceId] = useState(preset.workspaceId ?? context.workspaceId);
-  const [project, setProject] = useState(preset.project ?? context.project);
+  // A thread goes to the project on screen unless that one cannot start it.
+  const [project, setProject] = useState(() => preset.project ?? projects.find((p) => p.slug === context.project && canStart(p))?.slug);
   const [role, setRole] = useState<NodeRole>(preset.role ?? "worker");
   const [kind, setKind] = useState<NewKind | null>(() => {
     if (preset.kind) return preset.kind;
@@ -116,13 +121,13 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   useHoldReload("new-dialog", true);
 
   const readOnly = isReadOnly(data?.device);
-  const workspaces = data?.workspaces ?? [];
-  const projects = data?.projects ?? [];
   const workspace = workspaces.find((w) => w.workspaceId === workspaceId);
-  const current = projects.find((p) => p.slug === project) ?? projects[0];
+  const current = projects.find((p) => p.slug === project) ?? projects.find(canStart);
+  // The role the form starts, which a project without coordinators turns into a thread.
+  const nodeRole = current && startableRoles(current).includes(role) ? role : "worker";
   // A tab opens in a workspace and a thread in a project; without one, that kind is not offered.
   const shown = kind === "tab" && !workspace ? null : kind === "thread" && !current ? null : kind;
-  const title = browsing ? "Choose a folder" : shown ? titleOf(shown, role) : "New";
+  const title = browsing ? "Choose a folder" : shown ? titleOf(shown, nodeRole) : "New";
   const back = browsing ? () => setBrowsing(false) : shown ? () => choose(null) : null;
   const step = browsing ? "folder" : shown ?? "list";
 
@@ -140,7 +145,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   function pickWorkspace(id: string) {
     setWorkspaceId(id);
     const bound = projects.find((p) => p.workspaceIds?.includes(id));
-    if (bound) setProject(bound.slug);
+    if (bound && canStart(bound)) setProject(bound.slug);
   }
   function threadStarted(slug: string) {
     // The page that asked refreshes itself; a thread started in another project opens that one.
@@ -159,7 +164,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   ];
   const organize: KindRow[] = [
     { id: "project", label: "Project", hint: "Agents working toward one goal", icon: Folder },
-    ...(current ? [{ id: "thread" as const, label: "Thread", hint: `One task in ${current.name}`, icon: MessageCircle }] : []),
+    ...(current && projects.some(canStart) ? [{ id: "thread" as const, label: "Thread", hint: `One task in ${current.name}`, icon: MessageCircle }] : []),
   ];
   const agentPane = { data, readOnly, message: preset.message, browsing, onBrowsing: setBrowsing, onDone: onClose };
 
@@ -205,7 +210,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
 
         <section ref={body} aria-label={title} className={cn("flex min-w-0 flex-1 flex-col px-4 pt-3 lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:px-5 lg:pt-1 lg:pb-4", !shown && "max-lg:hidden")}>
           {shown === "thread" && current && (
-            <ThreadPane projects={projects} current={current} onProject={setProject} role={role} onRole={setRole} readOnly={readOnly}
+            <ThreadPane projects={projects} current={current} onProject={setProject} role={nodeRole} onRole={setRole} readOnly={readOnly}
               session={data?.session} onStarted={() => threadStarted(current.slug)} />
           )}
           {shown === "tab" && workspace && (
@@ -272,7 +277,7 @@ function ThreadPane({ projects, current, onProject, role, onRole, readOnly, sess
       </Field>
       {roles.length === 0 && <p className="text-subhead text-muted-foreground">{current.name} is paused, so it starts no threads.</p>}
       {roles.length > 0 && <NodeStartForm key={current.slug} project={current} session={session} readOnly={readOnly}
-        role={roles.includes(role) ? role : "worker"} onRole={onRole} onStarted={onStarted} />}
+        role={role} onRole={onRole} onStarted={onStarted} />}
     </div>
   );
 }
