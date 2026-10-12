@@ -1,4 +1,4 @@
-import { QuestionReplyContext } from "./transcript-question";
+import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -120,14 +120,16 @@ describe("TranscriptView", () => {
     expect(screen.getByText(/output truncated/)).toBeInTheDocument();
   });
 
-  it("marks a compaction summary as its own thing, not as something a human said", () => {
+  it("marks a compaction summary as one folded line, not as something a human said", async () => {
     render(
       <TranscriptView
         entries={[turn({ role: "summary", parts: [{ kind: "text", text: "…prior context…" }] })]}
       />,
     );
-    expect(screen.getByText(/Context compacted/)).toBeInTheDocument();
     expect(screen.queryByText("You")).not.toBeInTheDocument();
+    expect(screen.queryByText("…prior context…")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Context compacted", expanded: false }));
+    expect(screen.getByText("…prior context…")).toBeInTheDocument();
   });
 
   // Markdown introduced ONE new way for log content to reach the browser: an <a href>. A hostile
@@ -283,22 +285,36 @@ describe("TranscriptView — speaker grouping", () => {
   });
 });
 
-// Machine-injected content (a background task finishing, a local command's output) is real and
-// belongs on screen, but it is NOT speech — it must never be attributed to the user or the agent.
+// Machine-injected content (a background task finishing, another session's message, a loaded
+// skill) is real, but it is NOT speech: one quiet line each, never a bubble or a block, its body
+// behind the line.
 describe("TranscriptView — system notes", () => {
-  it("renders a note set apart, attributed to neither party", () => {
-    render(
-      <TranscriptView
-       
-        entries={[
-          turn({ role: "note", parts: [{ kind: "text", text: 'Agent "issue 8 fixes" finished' }] }),
-        ]}
-      />,
+  it("draws a note as one line attributed to neither party, with no box around it", () => {
+    const { container } = render(
+      <TranscriptView entries={[turn({ role: "note", parts: [{ kind: "context", label: 'Agent "issue 8 fixes" finished', text: "" }] })]} />,
     );
-    expect(screen.getByText(/System/)).toBeInTheDocument();
-    expect(screen.getByText(/Agent "issue 8 fixes" finished/)).toBeInTheDocument();
-    expect(screen.queryByText("You")).not.toBeInTheDocument();
-    expect(screen.queryByText("claude")).not.toBeInTheDocument();
+    expect(screen.getByText('Agent "issue 8 fixes" finished')).toBeInTheDocument();
+    // Nothing more to show, so nothing offers to open.
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/System/)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-speaker]')).toBeNull();
+    expect(container.querySelector(".border-dashed")).toBeNull();
+  });
+
+  it("keeps a note's body behind its line until tapped", async () => {
+    render(<TranscriptView entries={[turn({ role: "note", parts: [{ kind: "context", label: "Message from nenustop", text: "PR #63 is green, not merged." }] })]} />);
+    expect(screen.queryByText("PR #63 is green, not merged.")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Message from nenustop", expanded: false }));
+    expect(screen.getByText("PR #63 is green, not merged.")).toBeInTheDocument();
+  });
+
+  // The web is live the moment it is built; the bridge only after a restart, so an older bridge's
+  // notes (plain text) still read as one line: their first line, the rest behind it.
+  it("draws an older bridge's text note as its first line", async () => {
+    render(<TranscriptView entries={[turn({ role: "note", parts: [{ kind: "text", text: "Stop hook feedback: fix these\n- app.tsx: missing test" }] })]} />);
+    expect(screen.queryByText(/missing test/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Stop hook feedback: fix these", expanded: false }));
+    expect(screen.getByText(/missing test/)).toBeInTheDocument();
   });
 
   it("keeps a compaction summary distinct from an ordinary note", () => {
@@ -306,12 +322,30 @@ describe("TranscriptView — system notes", () => {
       <TranscriptView
         entries={[
           turn({ uuid: "s", role: "summary", parts: [{ kind: "text", text: "…prior…" }] }),
-          turn({ uuid: "n", role: "note", parts: [{ kind: "text", text: "task done" }] }),
+          turn({ uuid: "n", role: "note", parts: [{ kind: "context", label: "task done", text: "" }] }),
         ]}
       />,
     );
-    expect(screen.getByText(/Context compacted/)).toBeInTheDocument();
-    expect(screen.getByText(/System/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Context compacted" })).toBeInTheDocument();
+    expect(screen.getByText("task done")).toBeInTheDocument();
+  });
+
+  it("shows the command the operator typed in their bubble, and the skill it loaded as a line beside it", async () => {
+    const { container } = render(<TranscriptView entries={[turn({ role: "user", parts: [
+      { kind: "text", text: "/designboard Rediseño del checkout" },
+      { kind: "context", label: "Skill · designboard", text: "Base directory for this skill: /skills/designboard" },
+    ] })]} />);
+    const bubble = container.querySelector('[data-speaker="user"] > div')!;
+    expect(bubble).toHaveTextContent("/designboard Rediseño del checkout");
+    expect(bubble).not.toHaveTextContent("Skill");
+    expect(screen.queryByText(/Base directory/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Skill · designboard", expanded: false }));
+    expect(screen.getByText(/Base directory for this skill/)).toBeInTheDocument();
+  });
+
+  it("opens a folded line whose body holds the searched words", () => {
+    render(<TranscriptView query="green" entries={[turn({ role: "note", parts: [{ kind: "context", label: "Message from nenustop", text: "PR #63 is green." }] })]} />);
+    expect(screen.getByRole("button", { name: "Message from nenustop", expanded: true })).toBeInTheDocument();
   });
 });
 
@@ -455,11 +489,13 @@ describe("journal media", () => {
 
   // The designboard pane's compaction summary named files relative to other folders; each became an
   // Open card that answered 404. A recap or a system note names files, it does not hand them over.
-  it("shows no cards for the files a compaction summary or a system note names", () => {
+  it("shows no cards for the files a compaction summary or a system note names", async () => {
     render(withViewer(<TranscriptView entries={[
       turn({ uuid: "s", role: "summary", parts: [{ kind: "text", text: "Key files: `assets/canvas.template.html`, the real one `real/scroll.html`, shots in frames/frame1.png." }] }),
       turn({ uuid: "n", role: "note", parts: [{ kind: "text", text: "Base directory for this skill: /skills/designboard\n\nOpen assets/canvas.template.html or report.html" }] }),
     ]} />));
+    await userEvent.click(screen.getByRole("button", { name: "Context compacted" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Base directory for this skill/ }));
     expect(screen.queryByRole("button", { name: /^Open / })).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     // The names stay in the text, and a code-formatted one still opens by name.
@@ -498,4 +534,12 @@ describe("journal media", () => {
 it("treats an AskUserQuestion that already has its answer as closed", () => {
   render(<QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={[turn({ role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }], result: { text: "User answered: Web" } }] })]} /></QuestionReplyContext.Provider>);
   expect(screen.getByRole("button", { name: "Instagram" })).toBeDisabled();
+});
+
+it("leaves a live question to the card under it", () => {
+  const asked = [turn({ role: "assistant", turn: { status: "running" }, parts: [{ kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] }] })];
+  const { rerender } = render(<QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider>);
+  expect(screen.getByRole("region", { name: "Agent question" })).toBeInTheDocument();
+  rerender(<QuestionLiveContext.Provider value><QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>);
+  expect(screen.queryByRole("region", { name: "Agent question" })).not.toBeInTheDocument();
 });

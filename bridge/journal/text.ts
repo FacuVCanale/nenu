@@ -2,6 +2,8 @@
 // bridge, and the escape-stripping that keeps a terminal's colour codes out of a view that renders
 // text nodes rather than interpreting them.
 
+import type { TranscriptPart } from "./types.ts";
+
 /** Per-tool-result cap. Tool output is unbounded (a 2 MB file read); the phone only needs a gist. */
 export const MAX_RESULT_CHARS = 2000;
 
@@ -30,6 +32,18 @@ export function clamp(text: string, max: number): { text: string; truncated?: bo
 export function oneLine(value: string): string {
   const line = value.replace(/\s+/g, " ").trim();
   return line.length > MAX_SUMMARY_CHARS ? `${line.slice(0, MAX_SUMMARY_CHARS)}…` : line;
+}
+
+/**
+ * Injected text as the one line it is drawn as. `label` is the caption; `text` is what expanding it
+ * shows, dropped when it only repeats the caption, so a line with nothing more never offers to open.
+ * Without a label, the text's first line captions it.
+ */
+export function contextPart(label: string | null, text = ""): Extract<TranscriptPart, { kind: "context" }> {
+  const caption = oneLine(label ?? text.trimStart().split("\n", 1)[0] ?? "");
+  // Against the whole text, not its clipped line: a long one-liner keeps its words behind the caption.
+  const body = text.replace(/\s+/g, " ").trim() === caption ? "" : text;
+  return { kind: "context", label: caption, ...clamp(body, MAX_TEXT_CHARS) };
 }
 
 /**
