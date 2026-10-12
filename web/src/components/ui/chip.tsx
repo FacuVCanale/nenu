@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { useLongPress } from "@/hooks/use-long-press";
@@ -31,9 +31,13 @@ interface ChipProps {
   /** A tap on the chip while it is `active` opens its actions instead of a dead re-select, and the
    *  chip shows a chevron saying so: long-press alone was a gesture nobody found. */
   onTapActive?: () => void;
+  /** Makes the chip draggable along a strip that runs useStripReorder (ui/strip-reorder). */
+  reorderKey?: string;
+  /** Held or dragged right now: lifted off the row (strips.css). */
+  lifted?: boolean;
 }
 
-export function Chip({ label, tag, active, focused, status, icon, onClick, onLongPress, onTapActive }: ChipProps) {
+export function Chip({ label, tag, active, focused, status, icon, onClick, onLongPress, onTapActive, reorderKey, lifted }: ChipProps) {
   const longPress = useLongPress(onLongPress);
   const opensActions = active && !!onTapActive;
 
@@ -55,6 +59,8 @@ export function Chip({ label, tag, active, focused, status, icon, onClick, onLon
       aria-current={active ? "true" : undefined}
       aria-haspopup={opensActions ? "dialog" : undefined}
       data-focused={focused || undefined}
+      data-reorder-key={reorderKey}
+      data-lifted={lifted || undefined}
       title={label}
       className="strip-chip"
     >
@@ -76,13 +82,16 @@ interface ChipStripProps {
   lead?: ReactNode;
   /** After the scroller, outside it, so it never scrolls out of reach (the tab strip's +). */
   trail?: ReactNode;
+  /** The scroller, for a strip whose chips can be dragged (ui/strip-reorder). */
+  scrollerRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
 
 // One row of chips that scrolls sideways. The open chip is kept in view, and an edge the row can
 // still scroll toward fades, so a sibling past it is seen to exist.
-export function ChipStrip({ band, activeKey, lead, trail, children }: ChipStripProps) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
+export function ChipStrip({ band, activeKey, lead, trail, scrollerRef: givenScrollerRef, children }: ChipStripProps) {
+  const ownScrollerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = givenScrollerRef ?? ownScrollerRef;
   const chipsRef = useRef<HTMLDivElement>(null);
   const revealed = useRef<ChipSpot | null>(null);
 

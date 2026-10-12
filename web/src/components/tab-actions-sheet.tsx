@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, XCircle } from "lucide-react";
 
 import { BottomSheet } from "@/components/ui/sheet";
 import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
@@ -23,12 +23,16 @@ interface TabActionsSheetProps {
   /** Fired after a successful close, with the closed tab id — the parent moves off it if it was the
    *  selected/viewed tab, and revalidates so it drops out of the strip. */
   onClosed: (tabId: string) => void;
+  /** Move the tab one place along the strip; unset where it can't go (the first has no left). The
+   *  way to reorder without dragging, and the one a screen reader or a switch can reach. */
+  onMoveLeft?: () => void;
+  onMoveRight?: () => void;
 }
 
 type Mode = "actions" | "rename" | "confirm";
 
 // Actions for a single tab — the SAME structure as the pane sheet (the user asked for them to
-// match): opens on an action-list view (Rename / Close tab), with rename tucked behind its own tap
+// match): opens on an action-list view (Rename / Move left / Move right / Close tab), with rename tucked behind its own tap
 // so opening the sheet never shoves a keyboard-triggering input at you, and Close asking first.
 // Shares the action rows, confirmation and rename view (action-sheet-rows) with the pane sheet so
 // the two can't drift. Two differences from a pane, both live-verified: a tab label can't be cleared
@@ -44,6 +48,8 @@ export function TabActionsSheet({
   readOnly = false,
   onRenamed,
   onClosed,
+  onMoveLeft,
+  onMoveRight,
 }: TabActionsSheetProps) {
   const [mode, setMode] = useState<Mode>("actions");
   const [label, setLabel] = useState("");
@@ -128,6 +134,20 @@ export function TabActionsSheet({
             label="Rename"
             onClick={() => setMode("rename")}
           />
+          {onMoveLeft && (
+            <ActionRow
+              icon={<ArrowLeft className="size-4 shrink-0 text-muted-foreground" />}
+              label="Move left"
+              onClick={() => { onClose(); onMoveLeft(); }}
+            />
+          )}
+          {onMoveRight && (
+            <ActionRow
+              icon={<ArrowRight className="size-4 shrink-0 text-muted-foreground" />}
+              label="Move right"
+              onClick={() => { onClose(); onMoveRight(); }}
+            />
+          )}
           <ActionRow
             icon={<XCircle className="size-4 shrink-0" />}
             label="Close tab"
