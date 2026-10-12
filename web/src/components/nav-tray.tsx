@@ -10,6 +10,7 @@ import { useKeyQueue } from "@/hooks/use-key-queue";
 import { useActionEcho } from "@/hooks/use-action-echo";
 import { useHoldRepeat } from "@/hooks/use-hold-repeat";
 import { KeyQueueStrip } from "@/components/key-queue-strip";
+import { DOCK_TILE, DOCK_TILE_PRESSED } from "@/components/dock-tile";
 import { CONTROL_PRESETS, type CtrlDef } from "@/lib/operator-keys";
 
 // The inline navigation tray: the keys you need to drive an interactive agent prompt (selection
@@ -25,7 +26,7 @@ import { CONTROL_PRESETS, type CtrlDef } from "@/lib/operator-keys";
 // tap once for a one-shot (composed into the next staged key, then released), tap again to LOCK it
 // armed across presses and Sends, tap a third time to clear. Any subset combines — `ctrl+shift+p`.
 //
-// An immediate press ECHOES on its own button (useActionEcho): accent fill the instant you tap, a ✓
+// An immediate press ECHOES on its own button (useActionEcho): a pressed fill the instant you tap, a ✓
 // once the bridge accepts it. Before this the path was silent on success and the mirror — up to ~2s
 // behind — was the only acknowledgement, so pressing Enter felt like nothing happened. A STAGED press
 // needs no echo: the chip appearing in the strip is already the receipt. Deliberately no sibling
@@ -49,17 +50,37 @@ interface NavTrayProps {
 
 const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
+interface ModifierKey {
+  m: Modifier;
+  glyph?: ReactNode;
+  label: string;
+  aria: string;
+}
+
+const MODIFIER_KEYS: readonly ModifierKey[] = [
+  { m: "ctrl", label: "Ctrl", aria: "Ctrl" },
+  { m: "alt", glyph: <Option className="size-3.5" />, label: "Opt", aria: "Option (Alt)" },
+  { m: "shift", glyph: "⇧", label: "Shift", aria: "⇧ Shift" },
+  { m: "cmd", glyph: <Command className="size-3.5" />, label: "Cmd", aria: "Command" },
+];
+
 // F1–F12 — Herdr's send_keys grammar accepts them bare (HERDR_API.md), and harnesses bind them to
 // real actions (tmux windows, CLI hotkeys, agent-extension views like pi's CE Workflow: F7 opens
 // its orchestrator). Without buttons for them, a phone-only user has no route to any such keybind.
 const FN_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
 
-// Two views behind a segmented toggle: the keys pad (arrows/Esc, Tab/Space/Enter, modifiers, Ctrl
+// Two views behind a segmented toggle: the arrows pad (arrows/Esc, Tab/Space/Enter, modifiers, Ctrl
 // presets) and a phone-dialer digit grid. Digits were a cramped nine-across sliver row; on their own
 // tab they get large, thumb-sized targets. The tab is component state only (resets to "keys" each
 // open — the dock unmounts the tray when closed), while the armed modifier, the key queue, and the
 // Ctrl-expand persist across the toggle so a composed sequence survives switching to the digit pad.
+// The segments are "Arrows" and "123", not "Keys": the dock that holds them is already titled Keys.
 type Tab = "keys" | "digits";
+
+const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
+  { id: "keys", label: "Arrows" },
+  { id: "digits", label: "123" },
+];
 
 export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disabled: externallyDisabled }: NavTrayProps) {
   const [sendingQueue, setSendingQueue] = useState(false);
@@ -142,14 +163,15 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
       <Button
         key={id}
         type="button"
-        variant={held || phase !== "idle" ? "secondary" : "ghost"}
+        variant="ghost"
         size="sm"
         disabled={disabled}
         {...(bind ?? { onClick: () => fire(keys, id) })}
         aria-label={aria}
+        data-echo={held ? "held" : phase}
         // touch-action/select-none: without them a held button on iOS starts a text selection and
         // Android may treat the hold as a scroll gesture, both of which cancel the pointer stream.
-        className={cn("h-11 touch-manipulation select-none px-0 text-[13px] font-normal shadow-none", !held && phase === "idle" && "bg-muted/35")}
+        className={cn(DOCK_TILE, "h-11 touch-manipulation select-none px-0 text-subhead font-normal", (held || phase !== "idle") && DOCK_TILE_PRESSED)}
       >
         {held ? (
           <span className="mx-auto flex items-center gap-1">
@@ -165,24 +187,33 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
     );
   };
 
-  // A modifier button reads its own three-state mode from `mods`: quiet when off, filled (secondary)
-  // when armed — once OR locked — with a small Lock glyph beside the label to distinguish locked from
-  // one-shot. Tapping cycles off → once → locked → off.
-  const modBtn = (m: Modifier, label: ReactNode, aria: string) => {
+  // A modifier is the same tile as every key, so the row reads as keys rather than labels, and it
+  // shows its own three-state mode from `mods`: a plain tile when off, outlined and tinted in the
+  // accent for one key (once), solid ink with a Lock in place of its glyph while locked, the way iOS
+  // swaps Shift's arrow for caps lock. White on the accent measured 4.35:1 in dark, under the 4.5 a
+  // 15px label needs; ink clears it in both themes. Tapping cycles off → once → locked → off.
+  const modBtn = ({ m, glyph, label, aria }: ModifierKey) => {
     const mode = mods[m];
     return (
       <Button
+        key={m}
         type="button"
-        variant={mode === "off" ? "ghost" : "secondary"}
+        variant="ghost"
         size="sm"
         disabled={disabled}
         onClick={() => arm(m)}
         aria-label={aria}
         title={aria}
         aria-pressed={mode !== "off"}
-        className={cn("h-11 px-0 text-[13px] font-normal shadow-none", mode !== "off" && "text-primary")}
+        data-state={mode}
+        className={cn(
+          DOCK_TILE,
+          "h-11 px-0 text-subhead font-normal",
+          mode === "once" && "border-primary bg-primary/15 hover:bg-primary/20",
+          mode === "locked" && "border-foreground bg-foreground text-background hover:bg-foreground/90 hover:text-background",
+        )}
       >
-        {mode === "locked" && <Lock className="size-3" />}
+        {mode === "locked" ? <Lock aria-hidden="true" className="size-3.5 shrink-0" /> : glyph}
         {label}
       </Button>
     );
@@ -202,29 +233,23 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
         disabled={disabled}
       />
 
-      {/* Segmented toggle: the keys pad vs. the phone-dialer digit grid. Same pressed language as the
-          composer's view toggles (secondary = active, ghost = inactive). */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant={tab === "keys" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => setTab("keys")}
-          aria-pressed={tab === "keys"}
-          className="h-11 text-xs font-medium shadow-none"
-        >
-          Keys
-        </Button>
-        <Button
-          type="button"
-          variant={tab === "digits" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => setTab("digits")}
-          aria-pressed={tab === "digits"}
-          className="h-11 text-xs font-medium shadow-none"
-        >
-          123
-        </Button>
+      {/* Segmented toggle: the arrows pad vs. the phone-dialer digit grid. The selected segment takes
+          the neutral selected fill navigation uses; the accent stays for on-states like an armed key. */}
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+        {TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            aria-pressed={tab === id}
+            className={cn(
+              "hit-area h-9 rounded-md text-subhead font-medium text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none",
+              tab === id ? "bg-[var(--workbench-row-selected)] text-foreground" : "hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {tab === "keys" ? (
@@ -253,12 +278,9 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
             {navBtn("⇧ Tab", ["shift+Tab"], "Shift+Tab")}
           </div>
           <div className="grid grid-cols-4 gap-2">
-            {modBtn("ctrl", "Ctrl", "Ctrl")}
-            {modBtn("alt", <><Option className="size-3.5" />Opt</>, "Option (Alt)")}
-            {modBtn("shift", "⇧ Shift", "⇧ Shift")}
-            {modBtn("cmd", <><Command className="size-3.5" />Cmd</>, "Command")}
+            {MODIFIER_KEYS.map(modBtn)}
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">Tap a modifier to combine keys; tap again to lock. Command is sent to the terminal app.</p>
+          <p className="text-footnote text-subtle-foreground">Tap a modifier to combine keys; tap again to lock. Command is sent to the terminal app.</p>
 
           <div className="grid grid-cols-2 gap-x-2">
             {/* Presets (collapsed by default; expanding keeps everything inline, never covering the
@@ -271,7 +293,7 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
                 type="button"
                 onClick={() => setCtrlOpen((o) => !o)}
                 aria-expanded={ctrlOpen}
-                className="flex min-h-11 items-center gap-1 px-1 text-xs text-muted-foreground"
+                className="flex min-h-11 items-center gap-1 px-1 text-footnote text-muted-foreground"
               >
                 Presets
                 <ChevronDown className={cn("size-3 transition-transform", ctrlOpen && "rotate-180")} />
@@ -282,18 +304,19 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
                     const isPending = pending === item.label;
                     const phase = echo.phaseOf(item.label);
                     // The armed two-tap confirm outranks the echo — it's the thing you must read.
-                    const variant = isPending ? "destructive" : phase === "idle" ? "ghost" : "secondary";
                     return (
                       <Button
                         key={item.label}
                         type="button"
-                        variant={variant}
+                        variant={isPending ? "destructive" : "ghost"}
                         size="sm"
                         disabled={disabled}
                         onClick={() => pressCtrl(item)}
+                        data-echo={phase}
                         className={cn(
-                          "h-11 text-[13px] font-normal shadow-none",
-                          !isPending && phase === "idle" && "bg-muted/35",
+                          "h-11 text-subhead font-normal",
+                          !isPending && DOCK_TILE,
+                          !isPending && phase !== "idle" && DOCK_TILE_PRESSED,
                           item.danger && !isPending && phase === "idle" && "text-destructive",
                         )}
                       >
@@ -319,7 +342,7 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
                 type="button"
                 onClick={() => setFkeysOpen((o) => !o)}
                 aria-expanded={fkeysOpen}
-                className="flex min-h-11 items-center gap-1 px-1 text-xs text-muted-foreground"
+                className="flex min-h-11 items-center gap-1 px-1 text-footnote text-muted-foreground"
               >
                 F keys
                 <ChevronDown className={cn("size-3 transition-transform", fkeysOpen && "rotate-180")} />
@@ -332,7 +355,7 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
         </>
       ) : (
         /* Pick a numbered option — a phone-dialer 3×3 grid of large, thumb-sized digit keys. Same
-           fire() path as everything else, so an armed modifier / a queue built on the Keys tab still
+           fire() path as everything else, so an armed modifier / a queue built on the Arrows tab still
            applies here. */
         <div className="grid grid-cols-3 gap-2">
           {DIGITS.map((d) => {
@@ -341,11 +364,12 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
               <Button
                 key={d}
                 type="button"
-                variant={phase === "idle" ? "ghost" : "secondary"}
+                variant="ghost"
                 size="sm"
                 disabled={disabled}
                 onClick={() => fire([d], d)}
-                className="h-11 bg-muted/35 text-base font-normal shadow-none"
+                data-echo={phase}
+                className={cn(DOCK_TILE, "h-11 text-headline font-normal", phase !== "idle" && DOCK_TILE_PRESSED)}
               >
                 {phase === "done" ? <Check className="size-5" /> : d}
               </Button>
