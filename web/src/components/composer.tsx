@@ -1379,13 +1379,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
-              <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
+              <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message actions" aria-haspopup="dialog" aria-expanded={menuOpen}
                 onClick={toggleMenu}>
                 <Plus aria-hidden="true" className="size-5" />
               </button>
               {/* Right after the + in the document, so Shift+Tab from the first row is the + again. It
                   is fixed to the viewport, so where it sits here changes nothing on screen. */}
-              <WorkbenchPopover open={menuOpen} onDismiss={(reason) => closeMenu(reason !== "outside")} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+              <WorkbenchPopover open={menuOpen} onDismiss={(reason) => closeMenu(reason !== "outside")} anchorRef={menuAnchorRef} label="Message actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
                 {/* A row that needs the keyboard (Type) focuses the draft itself; the rest leave focus
                     on the + they were opened from. */}
                 <div ref={menuRowsRef}><ActionGroups groups={menuGroups} onRun={(run) => { closeMenu(true); run(); }} /></div>
