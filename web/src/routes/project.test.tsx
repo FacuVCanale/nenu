@@ -26,7 +26,8 @@ vi.mock("@/components/agent-chat", () => ({
 }));
 
 let wide = false;
-vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: () => wide }));
+// The width decides the frame; the pointer stays fine (a desk's hover actions) whatever the width.
+vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: (query: string) => query.includes("min-width") && wide }));
 afterEach(() => { wide = false; });
 
 function pane(paneId: string): AgentView {
@@ -147,6 +148,43 @@ it("keeps a phone thread's way to the project's threads and coordinator when it 
   await user.click(screen.getByRole("button", { name: "Back to chat" }));
   expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker");
   expect(router.state.location.pathname).toBe("/pane/worker");
+});
+
+describe("a coordinator under the project", () => {
+  // Lead runs Build; the project's own coordinator is not running.
+  const org: ProjectView = {
+    slug: "hub", name: "Hub", goal: "Ship it", status: "active",
+    threads: [
+      { id: "L", title: "Lead", parentId: "root", role: "coordinator", status: "open", paneId: "lead", liveStatus: "idle", agent: "claude" },
+      { id: "B", title: "Build", parentId: "L", role: "worker", status: "open", paneId: "worker", liveStatus: "working" },
+    ],
+  };
+
+  it("lists its own row in its threads, never the project coordinator as not running", async () => {
+    const { router, user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));
+    await user.click(await screen.findByRole("tab", { name: /Threads/ }));
+    expect(screen.queryByRole("button", { name: "Start coordinator" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Not running")).not.toBeInTheDocument();
+    const own = screen.getByRole("button", { name: /^Coordinator/ });
+    expect(own).toHaveTextContent("You're here");
+    expect(own.closest("li")).toHaveAttribute("aria-current", "true");
+
+    // A thread it runs lists the same coordinator above its siblings, one tap from its chat.
+    await router.navigate("/pane/worker");
+    await user.click(await screen.findByRole("button", { name: "Threads, 1 open" }));
+    const lead = screen.getByRole("button", { name: /^Coordinator/ });
+    expect(lead).not.toHaveTextContent("You're here");
+    await user.click(lead);
+    expect(router.state.location.pathname).toBe("/pane/lead");
+  });
+
+  it("lists its own row in the panel beside it on a wide screen", async () => {
+    wide = true;
+    setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));
+    const panel = within(await screen.findByRole("complementary", { name: "Project" }));
+    expect(panel.queryByRole("button", { name: "Start coordinator" })).not.toBeInTheDocument();
+    expect(panel.getByRole("button", { name: /^Coordinator/ })).toHaveTextContent("You're here");
+  });
 });
 
 it("shows the organization with a way to start the coordinator when none is running", async () => {
