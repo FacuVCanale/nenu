@@ -10,7 +10,7 @@ import { useKeyQueue } from "@/hooks/use-key-queue";
 import { useActionEcho } from "@/hooks/use-action-echo";
 import { useHoldRepeat } from "@/hooks/use-hold-repeat";
 import { KeyQueueStrip } from "@/components/key-queue-strip";
-import { DOCK_TILE, DOCK_TILE_PRESSED } from "@/components/dock-tile";
+import { DOCK_TILE, DOCK_TILE_PRESSED, SEGMENT_TRACK, segmentClass } from "@/components/dock-tile";
 import { CONTROL_PRESETS, type CtrlDef } from "@/lib/operator-keys";
 
 // The inline navigation tray: the keys you need to drive an interactive agent prompt (selection
@@ -233,20 +233,10 @@ export function NavTray({ onSend, presets = CONTROL_PRESETS, onQueueChange, disa
         disabled={disabled}
       />
 
-      {/* Segmented toggle: the arrows pad vs. the phone-dialer digit grid. The selected segment takes
-          the neutral selected fill navigation uses; the accent stays for on-states like an armed key. */}
-      <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+      {/* Segmented toggle: the arrows pad vs. the phone-dialer digit grid. */}
+      <div className={SEGMENT_TRACK}>
         {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            aria-pressed={tab === id}
-            className={cn(
-              "hit-area h-9 rounded-md text-subhead font-medium text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none",
-              tab === id ? "bg-[var(--workbench-row-selected)] text-foreground" : "hover:text-foreground",
-            )}
-          >
+          <button key={id} type="button" onClick={() => setTab(id)} aria-pressed={tab === id} className={segmentClass(tab === id)}>
             {label}
           </button>
         ))}

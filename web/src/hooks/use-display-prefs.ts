@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 // Terminal mirror display preferences, persisted in localStorage.
 // Safe to call in SSR contexts (localStorage guarded throughout).
@@ -169,4 +169,85 @@ export function useDisplayPrefs(scope = DEFAULT_SCOPE): UseDisplayPrefsReturn {
   }, []);
 
   return { prefs, setWrap, setFontSize, stepFontSize, setRawTerminal, setTapToFocus };
+}
+
+// ── Chat text ─────────────────────────────────────────────────────────────────────────────────────
+//
+// How big the conversation's prose reads. It is the type scale's body step (index.css), so the prose,
+// the bubbles and every row set in text-body follow it, while the mirror keeps its own Text size
+// above. One value for the whole app, not per pane, and applied at import so every route — history
+// included — reads it from first paint, before any Display dock has mounted.
+
+export type ChatTextSize = "small" | "default" | "large";
+
+export const CHAT_TEXT_SIZES: ReadonlyArray<{ id: ChatTextSize; label: string }> = [
+  { id: "small", label: "Small" },
+  { id: "default", label: "Default" },
+  { id: "large", label: "Large" },
+];
+
+const CHAT_TEXT_KEY = "collie:chat-text:v1";
+
+// Steps around the pointer's own body size (15px fine, 16px coarse in index.css): one px down, two
+// up, each with the line height that keeps prose at roughly 1.5.
+const CHAT_TEXT_STEP: Record<Exclude<ChatTextSize, "default">, { delta: number; lineHeight: string }> = {
+  small: { delta: -1, lineHeight: "1.375rem" },
+  large: { delta: 2, lineHeight: "1.625rem" },
+};
+
+function isChatTextSize(value: unknown): value is ChatTextSize {
+  return CHAT_TEXT_SIZES.some((size) => size.id === value);
+}
+
+function loadChatText(): ChatTextSize {
+  try {
+    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(CHAT_TEXT_KEY) : null;
+    return isChatTextSize(stored) ? stored : "default";
+  } catch {
+    return "default";
+  }
+}
+
+const coarsePointer = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
+function applyChatText(size: ChatTextSize): void {
+  if (typeof document === "undefined") return;
+  const style = document.documentElement.style;
+  if (size === "default") {
+    style.removeProperty("--text-body");
+    style.removeProperty("--text-body--line-height");
+    return;
+  }
+  const step = CHAT_TEXT_STEP[size];
+  style.setProperty("--text-body", `${((coarsePointer() ? 16 : 15) + step.delta) / 16}rem`);
+  style.setProperty("--text-body--line-height", step.lineHeight);
+}
+
+let chatText = loadChatText();
+const chatTextListeners = new Set<() => void>();
+applyChatText(chatText);
+// The base step follows the pointer, so a convertible switching input re-derives the override.
+if (typeof matchMedia === "function") matchMedia("(pointer: coarse)").addEventListener?.("change", () => applyChatText(chatText));
+
+function setChatText(size: ChatTextSize): void {
+  chatText = size;
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (size === "default") localStorage.removeItem(CHAT_TEXT_KEY);
+      else localStorage.setItem(CHAT_TEXT_KEY, size);
+    }
+  } catch {
+    // Ignore quota / SSR write errors; the size still applies for this session.
+  }
+  applyChatText(size);
+  for (const listener of chatTextListeners) listener();
+}
+
+function subscribeChatText(listener: () => void): () => void {
+  chatTextListeners.add(listener);
+  return () => chatTextListeners.delete(listener);
+}
+
+export function useChatText(): [ChatTextSize, (size: ChatTextSize) => void] {
+  return [useSyncExternalStore(subscribeChatText, () => chatText, () => "default"), setChatText];
 }
