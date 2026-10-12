@@ -126,6 +126,8 @@ interface AgentChatProps {
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
+  /** The pane's first read is still on its way; `text` is what the page had before it. */
+  pending?: boolean;
   /** The scrollback window `text` was fetched with — tells a grown fetch from a stale in-flight poll. */
   requestedLines?: number;
   /** The pane's `revision` for `text` — the race guard checks a tapped menu against this. */
@@ -183,6 +185,7 @@ export function AgentChat({
   composerTop,
   docked,
   text,
+  pending = false,
   nativeTelemetry,
   requestedLines = 0,
   revision = 0,
@@ -1151,6 +1154,10 @@ export function AgentChat({
                   promptDisabled={readOnly || gone}
                 />
               </>
+            ) : pending ? (
+              <div role="status" aria-label="Reading the terminal" className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />Reading the terminal…
+              </div>
             ) : (
               <div className="py-16 text-center text-sm text-muted-foreground">(no recent output)</div>
             )}

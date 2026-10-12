@@ -52,6 +52,10 @@ function isSuperseded(request: Request | undefined): boolean {
   return request?.signal.aborted === true;
 }
 
+function rethrowIfSuperseded(request: Request | undefined): void {
+  if (isSuperseded(request)) throw request!.signal.reason ?? new DOMException("The run was superseded", "AbortError");
+}
+
 // The root route's id, paired with rootLoader. Children read its data via
 // `useRouteLoaderData(ROOT_ROUTE_ID)`; keeping it a constant means a rename is a single edit, not a
 // silent runtime `undefined` from a stale string literal.
@@ -124,6 +128,9 @@ export interface PaneData {
   authError: boolean;
   /** When this mirror was actually fetched — set only on a datable stale render, as on HomeData. */
   lastSeenAt?: number;
+  /** The read is still on its way: this is what the page already had (empty for a pane never read),
+   *  handed over so the chat opens at once. DetailRoute asks for the read as soon as the chat shows. */
+  pending?: boolean;
 }
 
 // Keep-previous-data cache is now PER-SESSION: switching sessions must not show the other session's
@@ -382,6 +389,43 @@ function holdsNoEchoPrompt(text: string): boolean {
   return detectNoEchoPrompt(splitLines(parseAnsi(tail))) !== null;
 }
 
+/**
+ * How long a navigation waits on the pane's read before it opens the chat on what the page already
+ * has. A read on a quick link lands inside it, so nothing changes there; on a slow one the header and
+ * the conversation show at once instead of the old screen staying up for the whole read (SYS-17).
+ */
+export const PANE_FIRST_PAINT_MS = 150;
+
+// The read a navigation started and stopped waiting for, so the revalidation that follows awaits it
+// instead of reading the pane a second time. Keyed by pane and window; dropped once it settles.
+const inflight = new Map<string, Promise<PaneData>>();
+
+/** One background read of a pane, shared by the navigation that started it and the run after it. */
+function sharedRead(paneId: string, session: string | undefined, lines: number): Promise<PaneData> {
+  const id = `${paneKey(paneId, session)}\u0000${lines}`;
+  const running = inflight.get(id);
+  if (running) return running;
+  // No request signal: the navigation that starts it may stop waiting, and the read must still land.
+  // fetchPane bounds it with its own timeout, and loadPane turns a failure into the stale pane.
+  const read = loadPane(paneId, session, lines, undefined).then((pane) => {
+    rememberPaneData(paneKey(paneId, session), pane);
+    return pane;
+  }).finally(() => {
+    if (inflight.get(id) === read) inflight.delete(id);
+  });
+  inflight.set(id, read);
+  return read;
+}
+
+/** What a navigation hands the chat while the read runs: the last pane data or text, else nothing. */
+function pendingPane(paneId: string, session: string | undefined, lines: number): PaneData {
+  const key = paneKey(paneId, session);
+  const known = lastPaneData.get(key);
+  if (known?.requestedLines === lines) return { ...known, pending: true };
+  const text = lastPaneText.get(key) ?? loadLastPaneText(session, paneId)?.value ?? "";
+  return { paneId, session, text, truncated: false, requestedLines: lines, revision: 0, error: false, authError: hasAuthError(session), pending: true };
+}
+
 export async function paneLoader({
   params,
   request,
@@ -409,6 +453,19 @@ export async function paneLoader({
   // A live event that named only the herd: the mirror stays as it was (lib/revalidation.ts).
   const previous = lastPaneData.get(key);
   if (!isNavigation && previous?.requestedLines === lines && !needsFetch("pane", request)) return previous;
+
+  // Opening a pane: give the read a moment, then open on what the page has and let it land later.
+  // A superseded navigation still rejects, so React Router drops it (see isSuperseded).
+  if (isNavigation) {
+    rethrowIfSuperseded(request);
+    const read = sharedRead(paneId, session, lines);
+    const landed = await Promise.race([read, new Promise<null>((resolve) => setTimeout(() => resolve(null), PANE_FIRST_PAINT_MS))]);
+    rethrowIfSuperseded(request);
+    return landed ?? pendingPane(paneId, session, lines);
+  }
+  // The run after a navigation that stopped waiting: the read it started, not a second one.
+  const running = inflight.get(`${key}\u0000${lines}`);
+  if (running) return running;
 
   const pane = await loadPane(paneId, session, lines, request);
   rememberPaneData(key, pane);

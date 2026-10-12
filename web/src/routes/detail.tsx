@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData } from "react-router";
+import { useLoaderData, useLocation, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { AgentChat } from "@/components/agent-chat";
 import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
@@ -8,6 +8,7 @@ import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { displayName } from "@/lib/display-name";
 import { paneAfterClose, tabName } from "@/lib/spaces";
+import { narrowRevalidation } from "@/lib/revalidation";
 import { setStatus } from "@/lib/status";
 import type { AgentView, TabView } from "@/lib/types";
 
@@ -25,6 +26,15 @@ export function DetailRoute() {
   const session = pane.session;
   const navigate = useNavigate();
   const location = useLocation();
+  const { revalidate } = useRevalidator();
+
+  // The loader opened the chat before the pane's read landed (paneLoader): ask for that read now, so
+  // it shows as soon as it lands rather than at the next poll. Only the pane loader re-runs.
+  useEffect(() => {
+    if (!pane.pending) return;
+    narrowRevalidation("pane");
+    void revalidate();
+  }, [pane, revalidate]);
 
   const fresh = (location.state as { freshPane?: AgentView } | null)?.freshPane;
   const listed =
@@ -80,6 +90,7 @@ export function DetailRoute() {
       tabs={root.tabs}
       projects={root.projects}
       text={pane.text}
+      pending={pane.pending}
       nativeTelemetry={pane.nativeTelemetry}
       requestedLines={pane.requestedLines}
       revision={pane.revision}
