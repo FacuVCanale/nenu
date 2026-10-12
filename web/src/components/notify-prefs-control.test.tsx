@@ -72,4 +72,55 @@ describe("NotifyPrefsControl", () => {
 
     await waitFor(() => expect(needs).toBeChecked());
   });
+
+  test("describes each event as a sentence", async () => {
+    render(<NotifyPrefsControl />);
+    await screen.findByRole("switch", { name: /needs input/i });
+    expect(screen.getByText("When an agent is waiting on you.")).toBeInTheDocument();
+    expect(screen.getByText("When an agent completes its task.")).toBeInTheDocument();
+    expect(screen.getByText("When a new Nenu version is out.")).toBeInTheDocument();
+  });
+
+  test("shows no switch until the bridge says how each event is set", async () => {
+    let answer: (() => void) | undefined;
+    server.use(
+      http.get("/api/notifications/prefs", () => new Promise<Response>((resolve) => {
+        answer = () => resolve(HttpResponse.json(currentPrefs));
+      })),
+    );
+    render(<NotifyPrefsControl />);
+
+    // A disabled switch in the off position reads as "off", which the bridge never said.
+    await waitFor(() => expect(answer).toBeDefined());
+    expect(screen.getByText("Needs input")).toBeInTheDocument();
+    expect(screen.queryAllByRole("switch")).toHaveLength(0);
+
+    answer!();
+    expect(await screen.findByRole("switch", { name: /needs input/i })).toBeChecked();
+  });
+
+  test("says the prefs could not be loaded instead of showing them off", async () => {
+    server.use(http.get("/api/notifications/prefs", () => new HttpResponse(null, { status: 500 })));
+    render(<NotifyPrefsControl thisDevice="on" />);
+    const section = screen.getByRole("region", { name: "Notify when" });
+
+    await waitFor(() => expect(section).toHaveTextContent("Couldn't load these settings."));
+    expect(screen.queryAllByRole("switch")).toHaveLength(0);
+    expect(section).toHaveTextContent("Applies to every device with push on. This device: on.");
+  });
+
+  test("says the choices reach every device with push on, and where this one stands", async () => {
+    const { rerender } = render(<NotifyPrefsControl thisDevice="blocked" />);
+    const section = screen.getByRole("region", { name: "Notify when" });
+    expect(section).toHaveTextContent("Applies to every device with push on. This device: blocked.");
+
+    rerender(<NotifyPrefsControl thisDevice="on" />);
+    expect(section).toHaveTextContent("Applies to every device with push on. This device: on.");
+
+    // Push state still loading: say what is known and nothing about this device.
+    rerender(<NotifyPrefsControl />);
+    expect(section).toHaveTextContent("Applies to every device with push on.");
+    expect(section).not.toHaveTextContent("This device");
+  });
 });
+

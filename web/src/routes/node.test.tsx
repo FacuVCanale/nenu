@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { http, HttpResponse } from "msw";
@@ -23,12 +23,14 @@ const project: ProjectView = {
   ],
 };
 
-function setup(path: string) {
-  const data: HomeData = { bridge: "connected", agents: [pane("lead")], shellPanes: [], workspaces: [], tabs: [], projects: [project], device: undefined,
-    sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
+const data: HomeData = { bridge: "connected", agents: [pane("lead")], shellPanes: [], workspaces: [], tabs: [], projects: [project], device: undefined,
+  sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
+
+function setup(path: string, loader: () => HomeData | Promise<HomeData> = () => data) {
   const router = createMemoryRouter([{
-    id: ROOT_ROUTE_ID, path: "/", loader: () => data, element: <Outlet />,
+    id: ROOT_ROUTE_ID, path: "/", loader, element: <Outlet />,
     children: [
+      { index: true, element: <p>HOME</p> },
       { path: "project/:projectSlug", element: <ProjectRoute /> },
       { path: "project/:projectSlug/node/:nodeId", element: <NodeRoute /> },
       { path: "pane/:paneId", element: <p>PANE</p> },
@@ -82,7 +84,53 @@ it("offers a live node's chat without jumping to it, and closes an open one afte
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "t-4" }));
 });
 
-it("says so when the node is not in the project", async () => {
-  setup("/project/hub/node/t-9");
-  expect(await screen.findByText("This node is not in the project any more.")).toBeInTheDocument();
+it("says a node is gone and offers its project or Home", async () => {
+  const { router, user } = setup("/project/hub/node/t-9");
+  const main = within(await screen.findByRole("main"));
+  expect(main.getByRole("heading", { name: "Thread not found" })).toBeInTheDocument();
+  // The line names the project, so the button can stay short: a long name would push it off a phone.
+  expect(main.getByText("Hub no longer lists it.")).toBeInTheDocument();
+  expect(main.getByRole("link", { name: "Go to Home" })).toBeInTheDocument();
+  await user.click(main.getByRole("link", { name: "Open project" }));
+  expect(router.state.location.pathname).toBe("/project/hub");
+});
+
+it("says a project is not in this Herdr session and offers Home or another look", async () => {
+  for (const path of ["/project/nope", "/project/nope/node/t-1"]) {
+    const { router, user } = setup(path);
+    const main = within(await screen.findByRole("main"));
+    expect(main.getByRole("heading", { name: "Project not found" })).toBeInTheDocument();
+    expect(main.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    await user.click(main.getByRole("link", { name: "Go to Home" }));
+    expect(router.state.location.pathname).toBe("/");
+    cleanup();
+  }
+});
+
+it("shows Check again at work until the read answers, then offers it again", async () => {
+  let answer: (() => void) | undefined;
+  let hold = false;
+  const { user } = setup("/project/nope", () => hold ? new Promise<HomeData>((resolve) => { answer = () => resolve(data); }) : data);
+  const main = within(await screen.findByRole("main"));
+  hold = true;
+  await user.click(main.getByRole("button", { name: "Check again" }));
+  const checking = await main.findByRole("button", { name: "Checking…" });
+  expect(checking).toHaveAttribute("aria-busy", "true");
+  expect(checking).toBeDisabled();
+  hold = false;
+  answer!();
+  expect(await main.findByRole("button", { name: "Check again" }, { timeout: 2000 })).toBeEnabled();
+  expect(main.getByRole("heading", { name: "Project not found" })).toBeInTheDocument();
+});
+
+it("goes back one level, to the node's parent or its project, and names the node in the bar", async () => {
+  const { router, user } = setup("/project/hub/node/t-2");
+  // The app's bar comes first; the page's own heading block is a <header> too.
+  const bar = async () => within((await screen.findAllByRole("banner"))[0]!);
+  // jsdom cannot watch the page's heading, so the bar keeps its title in view here.
+  expect((await bar()).getByRole("heading", { level: 1, name: "Step" })).toBeInTheDocument();
+  await user.click((await bar()).getByRole("link", { name: "Back to Plan" }));
+  expect(router.state.location.pathname).toBe("/project/hub/node/t-1");
+  await user.click((await bar()).getByRole("link", { name: "Back to Hub" }));
+  expect(router.state.location.pathname).toBe("/project/hub");
 });

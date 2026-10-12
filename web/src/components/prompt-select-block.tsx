@@ -1,10 +1,18 @@
 import { useState } from "react";
 import { Loader2, MessageSquarePlus } from "lucide-react";
 
-import type { PromptFamily, PromptFeedbackPurpose, PromptModel, PromptOption } from "@/lib/blocks";
+import type { PromptFeedbackPurpose, PromptModel, PromptOption } from "@/lib/blocks";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
-import { OptionButton, OptionGroupCaption, PromptPanel, QuestionHeading } from "@/components/option-button";
+import {
+  DialogCard,
+  OptionButton,
+  OptionList,
+  QuestionHeading,
+  SECONDARY_ACTION,
+  SecondaryActions,
+} from "@/components/option-button";
 import { PromptRequestContext } from "@/components/prompt-request-context";
+import { Button } from "@/components/ui/button";
 
 /** What a tap on this block asks for: an option's keystroke plan, or feedback typed on the phone. */
 export type PromptBlockAction =
@@ -24,15 +32,6 @@ export interface PromptSelectBlockProps {
   /** Read-only device or a gone pane: buttons still render (for context) but can't be pressed. */
   disabled?: boolean;
 }
-
-// Family-aware caption above the options — orients the reader ("the terminal is asking you
-// something") while the question is presented directly inside the native panel.
-const FAMILY_CAPTION: Record<PromptFamily, string> = {
-  select: "Choose an option",
-  permission: "Permission required",
-  trust: "Trust this folder?",
-  plan: "Review the plan",
-};
 
 // Copy is purpose-aware: Claude's plan-approval input is deny-with-feedback; Grok's `z` row is
 // a custom answer. Missing purpose is Claude (the only row submitPromptFeedback will type into).
@@ -127,15 +126,14 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
   }
 
   const busyIcon = (
-    <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+    <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
   );
 
   return (
-    <PromptPanel ariaLabel={prompt.question}>
-      <OptionGroupCaption>{FAMILY_CAPTION[prompt.family]}</OptionGroupCaption>
+    <DialogCard label={prompt.question}>
       <QuestionHeading>{prompt.question}</QuestionHeading>
       <PromptRequestContext prompt={prompt} />
-      <div className="flex flex-col gap-1">
+      <OptionList aria-label="Answers">
         {prompt.options.map((option, index) => {
           const id = `opt-${index}`;
           const busy = sending === id;
@@ -150,7 +148,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
               trailing={
                 busy ? (
                   <Loader2
-                    className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground"
+                    className="size-4 shrink-0 animate-spin text-muted-foreground"
                     aria-label="Sending"
                   />
                 ) : null
@@ -158,37 +156,37 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
             />
           );
         })}
-      </div>
+      </OptionList>
 
       {/* The inline text input, in whichever of its states this screen is in. OUR OWN send comes
           first: the choreography focuses the row and fills it, so from the moment Send is pressed the
           screen is briefly indistinguishable from "someone at the terminal is typing" — and saying
           that to the person who just pressed the button would be a lie about their own action. */}
       {feedback && feedbackCopy && sending === "feedback" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <p className="flex items-center gap-2 text-body text-muted-foreground">
           {busyIcon}
           {feedbackCopy.sending}
-        </div>
+        </p>
       ) : feedback && feedbackCopy && terminalFocused ? (
-        <div className="rounded-lg border border-dashed border-status-working/50 px-3 py-2 text-xs text-status-working">
+        <p className="rounded-lg border border-dashed border-status-working/50 px-3.5 py-2.5 text-body text-status-working">
           {feedbackCopy.focused}
           {feedback.text ? <span className="text-muted-foreground"> ({feedback.text})</span> : null}
-        </div>
+        </p>
       ) : feedback && feedbackCopy && feedback.text !== "" ? (
-        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+        <div className="flex items-start gap-2 rounded-lg bg-muted/60 px-3.5 py-2.5">
           <MessageSquarePlus
-            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground"
             aria-label="Existing feedback"
           />
-          <span className="min-w-0 flex-1 text-xs text-foreground/90">
+          <span className="min-w-0 flex-1 text-body text-foreground">
             {feedbackCopy.typedPrefix}
             {feedback.text}
           </span>
         </div>
       ) : feedback && feedbackCopy && feedbackCopy.offer && editorOpen ? (
-        <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <MessageSquarePlus className="size-3.5 shrink-0" />
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-1.5 text-footnote font-medium text-muted-foreground">
+            <MessageSquarePlus className="size-4 shrink-0" />
             {feedbackCopy.editorLabel}
           </label>
           <textarea
@@ -199,43 +197,45 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
             autoFocus
             aria-label="Feedback text"
             placeholder={feedbackCopy.placeholder}
-            className="w-full resize-none rounded-md border border-border/60 bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/60"
+            className="min-h-16 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-body text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-          <p className="text-[11px] leading-snug text-muted-foreground">{feedbackCopy.help}</p>
-          <div className="flex items-center justify-end gap-1.5">
+          <p className="text-footnote text-muted-foreground">{feedbackCopy.help}</p>
+          <Button
+            type="button"
+            size="block"
+            disabled={locked || draft.trim().length === 0}
+            aria-busy={sending === "feedback" || undefined}
+            onClick={() => void sendFeedback()}
+          >
+            {feedbackCopy.send}
+          </Button>
+          <div className="-mx-2 flex items-center">
             <button
               type="button"
               disabled={sending !== null}
               onClick={() => setEditorOpen(false)}
-              className="rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
+              className={SECONDARY_ACTION}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              disabled={locked || draft.trim().length === 0}
-              onClick={() => void sendFeedback()}
-              className="flex items-center gap-1.5 rounded-md border border-primary/60 bg-primary/15 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors active:bg-primary/25 disabled:opacity-60"
-            >
-              {sending === "feedback" ? busyIcon : null}
-              {feedbackCopy.send}
             </button>
           </div>
         </div>
       ) : feedback && feedbackCopy && feedbackCopy.offer ? (
-        <button
-          type="button"
-          disabled={locked}
-          onClick={() => {
-            setDraft("");
-            setEditorOpen(true);
-          }}
-          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
-        >
-          <MessageSquarePlus className="size-3.5 shrink-0" />
-          {feedbackCopy.offer}
-        </button>
+        <SecondaryActions>
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => {
+              setDraft("");
+              setEditorOpen(true);
+            }}
+            className={SECONDARY_ACTION}
+          >
+            <MessageSquarePlus aria-hidden className="size-4 shrink-0" />
+            {feedbackCopy.offer}
+          </button>
+        </SecondaryActions>
       ) : null}
-    </PromptPanel>
+    </DialogCard>
   );
 }

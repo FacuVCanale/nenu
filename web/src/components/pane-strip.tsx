@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { TerminalSquare } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { SectionLabel } from "@/components/ui/section-label";
-import { StatusDot } from "@/components/status-badge";
+import { Chip, ChipStrip } from "@/components/ui/chip";
 import { PaneActionsSheet } from "@/components/pane-actions-sheet";
-import { useLongPress } from "@/hooks/use-long-press";
-import { paneDisplayName } from "@/lib/types";
-import type { AgentView } from "@/lib/types";
+import { displayName } from "@/lib/display-name";
+import type { AgentView, ProjectView } from "@/lib/types";
 
 interface PaneStripProps {
   /** The panes that share the current tab (agents + shells), in stable order. */
   panes: AgentView[];
   currentPaneId: string;
   onSelect: (paneId: string) => void;
+  /** So a project's thread pill reads its thread title, as every other view names it. */
+  projects?: readonly ProjectView[];
   /** Session scope for the long-press pane actions (rename/close); undefined = primary. */
   session?: string;
   /** Drop the long-press write actions when the device isn't authorised. */
@@ -28,46 +28,57 @@ interface PaneStripProps {
 // (space › tab › pane). Mobile deliberately doesn't replicate the desktop's pane tiling — a tab can
 // hold several panes, and this is just a quick way to flip between them. Rendered only when the tab
 // actually holds more than one pane (a lone pane needs no switcher), so it's an optional extra row.
-// A long-press on a pill opens its actions sheet (rename / close) when the parent wires the actions.
+// A long-press on a pill, or a tap on the open one, opens its actions sheet (rename / close) when the
+// parent wires the actions.
 export function PaneStrip({
   panes,
   currentPaneId,
   onSelect,
+  projects,
   session,
   readOnly,
   onRenamed,
   onClosed,
 }: PaneStripProps) {
-  const [sheetPane, setSheetPane] = useState<AgentView | null>(null);
+  // The pane whose actions are open, with the name its pill shows, which the sheet repeats.
+  const [sheet, setSheet] = useState<{ pane: AgentView; name: string } | null>(null);
   // Actions need both callbacks wired (revalidate on rename, refresh on close); without them the
   // pills stay plain tap-to-switch — long-press is inert.
   const actionsEnabled = !!onRenamed && !!onClosed;
 
   if (panes.length < 2) return null;
+  const names = chipNames(panes, projects);
 
   return (
     <>
-      <div data-workbench-navigation-band="panes" className="flex min-h-9 items-center gap-1 overflow-x-auto border-t border-border/40 bg-muted/20 px-2 py-0.5 [scrollbar-width:none] sm:gap-2 sm:px-3 sm:py-1.5 lg:px-(--page-gutter) [&::-webkit-scrollbar]:hidden">
-        <span className="hidden sm:inline"><SectionLabel>Panes</SectionLabel></span>
-        {panes.map((p) => (
-          <PanePill
-            key={p.paneId}
-            pane={p}
-            active={p.paneId === currentPaneId}
-            onSelect={onSelect}
-            onLongPress={actionsEnabled ? () => setSheetPane(p) : undefined}
-            // Tapping the already-active pill would otherwise be a useless re-navigate; repurpose it
-            // to open the same actions sheet a long-press would, so it's not a dead tap.
-            onTapActive={actionsEnabled ? () => setSheetPane(p) : undefined}
-          />
-        ))}
-      </div>
+      <ChipStrip band="panes" activeKey={currentPaneId} lead={<span className="hidden sm:inline"><SectionLabel>Panes</SectionLabel></span>}>
+        {panes.map((p) => {
+          const { name, tag } = names.get(p.paneId)!;
+          const open = () => setSheet({ pane: p, name: tag ? `${name} · ${tag}` : name });
+          return (
+            <Chip
+              key={p.paneId}
+              label={name}
+              tag={tag}
+              active={p.paneId === currentPaneId}
+              status={p.kind === "shell" ? undefined : p.status}
+              icon={p.kind === "shell" ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" /> : undefined}
+              onClick={() => onSelect(p.paneId)}
+              onLongPress={actionsEnabled ? open : undefined}
+              // A tap on the open pill would be a dead re-navigate; it opens the same sheet instead,
+              // except on a read-only device, whose sheet holds only a note.
+              onTapActive={actionsEnabled && !readOnly ? open : undefined}
+            />
+          );
+        })}
+      </ChipStrip>
 
       {actionsEnabled && (
         <PaneActionsSheet
-          open={sheetPane !== null}
-          onClose={() => setSheetPane(null)}
-          pane={sheetPane}
+          open={sheet !== null}
+          onClose={() => setSheet(null)}
+          pane={sheet?.pane ?? null}
+          name={sheet?.name ?? ""}
           session={session}
           readOnly={readOnly}
           onRenamed={onRenamed}
@@ -78,68 +89,18 @@ export function PaneStrip({
   );
 }
 
-function PanePill({
-  pane,
-  active,
-  onSelect,
-  onLongPress,
-  onTapActive,
-}: {
-  pane: AgentView;
-  active: boolean;
-  onSelect: (paneId: string) => void;
-  onLongPress?: () => void;
-  /** A plain tap on the pill when it's already `active` — opens actions instead of a no-op re-select. */
-  onTapActive?: () => void;
-}) {
-  const isShell = pane.kind === "shell";
-  // The "pN" suffix of the pane id disambiguates same-named panes (two claudes in one tab).
-  const tag = pane.paneId.split(":").pop();
-  // A user label, then Claude's /rename session name, then the agent/shell name (see paneDisplayName)
-  // — the icon still conveys which agent it is.
-  const name = paneDisplayName(pane);
-  const longPress = useLongPress(onLongPress);
-
-  // A long-press already suppresses the ensuing click via longPress.onClickCapture (stops it before
-  // this ever runs), so this only ever sees a genuine tap.
-  function onClick() {
-    if (active && onTapActive) {
-      onTapActive();
-      return;
-    }
-    onSelect(pane.paneId);
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      {...longPress}
-      aria-current={active ? "true" : undefined}
-      title={active && onTapActive ? "Tap for pane actions" : undefined}
-      className={cn(
-        // select-none + -webkit-touch-callout:none stop iOS Safari's selection loupe / touch callout,
-        // whose native long-press gesture otherwise fires pointercancel and kills our hold timer.
-        "flex shrink-0 select-none [-webkit-touch-callout:none] items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium transition-colors active:scale-95 sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-sm",
-        active
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-muted-foreground hover:bg-muted/70",
-      )}
-    >
-      {isShell ? (
-        <TerminalSquare className="size-3.5 shrink-0" />
-      ) : (
-        <StatusDot status={pane.status} />
-      )}
-      <span>{name}</span>
-      <span
-        className={cn(
-          "font-mono text-[10px]",
-          active ? "text-primary-foreground/70" : "text-muted-foreground/60",
-        )}
-      >
-        {tag}
-      </span>
-    </button>
+/** Each pane's one name, numbered only where two panes in the tab share it ("Codex · 1", "Codex · 2"). */
+function chipNames(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined) {
+  const named = panes.map((p) => [p.paneId, displayName(p, projects)] as const);
+  const count = new Map<string, number>();
+  for (const [, name] of named) count.set(name, (count.get(name) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return new Map(
+    named.map(([paneId, name]): [string, { name: string; tag?: string }] => {
+      if (count.get(name)! < 2) return [paneId, { name }];
+      const nth = (seen.get(name) ?? 0) + 1;
+      seen.set(name, nth);
+      return [paneId, { name, tag: String(nth) }];
+    }),
   );
 }

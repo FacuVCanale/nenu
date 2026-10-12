@@ -342,7 +342,8 @@ export type TranscriptPart =
       kind: "tool";
       name: string;
       summary: string;
-      questions?: Array<{ title: string; options: string[] }>;
+      /** `descriptions` runs beside `options` ("" for none), only when any option has one. */
+      questions?: Array<{ title: string; options: string[]; descriptions?: string[] }>;
       result?: { text: string; truncated?: boolean; isError?: boolean; attachments?: ToolAttachment[] };
     }
   | TranscriptImagePart;
@@ -604,8 +605,8 @@ export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction
 
 // ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
 
-/** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply. */
-export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
+/** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply; `nav` steps between a wizard's questions. */
+export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText" | "nav";
 
 export interface InteractionOption {
   index: number;
@@ -638,6 +639,27 @@ export interface InteractionStep {
   current: boolean;
 }
 
+export interface InteractionAnswer {
+  question: string;
+  answer: string;
+}
+
+/** What a permission asks to run or change, read from the dialog's own rows. Display only. */
+export interface InteractionSubject {
+  /** The tool the dialog names: "Bash", "Create file". */
+  tool?: string;
+  /** What the agent says the call is for (Claude's description row, Codex's Reason). */
+  description?: string;
+  /** The command, with the terminal's wrapping undone; exact when a hint agreed with the screen. */
+  command?: string;
+  /** The file the call creates or edits. */
+  file?: string;
+  /** The dialog's preview of the file's lines, its own line numbers kept. */
+  preview?: string;
+  /** Short facts about where it runs ("Environment: local"). */
+  meta?: string[];
+}
+
 export interface Interaction {
   paneId: string;
   agent: string;
@@ -647,6 +669,14 @@ export interface Interaction {
   context?: string;
   /** The question's header chips: one names a lone question, several are a wizard's steps. */
   steps?: InteractionStep[];
+  /** A wizard's review: what Submit sends, one pair per question. */
+  answers?: InteractionAnswer[];
+  /** A permission's subject in parts; `context` keeps the same rows as plain text. */
+  subject?: InteractionSubject;
+  /** Options the screen shows that no answer here can press (Codex's and Grok's "don't ask again"). */
+  terminalOnly?: string[];
+  /** A review with a question left unanswered: Submit sends what `answers` holds and nothing more. */
+  incomplete?: true;
   options: InteractionOption[];
   /** Identity of the dialog on screen; an answer with another signature comes back `interaction_changed`. */
   signature: string;
@@ -670,7 +700,7 @@ export interface AnswerRequest {
 
 export type AnswerOutcome =
   | { ok: true }
-  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" };
+  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" | "not_reached" };
 
 // ── Guarded send (mirrors bridge/types.ts) ─────────────────────────────────────────────────────────
 

@@ -4,22 +4,31 @@ import { parseMarkdown, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
+import { cn } from "@/lib/utils";
+import { CodeBlock } from "./code-block";
+import { IMAGE_EDGE } from "./message-images";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
 // NODE — there is no `dangerouslySetInnerHTML` here and there must never be one. That is the repo's
 // XSS boundary (CLAUDE.md §"Security posture"): the parser decides *structure*, never markup, so a
 // transcript containing `<script>` renders those characters and nothing executes.
 //
-// Sizing/colour deliberately track the surrounding transcript styles rather than introducing a
-// prose theme — this is a reading view inside a terminal-ish app, not a document viewer.
+// Sizes come from the app's type scale (index.css): prose in the body step, the size the composer
+// types in, headings a step or a weight above it. This is a reading view inside a terminal-ish app,
+// not a document viewer, so there is no separate prose theme.
 
-// The active find query, threaded via context rather than a prop drilled through every nested span —
+// The active find, threaded via context rather than a prop drilled through every nested span —
 // highlighting is a cross-cutting display concern, and the AST walk is already recursive.
-const QueryContext = createContext("");
+const FindContext = createContext({ query: "", current: false });
+
+// Every hit wears the work log's amber; the current match's go solid, so "2/7" can be found on screen.
+// Exported so the work log's own marks (work-log-tools.tsx) draw from the same two classes.
+export const FIND_HIT = "rounded-sm box-decoration-clone bg-amber-300/70 text-inherit dark:bg-amber-500/40";
+export const FIND_CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outline-amber-600 dark:bg-amber-400";
 
 /** Literal text with find hits marked. Still text nodes — `<mark>` is structure, never parsed markup. */
 function Hit({ text }: { text: string }) {
-  const query = useContext(QueryContext);
+  const { query, current } = useContext(FindContext);
   if (query.trim() === "") return <>{text}</>;
   const pieces = splitHighlight(text, query);
   if (pieces.length === 1 && !pieces[0]!.hit) return <>{text}</>;
@@ -27,7 +36,7 @@ function Hit({ text }: { text: string }) {
     <>
       {pieces.map((piece, i) =>
         piece.hit ? (
-          <mark key={i} className="rounded-sm bg-amber-300/70 text-inherit dark:bg-amber-500/40">
+          <mark key={i} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>
             {piece.text}
           </mark>
         ) : (
@@ -38,6 +47,15 @@ function Hit({ text }: { text: string }) {
   );
 }
 
+const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone [overflow-wrap:anywhere]";
+// A short span (an identifier, a flag, a file name) sits in an inline box capped at the line, so it
+// moves down whole instead of splitting `workbench-composer` at its hyphen, and breaks inside itself
+// only when it is wider than a whole line, as in a bubble at page zoom. The box carries no padding of
+// its own: the pill stays on the inline `code`, so a line holding one keeps the paragraph's pitch. A
+// longer span flows inline and wraps where it has to; moved down whole it would leave a ragged gap.
+const WHOLE = "inline-block max-w-full [overflow-wrap:anywhere]";
+const WHOLE_CODE_CHARS = 24;
+
 // Emphasis and links hold child spans (agents nest them — ``**`sha`**`` is routine), so this recurses
 // through <Spans>. `code` is the leaf.
 function Span({ span }: { span: MdSpan }) {
@@ -46,7 +64,7 @@ function Span({ span }: { span: MdSpan }) {
     case "image":
       return <InlineImage path={span.path} alt={span.alt} />;
     case "file":
-      return openFile ? <button type="button" className="text-primary underline underline-offset-2 break-all text-left" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
+      return openFile ? <button type="button" className="text-left text-primary underline underline-offset-2 [overflow-wrap:anywhere]" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
     case "bold":
       return (
         <strong className="font-semibold">
@@ -61,12 +79,11 @@ function Span({ span }: { span: MdSpan }) {
       );
     case "code": {
       const path = localFilePath(span.text);
-      if (path && openFile) return <button type="button" className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-primary underline underline-offset-2 break-all text-left" onClick={() => openFile(path)}><Hit text={span.text} /></button>;
-      return (
-        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] break-all">
-          <Hit text={span.text} />
-        </code>
-      );
+      const open = path && openFile ? () => openFile(path) : null;
+      const code = <code className={cn(INLINE_CODE, open && "text-primary underline underline-offset-2")}><Hit text={span.text} /></code>;
+      // A button is an inline box already, whatever its length.
+      if (open) return <button type="button" className={cn(WHOLE, "text-left")} onClick={open}>{code}</button>;
+      return span.text.length <= WHOLE_CODE_CHARS ? <span className={WHOLE}>{code}</span> : code;
     }
     case "link":
       // `href` was scheme-checked in the parser. noreferrer/noopener because these URLs come from
@@ -76,7 +93,7 @@ function Span({ span }: { span: MdSpan }) {
           href={span.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary underline underline-offset-2 break-all"
+          className="text-primary underline underline-offset-2 [overflow-wrap:anywhere]"
         >
           <LinkLabel spans={span.spans} />
         </a>
@@ -97,7 +114,7 @@ function InlineImage({ path, alt }: { path: string; alt: string }) {
   const name = alt || (path.split("/").at(-1) ?? path);
   if (!url || failed) return <Span span={{ kind: "file", path, spans: [{ kind: "text", text: name }] }} />;
   const image = <img src={url(path)} alt={name} loading="lazy" decoding="async" onError={() => setFailed(true)}
-    className="my-1 inline-block max-h-80 max-w-full rounded-lg border border-border/50 object-contain align-top" />;
+    className={cn("my-1 inline-block max-h-80 max-w-full rounded-lg object-contain align-top", IMAGE_EDGE)} />;
   return openFile ? <button type="button" aria-label={`Open ${name}`} className="inline-block max-w-full text-left" onClick={() => openFile(path)}>{image}</button> : image;
 }
 
@@ -114,12 +131,6 @@ const Spans = ({ spans }: { spans: MdSpan[] }) => (
   </>
 );
 
-const HEADING_CLASS: Record<number, string> = {
-  1: "text-base font-semibold",
-  2: "text-[0.95rem] font-semibold",
-  3: "text-sm font-semibold",
-};
-
 const ALIGN_CLASS: Record<string, string> = {
   left: "text-left",
   center: "text-center",
@@ -129,19 +140,21 @@ const ALIGN_CLASS: Record<string, string> = {
 function Block({ block }: { block: MdBlock }) {
   switch (block.kind) {
     case "heading": {
-      // Levels 4-6 are rare in agent prose and don't earn another size step on a phone.
-      const cls = HEADING_CLASS[block.level] ?? "text-sm font-semibold";
+      // Levels 1 and 2 take the headline step (its weight comes with it). Levels 3-6 keep the body
+      // size and stand out by weight: another size step costs a phone a line for a heading agents
+      // rarely nest that deep.
+      const cls = block.level <= 2 ? "text-headline" : "text-body font-semibold";
       return (
-        <div className={`${cls} mt-1 leading-snug`}>
+        <div className={`${cls} mt-1`}>
           <Spans spans={block.spans} />
         </div>
       );
     }
     case "code":
       return (
-        <pre className="overflow-x-auto rounded-md border bg-muted/50 px-2 py-1.5 font-mono text-[11px] leading-snug">
+        <CodeBlock lang={block.lang} text={block.text}>
           <Hit text={block.text} />
-        </pre>
+        </CodeBlock>
       );
     case "list": {
       const Tag = block.ordered ? "ol" : "ul";
@@ -168,7 +181,7 @@ function Block({ block }: { block: MdBlock }) {
       // own scroller — the same thing a mobile browser does with a table on any normal page.
       return (
         <div className="overflow-x-auto">
-          <table className="w-max border-collapse text-xs">
+          <table className="w-max border-collapse text-footnote tabular-nums">
             <thead>
               <tr>
                 {block.header.map((cell, i) => (
@@ -202,7 +215,7 @@ function Block({ block }: { block: MdBlock }) {
       return <hr className="border-border" />;
     default:
       return (
-        <p className="leading-relaxed">
+        <p>
           <Spans spans={block.spans} />
         </p>
       );
@@ -217,20 +230,24 @@ export function MarkdownText({
   text,
   className,
   query = "",
+  current = false,
 }: {
   text: string;
   className?: string;
   /** Active find query — occurrences render as marks. Empty disables highlighting entirely. */
   query?: string;
+  /** This text is find's current match: its hits take a solid fill the other matches don't. */
+  current?: boolean;
 }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
+  const find = useMemo(() => ({ query, current }), [query, current]);
   return (
-    <QueryContext.Provider value={query}>
-      <div className={`space-y-2 text-sm break-words ${className ?? ""}`}>
+    <FindContext.Provider value={find}>
+      <div className={cn("space-y-2 text-body break-words", className)}>
         {blocks.map((block, i) => (
           <Block key={i} block={block} />
         ))}
       </div>
-    </QueryContext.Provider>
+    </FindContext.Provider>
   );
 }

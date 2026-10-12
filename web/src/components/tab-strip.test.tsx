@@ -71,9 +71,19 @@ describe("TabStrip", () => {
     await user.click(screen.getByRole("button", { name: /new tab/i }));
     expect(onNewTab).toHaveBeenCalledWith("w1");
   });
+
+  // The + used to end the row that scrolls: on a desk, once the tabs overflowed, it went out of view.
+  it("keeps New tab beside the row that scrolls, so it stays in reach however many tabs there are", () => {
+    render(<TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} />);
+    const row = screen.getByRole("button", { name: "Tab 1" }).closest(".strip-scroller")!;
+    expect(row).not.toBeNull();
+    expect(row.contains(screen.getByRole("button", { name: "New tab" }))).toBe(false);
+  });
 });
 
 describe("TabStrip — long-press actions", () => {
+  afterEach(() => vi.useRealTimers());
+
   // A long-press on a chip reaches the DOM as a `contextmenu` event (Android Chrome / right-click);
   // with both actions wired it opens the actions sheet (rename / close), like the pane strip.
   it("opens the actions sheet on a long-press (contextmenu) when the actions are wired", () => {
@@ -148,6 +158,49 @@ describe("TabStrip — long-press actions", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  // Nothing used to say the open tab had actions; it now carries a chevron and says it opens a dialog.
+  it("marks the open tab, and only it, as opening its actions when they are wired", () => {
+    const { rerender } = render(
+      <TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: "Tab 1" });
+    expect(open).toHaveAttribute("aria-haspopup", "dialog");
+    expect(open.querySelector("[data-chip-actions]")).not.toBeNull();
+    const other = screen.getByRole("button", { name: "Tab 2" });
+    expect(other).not.toHaveAttribute("aria-haspopup");
+    expect(other.querySelector("[data-chip-actions]")).toBeNull();
+
+    rerender(<TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Tab 1" }).querySelector("[data-chip-actions]")).toBeNull();
+  });
+
+  // A read-only device's sheet holds only a note, so the open tab promises nothing; a long-press
+  // still shows the note.
+  it("puts no actions affordance on the open tab on a read-only device", () => {
+    render(
+      <TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} readOnly onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: "Tab 1" });
+    expect(open).not.toHaveAttribute("aria-haspopup");
+    expect(open.querySelector("[data-chip-actions]")).toBeNull();
+    fireEvent.contextMenu(open);
+    expect(screen.getByText(/isn't authorised to rename or close tabs/)).toBeInTheDocument();
+  });
+
+  // The chip, the sheet's title and its confirmation each named the tab their own way: "Tab 2",
+  // "Tab " and "Close “Tab 3”?" for a tab with no label, second in the strip, numbered 3 by Herdr.
+  it("names the sheet and its close confirmation as the strip names the tab", async () => {
+    const user = userEvent.setup();
+    const strip: TabView[] = [tabs[0]!, { tabId: "w1:t3", workspaceId: "w1", number: 3, label: "", focused: false, paneCount: 1 }];
+    render(
+      <TabStrip workspaceId="w1" tabs={strip} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" }));
+    expect(screen.getByRole("dialog", { name: "Tab 2" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    expect(screen.getByRole("heading", { name: "Close “Tab 2”?" })).toBeInTheDocument();
+  });
+
   it("still switches on a tap of a non-selected tab even with actions wired", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
@@ -168,9 +221,10 @@ describe("TabStrip — long-press actions", () => {
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
 
-  // The two-tap close wiring the call-site fallbacks hang off: long-press → Close tab → confirm hits
-  // the bridge and fires the parent's onClosed with the tab id.
-  it("closes a tab through a two-tap confirm and reports the closed tab id", async () => {
+  // The close wiring the call-site fallbacks hang off: long-press → Close tab → confirm hits the
+  // bridge and fires the parent's onClosed with the tab id.
+  it("closes a tab once confirmed and reports the closed tab id", async () => {
+    vi.useFakeTimers({ toFake: ["performance"] });
     const user = userEvent.setup();
     const onClosed = vi.fn();
     let url = "";
@@ -194,7 +248,8 @@ describe("TabStrip — long-press actions", () => {
     );
     fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" })); // w1:t2, paneCount 1
     await user.click(screen.getByRole("button", { name: "Close tab" }));
-    await user.click(screen.getByRole("button", { name: "Tap again to close 1 pane" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
 
     await waitFor(() => expect(onClosed).toHaveBeenCalledExactlyOnceWith("w1:t2"));
     expect(url).toContain("/api/tab/w1%3At2/close");

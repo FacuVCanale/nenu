@@ -18,11 +18,11 @@
 
 # The shipped dock, restated — start here and edit the phrases.
 # [[replies]]
-# title = "confirm"
+# title = "Confirm"
 # items = ["yes", "no"]
 #
 # [[replies]]
-# title = "common"
+# title = "Common"
 # items = ["continue", "commit and push", "retry", "skip"]
 
 # Working in another language? Replace the phrases; the harness reads them as prose either way.

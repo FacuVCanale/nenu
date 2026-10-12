@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, RouterProvider, useParams } from "react-router";
+import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
 import { __resetConnectionHealth } from "@/lib/connection-health";
 
@@ -24,6 +24,7 @@ vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
 import { submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
+import { WorkbenchNavigationContext, type WorkbenchNavigation } from "@/lib/workbench-navigation";
 import { AgentChat } from "./agent-chat";
 import { StatusArea } from "./status-area";
 
@@ -68,7 +69,7 @@ async function openMenuItem(user: ReturnType<typeof userEvent.setup>, name: stri
   await user.click(screen.getByRole("button", { name }));
 }
 
-function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
+function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation) {
   const agent = fixtureAgents[0]!; // a blocked claude agent
   const props: ComponentProps<typeof AgentChat> = {
     paneId: agent.paneId,
@@ -81,7 +82,10 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
     onSelect: vi.fn(),
     ...overrides,
   };
-  const router = createMemoryRouter([{ path: "/", element: <><AgentChat {...props} /><StatusArea /></> }]);
+  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar.
+  const element = <><AgentChat {...props} /><StatusArea /></>;
+  const router = createMemoryRouter([{ path: "/pane/:paneId", element: navigation ? <WorkbenchNavigationContext value={navigation}>{element}</WorkbenchNavigationContext> : element }],
+    { initialEntries: [`/pane/${encodeURIComponent(props.paneId)}`] });
   render(<RouterProvider router={router} />);
   return props;
 }
@@ -140,16 +144,53 @@ function ProjectSentinel() {
 const neighbourShell = { ...fixtureAgents[0]!, paneId: "w1:shell", tabId: "w1:t9", kind: "shell" as const, agent: "shell", status: "idle" as const };
 
 describe("AgentChat — header title block", () => {
-  it("leads with the space, puts the directory on the subline, and drops the redundant agent name", () => {
-    renderChat({ shellPanes: [neighbourShell] }); // claude @ /home/you/webapp → ~/webapp
-    expect(screen.getByText("webapp")).toBeInTheDocument(); // space leads
-    expect(screen.getByText("~/webapp")).toBeInTheDocument(); // directory on the subline
-    // The agent is conveyed by its icon (aria-label only), so its name isn't repeated as text.
-    expect(screen.queryByText(/claude/i)).toBeNull();
+  const named = { ...fixtureAgents[0]!, paneLabel: "Working Claude", tabLabel: "review" };
+
+  it("names the pane as every row does and says where it lives under the name", () => {
+    renderChat({ agent: named, agents: [named] });
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent(/^Working Claude/);
+    expect(within(header).getByText("webapp")).toBeInTheDocument();
+    expect(within(header).getByText("review")).toBeInTheDocument();
+    // The folder is no longer the second line; the place is.
+    expect(within(header).queryByText("~/webapp")).toBeNull();
+  });
+
+  it("leads a phone chat with a back to Home instead of the brand mark", async () => {
+    const props = renderChat({ agent: named, agents: [named] }, { open: false, onOpen: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Back to Home" }));
+    expect(props.onBack).toHaveBeenCalledOnce();
+  });
+
+  it("opens the navigation sheet from the title, where every workspace, tab and pane is one tap away", async () => {
+    const onOpen = vi.fn();
+    renderChat({ agent: named, agents: [named] }, { open: false, onOpen });
+    const title = screen.getByRole("button", { name: /^Working Claude/ });
+    expect(title).toHaveAttribute("aria-haspopup", "dialog");
+    await userEvent.click(title);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("says under the title that Herdr isn't responding as soon as Herdr reports disconnected", () => {
+    renderChat({ agent: named, agents: [named], bridge: "disconnected" });
+    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+  });
+
+  it("keeps the folder one tap away in the ⋯ menu", async () => {
+    renderChat({ agent: named, agents: [named] });
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
+  });
+
+  it("drops the unlabeled grab handle: the terminal view switches panes from the title too", () => {
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell] });
+    expect(screen.queryByRole("button", { name: "Switch pane" })).toBeNull();
   });
 
   // A workspace has no page: its tabs and panes are the strips above the conversation.
-  it("opens nothing from a workspace pane's title, however many panes the workspace holds", () => {
+  it("opens no workspace page from a workspace pane's title, however many panes the workspace holds", () => {
     renderChat({ shellPanes: [neighbourShell] });
     expect(screen.getByText("webapp")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
@@ -234,10 +275,10 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     expect(await screen.findByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("Codex is ready")).not.toBeInTheDocument();
 
-    await openMenuItem(user, "Terminal mirror");
+    await openMenuItem(user, "Terminal view");
     expect(screen.getByText("Codex is ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.getByRole("button", { name: "Terminal mirror" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Terminal view" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("promotes a newly-created shell to the Codex workbench without remounting the pane", async () => {
@@ -449,6 +490,20 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     return (pane: { text: string; revision: number }) => advance(pane);
   }
 
+  // The answered menu leaving the screen is the receipt; a "Sent" toast over the thread repeated it
+  // (T10). What the screen cannot show, a menu that changed under the tap, still says so.
+  it("answers a terminal menu without a Sent toast, and still says when the menu changed under the tap", async () => {
+    const user = userEvent.setup();
+    renderChat({ text: MENU_TEXT });
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledOnce());
+    await act(async () => {});
+    expect(screen.queryByText("Sent")).toBeNull();
+    mockSubmit.mockResolvedValueOnce({ status: "changed" });
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+    expect(await screen.findByText("Menu changed — refreshing")).toBeInTheDocument();
+  });
+
   it("passes the FROZEN revision when the mirror is frozen and the pane advances underneath", async () => {
     // Regression (found in review): the handler used to pass the LIVE loader revision, which keeps
     // advancing via background polls even while the mirror is frozen — so the guard compared
@@ -463,7 +518,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     // Freeze the mirror (opening find pins the tail — the same `following=false` state a scroll-up
     // freeze produces).
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" }));
+    await user.click(screen.getByRole("button", { name: "Find in terminal" }));
 
     // The pane advances while frozen: new output below the menu + a bumped revision.
     act(() => advance({ text: `${MENU_TEXT}\n● proceeding…\n`, revision: 2 }));
@@ -494,7 +549,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     const advance = renderWithLivePane({ text: MENU_TEXT, revision: 1 });
     expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" }));
+    await user.click(screen.getByRole("button", { name: "Find in terminal" }));
     act(() => advance({ text: STATUS_TEXT, revision: 2 }));
     expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
     const input = screen.getByRole("textbox", { name: "" });
@@ -518,7 +573,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     await screen.findByRole("button", { name: /Parser/ });
 
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" })); // freeze the tail
+    await user.click(screen.getByRole("button", { name: "Find in terminal" })); // freeze the tail
     act(() => advance({ text: `${WIZARD_TEXT}\n● advancing…\n`, revision: 2 }));
 
     await user.click(screen.getByRole("button", { name: /Parser/ }));
@@ -604,7 +659,7 @@ describe("AgentChat — mirror tap must not pop the keyboard on option taps", ()
   it("does NOT focus the composer when a native prompt option is tapped", async () => {
     const user = userEvent.setup();
     renderChat({ text: MENU_TEXT });
-    const box = screen.getByPlaceholderText(/type a reply/i);
+    const box = screen.getByPlaceholderText("Answer the agent first…");
     const yes = await screen.findByRole("button", { name: "Yes" });
 
     await user.click(yes);
@@ -688,7 +743,7 @@ describe("AgentChat — history affordance", () => {
     expect(screen.queryByRole("button", { name: /conversation history/i })).not.toBeInTheDocument();
   });
 
-  it("keeps a phone header to one ⋯ of five views, with no group headings", async () => {
+  it("keeps a phone header to one ⋯ of five views beside the pane's own actions", async () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true };
     renderChat({ agent, agents: [agent] });
     for (const name of [/conversation history/i, "Show raw terminal", "Artifacts and files", /^Subagents/]) {
@@ -697,8 +752,8 @@ describe("AgentChat — history affordance", () => {
     await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     const menu = screen.getByRole("dialog", { name: "Conversation actions" });
     expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
-      expect.arrayContaining(["Find in output", "Conversation history", "Artifacts and files", "Terminal mirror", "Display"]));
-    for (const heading of ["Terminal", "Shortcuts", "View"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
+      expect.arrayContaining(["Find in chat", "Conversation history", "Artifacts and files", "Terminal view", "Display"]));
+    for (const heading of ["Terminal", "Shortcuts"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
     // Message tools stay under the composer's chevron, background work behind the processes chip.
     for (const name of ["Keys", "Type into terminal", "Quick replies", "Background activity", "Subagents", "Context and usage"]) {
       expect(within(menu).queryByRole("button", { name })).not.toBeInTheDocument();
@@ -715,7 +770,7 @@ describe("AgentChat — history affordance", () => {
       expect(screen.getByRole("button", { name: "Show raw terminal" })).toBeVisible();
       expect(screen.queryByRole("button", { name: /^Subagents/ })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-      expect(screen.queryByRole("button", { name: "Terminal mirror" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Terminal view" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Artifacts and files" })).toBeVisible();
     } finally {
       window.matchMedia = original;
@@ -727,8 +782,8 @@ describe("AgentChat — history affordance", () => {
     const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
     renderChat({ agent, agents: [agent] });
     const shortcut = async (name: string) => {
-      await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
-      await user.click(within(screen.getByRole("dialog", { name: "Message shortcuts" })).getByRole("button", { name }));
+      await user.click(screen.getByRole("button", { name: "Message actions" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name }));
     };
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
     await shortcut("Keys");
@@ -736,7 +791,7 @@ describe("AgentChat — history affordance", () => {
     await shortcut("Type into terminal");
     expect(screen.getByPlaceholderText(/type into the terminal/i)).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Close Keys" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Message actions" }));
     expect(screen.getByRole("button", { name: "Type into terminal" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -763,8 +818,10 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal mirror" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
+    // A full-width row a thumb reaches: 44 px under a finger (QA 15).
+    expect(showHistory()).toHaveClass("coarse:min-h-11");
     expect(loadOlder()).not.toBeInTheDocument();
   });
 
@@ -773,7 +830,15 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     const agent = { ...fixtureAgents[0]!, kind: "shell" as const, readableLines: 6946 };
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(loadOlder()).toBeInTheDocument();
+    expect(loadOlder()).toHaveClass("coarse:min-h-11");
     expect(showHistory()).not.toBeInTheDocument();
+  });
+
+  it("says Load older is busy while the older lines are on their way", () => {
+    const agent = { ...fixtureAgents[0]!, kind: "shell" as const, readableLines: 6946 };
+    renderChat({ agent, agents: [agent], requestedLines: 600 });
+    fireEvent.click(loadOlder()!);
+    expect(screen.getByRole("button", { name: /loading/i })).toHaveAttribute("aria-busy", "true");
   });
 
   it("offers nothing when the pane has neither", () => {
@@ -800,7 +865,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true, readableLines: 6946 };
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal mirror" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
     expect(loadOlder()).not.toBeInTheDocument();
   });
@@ -975,6 +1040,229 @@ it("blocks sending immediately after access is refused, without waiting for the 
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 });
 
+// A pane that is gone, when the route cannot move off it (Herdr is not answering, or it never was):
+// say what happened and offer the way on, instead of a dead composer under "(agent gone)".
+describe("AgentChat — a pane that is gone", () => {
+  const closed = { ...fixtureAgents[0]!, paneLabel: "Codex" };
+  const next = { ...fixtureAgents[0]!, paneId: "w1:p9", paneLabel: "Blocked Claude" };
+
+  it("says the pane closed and opens the pane beside it or Home, with no composer", async () => {
+    const props = renderChat({ agent: undefined, closed, next, error: true });
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Pane closed");
+    expect(screen.getByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("(no recent output)")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Open Blocked Claude" }));
+    expect(props.onSelect).toHaveBeenCalledWith("w1:p9");
+    await userEvent.click(screen.getByRole("button", { name: "Go to Home" }));
+    expect(props.onBack).toHaveBeenCalled();
+  });
+
+  it("says a link names a pane Herdr no longer has", () => {
+    renderChat({ agent: undefined });
+    expect(screen.getByRole("heading", { name: "That pane no longer exists" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open / })).toBeNull();
+  });
+
+  it("does not claim a pane is gone while Nenu cannot ask Herdr", () => {
+    renderChat({ agent: undefined, error: true });
+    expect(screen.getByRole("heading", { name: "Nenu can't find this pane yet" })).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1 })).toHaveTextContent(/^Pane$/);
+  });
+});
+
+// A pane opened on the page's last text (its read still on the way) may show an input-box draft that
+// is gone by now; only the fresh read may offer it to Take over.
+describe("AgentChat — a pane opened on its last text", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const box = "─".repeat(40);
+  const withDraft = `hello from the pane\n${box}\n❯ a message recalled an hour ago\n${box}`;
+
+  it.each([[false, true], [true, false]])("pending %s offers the terminal's draft: %s", async (pending, offered) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderChat({ text: withDraft, pending });
+    act(() => vi.advanceTimersByTime(1600));
+    if (offered) expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    else expect(screen.queryByText(/draft in terminal/i)).toBeNull();
+  });
+});
+
+it("says the terminal is on its way, not that it printed nothing, while the pane's first read is pending", () => {
+  const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
+  renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "", pending: true });
+  expect(screen.getByRole("status", { name: "Reading the terminal" })).toBeInTheDocument();
+  expect(screen.queryByText("(no recent output)")).toBeNull();
+});
+
+// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11).
+describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", () => {
+  const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
+  const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
+
+  it("opens the pane's and the tab's actions from the menu", async () => {
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent], tabs });
+    await openMenuItem(user, "Rename or close pane…");
+    const paneSheet = screen.getByRole("dialog", { name: "Working Claude" });
+    expect(within(paneSheet).getByRole("button", { name: /Rename/ })).toBeInTheDocument();
+    expect(within(paneSheet).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
+    await user.click(within(paneSheet).getByRole("button", { name: "Close" }));
+    await openMenuItem(user, "Rename or close tab…");
+    expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
+  });
+
+  it("offers neither on a device that cannot write", async () => {
+    renderChat({ agent, agents: [agent], tabs, device: { enforced: true, device: "spare-phone", authorized: false } });
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
+  });
+});
+
+it("names a project's pane in the pane strip as its rows do", () => {
+  const coordinator = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
+  const projects = [{ slug: "shop", name: "Shop", status: "active" as const, coordinator: { paneId: "w1:p2", agent: "claude", liveStatus: "idle" as const }, threads: [] }];
+  renderChat({ agents: [fixtureAgents[0]!, coordinator], projects });
+  expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
+});
+
+// A project thread's back climbs one level, as its node page's does (NAV-03): to the coordinator it
+// runs under, else to its project. Only the project's own coordinator leads Home, since the project
+// opens on it.
+describe("AgentChat — a project thread's back", () => {
+  const coordinatorPane = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
+  const thread = (id: string, title: string, parentId: string, role: "worker" | "coordinator", paneId?: string) =>
+    ({ id, title, parentId, role, status: "open" as const, ...(paneId ? { paneId } : {}) });
+  const shop = (threads: ReturnType<typeof thread>[], coordinator?: string) => [{
+    slug: "shop", name: "Shop", status: "active" as const, threads,
+    ...(coordinator ? { coordinator: { paneId: coordinator, agent: "claude", liveStatus: "idle" as const } } : {}),
+  }];
+  const worker = { slug: "shop", name: "Shop", role: "worker" as const };
+
+  it("leads a worker back to its coordinator's chat while that runs", () => {
+    renderChat({ session: "work", agents: [fixtureAgents[0]!, coordinatorPane], project: worker,
+      projects: shop([thread("t-1", "Checkout", "root", "coordinator", "w1:p2"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) }, { open: false, onOpen: vi.fn() });
+    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
+    expect(screen.queryByRole("button", { name: "Back to Home" })).toBeNull();
+  });
+
+  it("leads a worker back to its coordinator's page when the coordinator has no chat", () => {
+    renderChat({ project: worker, projects: shop([thread("t-1", "Checkout", "root", "coordinator"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) });
+    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/project/shop/node/t-1");
+  });
+
+  it("leads a thread of the project itself back to the project", () => {
+    renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
+  });
+
+  it("leads the project's own coordinator Home", () => {
+    renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([], "w1:p1") });
+    expect(screen.getByRole("button", { name: "Back to Home" })).toBeInTheDocument();
+  });
+});
+
+// A project lays its Threads and PRs over the chat (ProjectFrame) and brings its own tabs into the
+// overlay, so only the header stays above it: the strips belong to the chat underneath.
+describe("AgentChat — a project's overlay", () => {
+  const sibling = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "Second pane" };
+
+  it("draws the project's tabs once, inside the overlay", () => {
+    const projectTabs = <div role="tablist" aria-label="Project" />;
+    renderChat({ strip: projectTabs, overlay: <div>{projectTabs}<p>Threads list</p></div> });
+    expect(screen.getAllByRole("tablist", { name: "Project" })).toHaveLength(1);
+    expect(screen.getByText("Threads list")).toBeVisible();
+  });
+
+  it("keeps a worker's chips and the pane row under the overlay", () => {
+    renderChat({ agents: [fixtureAgents[0]!, sibling], strip: <nav aria-label="Threads" />, overlay: <p>Threads list</p> });
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Threads" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Second pane/ })).toBeNull();
+  });
+});
+
+// The work log names a file as the operator thinks of it inside the project: from the pane's folder.
+it("shows a work step's file relative to the pane's folder", async () => {
+  const ts = "2026-07-25T06:22:21.253Z";
+  server.use(http.get(/\/api\/pane\/[^/]+\/history/, () => HttpResponse.json({
+    paneId: "w1:p1", available: true, hasMore: false, total: 2, fileTruncated: false, entries: [
+      { uuid: "t1", ts, role: "user", parts: [{ kind: "text", text: "read the stylesheet" }] },
+      { uuid: "t2", ts, role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "ok" } }] },
+    ],
+  })));
+  const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+  renderChat({ agent, agents: [agent] });
+  const work = await screen.findByRole("button", { name: /^(Worked|Work log)/ });
+  if (work.getAttribute("aria-expanded") === "false") await userEvent.click(work);
+  expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+});
+
+// A subagent works in its parent's folder, so its work log names the same file the same way.
+it("shows a subagent's work step file relative to the pane's folder too", async () => {
+  const reviewer = { id: "a1", parentId: "", name: "reviewer", task: "Review the diff", status: "running" };
+  server.use(
+    http.get(/\/api\/pane\/[^/]+\/subagents$/, () => HttpResponse.json({ available: true, sessionKey: "parent-key", agents: [reviewer], truncated: false })),
+    http.get(/\/api\/pane\/[^/]+\/subagent-history$/, () => HttpResponse.json({ sessionKey: "parent-key", agent: reviewer, truncated: false, entries: [
+      { uuid: "c1", ts: "2026-07-25T06:22:21.253Z", role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "ok" } }] },
+    ] })),
+  );
+  const user = userEvent.setup();
+  const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
+  renderChat({ agent, agents: [agent] });
+  await user.click(await screen.findByRole("button", { name: /^Processes/ }));
+  await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
+  await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
+  const work = await screen.findByRole("button", { name: /^(Worked|Work log|Working)/ });
+  if (work.getAttribute("aria-expanded") === "false") await user.click(work);
+  expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+});
+
+// Find names what it searches, in the menu and in the bar (T31).
+describe("AgentChat — find says what it searches", () => {
+  it("finds in the chat while the conversation shows", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+    renderChat({ agent, agents: [agent] });
+    await openMenuItem(userEvent.setup(), "Find in chat");
+    expect(screen.getByRole("textbox", { name: "Find in chat" })).toHaveAttribute("placeholder", "Find in chat…");
+  });
+
+  it("finds in the terminal while the mirror shows", async () => {
+    renderChat();
+    await openMenuItem(userEvent.setup(), "Find in terminal");
+    expect(screen.getByRole("textbox", { name: "Find in terminal" })).toBeInTheDocument();
+  });
+});
+
+// The composer names why it is locked, the same reason the question card gives: a refused sign-in is
+// not a device that was never authorised, and a silent Herdr is not a lost network.
+describe("AgentChat — why the composer is locked", () => {
+  beforeEach(() => __resetConnectionHealth());
+
+  it("asks for a new sign-in when access was refused", () => {
+    renderChat({ error: true, authError: true });
+    expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
+  });
+
+  it("says Herdr isn't responding as soon as Herdr reports disconnected", () => {
+    renderChat({ bridge: "disconnected" });
+    expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+  });
+
+  // DetailRoute passes the pane's own refusal as authError while the snapshot may still answer.
+  it("asks for a new sign-in when only the pane's read was refused", () => {
+    renderChat({ authError: true });
+    expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
+  });
+
+  it("says under the title that Herdr isn't responding on a device that cannot write, too", () => {
+    renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } });
+    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+  });
+});
+
 // Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box
 // unsendable (ADR 0048 step 4), which is right, but it is not a question for the operator: Claude
 // resumes on its own. Only a screen that really waits on a key earns the interaction notice.
@@ -1006,18 +1294,44 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(screen.queryByRole("button", { name: /terminal keys/i })).not.toBeInTheDocument();
   });
 
-  it("shows an unrecognised wait as one compact row that expands and dismisses", async () => {
+  it("says in words what an unrecognised wait is, and leads to the terminal and its keys", async () => {
     const user = userEvent.setup();
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
-    const notice = await screen.findByRole("status", { name: "Terminal waiting" });
+    const notice = await screen.findByRole("region", { name: "Terminal waiting" });
+    // Only the sentence is announced; the buttons around it are not part of a live region.
+    expect(within(notice).getByRole("status")).toHaveTextContent("Claude is showing a screen Nenu can't answer");
+    expect(notice).not.toHaveAttribute("role", "status");
+    // It needs the operator, like the pane's red dot in the header: never the yellow of a working agent.
+    const dots = [...notice.querySelectorAll("[aria-hidden]")].map((el) => el.getAttribute("class") ?? "");
+    expect(dots.some((c) => /status-blocked/.test(c))).toBe(true);
+    expect(dots.some((c) => /status-working/.test(c))).toBe(false);
+    // The screen's own hint stays, under the sentence.
     expect(within(notice).getByText("Enter to continue")).toBeVisible();
-    expect(within(notice).queryByText("Something new needs your attention")).not.toBeInTheDocument();
-    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
-    expect(within(notice).getByText(/Something new needs your attention/)).toBeVisible();
     expect(within(notice).getByRole("button", { name: "Keys" })).toBeVisible();
-    await user.click(within(notice).getByRole("button", { name: "Dismiss" }));
-    expect(screen.queryByRole("status", { name: "Terminal waiting" })).not.toBeInTheDocument();
+    // No key of its own until a declared cancel key exists (ADR 0053 rule 2 is still Proposed).
+    expect(within(notice).queryByRole("button", { name: /Esc|Dismiss/ })).not.toBeInTheDocument();
+    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
+    expect(screen.queryByRole("region", { name: "Live conversation" })).not.toBeInTheDocument();
+  });
+
+  // The composer is not paused: a message typed now waits for the answer ("Message for after you
+  // answer…"). The chip names what is actually waiting, the screen.
+  it("collapses an unrecognised wait to a chip that names the waiting screen, not a paused composer", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
+    const notice = await screen.findByRole("region", { name: "Terminal waiting" });
+    const collapse = within(notice).getByRole("button", { name: "Collapse" });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    await user.click(collapse);
+    expect(within(notice).queryByText("Claude is showing a screen Nenu can't answer")).not.toBeInTheDocument();
+    expect(within(notice).queryByText(/Composer paused/)).not.toBeInTheDocument();
+    const chip = within(notice).getByRole("button", { name: "Terminal waiting on a key" });
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    expect(chip.querySelector("[aria-hidden].bg-status-blocked")).not.toBeNull();
+    await user.click(chip);
+    expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
   });
 });
 
@@ -1031,7 +1345,7 @@ describe("AgentChat — bridge-detected dialog", () => {
     server.use(
       http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
         paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
-        context: "Bash command\nmkfifo fixture-fifo", signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: false,
+        context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: false,
         options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
       }] })),
       http.post(/\/api\/interactions\/[^/]+\/answer$/, async ({ request }) => {
@@ -1048,13 +1362,163 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));
-    expect(await screen.findByText("Answered: Yes")).toBeVisible();
+    expect(await screen.findByText("Approved · mkfifo fixture-fifo")).toBeVisible();
   });
 
-  it("keeps the popover while the bridge has no card for the pane", async () => {
+  it("keeps saying why a tap did nothing when the question it hit is replaced by the next one", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    const ask = (signature: string, question: string) => ({
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question, signature, revision: 1, detectedAt: 0,
+      subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    });
+    let shown = [ask("sig-1", "Do you want to proceed?")];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: shown })),
+      http.post(/\/api\/interactions\/[^/]+\/answer$/, () => {
+        shown = [ask("sig-2", "Do you want to make this edit?")];
+        return HttpResponse.json({ ok: false, error: "The question changed in the terminal. Nothing was sent.", code: "interaction_changed" }, { status: 409 });
+      }),
+    );
+    renderChat({ agent, agents: [agent], text: PERMISSION });
+    const first = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    await user.click(within(first).getByRole("button", { name: "Yes" }));
+    const next = await screen.findByRole("region", { name: "Do you want to make this edit?" });
+    expect(within(next).getByRole("status")).toHaveTextContent("The question changed in the terminal. Nothing was sent.");
+  });
+
+  it.each([
+    [{ device: { enforced: true, device: "spare-phone", authorized: false } }, "Read-only on this device. Answer from an authorised one."],
+    [{ error: true, authError: true }, "Sign in again to answer."],
+    [{ bridge: "disconnected" as const }, "Herdr isn't responding. Answers are paused."],
+  ])("says why the card cannot answer: %j", async (snapshot, line) => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" },
+      signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PERMISSION, ...snapshot });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText(line)).toBeVisible();
+    expect(within(card).queryByText("Answers are paused right now.")).not.toBeInTheDocument();
+  });
+
+  it("shows a read-only device the options as a list it cannot press", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PERMISSION, device: { enforced: true, device: "spare-phone", authorized: false } });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
+    expect(within(within(card).getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
+  });
+
+  it("draws the dialog as a card in the conversation while the bridge has no card for the pane", async () => {
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: PERMISSION });
-    expect(await screen.findByRole("region", { name: "Agent interaction" })).toBeInTheDocument();
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Waiting on you")).toBeVisible();
+    expect(card.closest("[data-follow-stop]")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+
+  it("draws a generic menu in the conversation as a card, never over it", async () => {
+    const MENU = readFileSync("src/fixtures/panes/claude-lab--menu-rewind--w82.txt", "utf8");
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "menu", family: "claude", question: "Rewind", signature: "sig-m", revision: 1, detectedAt: 0,
+      options: [{ index: 0, label: "Continue", role: "neutral" }, { index: 1, label: "Cancel", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: MENU });
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Rewind" });
+    expect(within(card).getByRole("button", { name: "Continue" })).toBeVisible();
+    expect(within(card).getByRole("button", { name: "Cancel" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+
+  it("draws a preview question in the conversation as a card, never over it", async () => {
+    const PREVIEW = readFileSync("src/fixtures/panes/claude--select-preview.txt", "utf8");
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "question", family: "claude", question: "Which widget design should we use?", signature: "sig-p", revision: 1, detectedAt: 0,
+      options: [{ index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PREVIEW });
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+});
+
+// Pointing at a preview row is the first of two taps: the digit moves the pointer, the guard sees it
+// land, and the card is drawn again from the next read. Until that read lands the tapped row stays
+// busy, so a second tap can never act on the old pointer; nothing was answered, so no "Sent".
+describe("AgentChat — pointing at a preview option", () => {
+  const PLAIN = readFileSync("src/fixtures/panes/claude--select-preview.txt", "utf8").replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "");
+  const ON_ROUNDED = PLAIN.replace("❯ 1. Boxy ", "  1. Boxy ").replace("  2. Rounded", "❯ 2. Rounded").replace("| WIDGET           [X] |", "( WIDGET           (x) )");
+
+  it("keeps the row busy until the refreshed card shows its preview and Choose, and says nothing was sent", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    let pane = PLAIN;
+    const keys: string[][] = [];
+    let hold = false;
+    let held = 0;
+    const waiting: Array<() => void> = [];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+        paneId: agent.paneId, agent: "claude", kind: "question", family: "claude", question: "Which widget design should we use?", signature: "sig-p", revision: 1, detectedAt: 0,
+        options: [{ index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" }],
+      }] })),
+      http.get(/\/api\/pane\/[^/]+$/, () => HttpResponse.json({ paneId: agent.paneId, text: pane, truncated: false, revision: 1 })),
+      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+        const body = (await request.json()) as { keys: string[] };
+        keys.push(body.keys);
+        if (body.keys.join() === "2") pane = ON_ROUNDED;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    function PaneRoute() {
+      const { text } = useLoaderData() as { text: string };
+      return <><AgentChat paneId={agent.paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={text} revision={1} onBack={vi.fn()} onSelect={vi.fn()} /><StatusArea /></>;
+    }
+    const router = createMemoryRouter([{
+      path: "/",
+      loader: async () => {
+        if (hold) { held++; await new Promise<void>((resolve) => waiting.push(resolve)); }
+        return { text: pane };
+      },
+      element: <PaneRoute />,
+    }]);
+    render(<RouterProvider router={router} />);
+    const card = await screen.findByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
+
+    hold = true;
+    await user.click(within(card).getByRole("radio", { name: /^Rounded/ }));
+    await waitFor(() => expect(held).toBeGreaterThan(0));
+    expect(keys).toEqual([["2"]]);
+    // The pointer moved, but the card on screen is still the old read: nothing in it can be pressed.
+    expect(within(card).getByRole("radio", { name: /^Rounded/ })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeDisabled();
+
+    hold = false;
+    act(() => { for (const resolve of waiting.splice(0)) resolve(); });
+    const refreshed = await screen.findByRole("region", { name: "Which widget design should we use?" });
+    expect(await within(refreshed).findByRole("button", { name: "Choose Rounded" })).toBeEnabled();
+    expect(within(within(refreshed).getByRole("group", { name: "Preview of Rounded" })).getByText(/\( WIDGET/)).toBeVisible();
+    expect(keys).toEqual([["2"]]);
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dialog changed/)).not.toBeInTheDocument();
   });
 });
 

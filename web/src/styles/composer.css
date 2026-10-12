@@ -1,0 +1,97 @@
+/* The composer under a chat. */
+/* Below a desk the box bleeds 8px into the page gutter (16px on a phone, 32px from 640), as the
+   strips' pills do: its + and Send sit on the column the prose starts on, and the draft keeps the
+   width the full gutter took (a four-line draft wrapped to five under the keyboard). The queue
+   strip's padding counts on these 8px below a desk. The home indicator's inset IS the composer's
+   bottom gap, as in a native chat; 8px only where there is none. */
+.workbench-composer { width: calc(100% - 2 * var(--page-gutter) + 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
+.workbench-telemetry { border-top: 0; }
+/* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
+.composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
+.composer-box { display: flex; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color 150ms ease-out; }
+.composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
+.composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
+/* Nothing can be written: a quiet well that holds only the reason. */
+.composer-box-locked, .composer-box-locked:focus-within { background: var(--disabled); border-color: transparent; }
+.composer-input::placeholder { color: var(--muted-foreground); }
+.composer-input-secret { -webkit-text-security: disc; }
+/* A notice on the draft it is about (a refused send, a password prompt), in flow above the box. */
+.composer-notice { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
+.composer-notice-icon { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.composer-notice-error .composer-notice-icon { color: var(--destructive); }
+.composer-notice-title { color: var(--foreground); font-weight: 500; }
+.composer-notice-body { margin-top: 2px; overflow-wrap: anywhere; }
+.composer-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.composer-notice-dismiss { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; margin: -4px -4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
+@media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--accent); } }
+/* A row above the box (Stop's, a notice) folds open and shut, so the thread moves with it instead of
+   jumping (Fold in composer.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
+.composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 220ms ease-out, opacity 220ms ease-out; }
+.composer-fold > div { min-height: 0; }
+.composer-fold:not([data-phase="open"]) > div { overflow: hidden; }
+.composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: 150ms; }
+@starting-style { .composer-fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
+/* The + leads the box: a 32px circle at the draft's last line, its column spanning the box so the
+   menu it opens hangs above the box, never over the draft. */
+.composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s; }
+.composer-plus { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; color: var(--muted-foreground); background: var(--muted); transition: color 150ms ease-out, background-color 150ms ease-out, scale 120ms ease-out; }
+.composer-plus[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
+.composer-plus:active { scale: 0.96; }
+@media (hover: hover) { .composer-plus:hover { color: var(--foreground); background: var(--accent); } }
+/* The one action: a 32px circle. Send is ink once there is something to send, and takes the accent
+   only while Type into terminal is armed, matching the box's border. */
+.composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
+.composer-send:disabled { background: var(--muted); color: var(--muted-foreground); }
+.composer-send[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+/* Stop at the end of the row above the box, right edge on Send's, for the whole turn. */
+.composer-working { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 40px; padding: 0 7px 4px 12px; }
+.composer-stop { height: 32px; padding: 0 12px; border-radius: 9999px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
+.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: var(--text-footnote); color: var(--muted-foreground); }
+.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; cursor: pointer; }
+.composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
+@media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
+.composer-quiet:disabled { opacity: 0.5; cursor: default; }
+/* The meta row's targets reach down into the home indicator's inset, not up into the box, where the
+   + needs its own 44px: its reach ends 1px above the box's edge on a phone and 1px below it from 768px,
+   where the lead's padding is 4px. */
+@media (pointer: coarse) { .composer-meta .hit-area::before { top: -2px; transform: translateX(-50%); } }
+
+/* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
+   keyboard can shrink the visual viewport without changing `dvh` on older iOS Safari, so
+   useAppViewport mirrors that live height into --app-viewport-height and the cap leaves room for the
+   header, the toolbar below the draft and the safe-area padding. */
+.workbench-composer [data-slot="chat-input"] {
+  max-height: min(12rem, 40dvh, max(5.5rem, calc(var(--app-viewport-height, 100dvh) - 16rem)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* A desk's box is 42px, as the draft's own row there: the + column follows its padding. */
+@media (min-width: 768px) {
+  .composer-lead { width: 36px; padding: 4px 0 4px 4px; }
+}
+
+@media (min-width: 1024px) {
+  .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
+  .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }
+}
+
+@media (max-width: 1023px) and (pointer: coarse) {
+  /* The keyboard covers the home indicator, whose inset iOS still reports; the composer sits on the keys. */
+  .workbench-chat[data-keyboard-open] .workbench-composer { margin-bottom: 8px; }
+  /* While typing, the model and background-work row gives its height back to the thread. */
+  .workbench-chat[data-keyboard-open] .composer-meta { display: none; }
+  /* …and a typed draft gets the +'s width, so it wraps no sooner than it did without one; the + is
+     back as soon as the box is empty or the keyboard goes down. The draft's inset moves with the
+     column, so the text slides over as one piece, and the + is hidden only once it has faded. */
+  .workbench-chat[data-keyboard-open] .composer-input { transition: padding-left 150ms ease-out; }
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s 150ms; }
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }
+  .composer-fold { transition: opacity 120ms ease-out; }
+  .composer-plus:active { scale: none; }
+}

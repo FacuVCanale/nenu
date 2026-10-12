@@ -27,26 +27,8 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
   onChanged: () => void;
 }) {
   const [merging, setMerging] = useState<ProjectThreadView | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const nodes = orgTree(threadTree(project, coordinatorId)).open;
   if (nodes.length === 0) return null;
-
-  async function merge() {
-    if (!merging) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await mergeOrgThread({ project: project.slug, id: merging.id }, session);
-      setStatus(`Merged ${merging.title}`, "success");
-      setMerging(null);
-      onChanged();
-    } catch (failure) {
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <section aria-label="Threads" className="mt-4 flex max-w-xl flex-col gap-2">
@@ -80,7 +62,7 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
             {actions && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {mergeable && <button type="button" className="h-11 rounded-md bg-foreground px-3 text-[13px] font-medium text-background lg:h-8"
-                  onClick={() => { setError(null); setMerging(thread); }}>Merge it</button>}
+                  aria-label={`Merge ${thread.title}`} onClick={() => setMerging(thread)}>Merge</button>}
                 {state === "needs" && thread.paneId && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>Answer</button>}
                 <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>View thread</button>
               </div>
@@ -88,9 +70,40 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
           </article>
         );
       })}
-      <ConfirmDialog open={merging !== null} title="Merge this pull request?" confirmLabel="Merge" busy={busy} error={error}
-        description={<><span className="font-medium text-foreground">{merging?.title}</span>{merging?.pr?.number !== undefined ? ` · PR #${merging.pr.number}` : ""} is merged by Herdr Organizations, which checks again that it is approved and green.</>}
-        onConfirm={() => void merge()} onCancel={() => { if (!busy) setMerging(null); }} />
+      <MergeDialog project={project} thread={merging} session={session} onMerged={() => { setMerging(null); onChanged(); }} onCancel={() => setMerging(null)} />
     </section>
+  );
+}
+
+/** Asks before Herdr Organizations merges a thread's pull request; a refusal stays in the dialog. */
+export function MergeDialog({ project, thread, session, onMerged, onCancel }: {
+  project: ProjectView;
+  thread: ProjectThreadView | null;
+  session?: string;
+  onMerged: () => void;
+  onCancel: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function merge() {
+    if (!thread) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await mergeOrgThread({ project: project.slug, id: thread.id }, session);
+      setStatus(`Merged ${thread.title}`, "success");
+      onMerged();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ConfirmDialog open={thread !== null} title="Merge this pull request?" confirmLabel="Merge" busy={busy} error={error}
+      description={<><span className="font-medium text-foreground">{thread?.title}</span>{thread?.pr?.number !== undefined ? ` · PR #${thread.pr.number}` : ""} is merged by Herdr Organizations, which checks again that it is approved and green.</>}
+      onConfirm={() => void merge()} onCancel={() => { if (!busy) { setError(null); onCancel(); } }} />
   );
 }

@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { useState } from "react";
 import type { ComponentProps } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -11,6 +13,7 @@ import { loadDraft, saveDraft } from "@/lib/drafts";
 import { listLocalSends, localSendScope } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
+import { declarations } from "@/test/css-rules";
 import type { SendOutcome, SendRequest, SendStage } from "@/lib/types";
 import { Composer, type ComposerControl } from "./composer";
 import { pendingStatus } from "./pending-turns";
@@ -50,6 +53,9 @@ const UNSEEN = "Your message wasn't seen in the agent's input box. Nothing was s
 const MAYBE_SENT = "The earlier try of this message is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal.";
 
 const accepted = (body: SendRequest): SendOutcome => ({ ok: true, requestId: body.requestId, ack: "submitted" });
+
+/** A refused send is said beside the draft it refused, not in a toast across the screen. */
+const sendNotice = () => screen.getByRole("alert", { name: /^Not (sent|confirmed)$/ });
 function refusal(body: SendRequest, stage: SendStage, error: string, textDelivered: boolean, code?: "not_ready" | "busy"): SendOutcome {
   return { ok: false, requestId: body.requestId, stage, error, textDelivered, ...(code ? { code } : {}) };
 }
@@ -183,12 +189,12 @@ describe("Composer — send", () => {
     const user = userEvent.setup();
     const wire = watchWrites();
     const props = renderComposerWithStatus({ dialogPresent: true, rawTerminalDraft: "leftover" });
-    const box = screen.getByPlaceholderText(/type a reply/i);
+    const box = screen.getByPlaceholderText("Answer the agent first…");
 
     await user.type(box, "please do not approve anything");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/dialog is waiting/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/dialog is waiting/i));
     expect(wire).toEqual([]); // nothing reached the pane at all
     expect(box).toHaveValue("please do not approve anything"); // the message survives
     expect(props.onSent).not.toHaveBeenCalled();
@@ -241,7 +247,7 @@ describe("Composer — send", () => {
     await user.type(box, "please do not approve anything");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/input box isn't on screen/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i));
     expect(wire).toEqual(["send"]);
     expect(box).toHaveValue("please do not approve anything");
     expect(screen.getByRole("button", { name: /type anyway/i })).toBeInTheDocument();
@@ -263,14 +269,12 @@ describe("Composer — send", () => {
     await user.type(box, "please do not approve anything");
 
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent(/Tap Send again to type anyway/i),
-    );
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/tap Type anyway/i));
     expect(sends).toHaveLength(1);
     expect(sends[0]!.force).toBeUndefined();
 
     await user.click(screen.getByRole("button", { name: "Type anyway?" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/wasn't seen in the agent's input box/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/wasn't seen in the agent's input box/i));
     expect(sends).toHaveLength(2);
     expect(sends[1]).toMatchObject({ text: "please do not approve anything", force: true });
     expect(wire).toEqual(["send", "send"]);
@@ -286,7 +290,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "keep this message");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/typed into the pane but not submitted/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/typed into the pane but not submitted/i));
     expect(screen.getByText(/check the terminal before sending again/i)).toBeInTheDocument();
     expect(box).toHaveValue("keep this message");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -308,8 +312,8 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "try again");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/send_text failed/i));
-    expect(screen.getByText(/tap send to try again/i)).toBeInTheDocument();
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/send_text failed/i));
+    expect(within(sendNotice()).getByRole("button", { name: "Try again" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(sends).toHaveLength(2);
@@ -329,7 +333,7 @@ describe("Composer — send", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends).toHaveLength(1));
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/may already have been sent/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/may already have been sent/i));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends).toHaveLength(3));
     expect(sends[1]!.requestId).toBe(sends[0]!.requestId);
@@ -354,7 +358,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "deploy the thing");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/may already be sent/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/may already be sent/i));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(requests).toHaveLength(2);
@@ -377,7 +381,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "fix the typo");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("Nenu couldn't use that request. Refresh and try again."));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent("Nenu couldn't use that request. Refresh and try again."));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(requests).toHaveLength(2);
@@ -449,13 +453,202 @@ describe("Composer — send", () => {
     await user.type(box, "almost sent");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(UNSEEN));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(UNSEEN));
     expect(box).toHaveValue("almost sent");
     expect(screen.getByText(/check the terminal before sending again/i)).toBeInTheDocument();
     expect(props.onSent).not.toHaveBeenCalled();
   });
 
   it("says a send to an agent Nenu cannot read back went out unverified", async () => {
+    const user = userEvent.setup();
+    serveSend();
+    const props = renderComposerWithStatus({ agent: "pi" });
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "hello pi");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("status")).toHaveTextContent(/sent, not verified/i);
+  });
+});
+
+// A refused send used to land in a toast at the middle of the screen while the draft sat at the
+// bottom, with only a ✕ to offer. The notice sits on the draft it is about and carries the recovery.
+describe("Composer — a refused send is said beside the draft", () => {
+  const VERIFY = "The message didn't reach Claude: its input box wasn't on screen. Nothing was typed.";
+
+  it("keeps the draft, says why above it and retries from the notice, with no toast", async () => {
+    const user = userEvent.setup();
+    let first = true;
+    const sends = serveSend((body) => {
+      if (!first) return accepted(body);
+      first = false;
+      return refusal(body, "verify", VERIFY, false);
+    });
+    const props = renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "Run the migration again");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+    expect(box).toHaveValue("Run the migration again");
+    // The terminal view already shows the pane, so it offers no Open terminal.
+    expect(within(sendNotice()).queryByRole("button", { name: "Open terminal" })).not.toBeInTheDocument();
+    const retry = within(sendNotice()).getByRole("button", { name: "Try again" });
+    expect(retry).toHaveClass("hit-area");
+    await user.click(retry);
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(sends.map((send) => send.text)).toEqual(["Run the migration again", "Run the migration again"]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("puts the message back in the conversation view's box and opens the terminal from the notice", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", VERIFY, false));
+    const props = renderComposerWithStatus({ nativeWorkbench: true });
+    const box = screen.getByRole("textbox");
+    await user.type(box, "Run the migration again");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    expect(box).toHaveValue("Run the migration again");
+    expect(within(sendNotice()).getByRole("button", { name: "Try again" })).toBeVisible();
+    const open = within(sendNotice()).getByRole("button", { name: "Open terminal" });
+    expect(open).toHaveClass("hit-area");
+    await user.click(open);
+    expect(props.setRawTerminal).toHaveBeenCalledWith(true);
+  });
+
+  // Try again is Send again, guards included: a retry that skipped them put a destructive command
+  // on the wire without "Really send?".
+  it("asks Really send? again when Try again retries a destructive draft", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderComposerWithStatus();
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "rm -rf build");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Really send?" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    await user.click(within(sendNotice()).getByRole("button", { name: "Try again" }));
+    expect(screen.getByRole("button", { name: "Really send?" })).toBeVisible();
+    expect(sends).toHaveLength(1);
+  });
+
+  // A pre-flight refusal arms Type anyway, and the notice points at it. A Try again refused the same
+  // way must leave it armed, not take the second refusal as the confirming tap.
+  it("keeps Type anyway armed when Try again is refused the same way", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend((body) => refusal(body, "preflight", NO_BOX, false, "not_ready"));
+    renderComposerWithStatus();
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "please continue");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/tap Type anyway/i));
+    await user.click(within(sendNotice()).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(sends).toHaveLength(2));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i));
+    expect(sends[1]!.force).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Type anyway?" })).toBeVisible();
+    expect(sendNotice()).toHaveTextContent(/tap Type anyway/i);
+  });
+
+  // The override lapses after 10 s; the notice stays until the next edit, so it must not keep
+  // pointing at a button that is no longer there.
+  it("stops naming Type anyway once the override has lapsed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      serveSend((body) => refusal(body, "preflight", NO_BOX, false, "not_ready"));
+      renderComposerWithStatus();
+      await user.type(screen.getByPlaceholderText(/type a reply/i), "please continue");
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(sendNotice()).toHaveTextContent(/tap Type anyway/i));
+      act(() => vi.advanceTimersByTime(10_500));
+      expect(screen.queryByRole("button", { name: "Type anyway?" })).not.toBeInTheDocument();
+      expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i);
+      expect(sendNotice()).not.toHaveTextContent(/Type anyway/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Take over, a card's answer, a bubble's Edit and a picked command all change the draft without
+  // the textarea's own change event. The notice was about the draft it refused, so it goes too.
+  it("goes away when the draft changes from outside the box, so Try again never sends what it did not refuse", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderDraftHarness({ terminalDraft: "rm -rf build" });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "hello");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    await user.click(screen.getByRole("button", { name: /take over/i }));
+    expect(box).toHaveValue("hello\nrm -rf build");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(sends).toHaveLength(1);
+  });
+
+  // A quick reply is not the draft under the notice, so the notice says which message it was, and it
+  // can be put away without touching the draft.
+  it("names the quick reply it refused, and goes away on its ✕ with the draft untouched", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "my own draft");
+    await user.click(control("Quick replies"));
+    await user.click(screen.getByRole("button", { name: "yes" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    expect(within(sendNotice()).getByText("yes")).toBeVisible();
+    await user.click(within(sendNotice()).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(box).toHaveValue("my own draft");
+  });
+
+  it("goes away on the next edit, which is the operator taking it from there", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "Run the migration");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toBeVisible());
+    await user.type(box, " again");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("offers no retry when the text may already be in the pane, only the way to check", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", UNSEEN, true));
+    renderComposerWithStatus({ nativeWorkbench: true });
+    await user.type(screen.getByRole("textbox"), "almost sent");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByRole("alert", { name: "Not confirmed" })).toHaveTextContent(UNSEEN));
+    expect(within(sendNotice()).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    expect(within(sendNotice()).getByRole("button", { name: "Open terminal" })).toBeVisible();
+  });
+});
+
+// A toast floats mid-screen over the transcript. Where the screen already says it (the bubble's
+// "Sent", the armed strip), the toast only covers what the operator is reading.
+describe("Composer — no toast repeats what the screen shows", () => {
+  it("says nothing on a verified send: the cleared box and the bubble say it", async () => {
+    const user = userEvent.setup();
+    serveSend();
+    const props = renderComposerWithStatus();
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "looks good");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+  });
+
+  it("arms and disarms Type into terminal without a toast, the strip says which mode is on", async () => {
+    renderComposerWithStatus();
+    fireEvent.click(control(/^type into terminal$/i));
+    expect(screen.getByText(/typing into terminal/i)).toBeVisible();
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+    fireEvent.click(screen.getByRole("button", { name: "Stop typing into terminal" }));
+    expect(screen.queryByText(/typing into terminal/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+  });
+
+  it("keeps the toast for what nothing on screen says: a send Nenu could not verify", async () => {
     const user = userEvent.setup();
     serveSend();
     const props = renderComposerWithStatus({ agent: "pi" });
@@ -505,7 +698,11 @@ describe("Composer — typing into the terminal", () => {
 
     const strip = screen.getByText(/typing into terminal/i);
     expect(strip).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^stop$/i }));
+    // Named for what it stops, so it never reads as the turn's Stop on the row beside it, and
+    // tappable at 44px though it looks like a link.
+    const stop = screen.getByRole("button", { name: /^stop typing$/i });
+    expect(stop).toHaveClass("hit-area");
+    fireEvent.click(stop);
 
     await waitFor(() =>
       expect(screen.queryByPlaceholderText(/type into the terminal/i)).toBeNull(),
@@ -711,7 +908,9 @@ describe("Composer — typing into the terminal", () => {
     expect(keyCalls.flat()).not.toContain("Enter");
     expect(replyCalls).toBe(0);
     expect(box).toHaveValue("");
-    expect(screen.getByTestId("status")).toHaveTextContent(/typing into the terminal/i);
+    // The armed strip says it; a toast repeating it would cover the transcript.
+    expect(screen.getByText(/typing into terminal/i)).toBeVisible();
+    expect(screen.getByTestId("status")).toHaveTextContent("");
   });
 
   it("sends a swiped/IME-composed word once when composition commits", async () => {
@@ -913,10 +1112,8 @@ describe("Composer — blocked pre-flight override", () => {
     await user.type(box, "use fable please");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent(/input box isn't on screen/i),
-    );
-    expect(screen.getByTestId("status")).toHaveTextContent(/tap send again to type anyway/i);
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i));
+    expect(sendNotice()).toHaveTextContent(/tap Type anyway/i);
     expect(calls).toEqual(["send"]); // one refused send, nothing forced into the picker
     expect(box).toHaveValue("use fable please"); // the message survives
     expect(props.onSent).not.toHaveBeenCalled();
@@ -940,7 +1137,7 @@ describe("Composer — blocked pre-flight override", () => {
     // The second tap overrules the pre-flight: one forced send. The bridge never sees the text in an
     // input box, so it never presses Enter, and the composer keeps the message. THE #34 invariant.
     await waitFor(() => expect(calls).toEqual(["send", "forced"]));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/check Terminal/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/check Terminal/i));
     expect(box).toHaveValue("use fable please");
   });
 });
@@ -999,16 +1196,41 @@ describe("Composer — password prompt", () => {
     await user.type(box, "hunter2hunter2");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    // The refusal names the mechanism, not "a menu or dialog is probably up".
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent(/password prompt/i),
-    );
+    // The refusal names the mechanism, not "a menu or dialog is probably up", and says it once: in
+    // the notice beside the draft, not again in a toast pointing at a different control.
+    const notice = await screen.findByRole("status", { name: "Password prompt" });
+    expect(screen.getByTestId("status")).toHaveTextContent("");
     // The prompt is quoted off the mirror, so the claim is checkable against the screen.
-    expect(screen.getByText("[sudo] password for altan:")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /use type/i })).toBeInTheDocument();
-    // The pre-existing override is untouched — a false positive costs a dismissal, not an action.
-    expect(screen.getByRole("button", { name: /type anyway/i })).toBeInTheDocument();
+    expect(within(notice).getByText("[sudo] password for altan:")).toBeInTheDocument();
+    // Type is the remedy, so it is the notice's primary control, at the Button's own height: 44 on a
+    // touch screen, 36 on a desk…
+    expect(within(notice).getByRole("button", { name: "Use Type" })).toHaveClass("ui-button-default");
+    expect(within(notice).getByRole("button", { name: "Use Type" })).not.toHaveClass("h-11");
+    expect(within(notice).getByRole("button", { name: /dismiss password-prompt notice/i })).toHaveClass("hit-area");
+    // …and the pre-existing override is untouched and named in one clause — a false positive costs a
+    // dismissal, not an action.
+    expect(notice).toHaveTextContent(/Type anyway/);
+    // Same place, same words, but outline: one primary on the surface, and it is Use Type.
+    expect(screen.getByRole("button", { name: /type anyway/i })).not.toHaveClass("bg-destructive");
     expect(calls).toEqual([]);
+  });
+
+  it("masks what was typed while the prompt is recognised, and shows it again once dismissed", async () => {
+    const user = userEvent.setup();
+    serveSudo([]);
+    renderComposerWithStatus({ text: SUDO });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    expect(box).not.toHaveClass("composer-input-secret");
+    await user.type(box, "hunter2hunter2");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByRole("status", { name: "Password prompt" });
+    expect(box).toHaveClass("composer-input-secret");
+    const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+    expect(declarations(css, ".composer-input-secret")).toMatchObject({ "-webkit-text-security": "disc" });
+    // A dismissal says the detection was wrong, so the text is the operator's to read again.
+    await user.click(screen.getByRole("button", { name: /dismiss password-prompt notice/i }));
+    expect(box).not.toHaveClass("composer-input-secret");
+    expect(box).toHaveValue("hunter2hunter2");
   });
 
   it("the handoff clears the draft before arming Type", async () => {
@@ -1500,8 +1722,7 @@ describe("Composer — reload-guard hold (no-SW self-update safety gate)", () =>
 });
 
 describe("Composer — quick keys / image attach", () => {
-  it("shows the attach button on the reply-input row without the quick-key strip being visible", async () => {
-    const user = userEvent.setup();
+  it("attaches from the Photo row without the quick-key strip being visible", async () => {
     renderComposer();
 
     // The quick-key strip only renders once composerFocused && keyboardOpen — keyboardOpen defaults
@@ -1509,10 +1730,10 @@ describe("Composer — quick keys / image attach", () => {
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tab" })).not.toBeInTheDocument();
 
-    // The attach button now lives on the always-visible reply-input row instead of the strip.
-    const attach = screen.getByRole("button", { name: "Attach image" });
+    // Attaching is the menu's first row, a named choice like the others.
+    const attach = control(/^photo$/i);
     expect(attach).toBeEnabled();
-    await user.click(attach); // clickable without throwing (opens the hidden file input)
+    fireEvent.click(attach); // clickable without throwing (opens the hidden file input)
   });
 
   it("does not render digit shortcut buttons in the composer (they live on the Keys dock's 123 tab)", () => {
@@ -1981,14 +2202,16 @@ describe("conversation composer", () => {
       }),
     );
     renderComposer({nativeWorkbench:true,dialogPresent:true,modelControl:<button>Choose model</button>,usageControls:<button>Usage</button>});
-    // The model chip sits in the toolbar under the draft; usage stays behind the ⋯ menu.
+    // What Send does now is said in the box: the message waits for the answer.
+    expect(await screen.findByPlaceholderText("Message for after you answer…")).toBeInTheDocument();
+    // The model chip sits in the row under the draft; attach and usage are rows of the + menu.
     const row = screen.getByRole("group",{name:"Message tools"});
     expect(within(row).getByRole("button",{name:"Choose model"})).toBeInTheDocument();
-    expect(within(row).getByRole("button",{name:"Attach image"})).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Message actions"})).toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Usage"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"More message actions"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Add to queue"})).not.toBeInTheDocument();
-    expect(screen.getByRole("button",{name:"Attach image"})).toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Attach image"})).not.toBeInTheDocument();
     await userEvent.type(screen.getByRole("textbox"),"keep this message");
     await userEvent.click(screen.getByRole("button",{name:"Send"}));
     await waitFor(() => expect(adds).toEqual(["keep this message"]));
@@ -2374,5 +2597,31 @@ describe("Composer — placeholder", () => {
   it("keeps the lock copy over the caller's placeholder", () => {
     renderComposer({ placeholder: "Steer this thread…", readOnly: true });
     expect(screen.getByPlaceholderText(/read-only — device not authorised/i)).toBeDisabled();
+  });
+
+  // The same lock can come from four places, and the box is where the operator looks first, so it
+  // names the one that holds: a refused sign-in is not an unauthorised device, and Herdr being down is
+  // not a reconnecting network.
+  it.each([
+    ["access was refused", { readOnly: true, lockReason: "refused" }, "Sign in again to reply", true],
+    ["the device is read-only", { readOnly: true, lockReason: "read-only" }, "Read-only — device not authorised", true],
+    ["Herdr isn't responding", { disconnected: true, lockReason: "herdr" }, "Herdr isn't responding. Drafts are kept.", false],
+    ["Nenu is reconnecting", { disconnected: true, lockReason: "offline" }, "Write a draft while reconnecting…", false],
+    ["the pane is gone", { gone: true, lockReason: "herdr" }, "Pane is gone", true],
+  ] as const)("names the real reason when %s", (_name, props, placeholder, disabled) => {
+    renderComposer(props);
+    const box = screen.getByPlaceholderText(placeholder);
+    if (disabled) expect(box).toBeDisabled();
+    else expect(box).toBeEnabled();
+  });
+
+  it("draws no + where nothing can be written, Send only as a disabled slot, and keeps both while a draft can wait", () => {
+    renderComposer({ readOnly: true });
+    expect(screen.queryByRole("button", { name: "Message actions" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    cleanup();
+    renderComposer({ disconnected: true });
+    expect(screen.getByRole("button", { name: "Message actions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 });

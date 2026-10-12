@@ -62,6 +62,10 @@ describe("Claude structured rows", () => {
     expect(parse([ask("q1")]).entries()[0]!.parts[0]).toMatchObject({ questions: [{ title: "Which fruits?", options: ["Apple", "Banana"] }] });
   });
 
+  test("a question's option descriptions ride beside its labels, one per option", () => {
+    expect(parse([ask("q1")]).entries()[0]!.parts[0]).toMatchObject({ questions: [{ options: ["Apple", "Banana"], descriptions: ["red", ""] }] });
+  });
+
   test("SendUserFile attachments come from toolUseResult; a malformed or failed result adds none", () => {
     const send = { type: "assistant", uuid: "a", timestamp: "t", message: { role: "assistant", content: [{ type: "tool_use", id: "s1", name: "SendUserFile", input: {} }] } };
     const result = (extra: Record<string, unknown>, isError = false) => ({

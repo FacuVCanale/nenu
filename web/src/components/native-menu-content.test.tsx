@@ -14,7 +14,7 @@ it("retains the subject and command context as native text without inventing cli
   expect(container.querySelector("pre")).toBeNull();
   expect(container.textContent).not.toContain("▔");
   expect(screen.getByText("This affects production settings.")).toBeInTheDocument();
-  expect(screen.getByText("config: { enabled: false }").textContent).toBe("  config: { enabled: false }");
+  expect(screen.getByText("config: { enabled: false }")).toBeInTheDocument();
   expect(screen.getByText("Leave the current value")).toBeInTheDocument();
   expect(screen.getByLabelText("Highlighted")).toBeInTheDocument();
   expect(screen.queryByText("Enter to apply · Esc to cancel")).not.toBeInTheDocument();
@@ -29,4 +29,23 @@ it("retains unsupported footer hints and treats embedded markup as literal text"
   expect(screen.getByText(footer)).toBeInTheDocument();
   expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
   expect(container.querySelector("img")).toBeNull();
+});
+
+// Drawn inside the card, the screen's lines read as the card's text, not as a terminal: the card sits
+// in the conversation's scroller, so no scroller of its own; the screen's indent survives as a hanging
+// indent (a wrapped row lines up under itself); and the highlighted row is marked, not filled like a
+// button, because tapping it does nothing.
+it("reads as the card's text: no scroller, the screen's indent kept as a hanging indent, the highlighted row marked without a fill", () => {
+  const lines = splitLines(parseAnsi("Review changes\n  This affects production settings and every session that reads them.\n    config: { enabled: false }\n  ❯ Keep settings\n    Apply settings\nEnter to apply · Esc to cancel"));
+  const { container } = render(<NativeMenuContent menu={menu} lines={lines} />);
+  for (const el of container.querySelectorAll("*")) expect(el.getAttribute("class") ?? "").not.toMatch(/overflow-(y-)?(auto|scroll)|max-h-/);
+  const prose = screen.getByText("This affects production settings and every session that reads them.");
+  expect(prose.textContent).toBe("This affects production settings and every session that reads them.");
+  const nested = screen.getByText("config: { enabled: false }");
+  expect(nested.textContent).toBe("config: { enabled: false }");
+  expect(nested).toHaveStyle({ paddingLeft: "2ch" });
+  expect(screen.getByText("Apply settings").closest("[data-row]")).toHaveStyle({ paddingLeft: "2ch" });
+  const highlighted = screen.getByLabelText("Highlighted").closest("[data-row]")!;
+  expect(highlighted).toHaveTextContent("Keep settings");
+  expect(highlighted.getAttribute("class") ?? "").not.toMatch(/\bbg-/);
 });

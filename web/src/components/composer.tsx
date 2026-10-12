@@ -4,7 +4,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, ChevronDown, Gauge, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -36,9 +36,11 @@ import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { detectNoEchoPrompt } from "@/lib/no-echo";
 import type { DeliveryMode } from "@/lib/types";
+import type { LockReason } from "@/components/question-card";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
+import { ComposerNotice } from "@/components/composer-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
 import { StopControl } from "@/components/stop-control";
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -69,20 +71,23 @@ export interface ComposerHandle {
 }
 
 /**
- * One of the composer's secondary controls. The composer owns their state and behaviour. The
- * chevron under the draft reaches the message-side groups; View is published to the pane header's
- * ⋯ menu, so the input row stays one line on every screen.
+ * One of the composer's secondary controls. The composer owns their state and behaviour. The + at
+ * the start of the box reaches every message-side group in this order; View is published to the
+ * pane header's ⋯ menu, so the header keeps the view and the composer keeps the message.
  */
 export interface ComposerControl {
-  id: "keys" | "type" | "quick" | "commands" | "display" | "usage";
-  group: "Terminal" | "Shortcuts" | "Session" | "View";
+  id: "photo" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
+  group: (typeof MESSAGE_GROUPS)[number] | "View";
   label: string;
   icon: LucideIcon;
   disabled: boolean;
-  /** An open dock or an armed mode. */
-  on: boolean;
+  /** An open dock or an armed mode; absent for a plain action. */
+  on?: boolean;
   run: () => void;
 }
+
+/** The + menu's groups, in the order it lists them. */
+const MESSAGE_GROUPS = ["Attach", "Replies", "Terminal", "Session"] as const;
 
 interface ComposerProps {
   paneId: string;
@@ -103,6 +108,10 @@ interface ComposerProps {
   readOnly: boolean;
   /** Transport unavailable: stop terminal writes while keeping the local draft editable. */
   disconnected?: boolean;
+  /** Why the composer is locked, when the caller knows: the box then names that cause instead of the
+   *  generic one (a refused sign-in is not an unauthorised device, Herdr down is not a reconnect).
+   *  It only changes the words; `readOnly`, `gone` and `disconnected` still decide what is locked. */
+  lockReason?: LockReason;
   modelControl?: ReactNode;
   /** The background-work chip, beside the model in the row under the draft. */
   processesControl?: ReactNode;
@@ -149,10 +158,10 @@ interface ComposerProps {
 // exposes `focusInput` so the mirror tap can bring up the keyboard.
 //
 // Keys, Quick, Display and Usage open as in-flow docks above the input (they act on, or change how
-// you read, what is on screen, so the conversation stays visible while they are up). Their entry
-// points are the header's ⋯ menu (onControlsChange) and, for the Terminal and Shortcuts rows, the
-// chevron under the draft. The box holds only the draft and its one action (send, stop or confirm);
-// attach, the chevron and the model/context controls sit in the quiet row beneath it.
+// you read, what is on screen, so the conversation stays visible while they are up). One box holds
+// the + (every message-side action, attach included), the draft and Send; Display is published to
+// the header's ⋯ menu (onControlsChange). The model and the session's background work sit in the
+// quiet row beneath the box, which steps aside while a phone keyboard is up.
 type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
 
 // Grace window after a send during which a terminal draft matching what we just sent is treated as
@@ -180,7 +189,7 @@ function ComposerDock({
   children: ReactNode;
 }) {
   return (
-    <div className="mb-2 flex flex-col overflow-hidden rounded-2xl border border-border/65 bg-card">
+    <div className="mb-2 flex flex-col overflow-hidden rounded-xl border border-border/65 bg-card">
       <div className="flex items-center justify-between px-3">
         <SectionLabel>{title}</SectionLabel>
         <Button
@@ -203,9 +212,9 @@ function ComposerDock({
  * measured behaviour, so "now" never promises more than the CLI does.
  */
 function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
-  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none";
+  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted";
   return (
-    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-2xl border border-border/65 bg-card p-1">
+    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-xl border border-border/65 bg-card p-1">
       <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{choice.name} is working. When should it read this?</p>
       <button type="button" className={row} onClick={() => onPick(choice.now)}>
         <span className="text-sm font-medium">Send now</span>
@@ -222,6 +231,51 @@ function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onP
   );
 }
 
+// How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
+const FOLD_OPEN_MS = 220;
+const FOLD_SHUT_MS = 150;
+
+/**
+ * A row above the box (Stop's, a notice) folds open and shut instead of appearing at once, so the
+ * thread above moves with it rather than jumping. One already there on mount is simply there.
+ * Folding shut, it keeps showing what it last showed, out of reach: inert and hidden from assistive
+ * tech, so a Stop on its way out can never be pressed.
+ */
+function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
+  const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
+  const last = useRef<T | null>(null);
+  if (value) last.current = value;
+  const shown = Boolean(value);
+  useEffect(() => setPhase((current) => (shown ? (current === "open" ? current : "opening") : current === "shut" ? current : "shutting")), [shown]);
+  useEffect(() => {
+    if (phase !== "opening" && phase !== "shutting") return;
+    const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
+  if (phase === "shut" || last.current === null) return null;
+  const shutting = phase === "shutting";
+  return (
+    <div className="composer-fold" data-phase={phase} inert={shutting} aria-hidden={shutting || undefined}>
+      <div>{children(last.current)}</div>
+    </div>
+  );
+}
+
+/** A send that did not go through, said above the box until the next edit or send. */
+interface SendFailure {
+  error: string;
+  /** May the text already be in the pane? Then the way forward is to look, never to resend. */
+  delivered: boolean;
+  /** One more line of what to do, when the error alone does not say it. */
+  hint?: string;
+  /** The pre-flight refused it, so Send's slot offers Type anyway for as long as that stays armed. */
+  overridable?: boolean;
+  /** The message, when it was not the draft under the notice (a quick reply). */
+  quote?: string;
+  /** What Try again sends: the message, when it is still where it was (the box, or a quick reply). */
+  retry: { text: string; isDraft: boolean } | null;
+}
+
 /** One line for the mirror view's "You sent" strip: the prose, and how many images went with it. */
 function sentPreview(message: string): string {
   const { text, images } = splitMessageImages(message);
@@ -231,12 +285,15 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
   // Every write affordance is off when the pane is gone OR this device is read-only.
   const locked = gone || readOnly || disconnected;
+  // Nothing can be written here at all (as opposed to a draft waiting out an outage): the box keeps
+  // the reason and Send's slot, disabled, and no + to offer actions that would refuse.
+  const lockedOut = gone || readOnly;
   // …and a ref alongside it, for the ONE caller that reads it after an await. `send()` checks
   // `locked` once, up front, but its pre-clear sweep goes out on the far side of the pre-flight's
   // pane read; a re-render that locks the composer in that window must be able to stop the most
@@ -261,6 +318,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // place, the effect below saves the outgoing pane's draft and loads the incoming one, so pane A's
   // text can never surface in pane B.
   const draftPaneRef = useRef({ session, paneId });
+  // The last send that did not go through, said above the box. It describes that draft only, so any
+  // change to the draft (typed, taken over, answered from a card, put back by Edit) or a new send
+  // takes it down: Try again must never send text it did not refuse.
+  const [failure, setFailure] = useState<SendFailure | null>(null);
 
   /**
    * Set the draft AND persist it. Every write to `input` goes through here — an empty value removes
@@ -283,6 +344,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const value = typeof next === "function" ? next(inputValueRef.current) : next;
     inputValueRef.current = value;
     setInput(value);
+    setFailure(null);
     persistDraft(value, readyPaths(attachments.current()));
   }
 
@@ -295,7 +357,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const attachments = useComposerAttachments({
     upload: (file) => api.uploadImage(paneId, file, session),
     previewUrl: (path) => api.paneFileUrl(paneId, path, session),
-    onPathsChange: (paths) => persistDraft(inputValueRef.current, paths),
+    onPathsChange: (paths) => {
+      setFailure(null);
+      persistDraft(inputValueRef.current, paths);
+    },
     initialPaths: restoredDraft.uploads,
   });
   const hasDraft = input.trim() !== "" || attachments.paths.length > 0;
@@ -329,6 +394,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setInput(restored.text);
     attachments.reset(restored.uploads);
     noticeNoEcho(null); // it described the pane we just left
+    setFailure(null);
   }, [session, paneId]);
   const queue = useMessageQueue(paneId, session, nativeWorkbench && !gone && !readOnly);
   // Pending bubbles in the conversation (lib/local-sends.ts) for what this composer sent.
@@ -448,7 +514,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
   const [sending, setSending] = useState(false);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
-  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "retry" | "check" | null>(null);
+  // "Sending…" for the terminal view, which has no bubble to say it.
+  const [delivering, setDelivering] = useState(false);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -692,7 +759,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   function takeOverDraft() {
     if (effectiveRaw === null) return;
     const draft = effectiveRaw;
-    direct.deactivateSilently();
+    direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
@@ -719,6 +786,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   async function send(value: string, isDraft: boolean, force = false, action?: "model" | "compact"): Promise<boolean> {
     const t = value.trim();
     if (!t || locked || sending) return false;
+    setFailure(null);
     const queueable = nativeWorkbench && queue.page?.available && !action && !force;
     // A dialog owns the TUI's keyboard: Nenu's queue holds the message until the dialog is answered.
     if (queueable && dialogPresent) return enqueueDraft(t, isDraft, "afterTurn");
@@ -736,7 +804,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // is kept: the user answers the dialog with its own buttons, then taps Send again. We never
     // queue-and-auto-send here, because the text may be a reaction to state the dialog just changed.
     if (dialogPresent && !(nativeWorkbench && prepareSend)) {
-      setStatus("A dialog is waiting — answer it first, then send.", "error");
+      setFailure({ error: "A dialog is waiting. Answer it first, then send.", delivered: false, retry: null });
       return false;
     }
     setSending(true);
@@ -748,7 +816,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       ? previous
       : { paneId, text: t, id: crypto.randomUUID(), keep: false };
     pendingDeliveryRef.current = delivery;
-    if (!action) setDeliveryPhase("queued");
+    if (!action) setDelivering(true);
     // Set once the write is on the wire: from then on a lost answer may hide a message already typed.
     let posted = false;
     try {
@@ -768,7 +836,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const res: ReplyOutcome = replyOutcomeFrom(outcome, () => detectNoEchoPrompt(splitLines(parseAnsi(text))));
       if (res.status === "sent") {
         pendingDeliveryRef.current = null;
-        setDeliveryPhase(null);
+        setDelivering(false);
         // A draft send cleared the composer when it started; a retry from a bubble clears the same
         // message if it had been put back.
         if (draftMessage() === t) clearComposer();
@@ -786,20 +854,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           setHandledKey(normalizeDraft(effectiveRaw));
           setPreviewLatched(false);
         }
-        // ✓ flash on the send button + status line acknowledge a VERIFIED send (the text was seen in
-        // the input box before the submit key went out). The "You sent: …" pending preview keeps the
-        // typed text visible until the mirror catches up (cleared by the next text update or a 6s
-        // safety timeout).
+        // The ✓ flash on the send button acknowledges a VERIFIED send (the text was seen in the input
+        // box before the submit key went out), and the bubble or the "You sent: …" preview keeps the
+        // text in view until the transcript catches up, so a plain send needs no toast. One still
+        // speaks for what nothing on screen says: an unverified send, and the two actions.
         setJustSent(true);
         if (sentTimer.current) clearTimeout(sentTimer.current);
         sentTimer.current = setTimeout(() => setJustSent(false), 1500);
         // The native picker already shows its own loading state.
-        if (action !== "model" || !nativeWorkbench) {
-          setStatus(
-            action === "model" ? "Opening model picker…" : action === "compact" ? "Compaction requested" : unverified ? "Sent, not verified: Nenu can't read this agent's input box." : "Message sent",
-            action === "model" || unverified ? "info" : "success",
-          );
-        }
+        const said = action === "model" ? (nativeWorkbench ? null : "Opening model picker…") : action === "compact" ? "Compaction requested" : unverified ? "Sent, not verified: Nenu can't read this agent's input box." : null;
+        if (said) setStatus(said, action === "compact" ? "success" : "info");
         // The conversation view shows the pending bubble instead of this strip.
         setLastSent(action || nativeWorkbench ? null : sentPreview(t));
         if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current);
@@ -819,13 +883,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // but the adapter can only report what it can see, so the user gets a deliberate override —
         // the same two-tap shape as the destructive-send confirm. The second tap skips the pre-flight
         // ONLY; the type-then-verify guard still runs, so Enter is never fired blind either way.
-        forceConfirm.confirm("force");
-        setDeliveryPhase("retry");
+        // Armed, never toggled: a Try again refused the same way offers it again.
+        forceConfirm.arm("force");
+        setDelivering(false);
         // A password prompt gets the notice AND keeps the override: the notice explains the screen and
         // offers the control that works, the override stays for the case where the detection is wrong.
         noticeNoEcho(res.noEcho !== undefined ? { prompt: res.noEcho, typed: false } : null);
         failSend(started, res.error, res.noEcho !== undefined);
-        setStatus(`${res.error} Tap Send again to type anyway.`, "error");
+        // The password notice is the one explanation of a no-echo refusal; a toast would repeat it.
+        if (res.noEcho === undefined) refused(res.error, false, t, isDraft, true);
         return false;
       } else {
         // "stalled" = the text went into the pane but was never seen in the input box, so NO submit
@@ -840,8 +906,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         noticeNoEcho(secret ? { prompt, typed: true } : null);
         const delivered = res.status === "stalled" || res.textDelivered === true;
         failSend(started, res.error, secret, delivered);
-        setDeliveryPhase(delivered ? "check" : "retry");
-        setStatus(res.error, "error");
+        setDelivering(false);
+        // A toolbar action is not a message: its failure is a toast, with nothing to "try again".
+        if (action) setStatus(res.error, "error");
+        else if (!secret) refused(res.error, delivered, t, isDraft);
         return false;
       }
     } catch (e) {
@@ -852,34 +920,55 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (unknown) delivery.keep = true;
       const error = unknown ? "No answer from Nenu, so the message may already be sent. Check Terminal before sending again." : e instanceof Error ? e.message : String(e);
       failSend(started, error, false, unknown);
-      setDeliveryPhase(unknown ? "check" : "retry");
-      setStatus(error, "error");
+      setDelivering(false);
+      if (action) setStatus(error, "error");
+      else refused(error, unknown, t, isDraft);
       return false;
     } finally {
       setSending(false);
     }
   }
 
-  // Gate the composer's Send through the destructive-input confirm: a matching command arms the
-  // "Really send?" state instead of sending; the confirming second tap goes through. Non-destructive
-  // input sends immediately (and any stray armed state is cleared).
-  function onSendClick() {
-    // Never send a message without an image the operator attached to it.
+  /** Say a refused send above the box. Try again is offered only while resending cannot type a
+   *  second copy, and only when the message is still where the operator left it. */
+  function refused(error: string, delivered: boolean, text: string, isDraft: boolean, overridable = false) {
+    const inPlace = !isDraft || draftMessage() === text;
+    setFailure({
+      error,
+      delivered,
+      hint: delivered ? "Check the terminal before sending again." : undefined,
+      overridable,
+      quote: isDraft ? undefined : text,
+      retry: !delivered && inPlace ? { text, isDraft } : null,
+    });
+  }
+
+  /** A refused draft goes again the way Send sends it, guards and all; a quick reply as it was tapped. */
+  function retryFailed() {
+    const retry = failure?.retry;
+    if (!retry) return;
+    if (retry.isDraft) sendDraft();
+    else void send(retry.text, false);
+  }
+
+  /** Never send a message without an image the operator attached to it. */
+  function attachmentsSettled(): boolean {
     if (attachments.uploading) {
       setStatus("Wait for the image to finish uploading.", "info");
-      return;
+      return false;
     }
     if (attachments.failed) {
       setStatus("An image didn't upload. Tap it to retry, or remove it.", "error");
-      return;
+      return false;
     }
-    // An armed override takes precedence: this tap IS the deliberate "type anyway", so it skips the
-    // destructive re-confirm (already answered on the tap that got blocked) and the pre-flight.
-    if (forceConfirm.pending === "force") {
-      forceConfirm.reset();
-      send(draftMessage(), true, true);
-      return;
-    }
+    return true;
+  }
+
+  // Send the draft through the destructive-input confirm: a matching command arms the "Really send?"
+  // state instead of sending; the confirming second tap goes through. Non-destructive input sends
+  // immediately (and any stray armed state is cleared).
+  function sendDraft() {
+    if (!attachmentsSettled()) return;
     const command = commands.find((candidate) => candidate.command === input.trimStart().split(/\s/, 1)[0]);
     const reason = isDestructiveInput(input) ?? (command?.dangerous ? command.command : null);
     if (reason && !sendConfirm.confirm("send")) {
@@ -887,7 +976,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return;
     }
     sendConfirm.reset();
-    send(draftMessage(), true);
+    void send(draftMessage(), true);
+  }
+
+  function onSendClick() {
+    // An armed override takes precedence: this tap IS the deliberate "type anyway", so it skips the
+    // destructive re-confirm (already answered on the tap that got blocked) and the pre-flight.
+    // Only Send's slot offers it; Try again is the ordinary send.
+    if (forceConfirm.pending === "force") {
+      if (!attachmentsSettled()) return;
+      forceConfirm.reset();
+      void send(draftMessage(), true, true);
+      return;
+    }
+    sendDraft();
   }
 
   // The bubbles' buttons. A queued message is handled through its server queue row; a failed one
@@ -982,7 +1084,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Insert "/cmd " into the composer (arg-taking commands) and focus it. Appends to any draft already
   // typed (with a separating space) rather than clobbering it; an empty draft just gets set.
   function insertCommand(value: string) {
-    direct.deactivateSilently();
+    direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${value}` : value));
     focusInputEnd();
   }
@@ -991,6 +1093,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // uploads straight away and shows as a chip; the paths join the text only when the message is sent.
   function attachFiles(files: Iterable<File>) {
     if (locked || direct.active) return;
+    setFailure(null); // the draft changed, so the refusal no longer describes it
     const skipped = attachments.add(files);
     if (skipped > 0) setStatus(`${skipped} file${skipped === 1 ? "" : "s"} skipped. Only images, up to 10 per message.`, "info");
     focusInputEnd();
@@ -1022,7 +1125,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The secondary controls, published to the header menu. Their handlers read the latest render
   // through a ref, so the list is re-published only when something a menu row shows has changed.
   const toggleDock = (dock: Exclude<ComposerDrawer, null>) => requestDrawer(drawer === dock ? null : dock);
-  const controlActions = useRef({ toggleDock, type: () => {} });
+  const controlActions = useRef({ toggleDock, type: () => {}, photo: () => {} });
   controlActions.current = {
     toggleDock,
     type: () => {
@@ -1035,32 +1138,53 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       requestDrawer(null);
       direct.activate();
     },
+    // Synchronous inside the row's click, so the browser still counts it as the user's gesture.
+    photo: () => fileRef.current?.click(),
   };
   const dockControl = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
     disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
   });
   const controls: ComposerControl[] = [
+    { id: "photo", group: "Attach", label: "Photo", icon: ImagePlus, disabled: locked || direct.active, run: () => controlActions.current.photo() },
+    { id: "quick", group: "Replies", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
+    ...(commands.length > 0 ? [{ id: "commands", group: "Replies", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") } as const] : []),
     { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dockControl("keys", locked) },
     // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
     { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
-    { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
+    ...(usageControls ? [{ id: "usage", group: "Session", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) } as const] : []),
     { id: "display", group: "View", label: "Display", icon: Settings2, ...dockControl("display", false) },
   ];
-  if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
-  if (usageControls) controls.push({ id: "usage", group: "Session", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) });
   const latestControls = useRef(controls);
   latestControls.current = controls;
   useEffect(() => {
     onControlsChange?.(latestControls.current);
   }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
-  // The chevron under the draft reaches the message-side rows (Terminal, Shortcuts, Session) without
-  // the header; View stays in the header's ⋯ menu.
-  const shortcutGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts", "Session"] as const).map((group) => ({
+  const menuGroups: ConversationActionGroup[] = MESSAGE_GROUPS.map((group) => ({
     label: group,
     actions: controls.filter((control) => control.group === group),
   }));
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const shortcutsRef = useRef<HTMLButtonElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // The menu hangs from the box's leading column, which spans the box's full height: anchored there,
+  // it opens above the box's top edge however tall the draft has grown, and never over the draft.
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
+  const plusRef = useRef<HTMLButtonElement>(null);
+  const menuRowsRef = useRef<HTMLDivElement>(null);
+  // A lock or another pane takes the menu down; unlocking must not bring it back by itself.
+  useEffect(() => setMenuOpen(false), [lockedOut, paneId, session]);
+  // Open, the menu holds focus on its first row, as a dialog does, so the rows are a Tab away.
+  useEffect(() => {
+    if (menuOpen) menuRowsRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+  }, [menuOpen]);
+  function toggleMenu() {
+    // On a phone the keyboard goes down and the menu gets the screen, as in Messages. Safari on iOS
+    // does not focus a tapped button, so the draft is let go here rather than by the tap.
+    if (!menuOpen) inputRef.current?.blur();
+    setMenuOpen(!menuOpen);
+  }
+  function closeMenu(returnFocus: boolean) {
+    setMenuOpen(false);
+    if (returnFocus) plusRef.current?.focus({ preventScroll: true });
+  }
 
   const [dragging, setDragging] = useState(false);
   const dropHandlers = locked || direct.active ? {} : {
@@ -1084,16 +1208,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     <>
       <div {...dropHandlers} className={cn("composer-surface", dragging && "composer-dragging")}>
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
-        {deliveryPhase && !lastSent && !nativeWorkbench && (
+        {delivering && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
-            {deliveryPhase === "queued" && <Loader2 className="size-3 shrink-0 animate-spin" />}
-            <span>
-              {deliveryPhase === "queued"
-                ? "Sending…"
-                : deliveryPhase === "check"
-                  ? "Not confirmed. Check the terminal before sending again."
-                  : "Not sent. Tap Send to try again."}
-            </span>
+            <Loader2 className="size-3 shrink-0 animate-spin" />
+            <span>Sending…</span>
           </div>
         )}
         {/* Pending-send preview: visible from send until the mirror echoes back (or 6s). Shows the
@@ -1107,10 +1225,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </div>
         )}
 
-        {/* File input stays mounted here (not inside the keyboard-only key row) so the picker
-            callback survives the keyboard collapsing. Attach-image fires it from the reply-input row
-            below (always visible, not gated behind the keyboard-open quick keys); structural commands
-            (New tab/space, Kill) and Stop (Esc, in the Keys dock) live elsewhere. */}
+        {/* File input stays mounted here, outside the + menu, so the picker callback survives the
+            menu closing. The menu's Photo row fires it inside its own tap. */}
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickImage} />
         {/* Keys / Quick / Display / Usage dock — one in-flow site above the input, so the panel
             grows over the conversation, not the draft. Whichever of the mutually exclusive drawers is
@@ -1119,7 +1235,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             palette, not a pad). */}
         {drawer === "usage" && usageControls && (
           <ComposerDock title="Context and usage" onClose={closeDrawer}>
-            <div className="flex flex-wrap items-center gap-1 pb-2">{usageControls}</div>
+            <div className="px-3 pb-3">{usageControls}</div>
           </ComposerDock>
         )}
         {drawer === "keys" && (
@@ -1172,7 +1288,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two
             strips, because that is where the eye already is when a send is refused — and it is a
             NOTICE beside the unchanged "Type anyway?" override, never a replacement for it. */}
-        {noEcho !== null && !direct.active && (
+        <Fold value={!direct.active && noEcho}>{(noEcho) => (
           <NoEchoNotice
             prompt={noEcho.prompt}
             typed={noEcho.typed}
@@ -1192,8 +1308,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   }
             }
             onDismiss={() => noticeNoEcho(null)}
+            overrideOffered={forcingSend}
           />
-        )}
+        )}</Fold>
         {/* Armed indicator for direct typing. In the same in-flow slot as the "You sent:" strip,
             deliberately NOT only on the button and textarea — see the component. */}
         {direct.active && <DirectTypingStrip onStop={() => direct.deactivate()} />}
@@ -1222,18 +1339,37 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         )}
 
-        {/* While a draft holds the round button for Send, Stop stays one tap away on the row that says
-            the agent is working, never as a second round button beside Send. */}
-        {stop.offered && (hasDraft || direct.active) && (
-          <div role="group" aria-label="Agent working" className="flex min-h-8 items-center gap-2 px-1 pb-1">
-            <WorkActivityLabel startedAt={workingSince} />
-            <span className="flex-1" />
-            <StopControl stop={stop} disabled={locked} compact />
+        <Fold value={failure}>{(failure) => (
+          <ComposerNotice
+            icon={CircleAlert}
+            tone="error"
+            title={failure.delivered ? "Not confirmed" : "Not sent"}
+            onDismiss={() => setFailure(null)}
+            actions={(failure.retry || nativeWorkbench) && <>
+              {failure.retry && <Button variant="secondary" size="sm" className="hit-area h-8 coarse:h-9" onClick={retryFailed} disabled={locked || sending}>Try again</Button>}
+              {nativeWorkbench && <Button variant="ghost" size="sm" className="hit-area h-8 coarse:h-9" onClick={() => setRawTerminal(true)}>Open terminal</Button>}
+            </>}
+          >
+            {failure.quote && <p className="truncate text-foreground">{failure.quote}</p>}
+            <p>{failure.error}</p>
+            {failure.hint && <p className="mt-1">{failure.hint}</p>}
+            {/* Said only while the override is there to tap: it lapses long before the notice does. */}
+            {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
+          </ComposerNotice>
+        )}</Fold>
+        {/* Stop lives on the row above the box for the whole turn, and never in the Send slot: a draft
+            appearing or clearing must not move the target under the thumb. The conversation's live
+            turn already says "Working for …" just above, so only the terminal view repeats it here. */}
+        <Fold value={stop.offered}>{() => (
+          <div role="group" aria-label="Agent working" className="composer-working">
+            {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
+            <StopControl stop={stop} disabled={locked} />
           </div>
-        )}
+        )}</Fold>
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
-        {/* One rounded box: the draft grows upward to its cap and the single action sits inside on
-            the right (send, stop, or the confirm pill). Quiet controls live in the row below it. */}
+        {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
+            it (Send or its confirm pill; Stop has the row above). Quiet controls live in the row
+            below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
@@ -1241,7 +1377,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
-          <div className={cn("composer-box", direct.active && "composer-box-armed")}>
+          <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
+            {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
+              <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message actions" aria-haspopup="dialog" aria-expanded={menuOpen}
+                onClick={toggleMenu}>
+                <Plus aria-hidden="true" className="size-5" />
+              </button>
+              {/* Right after the + in the document, so Shift+Tab from the first row is the + again. It
+                  is fixed to the viewport, so where it sits here changes nothing on screen. */}
+              <WorkbenchPopover open={menuOpen} onDismiss={(reason) => closeMenu(reason !== "outside")} anchorRef={menuAnchorRef} label="Message actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+                {/* A row that needs the keyboard (Type) focuses the draft itself; the rest leave focus
+                    on the + they were opened from. */}
+                <div ref={menuRowsRef}><ActionGroups groups={menuGroups} onRun={(run) => { closeMenu(true); run(); }} /></div>
+              </WorkbenchPopover>
+            </div>}
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}
@@ -1285,30 +1434,37 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 gone
                   ? "Pane is gone"
                   : readOnly
-                    ? "Read-only — device not authorised"
+                    ? lockReason === "refused" ? "Sign in again to reply" : "Read-only — device not authorised"
                     : disconnected
-                      ? "Write a draft while reconnecting…"
+                      ? lockReason === "herdr" ? "Herdr isn't responding. Drafts are kept." : "Write a draft while reconnecting…"
                     : direct.active
                       ? "Type into the terminal…"
                       : isShell
                         ? "Type a shell command…"
-                        : placeholder ?? "Type a reply…"
+                        // A dialog owns the agent's keyboard: Send queues behind the answer, or refuses.
+                        : dialogPresent
+                          ? nativeWorkbench && queue.page?.available ? "Message for after you answer…" : "Answer the agent first…"
+                          : placeholder ?? "Type a reply…"
               }
-              autoCorrect={direct.active ? "off" : undefined}
-              spellCheck={direct.active ? false : undefined}
-              className="composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-3.5 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm"
+              autoCorrect={direct.active || noEcho ? "off" : undefined}
+              spellCheck={direct.active || noEcho ? false : undefined}
+              autoComplete={noEcho ? "off" : undefined}
+              // While a password prompt is recognised the draft is a secret the pane never took: it is
+              // masked on screen as well as kept out of the store (noticeNoEcho). A box nothing can be
+              // written into keeps its reason at full strength: the well already says it is off.
+              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", lockedOut && "pl-3.5 disabled:opacity-100", noEcho !== null && !direct.active && "composer-input-secret")}
               disabled={gone || readOnly}
               rows={1}
             />
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
-            {/* One round button that morphs: Stop while the agent works and there is nothing to send,
-                Send (or queue) once a draft exists. */}
-            {stop.offered && !hasDraft && !direct.active ? <StopControl stop={stop} disabled={locked} /> : !direct.active && forcingSend ? (
+            {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
+            {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
-              // submit key is still conditional on the verify step behind it.
+              // submit key is still conditional on the verify step behind it. Beside the password
+              // notice it stays put but steps back to outline: that notice's Use Type is the primary.
               <Button
-                variant="destructive"
+                variant={noEcho !== null ? "outline" : "destructive"}
                 className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
                 onClick={onSendClick}
                 disabled={locked || !hasDraft || sending}
@@ -1349,22 +1505,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           </div>
         </div>
-        <div role="group" aria-label="Message tools" className="composer-meta">
-          <button type="button" className="composer-quiet hit-area" title="Attach image" aria-label="Attach image"
-            disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-            <Plus aria-hidden="true" className="size-4" />
-          </button>
-          <button ref={shortcutsRef} type="button" className="composer-quiet hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen}
-            onClick={() => setShortcutsOpen(!shortcutsOpen)}>
-            <ChevronDown aria-hidden="true" className="size-4" />
-          </button>
-          <WorkbenchPopover open={shortcutsOpen} onDismiss={() => setShortcutsOpen(false)} anchorRef={shortcutsRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
-            <ActionGroups groups={shortcutGroups} onRun={(run) => { setShortcutsOpen(false); run(); }} />
-          </WorkbenchPopover>
-          <div className="flex-1" />
-          {processesControl}
-          {modelControl && <div className="flex min-w-0 items-center justify-end">{modelControl}</div>}
-        </div>
+        {(modelControl || processesControl) && (
+          <div role="group" aria-label="Message tools" className="composer-meta">
+            {modelControl && <div className="flex min-w-0 items-center">{modelControl}</div>}
+            <div className="flex-1" />
+            {processesControl}
+          </div>
+        )}
       </div>
 
       {/* Slash-command palette */}

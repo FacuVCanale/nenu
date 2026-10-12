@@ -3,12 +3,14 @@ import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
-import { BottomSheet } from "@/components/ui/sheet";
+import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { SEGMENT_TRACK, segmentClass } from "@/components/dock-tile";
 import { fetchHistory, paneFileUrl } from "@/lib/api";
 import { chatFileReferences, fileExtension, artifactKind, type ChatFileKind } from "@/lib/chat-files";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 type ScanState = {
@@ -211,7 +213,19 @@ export function ChatFilesBrowser({
   useLayoutEffect(() => {
     if (openedFromMenu) begin();
   }, [openedFromMenu]);
-  function changeFilter(next: typeof filter) { setFilter(next); setExtension("all"); }
+  // Project opens first and has no search; picking a list that has one puts the cursor there on a
+  // desk, as the sheet does for Commands. A touch screen keeps its keyboard down until a tap.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const searchNext = useRef(false);
+  useEffect(() => {
+    if (searchNext.current) searchRef.current?.focus({ preventScroll: true });
+    searchNext.current = false;
+  }, [filter]);
+  function changeFilter(next: typeof filter) {
+    setFilter(next);
+    setExtension("all");
+    searchNext.current = next !== "project" && finePointer();
+  }
 
   return (
     <>
@@ -225,21 +239,19 @@ export function ChatFilesBrowser({
         <Paperclip aria-hidden="true" className="size-4" />
       </button>}
 
-      <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" className="max-h-[82dvh]">
-        <div className="mb-4 grid grid-cols-4 gap-1" role="group" aria-label="File type">
-          <FilterButton active={filter === "artifacts"} onClick={() => changeFilter("artifacts")} icon={null}>Artifacts</FilterButton>
-          <FilterButton active={filter === "project"} onClick={() => changeFilter("project")} icon={null}>Project</FilterButton>
-          <FilterButton active={filter === "file"} onClick={() => changeFilter("file")} icon={null}>
+      <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" desktop="dialog">
+        <div className={cn("mb-4", SEGMENT_TRACK)} role="group" aria-label="File type">
+          <FilterButton active={filter === "artifacts"} onClick={() => changeFilter("artifacts")}>Artifacts</FilterButton>
+          <FilterButton active={filter === "project"} onClick={() => changeFilter("project")}>Project</FilterButton>
+          <FilterButton active={filter === "file"} onClick={() => changeFilter("file")}>
             Files{!scan.loading ? ` · ${files.length}` : ""}
           </FilterButton>
-          <FilterButton active={filter === "photo"} onClick={() => changeFilter("photo")} icon={null}>
-            Media
-          </FilterButton>
+          <FilterButton active={filter === "photo"} onClick={() => changeFilter("photo")}>Media</FilterButton>
         </div>
 
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
         <div className="mb-3 flex flex-wrap gap-2">
-          <input aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
+          <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
           {filter === "artifacts" && <select aria-label="Artifact type" value={artifactType} onChange={event => { setArtifactType(event.target.value); setExtension("all"); }} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
             <option value="all">All types</option><option value="designboard">Designboards</option><option value="document">Documents</option><option value="media">Media</option>
           </select>}
@@ -282,7 +294,7 @@ export function ChatFilesBrowser({
                 </div>
                 <div className="px-2.5 py-2">
                   <p className="truncate text-sm font-medium">{reference.name}</p>
-                  <p className="truncate font-mono text-[11px] text-muted-foreground">{reference.path}</p>
+                  <p className="truncate font-mono text-caption text-muted-foreground">{reference.path}</p>
                 </div>
               </button>
             ))}
@@ -296,7 +308,7 @@ export function ChatFilesBrowser({
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText aria-hidden="true" className="size-4" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{boards.get(reference.path) ?? reference.name}</span>
-                    <span className="block truncate font-mono text-[11px] text-muted-foreground">{reference.path}</span>
+                    <span className="block truncate font-mono text-caption text-muted-foreground">{reference.path}</span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-muted-foreground">
                     <span className="block">{boards.has(reference.path) ? "Designboard" : fileExtension(reference).toUpperCase()}</span>
@@ -329,11 +341,14 @@ export function ChatFilesBrowser({
   );
 }
 
-function FilterButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
+// Four names share a phone's width, so a segment takes the footnote step (an iOS segmented control's
+// size) and a 2px inset: every name, a three-digit Files count included, fits from 320px at the
+// default text size. A four-digit count at 320px, or larger browser text, ends in an ellipsis inside
+// its own segment.
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" aria-pressed={active} onClick={onClick}
-      className={`flex min-h-11 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring ${active ? "border-primary/40 bg-primary/10 text-foreground" : "bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}>
-      {icon}{children}
+    <button type="button" aria-pressed={active} onClick={onClick} className={cn(segmentClass(active), "px-0.5 text-footnote")}>
+      <span className="block truncate">{children}</span>
     </button>
   );
 }

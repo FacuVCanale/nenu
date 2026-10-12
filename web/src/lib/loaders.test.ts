@@ -1,4 +1,5 @@
-import { http, HttpResponse } from "msw";
+import { onTestFinished } from "vitest";
+import { delay, http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
 import { fixtureAgents, fixtureSnapshot, paneTextWithDraft } from "@/test/handlers";
@@ -781,5 +782,109 @@ describe("loaders — narrowed revalidation", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await rootLoader({ request: new Request("http://localhost/space/w1") });
     expect(fetchSpy).toHaveBeenCalled();
+  });
+});
+
+// Opening a pane must not wait on its read (SYS-17): the bench held a 6 s read and the tap left Home
+// on screen for all of it. A navigation gives the read a moment, then opens the chat on what the page
+// already has, and the read lands through the revalidation the route asks for: one read, not two.
+describe("loaders — a pane opens before its read lands", () => {
+  const slowPane = (text: string, ms: number) => {
+    let reads = 0;
+    server.use(http.get(/\/api\/pane\/[^/]+$/, async () => {
+      reads++;
+      await delay(ms);
+      return HttpResponse.json({ paneId: "w1:p1", text, truncated: false, revision: 9 });
+    }));
+    return () => reads;
+  };
+  const within = <T,>(promise: Promise<T>, ms: number) =>
+    Promise.race([promise, new Promise<"late">((resolve) => setTimeout(() => resolve("late"), ms))]);
+  // Measured against the navigation's own budget: the read outlasts it well, and the chat opens soon after.
+  let slowRead = 0;
+  let openBy = 0;
+  beforeAll(async () => {
+    const { PANE_FIRST_PAINT_MS } = await import("./loaders");
+    slowRead = PANE_FIRST_PAINT_MS * 5;
+    openBy = PANE_FIRST_PAINT_MS * 3;
+  });
+
+  it("opens a pane read before on its last text at once, and the next run brings the fresh read without asking again", async () => {
+    const { paneLoader, rootLoader } = await import("./loaders");
+    await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
+    await rootLoader({ request: new Request("http://localhost/") });
+    const reads = slowPane("fresh text", slowRead);
+
+    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), openBy);
+    expect(opened).not.toBe("late");
+    if (opened === "late") return;
+    expect(opened.pending).toBe(true);
+    expect(opened.text).toBe(paneTextWithDraft());
+
+    const settled = await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
+    expect(settled.pending).toBeFalsy();
+    expect(settled.text).toBe("fresh text");
+    expect(reads()).toBe(1);
+  });
+
+  it("opens a pane never read on an empty mirror that says it is on its way", async () => {
+    const { paneLoader } = await import("./loaders");
+    slowPane("fresh text", slowRead);
+    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), openBy);
+    expect(opened).not.toBe("late");
+    if (opened === "late") return;
+    expect(opened).toMatchObject({ pending: true, text: "", error: false, revision: 0 });
+  });
+
+  // Quick taps on a slow link left one read per pane running to its 10 s timeout. A read the reader
+  // walked away from is dropped; the pane they are on keeps its own.
+  const paneReads = (fetchSpy: { mock: { calls: Parameters<typeof fetch>[] } }) => fetchSpy.mock.calls
+    .filter(([input]) => /\/api\/pane\/[^/?]+(\?|$)/.test(String(input)))
+    .map(([input, init]) => ({ pane: decodeURIComponent(String(input).split("/api/pane/")[1]!.split("?")[0]!), signal: init?.signal }));
+  const open = async (paneId: string) => {
+    const { paneLoader } = await import("./loaders");
+    return paneLoader({ params: { paneId }, request: new Request(`http://localhost/pane/${encodeURIComponent(paneId)}`) });
+  };
+
+  it("drops the read of a pane the reader left for another, and keeps the one they are on", async () => {
+    slowPane("fresh text", slowRead);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await open("w1:p1");
+    await open("w2:p1");
+    const reads = paneReads(fetchSpy);
+    expect(reads.map((read) => read.pane)).toEqual(["w1:p1", "w2:p1"]);
+    expect(reads[0]!.signal?.aborted).toBe(true);
+    expect(reads[1]!.signal?.aborted).toBe(false);
+  });
+
+  it("drops it when the reader leaves the panes altogether, but not for the pane's own history", async () => {
+    const { rootLoader } = await import("./loaders");
+    slowPane("fresh text", slowRead);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await open("w1:p1");
+    await rootLoader({ request: new Request("http://localhost/pane/w1%3Ap1/history") });
+    expect(paneReads(fetchSpy)[0]!.signal?.aborted).toBe(false);
+    await rootLoader({ request: new Request("http://localhost/") });
+    expect(paneReads(fetchSpy)[0]!.signal?.aborted).toBe(true);
+  });
+
+  // iOS 16.0 to 17.3 have AbortSignal.timeout but not AbortSignal.any, and there fetchPane can't join
+  // a stop with its timeout. The read keeps the 10 s bound rather than the early stop.
+  it("keeps the read's timeout on a WebView that can't join two signals", async () => {
+    const any = AbortSignal.any;
+    Object.defineProperty(AbortSignal, "any", { value: undefined, configurable: true, writable: true });
+    onTestFinished(() => { Object.defineProperty(AbortSignal, "any", { value: any, configurable: true, writable: true }); });
+    slowPane("fresh text", slowRead);
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await open("w1:p1");
+    expect(paneReads(fetchSpy)[0]!.signal).toBe(timeout.mock.results[0]!.value);
+  });
+
+  it("keeps a quick read on the navigation itself, with nothing pending", async () => {
+    const { paneLoader } = await import("./loaders");
+    const data = await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
+    expect(data.pending).toBeFalsy();
+    expect(data.text).toBe(paneTextWithDraft());
   });
 });

@@ -1,66 +1,169 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { Check } from "lucide-react";
 
+import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// The one shared visual language for an up-levelled dialog option, used by all three block
-// renderers (prompt-select / wizard / preview-select) so they can't drift into three different flat
-// styles again. The rows must read as OBVIOUSLY tappable controls sitting apart from the raw
-// terminal mirror above them: a solid, elevated surface (secondary fill + full-opacity border +
-// shadow) with generous corners and tap padding, a leading key badge mirroring the terminal menu's
-// digit, and calm accent/active states. Theme tokens only — light and dark both derive from these.
+// The one shared visual language for a dialog: the card every dialog is drawn as (the bridge's
+// QuestionCard and each block a grammar lifts off the screen), its option list and its actions. One
+// source, so a menu, a preview and a permission can't drift into different styles again. Theme tokens
+// only, and no `dark:` variant: a block also renders inside the terminal mirror (ADR 0002).
 //
 // XSS boundary unchanged: labels/descriptions passed in are React text nodes; nothing is ever set as
 // innerHTML.
 
-/**
- * Surface tone of an option row:
- *  - `default`  — a plain, selectable choice.
- *  - `selected` — the TUI's current/chosen row (primary accent tint).
- *  - `busy`     — this option's keystroke is in flight: primary accent, and NOT dimmed even while the
- *                 button is disabled (the caller renders a spinner in the trailing slot), so the
- *                 pressed row stays visibly distinct while its siblings dim under `disabled`.
- */
-export type OptionTone = "default" | "selected" | "busy";
+/** The card's surface: an elevated card with a hairline and no shadow (direction.md), in the thread and the mirror. */
+export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-4";
 
-/** Shared surface classes for a tappable option row. Applied verbatim in all three blocks. */
-export function optionSurface(tone: OptionTone): string {
-  return cn(
-    "flex w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-left shadow-sm transition-all",
-    "active:scale-[0.99]",
-    tone === "busy"
-      ? "border-primary bg-primary/10" // in flight — accent, never dimmed (the spinner reads over it)
-      : tone === "selected"
-        ? "border-primary bg-primary/10 active:bg-primary/15 disabled:opacity-60"
-        : "border-border bg-secondary active:border-primary/50 active:bg-primary/5 disabled:opacity-60",
-  );
-}
-
-/** The small square key chip — the option's terminal digit, so the menu mapping is visible.
- *  `aria-hidden`: the digit is a visual affordance; the button is already named by its label. */
-export function KeyBadge({ children, tone = "default" }: { children: ReactNode; tone?: OptionTone }) {
+/** The card's status: the blocked dot carries the urgency, the words stay plain (direction.md). */
+export function WaitingOnYou() {
   return (
-    <span
-      aria-hidden
-      className={cn(
-        "mt-px flex size-5 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold leading-none tabular-nums",
-        tone === "default"
-          ? "border-border bg-background text-muted-foreground"
-          : "border-primary/40 bg-primary/15 text-primary",
-      )}
-    >
-      {children}
+    <span className="flex shrink-0 items-center gap-2 font-medium text-foreground">
+      <span aria-hidden className="size-2 rounded-full bg-status-blocked" />
+      Waiting on you
     </span>
   );
 }
 
 /**
- * The enclosing surface for an up-levelled dialog: a bordered, filled panel that lifts the WHOLE
- * prompt off the raw terminal mirror behind it — the primary "these are controls, not output"
- * signal, shared by all three block renderers so the separation can't drift. `bg-card` sits one
- * layer above the page background in dark (the terminal is on `--background`, the option rows on the
- * lighter `--secondary`, so the panel reads as a distinct middle layer); in light, where card ==
- * background, the border + shadow carry the separation. Owns `role="group"` + its aria label, so a
- * block's outermost element IS this panel.
+ * A dialog a grammar lifted off the screen, drawn as the card: the status line, then the block's own
+ * content. Named by its question, like the QuestionCard.
+ */
+export function DialogCard({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section aria-label={label} data-dialog-card className={DIALOG_CARD}>
+      <div className="flex min-w-0 items-center gap-2 text-footnote">
+        <WaitingOnYou />
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** The card's question, the same headline on Home and in the thread, always whole. */
+export function QuestionHeading({ children }: { children: ReactNode }) {
+  return <p className="text-headline text-pretty text-foreground">{children}</p>;
+}
+
+/**
+ * The option list every card draws, whatever the kind: one grouped surface with a hairline between
+ * rows, the rows' radius (lg). Its rows clip to it, so a row's focus ring is drawn inside (see
+ * `optionRow`).
+ */
+export const OPTION_LIST = "flex min-w-0 flex-col divide-y divide-border overflow-hidden rounded-lg border border-border";
+
+export function OptionList({ className, ...props }: ComponentProps<"div">) {
+  return <div role="group" data-option-list {...props} className={cn(OPTION_LIST, className)} />;
+}
+
+/** A chosen row (the previewed design, a ticked box, the current answer): the neutral fill of a
+ *  selected row elsewhere in the app. The blue stays on its radio, checkbox or check. */
+export const ROW_SELECTED = "bg-[var(--workbench-row-selected)]";
+
+/**
+ * Surface tone of an option row:
+ *  - `default`  — a plain, selectable choice.
+ *  - `selected` — the TUI's current/chosen row (ROW_SELECTED).
+ *  - `busy`     — this option's keystroke is in flight: the same fill, and NOT dimmed even while the
+ *                 button is disabled (the caller renders a spinner in the trailing slot), so the
+ *                 pressed row stays visibly distinct while its siblings dim.
+ */
+export type OptionTone = "default" | "selected" | "busy";
+
+/** A row of the option list: 36 px on a fine pointer, 44 on a coarse one, a tint on hover and press. */
+export function optionRow(tone: OptionTone = "default"): string {
+  return cn(
+    "flex min-h-9 w-full min-w-0 items-center gap-3 px-3.5 py-1.5 text-left select-none coarse:min-h-11 coarse:py-2",
+    "transition-colors duration-150 ease-out motion-reduce:transition-none focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed",
+    tone === "default" ? "enabled:hover:bg-[var(--workbench-row-hover)] enabled:active:bg-[var(--workbench-row-selected)]" : ROW_SELECTED,
+  );
+}
+
+/** An option's title, with the agent's "(Recommended)" suffix drawn as the badge every card uses. */
+export function OptionLabel({ label, dim = false }: { label: string; dim?: boolean }) {
+  const { text, recommended } = recommendedLabel(label);
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span data-option-title className={cn("min-w-0 break-words text-body font-medium", dim ? "text-muted-foreground" : "text-foreground")}>{text}</span>
+      {recommended && <RecommendedBadge />}
+    </span>
+  );
+}
+
+/** What an option means, under its title. `clamp` cuts it to two lines (Home measures the cut). */
+export function OptionDescription({ clamp = false, children }: { clamp?: boolean; children: ReactNode }) {
+  return <span data-description className={cn("break-words text-footnote text-muted-foreground", clamp && "line-clamp-2")}>{children}</span>;
+}
+
+/** A multi-select row's box: the blue is the tick, never the row. */
+export function OptionCheckbox({ checked }: { checked: boolean }) {
+  return (
+    <span aria-hidden className={cn("flex size-5 shrink-0 items-center justify-center rounded-sm border",
+      checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground")}>
+      {checked && <Check className="size-3.5" />}
+    </span>
+  );
+}
+
+/** A one-of-many row's radio: the blue is the dot, never the row. */
+export function OptionRadio({ checked }: { checked: boolean }) {
+  return (
+    <span aria-hidden className={cn("flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+      checked ? "border-primary" : "border-muted-foreground")}>
+      {checked && <span className="size-2.5 rounded-full bg-primary" />}
+    </span>
+  );
+}
+
+/** A full option row: a leading control (box, radio), label + description, and a trailing slot
+ *  (spinner or a state mark). Every block's options are these, inside an OptionList. */
+export function OptionButton({
+  tone = "default",
+  label,
+  description,
+  leading,
+  trailing,
+  disabled,
+  className,
+  ...props
+}: Omit<ComponentProps<"button">, "children"> & {
+  tone?: OptionTone;
+  label: string;
+  description?: ReactNode;
+  leading?: ReactNode;
+  trailing?: ReactNode;
+}) {
+  return (
+    <button type="button" disabled={disabled} {...props} className={cn(optionRow(tone), className)}>
+      {leading}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <OptionLabel label={label} dim={disabled && tone !== "busy"} />
+        {description ? <OptionDescription>{description}</OptionDescription> : null}
+      </span>
+      {trailing}
+    </button>
+  );
+}
+
+/** The card's one commit, as a class for a control that is not a Button: the Button's large primary. */
+export const PRIMARY_ACTION = cn(buttonVariants({ size: "block" }));
+/** A second key the screen names that commits too, beside the primary but never as loud. */
+export const NEUTRAL_ACTION = cn(buttonVariants({ variant: "secondary", size: "block" }));
+/** An escape or a utility under the card (Cancel, Chat about this, Add a note…): plain text, neutral. */
+export const SECONDARY_ACTION =
+  "inline-flex min-h-11 select-none items-center gap-1.5 rounded-lg px-2 text-subhead font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-disabled-foreground";
+/** The row of SECONDARY_ACTIONs, bled into the card's padding so their text lines up with the content. */
+export const SECONDARY_ROW = "-mx-2 -mb-2 flex flex-wrap items-center";
+
+/** The card's footer of escapes and utilities, apart from the answers above it. */
+export function SecondaryActions({ children }: { children: ReactNode }) {
+  return <div data-secondary-actions className={SECONDARY_ROW}>{children}</div>;
+}
+
+/**
+ * The enclosing surface for a block that is not a dialog (the completion popup): a bordered panel
+ * that lifts it off the raw terminal mirror behind it. Owns `role="group"` + its aria label.
  */
 export function PromptPanel({ ariaLabel, children }: { ariaLabel: string; children: ReactNode }) {
   return (
@@ -74,66 +177,14 @@ export function PromptPanel({ ariaLabel, children }: { ariaLabel: string; childr
   );
 }
 
-// The small primary tick that flags an option group as "the terminal is asking you something",
-// separating the block from the raw mirror above it. Shared by both group headers below.
-const accentTick = <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-primary/60" />;
-
-/** The compact caption above an option group — a short uppercase label, for the single-question
- *  dialogs whose actual question stays visible in the raw scrollback just above. Non-semantic (the
- *  group is already aria-labelled by its question). */
+/** The compact caption above a PromptPanel's rows. Non-semantic (the group is already labelled). */
 export function OptionGroupCaption({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5 pl-0.5">
-      {accentTick}
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-primary/60" />
+      <span className="text-footnote font-medium text-muted-foreground">
         {children}
       </span>
     </div>
-  );
-}
-
-/** The readable question heading, for the wizard steps whose question is NOT in the raw mirror (the
- *  dialog block replaced it) — kept prominent, with the same accent tick as {@link OptionGroupCaption}. */
-export function QuestionHeading({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-1.5 pl-0.5">
-      <span className="mt-[3px] flex">{accentTick}</span>
-      <div className="text-sm font-medium text-foreground">{children}</div>
-    </div>
-  );
-}
-
-/** A full option row: leading key badge, label + optional description, and a trailing slot (spinner
- *  or a state mark). Shared by prompt-select and wizard answers, which are structurally identical;
- *  preview-select composes {@link optionSurface}/{@link KeyBadge} directly because its rows also
- *  carry the pointer chevron. */
-export function OptionButton({
-  tone = "default",
-  keyLabel,
-  label,
-  description,
-  trailing,
-  disabled,
-  onClick,
-}: {
-  tone?: OptionTone;
-  keyLabel?: ReactNode;
-  label: ReactNode;
-  description?: ReactNode;
-  trailing?: ReactNode;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" disabled={disabled} onClick={onClick} className={optionSurface(tone)}>
-      {keyLabel != null ? <KeyBadge tone={tone}>{keyLabel}</KeyBadge> : null}
-      <span className="min-w-0 flex-1">
-        <span className="block break-words text-sm font-medium leading-snug text-foreground">{label}</span>
-        {description ? (
-          <span className="block break-words text-xs leading-snug text-muted-foreground">{description}</span>
-        ) : null}
-      </span>
-      {trailing}
-    </button>
   );
 }

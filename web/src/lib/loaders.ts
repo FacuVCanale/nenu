@@ -52,6 +52,10 @@ function isSuperseded(request: Request | undefined): boolean {
   return request?.signal.aborted === true;
 }
 
+function rethrowIfSuperseded(request: Request | undefined): void {
+  if (isSuperseded(request)) throw request!.signal.reason ?? new DOMException("The run was superseded", "AbortError");
+}
+
 // The root route's id, paired with rootLoader. Children read its data via
 // `useRouteLoaderData(ROOT_ROUTE_ID)`; keeping it a constant means a rename is a single edit, not a
 // silent runtime `undefined` from a stale string literal.
@@ -124,6 +128,9 @@ export interface PaneData {
   authError: boolean;
   /** When this mirror was actually fetched — set only on a datable stale render, as on HomeData. */
   lastSeenAt?: number;
+  /** The read is still on its way: this is what the page already had (empty for a pane never read),
+   *  handed over so the chat opens at once. DetailRoute asks for the read as soon as the chat shows. */
+  pending?: boolean;
 }
 
 // Keep-previous-data cache is now PER-SESSION: switching sessions must not show the other session's
@@ -237,8 +244,12 @@ export async function rootLoader({ request }: { request?: Request } = {}): Promi
   const url = request?.url;
   const isNavigation = lastRootUrl !== url;
   lastRootUrl = url;
-  // Leaving a pane clears the pane loader's discriminator so a later return to it reads as a fresh nav.
-  if (!isPaneUrl(url)) lastPaneUrl = undefined;
+  // Leaving the panes clears the pane loader's discriminator so a later return to it reads as a fresh
+  // nav, and stops a pane read nothing will show now.
+  if (!isPaneUrl(url)) {
+    lastPaneUrl = undefined;
+    dropReads();
+  }
 
   // Fast path: a navigation during a known, escalated outage returns last-known data INSTANTLY rather
   // than hanging on a doomed fetch. Revalidations fall through and really fetch (so recovery lands and
@@ -382,6 +393,59 @@ function holdsNoEchoPrompt(text: string): boolean {
   return detectNoEchoPrompt(splitLines(parseAnsi(tail))) !== null;
 }
 
+/**
+ * How long a navigation waits on the pane's read before it opens the chat on what the page already
+ * has. A read on a quick link lands inside it, so nothing changes there; on a slow one the header and
+ * the conversation show at once instead of the old screen staying up for the whole read (SYS-17).
+ */
+export const PANE_FIRST_PAINT_MS = 150;
+
+// The read a navigation started and stopped waiting for, so the revalidation that follows awaits it
+// instead of reading the pane a second time. Keyed by pane and window; dropped once it settles, or
+// once the reader is on another pane or off the panes (dropReads).
+const inflight = new Map<string, { pane: string; read: Promise<PaneData>; stop: AbortController }>();
+
+/** Stop the shared reads of every pane but `keep`: left to its timeout, a read nobody will show holds the link. */
+function dropReads(keep?: string): void {
+  for (const [id, entry] of inflight) {
+    if (entry.pane === keep) continue;
+    entry.stop.abort();
+    inflight.delete(id);
+  }
+}
+
+/** One background read of a pane, shared by the navigation that started it and the run after it. */
+function sharedRead(paneId: string, session: string | undefined, lines: number): Promise<PaneData> {
+  const pane = paneKey(paneId, session);
+  const id = `${pane}\u0000${lines}`;
+  dropReads(pane);
+  const running = inflight.get(id);
+  if (running) return running.read;
+  // Not the request's signal: the navigation that starts it may stop waiting, and the read must still
+  // land. Its own stops it once the reader moves on; fetchPane bounds it with its own timeout, and
+  // loadPane turns a failure into the stale pane. Without AbortSignal.any (iOS before 17.4) fetchPane
+  // can't join the stop to that timeout, so there the read keeps the timeout and goes without the stop.
+  const stop = new AbortController();
+  const signal = typeof AbortSignal.any === "function" ? stop.signal : undefined;
+  const read = loadPane(paneId, session, lines, signal).then((data) => {
+    rememberPaneData(pane, data);
+    return data;
+  }).finally(() => {
+    if (inflight.get(id)?.read === read) inflight.delete(id);
+  });
+  inflight.set(id, { pane, read, stop });
+  return read;
+}
+
+/** What a navigation hands the chat while the read runs: the last pane data or text, else nothing. */
+function pendingPane(paneId: string, session: string | undefined, lines: number): PaneData {
+  const key = paneKey(paneId, session);
+  const known = lastPaneData.get(key);
+  if (known?.requestedLines === lines) return { ...known, pending: true };
+  const text = lastPaneText.get(key) ?? loadLastPaneText(session, paneId)?.value ?? "";
+  return { paneId, session, text, truncated: false, requestedLines: lines, revision: 0, error: false, authError: hasAuthError(session), pending: true };
+}
+
 export async function paneLoader({
   params,
   request,
@@ -410,7 +474,20 @@ export async function paneLoader({
   const previous = lastPaneData.get(key);
   if (!isNavigation && previous?.requestedLines === lines && !needsFetch("pane", request)) return previous;
 
-  const pane = await loadPane(paneId, session, lines, request);
+  // Opening a pane: give the read a moment, then open on what the page has and let it land later.
+  // A superseded navigation still rejects, so React Router drops it (see isSuperseded).
+  if (isNavigation) {
+    rethrowIfSuperseded(request);
+    const read = sharedRead(paneId, session, lines);
+    const landed = await Promise.race([read, new Promise<null>((resolve) => setTimeout(() => resolve(null), PANE_FIRST_PAINT_MS))]);
+    rethrowIfSuperseded(request);
+    return landed ?? pendingPane(paneId, session, lines);
+  }
+  // The run after a navigation that stopped waiting: the read it started, not a second one.
+  const running = inflight.get(`${key}\u0000${lines}`);
+  if (running) return running.read;
+
+  const pane = await loadPane(paneId, session, lines, request?.signal);
   rememberPaneData(key, pane);
   return pane;
 }
@@ -427,13 +504,13 @@ function rememberPaneData(key: string, pane: PaneData): void {
   }
 }
 
-async function loadPane(paneId: string, session: string | undefined, lines: number, request: Request | undefined): Promise<PaneData> {
+async function loadPane(paneId: string, session: string | undefined, lines: number, signal: AbortSignal | undefined): Promise<PaneData> {
   const key = paneKey(paneId, session);
   try {
     // On a 304 fetchPane returns the cached body, so `read.text` is populated either way; the
     // `?? lastPaneText` is just belt-and-suspenders. Both paths are a success (not the error
     // branch) so the connection bar doesn't flicker on an unchanged poll.
-    const read: PaneReadResponse = await fetchPane(paneId, lines, session, request?.signal);
+    const read: PaneReadResponse = await fetchPane(paneId, lines, session, signal);
     const text = read.text || lastPaneText.get(key) || "";
     rememberPaneText(key, text);
     // Write-through, EXCEPT while the pane is asking for a secret — see holdsNoEchoPrompt (ADR 0017).
@@ -452,7 +529,7 @@ async function loadPane(paneId: string, session: string | undefined, lines: numb
       authError: false,
     };
   } catch (e) {
-    if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
+    if (signal?.aborted) throw e; // superseded revalidation, or a read the reader left — let it go
     rememberAuthError(session, isAuthError(e));
     // Genuine network / server failure: show stale text flagged as degraded.
     return stalePane(paneId, session, lines);

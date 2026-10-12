@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { DogGallop } from "@/components/dog-gallop";
 
 interface CollieHomeProps {
-  /** Return to the dashboard. */
+  /** Opens navigation (or the caller's action outside the workbench). */
   onHome?: () => void;
   /** Mobile chat uses the mark to open workspace navigation in the same header row. */
   label?: string;
@@ -16,21 +16,18 @@ interface CollieHomeProps {
    *  when we've in fact given up; the muted icon says "not connected" at a glance, matching the boot
    *  splash. (Never a gallop rest-frame — that full-stretch pose looks frozen mid-run.) */
   lost?: boolean;
-  /** Show the "Nenu" wordmark beside the mark when the surrounding layout has room for it. */
-  wordmark?: boolean;
   className?: string;
 }
 
-// The single, shared Nenu mark: brand + home button + connection loader in one, so the top-left of
-// every screen means the same thing. At rest it's the familiar static app icon (favicon.svg); once the
-// connection has been not-live for a sustained beat (`trouble`) it springs into the galloping sprite —
-// until the outage escalates (`lost`), when it drops the gallop and rests on the SAME static icon,
-// muted, then settles back to the full-color icon once live. The rest state is always the static icon,
-// never a paused sprite: a gallop strip's rest frame is a full-stretch mid-stride pose that reads as
-// frozen mid-run. Tapping it returns to the dashboard. Callers can include the "Nenu" wordmark on
-// wider layouts and omit it where horizontal room belongs to context and actions. Every header renders
-// THIS component — the consistency is structural, not a convention two files have to keep agreeing on.
-export function CollieHome({ onHome, label = "Nenu home", expanded, trouble, lost = false, wordmark = false, className }: CollieHomeProps) {
+// The single, shared Nenu mark: brand + button + connection loader in one. At rest it's the familiar
+// static app icon (favicon.svg); once the connection has been not-live for a sustained beat (`trouble`)
+// it springs into the galloping sprite — until the outage escalates (`lost`), when it drops the gallop
+// and rests on the SAME static icon, muted, then settles back to the full-color icon once live. The
+// rest state is always the static icon, never a paused sprite: a gallop strip's rest frame is a
+// full-stretch mid-stride pose that reads as frozen mid-run. On a phone it leads Home's header (and a
+// chat's, until the chat's title opens the switcher), where tapping it opens navigation; every other
+// screen leads with a back instead (AppHeader).
+export function CollieHome({ onHome, label = "Nenu home", expanded, trouble, lost = false, className }: CollieHomeProps) {
   const gallop = trouble && !lost;
   return (
     <button
@@ -64,7 +61,6 @@ export function CollieHome({ onHome, label = "Nenu home", expanded, trouble, los
           <img src="/nenu-mark.png" alt="" className="nenu-mark size-6 sm:size-8" />
         )}
       </span>
-      {wordmark && <span className="text-sm font-semibold tracking-tight sm:text-lg">Nenu</span>}
     </button>
   );
 }

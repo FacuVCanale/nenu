@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // use-theme holds module-scope state, so each case re-imports both the hook and this component to
@@ -55,5 +55,40 @@ describe("ThemeControl", () => {
 
     expect([...document.documentElement.classList]).toEqual([]);
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("is one tab stop: only the selected option takes Tab", async () => {
+    const { ThemeControl } = await load("light");
+    render(<ThemeControl />);
+    expect(screen.getAllByRole("radio").map((o) => o.tabIndex)).toEqual([-1, 0, -1]);
+  });
+
+  it("moves the selection with the arrow keys, wrapping at the ends, and keeps focus on it", async () => {
+    const { ThemeControl } = await load(null);
+    render(<ThemeControl />);
+    const user = userEvent.setup();
+
+    screen.getByRole("radio", { name: "System" }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("radio", { name: "Light" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Light" })).toHaveFocus();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("light");
+
+    await user.keyboard("{ArrowLeft}{ArrowLeft}");
+    expect(screen.getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Dark" })).toHaveFocus();
+  });
+
+  it("leaves a modified arrow to the browser, so Alt+Left still goes back", async () => {
+    const { ThemeControl } = await load(null);
+    render(<ThemeControl />);
+    const system = screen.getByRole("radio", { name: "System" });
+    system.focus();
+
+    for (const modifier of ["altKey", "metaKey", "ctrlKey"] as const) {
+      // fireEvent returns false when the handler called preventDefault.
+      expect(fireEvent.keyDown(system, { key: "ArrowLeft", [modifier]: true })).toBe(true);
+      expect(system).toHaveAttribute("aria-checked", "true");
+    }
   });
 });

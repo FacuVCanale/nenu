@@ -25,6 +25,13 @@ describe("CommandPalette", () => {
     expect(screen.queryByText("/doctor")).toBeNull();
   });
 
+  it("names the common list the way the docks name theirs: sentence case, never tracked capitals", () => {
+    setup();
+    const label = screen.getByText(/^Common · type to search all \d+$/);
+    expect(label).toHaveClass("text-footnote", "font-medium", "text-subtle-foreground");
+    expect(label.className).not.toMatch(/\buppercase\b|\btracking-/);
+  });
+
   it("filters across the full catalog as you type", async () => {
     const user = userEvent.setup();
     setup();
@@ -170,5 +177,32 @@ describe("CommandPalette", () => {
     expect(screen.getByText("Confirm?")).toBeInTheDocument();
     await user.click(screen.getByText("Deploy staging"));
     expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith("/deploy");
+  });
+});
+
+/** The pointer the page reports, for the media query that decides first focus. */
+function pointer(kind: "fine" | "coarse") {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === `(pointer: ${kind})`, media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  }));
+}
+
+describe("CommandPalette first focus", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("on a desk opens with the cursor in the search, so typing filters at once", async () => {
+    pointer("fine");
+    const user = userEvent.setup();
+    setup();
+    expect(screen.getByPlaceholderText(/Search \d+ commands/)).toHaveFocus();
+    await user.keyboard("doctor");
+    expect(screen.getByText("/doctor")).toBeInTheDocument();
+  });
+
+  it("on a touch screen leaves the search for a tap, so the keyboard does not cover the list", () => {
+    pointer("coarse");
+    setup();
+    expect(screen.getByPlaceholderText(/Search \d+ commands/)).not.toHaveFocus();
   });
 });

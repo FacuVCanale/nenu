@@ -57,7 +57,7 @@ interface DirectTypingOptions {
 // Herdr writes.
 //
 // It does NOT own the entry point. Arming is an explicit NAMED choice — the "Type into terminal" row
-// of the pane header's ⋯ menu, beside Keys (published by the composer as a ComposerControl).
+// of the composer's + menu, beside Keys (a ComposerControl).
 //
 // WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
 // bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per
@@ -124,10 +124,10 @@ export function useDirectTyping({
     committedComposition.current = null;
     activeRef.current = true;
     setActive(true);
-    setStatus("Typing into the terminal — keys send as you type.", "success");
-    // Focus synchronously while the long-press/contextmenu gesture still carries browser user
-    // activation; a deferred focus selects the field but mobile browsers may refuse to open their
-    // software keyboard once that activation has expired. The existing callback still runs after
+    // No toast: the armed strip above the composer says it, and stays while the mode does.
+    // Focus synchronously while the tap on the + menu's "Type into terminal" row still carries
+    // browser user activation; a deferred focus selects the field but mobile browsers may refuse to
+    // open their software keyboard once that activation has expired. The existing callback still runs after
     // React swaps the controlled value so selection lands at the end.
     inputRef.current?.focus({ preventScroll: true });
     focusInput();
@@ -178,12 +178,8 @@ export function useDirectTyping({
     }, 0);
   }
 
+  /** Disarm on the operator's own tap. Silent: the strip going away and the placeholder say it. */
   function deactivate() {
-    clearMode();
-    setStatus("Back to sending replies", "info");
-  }
-
-  function deactivateSilently() {
     clearMode();
   }
 
@@ -191,7 +187,7 @@ export function useDirectTyping({
   // all mean the same thing: the mirror on screen has stopped tracking the pane, and the next
   // keystroke would go into a terminal the user is no longer actually looking at. Disarm rather
   // than hold the mode open across the gap — the cost is one re-arm, the alternative is typing
-  // blind. Never persisted, never restored — see the lifecycle note in send-mode-menu.tsx.
+  // blind. Never persisted, never restored — see the lifecycle note at the top of this file.
   useEffect(() => {
     if (!active || !suspended) return;
     clearMode();
@@ -312,7 +308,6 @@ export function useDirectTyping({
     busy: sender.busy,
     activate,
     deactivate,
-    deactivateSilently,
     onChange,
     onCompositionStart,
     onCompositionEnd,

@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createRef, type ComponentProps } from "react";
-import { act, render, screen, within } from "@testing-library/react";
+import { createRef, useState, type ComponentProps } from "react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendMessage } from "@/lib/api";
 import { loadDraft } from "@/lib/drafts";
-import { clearStatus } from "@/lib/status";
+import { clearStatus, useStatus } from "@/lib/status";
+import { declarations } from "@/test/css-rules";
 import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
 
 // These seams isolate workbench commands from the separately tested send protocol: the bridge's
@@ -21,6 +22,11 @@ beforeEach(() => {
   vi.mocked(sendMessage).mockImplementation(async (_pane, request) => ({ ok: true, requestId: request.requestId, ack: "submitted" }));
   clearStatus();
 });
+
+/** The toast line, as the status area would show it. */
+function StatusLine() {
+  return <output data-testid="status">{useStatus()?.text ?? ""}</output>;
+}
 
 /** The texts sent through the bridge's one-request send, with the pane and session they went to. */
 const sent = () => vi.mocked(sendMessage).mock.calls.map(([pane, request, session]) => ({ pane, text: request.text, session }));
@@ -38,7 +44,7 @@ function setup(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
     setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(),
     onSent, onControlsChange, ...overrides,
   };
-  const router = createMemoryRouter([{ path: "/", element: <Composer {...props} ref={ref} /> }]);
+  const router = createMemoryRouter([{ path: "/", element: <><Composer {...props} ref={ref} /><StatusLine /></> }]);
   render(<RouterProvider router={router} />);
   /** The ⋯ menu's view of the composer: its published controls, run as a menu tap would. */
   const run = (id: ComposerControl["id"]) => act(() => controls.find((control) => control.id === id)!.run());
@@ -100,10 +106,10 @@ it("publishes its secondary controls, grouped, instead of rendering them", async
   const input = screen.getByRole("textbox");
   await user.type(input, "draft survives navigation");
   expect(controls().map(({ group, label }) => `${group}: ${label}`)).toEqual([
-    "Terminal: Keys", "Terminal: Type into terminal", "Shortcuts: Quick replies", "Shortcuts: Commands",
-    "View: Display", "Session: Context and usage",
+    "Attach: Photo", "Replies: Quick replies", "Replies: Commands", "Terminal: Keys", "Terminal: Type into terminal",
+    "Session: Context and usage", "View: Display",
   ]);
-  for (const name of ["Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  for (const name of ["Photo", "Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   expect(input).toHaveValue("draft survives navigation");
 });
 
@@ -118,6 +124,16 @@ it("does not convert a rejected picker command into a forced send on retry", asy
   expect(vi.mocked(sendMessage).mock.calls.some(([, request]) => request.force)).toBe(false);
   expect(screen.getByRole("textbox")).toHaveValue("Preserve this draft");
   expect(onSent).not.toHaveBeenCalled();
+});
+
+it("reports a failed toolbar command in a toast, never as a draft's notice with Try again", async () => {
+  // Try again resends a message; a /compact that failed to verify is not one, and re-sending its
+  // text as a reply would skip the action's own guard.
+  vi.mocked(sendMessage).mockResolvedValueOnce({ ok: false, requestId: "r", stage: "verify", error: "Compact didn't reach the agent.", textDelivered: false });
+  const { ref } = setup();
+  await act(async () => { expect(await ref.current!.compactContext()).toBe(false); });
+  expect(screen.getByTestId("status")).toHaveTextContent("Compact didn't reach the agent.");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 it("does not arm a normal draft override when a toolbar command is rejected", async () => {
@@ -159,48 +175,148 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
   expect(sent()).toEqual([expect.objectContaining({ text: "Keep me" })]);
 });
 
-it("keeps the draft and its one action in a box, with quiet controls in a row beneath it", () => {
-  setup({ modelControl: <button>Choose model</button> });
+it("puts one + at the start of the box and Send at its end; the row beneath holds only the session", () => {
+  setup({ modelControl: <button>Choose model</button>, processesControl: <button>Processes: 1 done</button> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
   const input = screen.getByRole("textbox");
-  const toolbar = screen.getByRole("group", { name: "Message tools" });
   const box = input.parentElement!;
-  // Regression: the draft used to share a row with the tools and wrapped every few words. Only the
-  // single action shares the box, after the draft.
-  expect(toolbar).not.toContainElement(input);
-  expect(within(box).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Send"]);
+  // One box: the + leads, the draft grows in the middle, Send closes it. No second menu anywhere.
+  expect(within(box).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Message actions", "Send"]);
+  const plus = within(box).getByRole("button", { name: "Message actions" });
+  expect(plus.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(input.compareDocumentPosition(within(box).getByRole("button", { name: "Send" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(box.parentElement!.nextElementSibling).toBe(toolbar);
-  const order = ["Attach image", "Message shortcuts", "Choose model"].map((name) => within(toolbar).getByRole("button", { name }));
-  expect(order[0]!.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(order[1]!.compareDocumentPosition(order[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(within(toolbar).queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Message actions" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Attach image" })).not.toBeInTheDocument();
+  const toolbar = screen.getByRole("group", { name: "Message tools" });
+  expect(toolbar).not.toContainElement(input);
+  expect(within(toolbar).getAllByRole("button").map((button) => button.textContent)).toEqual(["Choose model", "Processes: 1 done"]);
 });
 
-it("opens the message shortcuts from the chevron and runs a row like the header menu does", async () => {
-  const { user } = setup();
+it("opens one menu from the +, grouped Attach, Replies, Terminal and Session, and runs a row like the header menu does", async () => {
+  const { user } = setup({ usageControls: <button>Session metrics</button> });
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep writing here");
-  await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
-  const menu = screen.getByRole("dialog", { name: "Message shortcuts" });
-  expect(within(menu).getByRole("button", { name: "Keys" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Message actions" }));
+  const menu = screen.getByRole("dialog", { name: "Message actions" });
+  const groups = [...menu.querySelectorAll("section")].map((section) =>
+    `${section.getAttribute("aria-label")}: ${within(section).getAllByRole("button").map((button) => button.textContent).join(", ")}`);
+  expect(groups).toEqual(["Attach: Photo", "Replies: Quick replies, Commands", "Terminal: Keys, Type into terminal", "Session: Context and usage"]);
+  // "Type into terminal" stays a row with its name, never a gesture; Display stays in the header.
   expect(within(menu).getByRole("button", { name: "Type into terminal" })).toBeVisible();
   expect(within(menu).queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
   await user.click(within(menu).getByRole("button", { name: "Quick replies" }));
-  expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
   expect(sendMessage).not.toHaveBeenCalled();
 });
 
+it("takes the phone keyboard down when the + opens its menu, so the menu has the screen", async () => {
+  const { user } = setup();
+  const input = screen.getByRole("textbox");
+  await user.click(input);
+  expect(input).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Message actions" }));
+  expect(screen.getByRole("dialog", { name: "Message actions" })).toBeVisible();
+  expect(input).not.toHaveFocus();
+});
+
+it("reaches the + menu's rows from the keyboard and hands focus back to the + on Escape", async () => {
+  const { user } = setup({ usageControls: <button>Session metrics</button> });
+  const plus = screen.getByRole("button", { name: "Message actions" });
+  plus.focus();
+  await user.keyboard("{Enter}");
+  const menu = screen.getByRole("dialog", { name: "Message actions" });
+  // The menu takes focus on its first row and Tab walks the rest; leaving it is Escape.
+  expect(within(menu).getByRole("button", { name: "Photo" })).toHaveFocus();
+  await user.tab();
+  expect(within(menu).getByRole("button", { name: "Quick replies" })).toHaveFocus();
+  expect(menu).toBeVisible();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
+  expect(plus).toHaveFocus();
+});
+
+it("takes the keyboard down itself when the + opens its menu, as a tap on iOS leaves focus in the draft", async () => {
+  const { user } = setup();
+  const input = screen.getByRole("textbox");
+  await user.click(input);
+  // Safari on iOS does not focus a button it taps, so the click arrives with the draft still focused.
+  fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
+  expect(screen.getByRole("dialog", { name: "Message actions" })).toBeVisible();
+  expect(input).not.toHaveFocus();
+});
+
+it("closes the + menu when the pane locks, so it does not come back by itself on unlock", async () => {
+  function Lockable(props: ComponentProps<typeof Composer>) {
+    const [readOnly, setReadOnly] = useState(false);
+    return <><button type="button" onClick={() => setReadOnly(!readOnly)}>Toggle lock</button><Composer {...props} readOnly={readOnly} /></>;
+  }
+  const props: ComponentProps<typeof Composer> = {
+    paneId: "w1:p1", agent: "codex", isShell: false, gone: false, readOnly: false, nativeWorkbench: true, dialogPresent: false,
+    text: "pane output", terminalDraft: null, rawTerminalDraft: null,
+    prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
+    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), onSent: vi.fn(),
+  };
+  render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Lockable {...props} /> }])} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Message actions" }));
+  expect(screen.getByRole("dialog", { name: "Message actions" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Toggle lock" }));
+  expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Toggle lock" }));
+  expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
+});
+
+it("opens the image picker from the menu's Photo row", async () => {
+  const { user } = setup();
+  const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const click = vi.spyOn(picker, "click").mockImplementation(() => {});
+  await user.click(screen.getByRole("button", { name: "Message actions" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name: "Photo" }));
+  expect(click).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
+});
+
 it("gives every small composer control a 44px touch target", () => {
   setup({ modelControl: <button>Choose model</button> });
-  const toolbar = screen.getByRole("group", { name: "Message tools" });
-  for (const name of ["Attach image", "Message shortcuts"]) expect(within(toolbar).getByRole("button", { name })).toHaveClass("hit-area");
+  expect(screen.getByRole("button", { name: "Message actions" })).toHaveClass("hit-area");
   expect(screen.getByRole("button", { name: "Send" })).toHaveClass("hit-area");
   const css = readFileSync(resolve(import.meta.dirname, "../workbench.css"), "utf8");
-  expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.hit-area::before \{[^}]*width: max\(100%, 44px\); height: max\(100%, 44px\)/);
+  expect(declarations(css, ".hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ width: "max(100%, 44px)", height: "max(100%, 44px)" });
+});
+
+it("gives a draft the + column's width while the phone keyboard is up, so it wraps no sooner than before", async () => {
+  // Measured on the bench: with the + inside the box a four-line draft wrapped to six lines and the
+  // thread lost 48px; folding the + while typing under the keyboard keeps it at four.
+  const { user } = setup();
+  const box = screen.getByRole("textbox").parentElement!;
+  expect(box).not.toHaveClass("composer-box-typing");
+  await user.type(screen.getByRole("textbox"), "a");
+  expect(box).toHaveClass("composer-box-typing");
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ width: "0", visibility: "hidden" });
+  // Off the keyboard, and on a desk, the + stays: the menu is one tap away while a draft waits.
+  expect(screen.getByRole("button", { name: "Message actions" })).toBeVisible();
+});
+
+it("gives the thread the meta row's height while the phone keyboard is up", () => {
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
+});
+
+it("paints the armed Send in the accent its box wears, so armed reads as one signal", async () => {
+  const { user } = setup();
+  await user.click(screen.getByRole("button", { name: "Message actions" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name: "Type into terminal" }));
+  const armed = screen.getByRole("button", { name: "Stop typing into terminal" });
+  expect(armed).toHaveAttribute("aria-pressed", "true");
+  expect(armed).toHaveClass("composer-send");
+  // The ink primary must not win here: the direction keeps the accent for the armed mode.
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  const box = declarations(css, ".composer-box-armed")["border-color"];
+  expect(box).toBe("var(--primary)");
+  expect(declarations(css, '.composer-send[aria-pressed="true"]')).toMatchObject({ background: box, color: "var(--primary-foreground)" });
 });
 
 it("opens quick replies from the menu without changing or sending the draft", async () => {

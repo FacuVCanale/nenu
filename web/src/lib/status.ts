@@ -8,6 +8,8 @@ export interface StatusMessage {
   text: string;
   tone: StatusTone;
   description?: string;
+  /** Where the notice leads: the toast becomes one control that opens it (a pane, Home's Needs you). */
+  to?: string;
 }
 
 let current: StatusMessage | null = null;
@@ -23,11 +25,15 @@ function emit() {
 
 /** Latest foreground feedback wins; errors persist until explicitly dismissed. Returns its id, for clearStatus. */
 export function setStatus(text: string, tone: StatusTone = "info", ttlMs?: number | null,
-  options: { description?: string; background?: boolean } = {}): number | undefined {
+  options: { description?: string; background?: boolean; to?: string } = {}): number | undefined {
   if (options.background && current?.tone === "error") return undefined;
   if (timer) clearTimeout(timer);
   timer = null;
-  current = { id: nextId++, text, tone, ...(options.description ? { description: options.description } : {}) };
+  current = {
+    id: nextId++, text, tone,
+    ...(options.description ? { description: options.description } : {}),
+    ...(options.to ? { to: options.to } : {}),
+  };
   remaining = ttlMs === undefined ? (tone === "error" ? null : 2500) : ttlMs;
   resumeStatus(current.id);
   emit();

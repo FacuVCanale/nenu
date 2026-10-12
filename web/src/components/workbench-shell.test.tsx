@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, RouterProvider, useMatch } from "react-router";
 import { onTestFinished } from "vitest";
 import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
@@ -20,11 +20,19 @@ const data: HomeData = {
 
 beforeEach(() => localStorage.clear());
 
+/** A chat's title as agent-chat draws it on a phone: the navigation opens from it, as it once did from the mark. */
+function ChatTitle() {
+  const navigation = useContext(WorkbenchNavigationContext);
+  if (!useMatch("/pane/:paneId")) return <span>Screen</span>;
+  return <button type="button" data-chat-title aria-haspopup="dialog" aria-expanded={navigation?.open} onClick={navigation?.onOpen}>Chat title</button>;
+}
+
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
-  const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
-  const router = createMemoryRouter([{ path: "/pane/:paneId", element }, { path: "*", element }], { initialEntries: [initialEntry] });
-  render(<RouterProvider router={router} />);
-  return { router, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
+  const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><ChatTitle /></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
+  const routes = ["/pane/:paneId", "/pane/:paneId/history", "/project/:projectSlug", "/project/:projectSlug/node/:nodeId", "*"].map((path) => ({ path, element }));
+  const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
+  const { unmount } = render(<RouterProvider router={router} />);
+  return { router, unmount, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
 }
 
 it("uses one shared mobile header without the old brand or session row", () => {
@@ -73,12 +81,12 @@ it("searches projects by thread metadata and chats by name, then closes on Escap
   const search = sidebar.getByRole("searchbox", { name: "Search projects and chats" });
   expect(search).toHaveFocus();
   await user.type(search, "t-0007");
-  expect(sidebar.getByRole("link", { name: /Nenu Project/ })).toBeInTheDocument();
-  expect(sidebar.queryByRole("link", { name: /Improve interface/ })).not.toBeInTheDocument();
+  expect(sidebar.getByRole("option", { name: /^Project navigation/ })).toHaveAttribute("href", "/project/nenu/node/t-0007?s=work");
+  expect(sidebar.queryByRole("option", { name: /Improve interface/ })).not.toBeInTheDocument();
   await user.clear(search);
   await user.type(search, "improve");
-  expect(sidebar.queryByRole("link", { name: /Nenu Project/ })).not.toBeInTheDocument();
-  expect(sidebar.getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
+  expect(sidebar.queryByRole("option", { name: /Nenu Project/ })).not.toBeInTheDocument();
+  expect(sidebar.getByRole("option", { name: /Improve interface/ })).toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(sidebar.queryByRole("searchbox")).not.toBeInTheDocument();
   expect(sidebar.getByRole("link", { name: /Nenu Project/ })).toBeInTheDocument();
@@ -90,7 +98,7 @@ it("filters without disturbing a mounted composer draft", async () => {
   await user.type(draft, " plus edits");
   await user.click(sidebar.getByRole("button", { name: "Search" }));
   await user.type(sidebar.getByRole("searchbox"), "missing");
-  expect(sidebar.getByText("No matching projects or chats")).toBeInTheDocument();
+  expect(sidebar.getByText("No matches for “missing”")).toBeInTheDocument();
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
   expect(draft).toHaveValue("Keep this draft plus edits");
@@ -116,9 +124,36 @@ it("shows the tab bar off a pane, and its tabs open the navigation in the matchi
   expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
 });
 
-it("hides the tab bar on a pane, where the composer owns the bottom edge", () => {
-  setup(data, "/pane/w%3A1%3Ap2?s=work");
+it("hides the tab bar on a pane and its History, where the composer owns the bottom edge", () => {
+  for (const path of ["/pane/w%3A1%3Ap2?s=work", "/pane/w%3A1%3Ap2/history?s=work"]) {
+    const { unmount } = setup(data, path);
+    expect(screen.queryByRole("navigation", { name: "Primary" }), path).not.toBeInTheDocument();
+    unmount();
+  }
+});
+
+// The coordinator's pane w:1:p9 is not running, so the project page is its organization.
+const restingProject: HomeData = { ...projectData, agents: data.agents };
+
+it("keeps the tab bar on a project page and a node page, which draw no composer", () => {
+  // A node page stays put even while its project's coordinator runs.
+  for (const [home, path] of [[restingProject, "/project/nenu?s=work"], [projectData, "/project/nenu/node/t-0007?s=work"]] as const) {
+    const { unmount } = setup(home, path);
+    expect(screen.getByRole("navigation", { name: "Primary" }), path).toBeInTheDocument();
+    unmount();
+  }
+});
+
+it("draws no tab bar on a project whose live coordinator is opening its pane", () => {
+  // The router stays on /project/:slug while the pane loads; a tab bar there would sit alone on an empty page.
+  setup(projectData, "/project/nenu?s=work");
   expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
+});
+
+it("draws New as a tab with its own label, like its neighbours", () => {
+  setup();
+  const bar = within(screen.getByRole("navigation", { name: "Primary" }));
+  for (const name of ["Home", "Browse", "Search", "New"]) expect(bar.getByRole(name === "Home" ? "link" : "button", { name })).toHaveTextContent(name);
 });
 
 it("searches with Cmd+K and reaches every action from the collapsed rail", async () => {
@@ -129,7 +164,7 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
   // A workspace of one pane opens that pane.
-  expect(rail.getByRole("link", { name: "Nenu" })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
+  expect(rail.getByRole("link", { name: /^Nenu\b/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(rail.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
   await user.click(rail.getByRole("button", { name: "Needs you, 1" }));
   expect(sidebar.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "true");
@@ -160,13 +195,13 @@ it("opens a workspace on the same pane from the sidebar, search and the collapse
 
   await user.keyboard("{Meta>}k{/Meta}");
   await user.type(sidebar.getByRole("searchbox"), "op");
-  expect(workspaces().getByRole("link", { name: /^ops/ })).toHaveAttribute("href", opsPane);
-  await user.click(workspaces().getByRole("link", { name: /^ops/ }));
+  expect(sidebar.getByRole("option", { name: /^ops/ })).toHaveAttribute("href", opsPane);
+  await user.click(sidebar.getByRole("option", { name: /^ops/ }));
   expect(router.state.location.pathname + router.state.location.search).toBe(opsPane);
 
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
-  expect(rail.getByRole("link", { name: "ops" })).toHaveAttribute("href", opsPane);
+  expect(rail.getByRole("link", { name: /^ops\b/ })).toHaveAttribute("href", opsPane);
 });
 
 it("opens a workspace on the same pane from the phone's Browse", async () => {
@@ -235,11 +270,12 @@ it("folds to the rail while a thread is docked, unless expanded during that dock
   expect(localStorage.getItem("nenu:sidebar-collapsed:v1")).toBe("0");
 });
 
-it("can reopen the mobile workspace drawer after navigation and Escape", async () => {
-  const { user } = setup();
-  const trigger = screen.getByRole("button", { name: "Open navigation" });
+it("can reopen the mobile workspace drawer from the chat title after navigation and Escape", async () => {
+  const { router, user } = setup(herd, "/pane/dev%3Amobile?s=work");
+  const trigger = screen.getByRole("button", { name: "Chat title" });
   await user.click(trigger);
-  await user.click(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("link", { name: /Improve interface/ }));
+  await user.click(within(screen.getByRole("region", { name: "Recent" })).getByRole("link", { name: /Rediseño de Nenu/ }));
+  expect(router.state.location.pathname).toBe("/pane/dev%3Adone");
   expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   await user.click(trigger);
   expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
@@ -247,6 +283,24 @@ it("can reopen the mobile workspace drawer after navigation and Escape", async (
   expect(trigger).toHaveFocus();
   await user.click(trigger);
   expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
+});
+
+it("keeps the Browse sheet on the tapped row, marked as opening, until its chat is on screen", async () => {
+  let land!: () => void;
+  const landed = new Promise<null>((resolve) => { land = () => resolve(null); });
+  const element = <WorkbenchShell data={data}><span>Screen</span></WorkbenchShell>;
+  const router = createMemoryRouter([{ path: "/pane/:paneId", element, loader: () => landed }, { path: "*", element }], { initialEntries: ["/?s=work"] });
+  render(<RouterProvider router={router} />);
+  const user = userEvent.setup();
+  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
+  const row = within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("link", { name: /^Nenu/ });
+  await user.click(row);
+  // A slow read leaves the sheet up, with the tapped row saying it is on its way.
+  expect(await within(row).findByText("Opening")).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Navigation" })).toContainElement(row);
+  land();
+  await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument());
+  expect(router.state.location.pathname).toBe("/pane/w%3A1%3Ap2");
 });
 
 function desktop() {
@@ -311,9 +365,9 @@ const herd: HomeData = {
   }],
 };
 
-it("opens the mark's drawer from the top: what needs you, the chats that moved last, then folded projects and workspaces", async () => {
+it("opens the chat title's drawer from the top: what needs you, the chats that moved last, then folded projects and workspaces", async () => {
   const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
-  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
   // A drawer from the left edge, not the sheet that rises from the bottom.
   expect(drawer.querySelector(".side-sheet-panel")).not.toBeNull();
@@ -340,22 +394,22 @@ it("opens the mark's drawer from the top: what needs you, the chats that moved l
   await user.click(workspaces.getByRole("button", { name: "Developer panes" }));
   expect(workspaces.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "true");
   await user.click(nav.getByRole("button", { name: "Close" }));
-  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
   expect(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
 });
 
 it("searches and starts something new from the drawer's header", async () => {
   const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
   render(<NewDialogProbe />);
-  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
   const nav = within(screen.getByRole("dialog", { name: "Navigation" }));
   await user.click(nav.getByRole("button", { name: "Search" }));
   const search = nav.getByRole("searchbox", { name: "Search projects and chats" });
   expect(search).toHaveFocus();
   await user.type(search, "psag");
   expect(nav.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
-  expect(nav.getByRole("link", { name: /^psag/ })).toBeInTheDocument();
-  expect(nav.queryByRole("link", { name: /^AWAM producto/ })).not.toBeInTheDocument();
+  expect(nav.getByRole("option", { name: /^psag/ })).toBeInTheDocument();
+  expect(nav.queryByRole("option", { name: /^AWAM producto/ })).not.toBeInTheDocument();
   await user.click(nav.getByRole("button", { name: "New" }));
   expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   expect(screen.getByText("New dialog")).toBeInTheDocument();
@@ -369,4 +423,91 @@ it("leaves Needs you and Recent to Home in the tab bar's Browse, and folds every
   expect(sheet.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
   expect(sheet.getByRole("button", { name: "AWAM Comercio SaaS tasks" })).toHaveAttribute("aria-expanded", "false");
   expect(sheet.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+});
+
+// The audit's folded rail: six client-*-portal workspaces read as six "C" tiles, api and acme as two "A".
+const fleetNames = ["nenu", "api", "acme-enterprise-billing-platform-migration", "data-pipeline-backfill-2026-q4-customer-events", "personal-site",
+  ...["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].map((word) => `client-${word}-portal`)];
+const fleet: HomeData = {
+  ...data,
+  workspaces: fleetNames.map((label, i) => ({ workspaceId: `w:${i}`, number: i + 1, label, focused: false, activeTabId: `t${i}`, tabCount: 1, paneCount: 1 })),
+  tabs: fleetNames.map((_, i) => ({ tabId: `t${i}`, workspaceId: `w:${i}`, number: 1, label: "1", focused: false, paneCount: 1 })),
+  agents: fleetNames.map((label, i) => ({ paneId: `w:${i}:p`, workspaceId: `w:${i}`, workspaceLabel: label, workspaceNumber: i + 1, tabId: `t${i}`,
+    agent: "claude", status: i === 2 ? "blocked" : "idle", cwd: "/", focused: false, paneLabel: `Task ${i}` })),
+};
+
+/** What a rail tile shows, without the words only a screen reader hears. */
+function shownText(element: HTMLElement): string {
+  const copy = element.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll(".sr-only").forEach((node) => node.remove());
+  return copy.textContent!.trim();
+}
+
+it("folds every workspace to two letters no other tile shares, and names it on hover and focus", async () => {
+  desktop();
+  const { sidebar, user } = setup(fleet);
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
+  const tiles = fleetNames.map((name) => rail.getByRole("link", { name: new RegExp(`^${name}\\b`) }));
+  const shown = tiles.map(shownText);
+  for (const monogram of shown) expect(monogram).toMatch(/^[A-Z0-9]{2}$/);
+  expect(new Set(shown).size).toBe(fleetNames.length);
+  // The dot on a tile is spoken with its name.
+  expect(tiles[2]).toHaveAccessibleName("acme-enterprise-billing-platform-migration, needs you");
+
+  await user.hover(tiles[5]!);
+  expect(await screen.findByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
+  await user.unhover(tiles[5]!);
+  await waitFor(() => expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument());
+
+  tiles[5]!.focus();
+  await user.tab();
+  expect(tiles[6]).toHaveFocus();
+  expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("client-bravo-portal");
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument());
+  expect(tiles[6]).toHaveFocus();
+});
+
+/** The fleet's folded rail with client-alpha-portal's name up; from there the test drives the clock. */
+async function railNamed() {
+  desktop();
+  const { sidebar, user } = setup(fleet);
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const nav = screen.getByRole("navigation", { name: "Collapsed sidebar" });
+  const tile = within(nav).getByRole("link", { name: /^client-alpha-portal\b/ });
+  await user.hover(tile);
+  expect(await screen.findByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
+  vi.useFakeTimers();
+  onTestFinished(() => { vi.useRealTimers(); });
+  return { nav, tile };
+}
+const railName = () => screen.queryByRole("tooltip", { hidden: true });
+
+it("keeps a rail item's name up when the pointer slips into the gap and back", async () => {
+  const { nav, tile } = await railNamed();
+  // A browser moving within the rail sends only pointerover; user-event's pointerout would read as leaving it.
+  fireEvent.pointerOver(nav);
+  fireEvent.pointerOver(tile);
+  act(() => vi.advanceTimersByTime(250));
+  expect(railName()).toHaveTextContent("client-alpha-portal");
+});
+
+it("keeps a rail item's name up while the pointer rests on it, to read it", async () => {
+  const { nav } = await railNamed();
+  // Out of the tile, over the rail's edge and onto the name itself.
+  fireEvent.pointerOver(nav);
+  fireEvent.pointerOver(railName()!);
+  act(() => vi.advanceTimersByTime(250));
+  expect(railName()).toHaveTextContent("client-alpha-portal");
+});
+
+it("closes a rail item's name on Escape wherever focus is, fading it out before it goes", async () => {
+  await railNamed();
+  const draft = screen.getByRole("textbox", { name: "Draft" });
+  draft.focus();
+  fireEvent.keyDown(draft, { key: "Escape" });
+  expect(railName()).toBeInTheDocument();
+  act(() => vi.advanceTimersByTime(150));
+  expect(railName()).not.toBeInTheDocument();
 });

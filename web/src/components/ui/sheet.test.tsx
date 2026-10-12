@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
-import { BottomSheet, SideSheet } from "./sheet";
+import { BottomSheet, SideSheet, useSheetStep } from "./sheet";
 
 // Focus + labelling: the sheets are role=dialog/aria-modal, so they should be named by their title,
 // move focus inside on open, restore it on close, and expose exactly ONE accessible "Close" (the
@@ -188,5 +190,189 @@ describe("SideSheet — swipe to dismiss", () => {
     expect(onClose).not.toHaveBeenCalled();
     swipe(panel, [[200, 300], [180, 302], [100, 306]]);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * A stand-in for the browser's exit animation, which jsdom does not run: the test decides when it
+ * ends. Anything else running in the layer (a spinner) comes along with a name of its own.
+ */
+function stubExitAnimation(...others: Array<{ animationName: string }>) {
+  let end!: () => void;
+  const finished = new Promise<void>((resolve) => { end = resolve; });
+  const forever = new Promise<void>(() => {});
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [{ animationName: "exit", finished }, ...others.map((other) => ({ ...other, finished: forever }))],
+  });
+  return async () => {
+    end();
+    await act(async () => { await finished; });
+  };
+}
+afterEach(() => { delete (Element.prototype as { getAnimations?: unknown }).getAnimations; });
+
+/** The pointer the page reports, for the media queries the sheets read. */
+function pointer(kind: "fine" | "coarse") {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === `(pointer: ${kind})`, media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  }));
+}
+afterEach(() => vi.unstubAllGlobals());
+
+describe("closing animates out", () => {
+  it("keeps a closing sheet on screen, out of reach, showing what it showed, until its exit ends", async () => {
+    const finish = stubExitAnimation();
+    const { container, rerender } = render(
+      <BottomSheet open onClose={vi.fn()} title="Close “review”?"><p>Its pane closes.</p></BottomSheet>,
+    );
+    // The owner falls back to its first view as it closes; what slides away is what was on screen.
+    rerender(<BottomSheet open={false} onClose={vi.fn()} title="review"><p>Rename</p></BottomSheet>);
+    const layer = container.querySelector('[role="dialog"]');
+    expect(layer).not.toBeNull();
+    expect(layer).toHaveAttribute("inert");
+    expect(screen.getByText("Its pane closes.")).toBeInTheDocument();
+    expect(screen.getByText("Close “review”?")).toBeInTheDocument();
+    expect(screen.queryByText("Rename")).toBeNull();
+
+    await finish();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("stays open when it is reopened before its exit ends", async () => {
+    const finish = stubExitAnimation();
+    const { container, rerender } = render(<BottomSheet open onClose={vi.fn()} title="Actions">first</BottomSheet>);
+    rerender(<BottomSheet open={false} onClose={vi.fn()} title="Actions">first</BottomSheet>);
+    rerender(<BottomSheet open onClose={vi.fn()} title="Actions">second</BottomSheet>);
+    await finish();
+    const layer = screen.getByRole("dialog", { name: "Actions" });
+    expect(layer).not.toHaveAttribute("inert");
+    expect(screen.getByText("second")).toBeInTheDocument();
+    expect(container.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  });
+
+  it("waits for the exit only, never for an endless animation inside the sheet", async () => {
+    // "Scanning the full conversation…" spins forever; the sheet must still go when its exit ends.
+    const finish = stubExitAnimation({ animationName: "spin" });
+    const { container, rerender } = render(<BottomSheet open onClose={vi.fn()} title="Files">body</BottomSheet>);
+    rerender(<BottomSheet open={false} onClose={vi.fn()} title="Files">body</BottomSheet>);
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    await finish();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("drops a closed sheet at once where nothing animates its exit", () => {
+    Object.defineProperty(Element.prototype, "getAnimations", { configurable: true, value: () => [] });
+    const { container, rerender } = render(<BottomSheet open onClose={vi.fn()} title="Keys">body</BottomSheet>);
+    rerender(<BottomSheet open={false} onClose={vi.fn()} title="Keys">body</BottomSheet>);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("slides the side drawer out the same way", async () => {
+    const finish = stubExitAnimation();
+    const { container, rerender } = render(<SideSheet open onClose={vi.fn()} title="Navigation">rows</SideSheet>);
+    rerender(<SideSheet open={false} onClose={vi.fn()} title="Navigation">rows</SideSheet>);
+    expect(container.querySelector(".side-sheet-panel")).not.toBeNull();
+    expect(container.querySelector('[role="dialog"]')).toHaveAttribute("inert");
+    await finish();
+    expect(container.querySelector(".side-sheet-panel")).toBeNull();
+  });
+});
+
+describe("first focus", () => {
+  it("puts the cursor in the field the sheet marks where typing raises no on-screen keyboard", () => {
+    pointer("fine");
+    render(<BottomSheet open onClose={vi.fn()} title="Agent commands"><input aria-label="Search" data-autofocus /></BottomSheet>);
+    expect(screen.getByRole("textbox", { name: "Search" })).toHaveFocus();
+  });
+
+  it("keeps the keyboard down on a touch screen: the panel takes focus, not the field", () => {
+    pointer("coarse");
+    render(<BottomSheet open onClose={vi.fn()} title="Agent commands"><input aria-label="Search" data-autofocus /></BottomSheet>);
+    expect(screen.getByRole("textbox", { name: "Search" })).not.toHaveFocus();
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+  });
+});
+
+// One header for every bottom sheet and its desk panel: the title in the title style at the start,
+// a chevron back before it on a sheet with steps, the ✕ at the end. A step drawn inside the sheet
+// (a rename, a confirmation) names the sheet while it shows instead of drawing a second header.
+describe("one header", () => {
+  const order = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+
+  it("titles the sheet at the start of its header in the title style, with Close at the end and no Back", () => {
+    render(<BottomSheet open onClose={vi.fn()} title="Navigation">rows</BottomSheet>);
+    const dialog = screen.getByRole("dialog", { name: "Navigation" });
+    const heading = within(dialog).getByRole("heading", { name: "Navigation" });
+    expect(heading).toHaveClass("text-title");
+    expect(within(dialog).getAllByRole("heading")).toHaveLength(1);
+    expect(order(heading, within(dialog).getByRole("button", { name: "Close" }))).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
+  it("steps back from a chevron before the title on a sheet with steps", () => {
+    const onBack = vi.fn();
+    render(<BottomSheet open onClose={vi.fn()} title="New tab" onBack={onBack}>form</BottomSheet>);
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(order(back, screen.getByRole("heading", { name: "New tab" }))).toBeTruthy();
+    fireEvent.click(back);
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  function Step({ title, onBack }: { title: string; onBack?: () => void }) {
+    useSheetStep(title, onBack);
+    return <p>{title} body</p>;
+  }
+
+  it("lets the step on screen name the sheet and step back, then gives the header back when it goes", () => {
+    const onBack = vi.fn();
+    const { rerender } = render(
+      <BottomSheet open onClose={vi.fn()} title="review"><Step title="Rename tab" onBack={onBack} /></BottomSheet>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Rename tab" });
+    expect(within(dialog).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Rename tab"]);
+    expect(within(dialog).getAllByRole("button", { name: "Close" })).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    expect(onBack).toHaveBeenCalledOnce();
+
+    rerender(<BottomSheet open onClose={vi.fn()} title="review"><Step title="Close “review”?" /></BottomSheet>);
+    expect(screen.getByRole("dialog", { name: "Close “review”?" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+
+    rerender(<BottomSheet open onClose={vi.fn()} title="review"><p>Rename</p></BottomSheet>);
+    expect(screen.getByRole("dialog", { name: "review" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual(["review"]);
+  });
+
+  it("is the only way a screen restyles a sheet's header: no stylesheet or class reaches into it", () => {
+    const src = resolve(import.meta.dirname, "../..");
+    const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return files(path);
+      return /\.(tsx|css)$/.test(entry.name) && !entry.name.includes(".test.") ? [path] : [];
+    });
+    /** Every `<BottomSheet …>` opening tag in a file, read up to the `>` that closes it. */
+    const sheetTags = (text: string) => [...text.matchAll(/<BottomSheet\b/g)].map(({ index }) => {
+      let depth = 0;
+      let quote = "";
+      for (let i = index; i < text.length; i++) {
+        const ch = text[i]!;
+        if (quote) quote = ch === quote ? "" : quote;
+        else if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+        else if (depth === 0 && (ch === '"' || ch === "'")) quote = ch;
+        else if (depth === 0 && ch === ">") return text.slice(index, i + 1);
+      }
+      return text.slice(index);
+    });
+    const offenders = files(src)
+      .filter((file) => !file.endsWith("index.css") && !file.endsWith(join("ui", "sheet.tsx")))
+      .flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        const reaches = /\.sheet-bottom-panel|data-sheet-edit-header/.test(text) || sheetTags(text).some((tag) => /\[&>/.test(tag));
+        return reaches ? [relative(src, file)] : [];
+      });
+    expect(offenders).toEqual([]);
   });
 });

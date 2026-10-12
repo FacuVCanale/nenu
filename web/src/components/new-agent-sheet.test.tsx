@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
+import { useState, type ComponentProps } from "react";
 
 import { server } from "@/test/setup";
 import { saveAgent, savePermission, rememberDir } from "@/lib/spawn";
-import { NewAgentSheet } from "./new-agent-sheet";
+import { NewAgentForm } from "./new-agent-sheet";
 
 const HOME = "/home/me";
 const TREE: Record<string, string[]> = {
@@ -28,18 +29,25 @@ beforeEach(() => {
   );
 });
 
-function renderSheet(over: Partial<React.ComponentProps<typeof NewAgentSheet>> = {}) {
-  const props: React.ComponentProps<typeof NewAgentSheet> = {
-    open: true, onClose: vi.fn(), title: "New tab", defaultCwd: `${HOME}/code/api`, liveDirs: ["/srv/web"], readOnly: false,
-    onSubmit: vi.fn(async () => null), ...over,
+type FormProps = Omit<ComponentProps<typeof NewAgentForm>, "browsing" | "onBrowsing">;
+
+/** The form as the New flow hosts it, which owns whether the folder picker is up. */
+function Hosted(props: FormProps) {
+  const [browsing, setBrowsing] = useState(false);
+  return <NewAgentForm {...props} browsing={browsing} onBrowsing={setBrowsing} />;
+}
+
+function renderSheet(over: Partial<FormProps> = {}) {
+  const props: FormProps = {
+    defaultCwd: `${HOME}/code/api`, liveDirs: ["/srv/web"], readOnly: false, onSubmit: vi.fn(async () => null), ...over,
   };
-  render(<NewAgentSheet {...props} />);
+  render(<Hosted {...props} />);
   return props;
 }
 
 const directory = () => screen.getByRole("button", { name: /^Directory/ });
 
-describe("NewAgentSheet", () => {
+describe("NewAgentForm", () => {
   it("opens on the remembered agent and permission, with the directory shown from home", async () => {
     saveAgent("codex");
     savePermission("codex", "auto");

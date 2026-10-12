@@ -1,10 +1,13 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import FilePreview from "./file-preview";
 import { HTML_VERSION_POLL_MS } from "./html-viewer";
 import { MarkdownText } from "./markdown-text";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { fetchArtifactMetadata, fetchPaneFile, PaneFileError } from "@/lib/api";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { declarations } from "@/test/css-rules";
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn(), fetchArtifactMetadata: vi.fn() }));
 vi.mock("./pdf-preview", () => ({ default: () => <div>PDF canvas</div> }));
@@ -68,7 +71,7 @@ it("follows a name the pane's folder lacks to the file the bridge finds, and say
     : { path: path!, state: "missing" as const }]);
   const { unmount } = render(<FilePreview paneId="w1:p1" path="assets/notes.md" onClose={() => {}} />);
   expect(await screen.findByText("Found it")).toBeInTheDocument();
-  expect(screen.getByText("/repo/assets/notes.md")).toBeInTheDocument();
+  expect(screen.getByText("/repo/assets")).toBeInTheDocument();
   unmount();
   render(<FilePreview paneId="w1:p1" path="gone.md" onClose={() => {}} />);
   expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
@@ -84,7 +87,8 @@ it("surfaces unavailable files and retries without leaving the chat", async () =
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(await screen.findByText("hello")).toBeInTheDocument();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-  expect(close).toHaveBeenCalledOnce();
+  // The layer stays for its exit, then goes.
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
 });
 
 it("explains a file outside the pane's folder with its path instead of a Retry that cannot work", async () => {
@@ -116,7 +120,8 @@ it("opens a refused file from the pane whose folder holds it", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Open from worker" }));
   expect(await screen.findByText("Report")).toBeInTheDocument();
   expect(fetchFile).toHaveBeenLastCalledWith("w1:p2", path, undefined, expect.any(AbortSignal));
-  expect(screen.getByText(`${path} · from worker`)).toBeInTheDocument();
+  // The file sits at the top of the worker's folder, so the line under its name only says whose it is.
+  expect(screen.getByText("from worker")).toBeInTheDocument();
 });
 
 it("replaces a refused HTML frame with the reason once the frame has loaded", async () => {
@@ -198,16 +203,268 @@ it("reloads an open HTML frame when the file's ETag changes, and only then", asy
   }
 });
 
-it("steps through a gallery of journal images with previous, next and the arrow keys", () => {
+// The gallery ends where it ends, for the buttons and the arrow keys as for a swipe.
+it("steps through a gallery of journal images with previous, next and the arrow keys, and stops at its ends", () => {
   render(<FilePreview paneId="w1:p1" items={[
     { kind: "journal", entry: "e1", index: 0, label: "Image 1" },
     { kind: "journal", entry: "e1", index: 1, label: "Image 2" },
   ]} start={1} onClose={() => {}} />);
   expect(screen.getByRole("img", { name: "Image 2" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=1");
-  expect(screen.getByText("· 2 of 2")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
+  expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
   expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
+  expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
+  expect(screen.getByText("1 of 2")).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
   expect(screen.getByRole("img", { name: "Image 2" })).toBeInTheDocument();
   expect(fetchFile).not.toHaveBeenCalled();
+});
+
+// T07: the agent's own folder is where the operator thinks from. The heading is the file's name and
+// the line under it the folder that holds it, so neither repeats the other.
+it("names the file in the heading and its folder, from the agent's folder, under it", async () => {
+  fetchFile.mockImplementation(async () => new Response("export {}", { headers: { "content-type": "text/plain" } }));
+  const cwd = "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-s76Uzr";
+  const panes = [{ paneId: "w1:p1", cwd, label: "coordinator" }];
+  const { unmount } = render(<FilePreview paneId="w1:p1" path={`${cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
+  expect(screen.getByRole("heading", { name: "use-app-viewport.ts" })).toBeInTheDocument();
+  expect(screen.getByText("web/src/hooks")).toBeInTheDocument();
+  expect(screen.getAllByText(/use-app-viewport/)).toEqual([screen.getByRole("heading", { name: "use-app-viewport.ts" })]);
+  expect(screen.queryByText(/\/var\/folders/)).not.toBeInTheDocument();
+  await screen.findByText("export {}");
+  unmount();
+  // At the top of the folder there is no folder to name.
+  render(<FilePreview paneId="w1:p1" path={`${cwd}/reporte-auditoria.md`} panes={panes} onClose={() => {}} />);
+  expect(screen.getAllByText("reporte-auditoria.md")).toEqual([screen.getByRole("heading", { name: "reporte-auditoria.md" })]);
+  await screen.findByText("export {}");
+});
+
+// Both lines are cut to the width they are drawn in, measured in their own font: the folder gives way
+// from the front, and the name in the middle, keeping how it starts, how it ends and its extension.
+it("cuts the folder from the front and the name in the middle to the measured width of the bar", async () => {
+  fetchFile.mockImplementation(async () => new Response("export {}", { headers: { "content-type": "text/plain" } }));
+  // 160px of bar and 8px a character: twenty characters to a line.
+  const width = vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.classList.contains("file-preview-heading") ? 160 : 0;
+  });
+  const measure = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+    .mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 8 }) } as unknown as CanvasRenderingContext2D);
+  try {
+    const panes = [{ paneId: "w1:p1", cwd: "/repo", label: "coordinator" }];
+    const { unmount } = render(<FilePreview paneId="w1:p1" path="/repo/docs/rediseno/notas.md" panes={panes} onClose={() => {}} />);
+    expect(screen.getByRole("heading", { name: "notas.md" })).toHaveTextContent(/^notas\.md$/);
+    expect(screen.getByText("docs/rediseno")).toBeInTheDocument();
+    await screen.findByText("export {}");
+    unmount();
+    const long = "informe-de-auditoria-de-la-interfaz-movil-completo.md";
+    render(<FilePreview paneId="w1:p1" path={`/repo/docs/rediseno/2026/octubre/${long}`} panes={panes} onClose={() => {}} />);
+    expect(screen.getByRole("heading", { name: long })).toHaveTextContent(/^informe-de-a…leto\.md$/);
+    expect(screen.getByText("…/2026/octubre")).toBeInTheDocument();
+    await screen.findByText("export {}");
+  } finally {
+    width.mockRestore();
+    measure.mockRestore();
+  }
+});
+
+// T28: on a phone the viewer is a screen of its own: Done leaves it, and what a desk header shows as
+// buttons waits behind one menu.
+it("closes on Done and keeps Reload and Copy path behind More actions", async () => {
+  const path = "/repo/docs/guide.md";
+  fetchFile.mockImplementation(async () => new Response("# Guide", { headers: { "content-type": "text/markdown" } }));
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  const close = vi.fn();
+  render(<FilePreview paneId="w1:p1" path={path} panes={[{ paneId: "w1:p1", cwd: "/repo", label: "coordinator" }]} onClose={close} />);
+  expect(await screen.findByText("Guide")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Refresh preview" })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+  await waitFor(() => expect(fetchFile).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(path));
+  expect(await screen.findByRole("button", { name: "Copied path" })).toBeInTheDocument();
+  // Escape closes the menu first, and only then the viewer.
+  fireEvent.keyDown(screen.getByRole("button", { name: "Copied path" }), { key: "Escape" });
+  expect(screen.queryByRole("button", { name: "Copied path" })).not.toBeInTheDocument();
+  expect(close).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
+});
+
+describe("image viewer", () => {
+  const gallery = [
+    { kind: "journal" as const, entry: "e1", index: 0, label: "Image 1" },
+    { kind: "journal" as const, entry: "e1", index: 1, label: "Image 2" },
+  ];
+  const stage = () => document.querySelector<HTMLElement>("[data-image-stage]")!;
+  const zoom = () => Number(/scale\(([\d.]+)\)/.exec(document.querySelector<HTMLElement>("[data-image-zoom]")!.style.transform)?.[1] ?? 1);
+  const point = (id: number, x: number, y: number, type = "touch") => ({ pointerId: id, pointerType: type, clientX: x, clientY: y, isPrimary: id === 1, button: 0 });
+  // The viewer reads a release's speed from the events' timeStamps. Synchronous dispatch gives them
+  // whatever the machine's clock says, so a slow runner turned a short pull into a flick. Each step of
+  // a drag is stamped `stepMs` after the last (a 60 Hz finger by default), and real waits between
+  // gestures still count.
+  let clock = 0;
+  function fire(kind: "pointerDown" | "pointerMove" | "pointerUp", init: ReturnType<typeof point>) {
+    const event = createEvent[kind](stage(), init);
+    Object.defineProperty(event, "timeStamp", { value: clock });
+    fireEvent(stage(), event);
+  }
+  function drag(points: [number, number][], type = "touch", stepMs = 16) {
+    const [first, ...rest] = points;
+    clock = Math.max(Date.now(), clock + 1);
+    fire("pointerDown", point(1, ...first!, type));
+    for (const [x, y] of rest) { clock += stepMs; fire("pointerMove", point(1, x, y, type)); }
+    clock += stepMs;
+    fire("pointerUp", point(1, ...points.at(-1)!, type));
+  }
+  const tap = (x: number, y: number, type = "touch") => drag([[x, y]], type);
+
+  it("shows the picture alone on black, with Done and Download and nothing to reload", () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "Image 1" })).toBeInTheDocument();
+    // The next picture waits beside this one for a swipe, out of the reading order.
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+    expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download image" })).toHaveAttribute("href", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
+    expect(screen.queryByRole("button", { name: /Refresh|Reload|More actions/ })).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+  });
+
+  it("opens an image file by its own URL and asks the bridge why when it will not load", async () => {
+    fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): This file is outside the project.", 404, true));
+    render(<FilePreview paneId="w1:p1" path="/elsewhere/shot.png" onClose={() => {}} />);
+    const image = screen.getByRole("img", { name: "shot.png" });
+    expect(image).toHaveAttribute("src", "/api/pane/w1%3Ap1/file?path=%2Felsewhere%2Fshot.png");
+    expect(fetchFile).not.toHaveBeenCalled();
+    fireEvent.error(image);
+    expect(await screen.findByRole("alert")).toHaveTextContent("outside this agent's folder");
+  });
+
+  // A large picture over a slow link leaves the black empty: a spinner says it is on its way.
+  it("says a picture is still on its way until it has loaded", () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    expect(screen.getByRole("status", { name: "Loading image" })).toBeInTheDocument();
+    fireEvent.load(screen.getByRole("img", { name: "Image 1" }));
+    expect(screen.queryByRole("status", { name: "Loading image" })).not.toBeInTheDocument();
+  });
+
+  // A picture that fails while it waits beside the current one never fails again once it is the
+  // current one: the same <img> with the same src fires no second error. The viewer remembers it.
+  it("explains a picture that failed while it waited beside the current one, and retries it", async () => {
+    fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): File unavailable in this workspace.", 404, false));
+    inspect.mockImplementation(async (_pane, [path]) => [{ path: path!, state: "missing" as const }]);
+    render(<FilePreview paneId="w1:p1" items={[{ kind: "file", path: "shots/a.png" }, { kind: "file", path: "shots/b.png" }]} onClose={() => {}} />);
+    fireEvent.error(document.querySelector('img[src*="b.png"]')!);
+    expect(fetchFile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
+    expect(fetchFile).toHaveBeenCalledWith("w1:p1", "shots/b.png", undefined, expect.any(AbortSignal));
+    expect(screen.queryByRole("link", { name: "Download image" })).not.toBeInTheDocument();
+    // Retry loads the picture again instead of answering from memory.
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("img", { name: "b.png" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("closes on a long pull down and settles back after a short one", async () => {
+    const close = vi.fn();
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
+    drag([[500, 300], [502, 320], [505, 340]], "touch", 50);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(close).not.toHaveBeenCalled();
+    drag([[500, 300], [502, 400], [510, 550], [515, 700]]);
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
+
+  it("turns to the next picture on a swipe sideways, and not past the last one", async () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    drag([[900, 400], [700, 404], [400, 406], [150, 410]]);
+    expect(await screen.findByText("2 of 2")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Image 2" })).toBeInTheDocument();
+    drag([[900, 400], [700, 404], [400, 406], [150, 410]]);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("zooms where a double tap lands and back out on the next one, and pinches", async () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    tap(600, 300); tap(600, 300);
+    expect(zoom()).toBe(2.5);
+    tap(600, 300); tap(600, 300);
+    expect(zoom()).toBe(1);
+    fireEvent.pointerDown(stage(), point(1, 480, 380));
+    fireEvent.pointerDown(stage(), point(2, 540, 380));
+    fireEvent.pointerMove(stage(), point(1, 400, 380));
+    fireEvent.pointerMove(stage(), point(2, 620, 380));
+    fireEvent.pointerUp(stage(), point(1, 400, 380));
+    fireEvent.pointerUp(stage(), point(2, 620, 380));
+    expect(zoom()).toBeGreaterThan(2);
+  });
+
+  it("hides and shows its bars on a single tap, after waiting out a double tap", async () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    const viewer = document.querySelector("[data-chrome]")!;
+    expect(viewer).toHaveAttribute("data-chrome", "shown");
+    tap(500, 400);
+    expect(viewer).toHaveAttribute("data-chrome", "shown");
+    await waitFor(() => expect(viewer).toHaveAttribute("data-chrome", "hidden"));
+    tap(500, 400);
+    await waitFor(() => expect(viewer).toHaveAttribute("data-chrome", "shown"));
+  });
+
+  // CSS cuts a title at its end, which hid the extension: the picture's name is cut in the middle to
+  // the bar's measured width, like a document's.
+  it("cuts a long picture name in the middle, keeping its extension", () => {
+    const width = vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+      return this.classList.contains("image-viewer-title") ? 160 : 0;
+    });
+    const measure = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 8 }) } as unknown as CanvasRenderingContext2D);
+    try {
+      const name = "screenshot-2026-10-12-at-14.03.22.png";
+      render(<FilePreview paneId="w1:p1" path={`/repo/shots/${name}`} onClose={() => {}} />);
+      expect(screen.getByRole("heading", { name })).toHaveTextContent(/^screenshot-…3\.22\.png$/);
+    } finally {
+      width.mockRestore();
+      measure.mockRestore();
+    }
+  });
+
+  // The stage holds the pointer capture, so every pointerup names the stage as its target: a click on
+  // the picture read as one beside it and closed the viewer halfway through a double click.
+  it("zooms on a double click on the picture on a desk, and stays open", () => {
+    const close = vi.fn();
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
+    const box = { left: 300, right: 700, top: 200, bottom: 500, x: 300, y: 200, width: 400, height: 300, toJSON: () => ({}) };
+    vi.spyOn(screen.getByRole("img", { name: "Image 1" }), "getBoundingClientRect").mockReturnValue(box as DOMRect);
+    tap(500, 300, "mouse"); tap(500, 300, "mouse");
+    expect(zoom()).toBe(2.5);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  // The build resolves every light-dark() token once, at :root, so a color-scheme on the viewer cannot
+  // flip them: in the light theme its bars read #27272a on black. Its text takes a fixed colour.
+  it("keeps the viewer's own text off the theme tokens, which follow the page and not the black", () => {
+    const css = readFileSync(resolve(import.meta.dirname, "file-preview.css"), "utf8");
+    expect(declarations(css, ".file-preview-panel--image").color).not.toMatch(/var\(--/);
+    expect(declarations(css, ".image-viewer-error > *").color).toBe("var(--card-foreground)");
+  });
+
+  it("closes on a click beside the picture on a desk", async () => {
+    const close = vi.fn();
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
+    tap(20, 400, "mouse");
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
 });

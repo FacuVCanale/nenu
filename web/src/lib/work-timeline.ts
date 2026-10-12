@@ -1,4 +1,5 @@
-import type { AgentStatus, TranscriptEntry } from "./types";
+import { parseInline, type MdSpan } from "./markdown";
+import type { AgentStatus, TranscriptEntry, TranscriptPart } from "./types";
 
 export interface WorkTurn {
   kind: "work";
@@ -86,4 +87,91 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
   }
   flush(false);
   return rows;
+}
+
+/** What a tool call is to the reader: its icon, and the verbs a row says it with. */
+export type StepKind = "terminal" | "read" | "edit" | "write" | "search" | "web" | "agent" | "plan" | "question" | "tool";
+export interface ToolStepDescription {
+  kind: StepKind;
+  /** Past tense for a finished step ("Ran"), present for the one in progress ("Running"). */
+  done: string;
+  doing: string;
+  /** The request, while a dialog asks the operator about the call ("Run"): it has not run yet. */
+  ask: string;
+  /** How the call's summary is drawn: a path keeps its file name whole, code stays monospace, a document by its title. */
+  target: "path" | "code" | "text" | "title";
+}
+
+// Names across harnesses: Claude Code, Codex and pi spell the same few tools differently.
+const TOOL_STEPS: Array<[RegExp, ToolStepDescription]> = [
+  [/^(bash|shell|exec|exec_command|local_shell|run_shell_command)$/, { kind: "terminal", done: "Ran", doing: "Running", ask: "Run", target: "code" }],
+  [/^(read|read_file|view|notebookread)$/, { kind: "read", done: "Read", doing: "Reading", ask: "Read", target: "path" }],
+  [/^(edit|multiedit|edit_file|notebookedit|str_replace_editor|str_replace_based_edit_tool)$/, { kind: "edit", done: "Edited", doing: "Editing", ask: "Edit", target: "path" }],
+  [/^apply_patch$/, { kind: "edit", done: "Edited", doing: "Editing", ask: "Edit", target: "text" }],
+  [/^(write|write_file|create_file)$/, { kind: "write", done: "Wrote", doing: "Writing", ask: "Write", target: "path" }],
+  [/^(grep|glob|find|rg|search|search_files|codebase_search)$/, { kind: "search", done: "Searched", doing: "Searching", ask: "Search", target: "code" }],
+  [/^(ls|list_dir|list_directory)$/, { kind: "search", done: "Listed", doing: "Listing", ask: "List", target: "path" }],
+  [/^(webfetch|web_fetch|fetch)$/, { kind: "web", done: "Fetched", doing: "Fetching", ask: "Fetch", target: "text" }],
+  [/^(websearch|web_search)$/, { kind: "web", done: "Searched the web", doing: "Searching the web", ask: "Search the web", target: "text" }],
+  [/^(task|agent|spawn_agent)$/, { kind: "agent", done: "Ran agent", doing: "Running agent", ask: "Run agent", target: "text" }],
+  [/^(todowrite|update_plan)$/, { kind: "plan", done: "Updated the plan", doing: "Updating the plan", ask: "Update the plan", target: "text" }],
+  // Claude's plan, shown to the operator to approve: the line says Plan once, with the plan's title.
+  [/^exitplanmode$/, { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "title" }],
+];
+
+/** A call the bridge read questions from (its `questions`) reads as the question it asks. */
+export const QUESTION_STEP: ToolStepDescription = { kind: "question", done: "Question", doing: "Question", ask: "Question", target: "text" };
+
+// Claude Code's spelling of an MCP tool: mcp__<server>__<tool>.
+const MCP_TOOL = /^mcp__.+?__(.+)$/;
+
+/** A tool call as a step; a tool it does not know keeps its own name (an MCP tool's, without its server) as the verb. */
+export function describeTool(name: string): ToolStepDescription {
+  const key = name.toLowerCase();
+  const own = MCP_TOOL.exec(name)?.[1] ?? name;
+  return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: own, doing: own, ask: own, target: "text" };
+}
+
+/** The words the renderer draws for `spans`, without their formatting. */
+function plain(spans: MdSpan[]): string {
+  return spans.map((span) => "text" in span ? span.text : span.kind === "image" ? span.alt : plain(span.spans)).join("");
+}
+
+// A heading's hashes and a quote's marker are syntax the renderer never prints.
+const BLOCK_MARK = /^(?:#{1,6}\s+|>\s?)/;
+
+/**
+ * The first line of `text` that has words, as the rendered thought reads it: Codex and pi open a
+ * thought with a `**bold title**`, and a preview must not show the asterisks.
+ */
+export function firstLine(text: string): string {
+  return text.split("\n").map((line) => plain(parseInline(line.trim().replace(BLOCK_MARK, ""))).trim()).find(Boolean) ?? "";
+}
+
+/**
+ * What a running turn is doing now: a call still waiting for its result, or the thought being
+ * written. `entry` and `index` name that part, so the timeline draws it once, as the turn's live row.
+ */
+export interface LiveStep {
+  part: Extract<TranscriptPart, { kind: "tool" | "thinking" }>;
+  entry: string;
+  index: number;
+  since?: string;
+}
+
+export function liveStep(turn: WorkTurn): LiveStep | null {
+  if (!turn.active) return null;
+  const at = (entry: TranscriptEntry, index: number) => ({ entry: entry.uuid, index, ...(validTime(entry.ts) ? { since: entry.ts } : {}) });
+  // Parallel calls finish in any order, so the latest call still waiting for its result is the one
+  // in progress, wherever it sits; only with none does the turn's last part say what happens now.
+  for (const entry of turn.activity.toReversed()) {
+    const index = entry.parts.findLastIndex((part) => part.kind === "tool" && !part.result);
+    const part = entry.parts[index];
+    if (part?.kind === "tool") return { part, ...at(entry, index) };
+  }
+  // Between steps there is nothing to name, and the turn's own line already says it is working.
+  const last = turn.activity.at(-1);
+  const index = last ? last.parts.findLastIndex((part) => part.kind !== "image") : -1;
+  const part = last?.parts[index];
+  return last && part?.kind === "thinking" ? { part, ...at(last, index) } : null;
 }

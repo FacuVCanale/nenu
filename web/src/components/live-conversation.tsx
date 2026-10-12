@@ -1,15 +1,19 @@
-import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2, MessageSquare } from "lucide-react";
+import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
+import { thirdScrollTop } from "@/components/find-bar";
 import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
-import type { AgentStatus, PaneHistoryResponse } from "@/lib/types";
+import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
-import { atTail } from "@/hooks/use-auto-scroll";
+import { atTail, isTextField, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
+import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
+import { RecoveryLeads } from "@/components/connect-conversation";
+import { cn } from "@/lib/utils";
 
 interface LiveConversationProps {
   paneId: string;
@@ -39,11 +43,92 @@ const OLDER_PAGE_SIZE = 120;
 const OLDER_PAGE_MARGIN = 800;
 /** Room kept above a `[data-follow-stop]` element when following lands on it. */
 const STOP_MARGIN = 12;
+
+/**
+ * Where following stops for a question at the tail taller than the list: its first line. Null when
+ * there is none or it fits, so the bottom is the stop.
+ */
+function stopCap(el: HTMLElement): number | null {
+  const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
+  if (!stop) return null;
+  const cap = el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN;
+  return cap < el.scrollHeight - el.clientHeight ? cap : null;
+}
+
+/** How far a finger moves before a touch is a drag, not a tap. */
+const TAP_SLOP = 10;
+/** A drag down this far on the thread closes the phone keyboard. */
+const DISMISS_DRAG = 32;
+const CONTROL = "button, a[href], input, textarea, select, label, summary, [role='button'], [contenteditable]";
+
+/**
+ * Close the phone keyboard by blurring the field that holds it, unless the touch landed in that
+ * field. The draft stays in the box. iOS keeps the keyboard up over a tap on plain text, so the
+ * thread does it, as Messages does.
+ */
+function dismissKeyboard(target: EventTarget): void {
+  const field = document.activeElement;
+  if (isTextField(field) && !(target instanceof Node && field.contains(target))) field.blur();
+}
+
+/** A message as a reader counts one: someone's words or images, not a tool call or a note. */
+function spoken(entry: TranscriptEntry): boolean {
+  return (entry.role === "user" || entry.role === "assistant") && entry.parts.some((part) => part.kind === "text" || part.kind === "image");
+}
+
+/**
+ * The held window with each call's result where the live window has it: a call that finished while
+ * the reader held the thread says so on its row. Nothing else in the window moves. The same window
+ * comes back when no result landed, so a held thread does not redraw on every poll.
+ */
+function withResults(held: AvailableHistory, live: TranscriptEntry[]): AvailableHistory {
+  const now = new Map(live.map((entry) => [entry.uuid, entry]));
+  const landed = (entry: TranscriptEntry, index: number) => {
+    const part = now.get(entry.uuid)?.parts[index];
+    return part?.kind === "tool" ? part.result : undefined;
+  };
+  let changed = false;
+  const entries = held.entries.map((entry) => {
+    if (!entry.parts.some((part, index) => part.kind === "tool" && !part.result && landed(entry, index))) return entry;
+    changed = true;
+    return { ...entry, parts: entry.parts.map((part, index) => {
+      const result = part.kind === "tool" && !part.result ? landed(entry, index) : undefined;
+      return result ? { ...part, result } : part;
+    }) };
+  });
+  return changed ? { ...held, entries } : held;
+}
+
+/** The operator is typing in a box inside the question (a reply, a note). */
+function typingIn(el: HTMLElement): boolean {
+  const active = document.activeElement;
+  return isTextField(active) && Boolean(active.closest("[data-follow-stop]")) && el.contains(active);
+}
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
-  "no-session": "Send the first message to start the conversation, or connect an existing session.",
+  "no-session": "Send the first message to start the conversation.",
   "no-log": "Waiting for the first conversation entry…",
 };
+
+/**
+ * The thread's shape while its first page loads: an answer, a message of yours, an answer, at the
+ * foot of the list where the tail will land, so the turns replace it without a jump.
+ */
+function TranscriptSkeleton() {
+  const lines = (widths: string[]) => (
+    <div data-skeleton-turn className="space-y-3 px-0.5 py-1.5">
+      {widths.map((width) => <div key={width} className="h-3 rounded-full bg-muted" style={{ width }} />)}
+    </div>
+  );
+  return (
+    <div role="status" data-slot="transcript-skeleton" className="flex flex-col gap-6 animate-pulse motion-reduce:animate-none">
+      <span className="sr-only">Loading conversation…</span>
+      {lines(["92%", "64%"])}
+      <div data-skeleton-turn className="flex justify-end"><div className="h-16 w-3/5 rounded-xl rounded-br-md bg-muted" /></div>
+      {lines(["96%", "88%", "52%"])}
+    </div>
+  );
+}
 
 /** Scope pagination to a pane/session without remounting the surrounding live composer. */
 export const LiveConversation = memo(function LiveConversation(props: LiveConversationProps) {
@@ -64,11 +149,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // Where the list last stood, set by every pin: only a move up from here is the reader leaving the
   // tail (see useAutoScroll for why geometry alone can't tell).
   const lastTop = useRef(0);
+  // The last pin landed on a question's first line, so a shift above it should carry the view along.
+  const onCap = useRef(false);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
   // The list's height just before an older page goes in above the reader. Restoring adds only the
   // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
   const anchorHeight = useRef<number | null>(null);
+  const editShift = useEditShift(scrollRef);
+  const cardTitle = useId();
   const shown = frozen ?? history;
   const entries = shown?.available ? shown.entries : [];
   const latest = history?.available ? history.entries.at(-1) : undefined;
@@ -77,6 +166,19 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     latest?.uuid !== lastShown?.uuid || latest?.turn?.status !== lastShown?.turn?.status ||
     latest?.turn?.durationMs !== lastShown?.turn?.durationMs
   );
+  // What the live window holds below the frozen one; null when it slid past it.
+  const below = useMemo(() => {
+    if (!frozen || !history?.available) return null;
+    const from = lastShown ? history.entries.findIndex((entry) => entry.uuid === lastShown.uuid) : -1;
+    return from < 0 ? null : history.entries.slice(from + 1);
+  }, [frozen, history, lastShown]);
+  // How many messages arrived below the frozen window; null when the live window slid past it.
+  const newCount = !hasNew ? 0 : below ? below.filter(spoken).length : null;
+  // The frozen window still ends on the live turn when only the agent's own steps came after it.
+  const onLiveTurn = below?.every((entry) => entry.role === "assistant") ?? false;
+  useEffect(() => {
+    if (history?.available) setFrozen((current) => current?.available ? withResults(current, history.entries) : current);
+  }, [history]);
   const matches = useMemo(() => matchingEntries(entries, query), [entries, query]);
   // This client's sends the journal has not caught up with yet. Reconciled against the LIVE window,
   // not a frozen one, so scrolling back to read never holds a delivered bubble on screen.
@@ -112,7 +214,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const timer = setTimeout(() => setStarting(null), TURN_PENDING_MS);
     return () => clearTimeout(timer);
   }, [starting, activityStatus]);
-  const activity = error || frozen ? undefined : starting ? "working" : activityStatus;
+  // A frozen window shows its turn running only while that turn is the live one and still runs: any
+  // other state would draw the reader's window as something it is not, or fold a turn they are reading.
+  const activity = error ? undefined : frozen ? (onLiveTurn && activityStatus === "working" ? "working" : undefined)
+    : starting ? "working" : activityStatus;
   // Under this client's bubble while the journal does not show it yet; the transcript's own after that.
   const labelUnderSend = activity === "working" && delivered !== null;
   const startingLabel = labelUnderSend && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
@@ -125,12 +230,19 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       setFrozen((current) => current ?? history);
     }
   }, [searching, history]);
+  // Find's current hit lands a third down what the reader sees, below the chrome a phone draws over the
+  // list (its scroll-padding), and every redraw of the held window (a result landing, an older page)
+  // puts it back there. The turn stands in for a hit the view doesn't draw.
   useEffect(() => {
+    const el = scrollRef.current;
     const uuid = entries[matches[currentMatch] ?? -1]?.uuid;
-    if (!searching || !uuid) return;
-    const target = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>("[data-turn]") ?? [])
-      .find((element) => element.dataset.turn === uuid);
-    target?.scrollIntoView({ block: "center" });
+    if (!searching || !uuid || !el) return;
+    const turn = Array.from(el.querySelectorAll<HTMLElement>("[data-turn]")).find((element) => element.dataset.turn === uuid);
+    const hit = turn?.querySelector<HTMLElement>('mark[aria-current="true"]') ?? turn;
+    if (!hit) return;
+    const view = el.getBoundingClientRect();
+    el.scrollTop = thirdScrollTop({ scrollTop: el.scrollTop, viewTop: view.top, viewBottom: view.bottom, hitTop: hit.getBoundingClientRect().top,
+      inset: parseFloat(getComputedStyle(el).scrollPaddingTop) || 0 });
   }, [searching, currentMatch, matches, entries]);
 
   const cancelOlder = useCallback(() => {
@@ -144,9 +256,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // box sits at its foot) the bottom wins again, so the phone keyboard never hides the box.
   const pin = useCallback((el: HTMLElement) => {
     const bottom = el.scrollHeight - el.clientHeight;
-    const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
-    const cap = stop && !stop.contains(document.activeElement) ? el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN : bottom;
-    el.scrollTo({ top: cap < bottom ? Math.max(cap, Math.min(el.scrollTop, bottom)) : bottom, behavior: "auto" });
+    const cap = typingIn(el) ? null : stopCap(el);
+    const top = cap === null ? bottom : onCap.current ? cap : Math.max(cap, Math.min(el.scrollTop, bottom));
+    el.scrollTo({ top, behavior: "auto" });
+    onCap.current = cap !== null && top === cap;
     lastTop.current = el.scrollTop;
   }, []);
 
@@ -216,6 +329,31 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     return () => observer.disconnect();
   }, [pin]);
 
+  // A tap on the thread's text, or a drag down of DISMISS_DRAG px, closes the keyboard. A tap on a
+  // control stays the control's; a drag up or sideways (a code block) is only scrolling.
+  const touch = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const onTouchStart = (event: ReactTouchEvent) => {
+    const point = event.touches[0];
+    touch.current = point && event.touches.length === 1 ? { x: point.clientX, y: point.clientY, moved: false } : null;
+  };
+  const onTouchMove = (event: ReactTouchEvent) => {
+    const start = touch.current;
+    const point = event.touches[0];
+    if (!start || !point) return;
+    const dx = point.clientX - start.x;
+    const dy = point.clientY - start.y;
+    if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) start.moved = true;
+    if (dy >= DISMISS_DRAG && dy > Math.abs(dx)) {
+      dismissKeyboard(event.target);
+      touch.current = null;
+    }
+  };
+  const onTouchEnd = (event: ReactTouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    if (start && !start.moved && !(event.target instanceof Element && event.target.closest(CONTROL))) dismissKeyboard(event.target);
+  };
+
   const onWorkToggle = useCallback((target: HTMLElement) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -236,11 +374,15 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const el = scrollRef.current;
     if (!el) return;
     const up = el.scrollTop < lastTop.current;
+    // Our own pins leave scrollTop where they put it; any other move is the reader's.
+    if (Math.abs(el.scrollTop - lastTop.current) >= 1) onCap.current = false;
     lastTop.current = el.scrollTop;
     if (restoring.current) return;
-    if (atTail(el)) {
+    // Reading inside a question at the tail is being at the tail: its foot may be far below.
+    const cap = stopCap(el);
+    if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
       if (!following.current) followLatest();
-    } else if (up) {
+    } else if (up && !(following.current && editShift())) {
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);
@@ -285,12 +427,16 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       }
       const el = scrollRef.current;
       anchorHeight.current = el ? el.scrollHeight : null;
-      setFrozen({
-        ...base,
-        entries: [...older, ...base.entries],
-        hasMore: page.hasMore,
-        fileTruncated: base.fileTruncated || page.fileTruncated,
-        total: Math.max(base.total, page.total),
+      // Onto the window as it stands now: a result that landed while the page loaded stays on its row.
+      setFrozen((current) => {
+        const held = current?.available ? current : base;
+        return {
+          ...held,
+          entries: [...older, ...held.entries],
+          hasMore: page.hasMore,
+          fileTruncated: held.fileTruncated || page.fileTruncated,
+          total: Math.max(held.total, page.total),
+        };
       });
     } catch {
       if (request.current === controller && !controller.signal.aborted) setOlderError(true);
@@ -303,9 +449,14 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   }
 
   let emptyCopy = "Waiting for the first conversation entry…";
-  if (loading) emptyCopy = "Loading conversation…";
-  else if (shown && !shown.available) emptyCopy = UNAVAILABLE_COPY[shown.reason];
+  if (shown && !shown.available) emptyCopy = UNAVAILABLE_COPY[shown.reason];
   else if (error) emptyCopy = "Your draft is safe. Retry to load the conversation.";
+  const empty = entries.length === 0 && localSends.length === 0;
+  // The skeleton and the turns sit at the list's foot, where the tail will land.
+  const skeleton = empty && loading;
+  // A conversation the operator can link: one card, centred, instead of a sentence over a form. While a
+  // question waits in the thread the card folds to one line at the foot, so the question is the one card.
+  const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
 
@@ -318,8 +469,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} onScroll={onScroll} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className="mx-auto w-full max-w-(--chat-column)">
+        <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
+          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && cn("flex min-h-full flex-col", waiting ? "justify-end" : "justify-center"))}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
@@ -335,19 +486,38 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               <PendingTurns sends={localSends} actions={localSendActions} />
               {startingLabel}
               {footer}
-            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
-              {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
+            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : skeleton ? <>
+              <TranscriptSkeleton />
+              {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
+              {footer}
+            </> : linkable ? <>
+              {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
+                <MessageSquare aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />No conversation linked
+              </p> : <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
+                <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
+                <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
+                <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
+                <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
+                {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
+              </section>}
+              {footer}
+            </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+              <MessageSquare className="size-5" />
               <p>{emptyCopy}</p>
-              {shown && !shown.available && shown.reason !== "disabled" && recovery}
+              {shown && !shown.available && shown.reason !== "disabled" && recovery && <div className="w-full max-w-sm">{recovery}</div>}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
             </div>{footer}</>}
           </div>
         </div>
-        {paused && <button type="button" onClick={followLatest} aria-label="Scroll to latest" className="absolute bottom-3 left-1/2 z-10 flex min-h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs shadow-md hover:bg-muted">
-          {waiting
-            ? <><span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />Waiting on you<ArrowDown aria-hidden="true" className="size-4" /></>
-            : <><ArrowDown aria-hidden="true" className="size-4" />{hasNew ? "New messages" : "Latest"}</>}
-        </button>}
+        {/* The list's top edge fades into the page instead of cutting text under the strip above it.
+            A gradient over the list, not a mask on it: a mask would also clip the fixed popovers and
+            sheets that open from inside the thread. */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-3 bg-linear-to-b from-background" />
+        {paused && <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-(--page-gutter)">
+          <div className="mx-auto max-w-(--chat-column)">
+            <ScrollToLatest corner onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />
+          </div>
+        </div>}
       </div>
     </section>
   );

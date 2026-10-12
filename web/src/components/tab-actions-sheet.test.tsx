@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -30,6 +30,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof TabActionsSh
     open: true,
     onClose: vi.fn(),
     tab,
+    name: "Tab 1",
     onRenamed: vi.fn(),
     onClosed: vi.fn(),
     ...overrides,
@@ -67,6 +68,28 @@ describe("TabActionsSheet — rename", () => {
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
     await waitFor(() => expect(screen.getByPlaceholderText("name this tab")).toHaveFocus());
+  });
+
+  it("edits under the sheet's one header, Back · Rename tab · Close, with Save under the field", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename tab" });
+    expect(within(dialog).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Rename tab"]);
+    expect(within(dialog).getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("button", { name: "Close" })).toHaveLength(1);
+    expect(within(dialog).getByRole("textbox", { name: "Tab name" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("can clear the field, but a blank tab name can't be saved", async () => {
+    const user = userEvent.setup();
+    renderSheet({ tab: { ...tab, label: "review" } });
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Clear name" }));
+    expect(screen.getByRole("textbox", { name: "Tab name" })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("Back returns to the action list without saving", async () => {
@@ -134,16 +157,16 @@ describe("TabActionsSheet — rename", () => {
   it("resets back to the action list when the sheet reopens, even mid-rename", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this tab")).toBeInTheDocument();
 
     rerender(
-      <TabActionsSheet open={false} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={false} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
     rerender(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
 
     expect(screen.queryByPlaceholderText("name this tab")).toBeNull();
@@ -154,13 +177,13 @@ describe("TabActionsSheet — rename", () => {
     const user = userEvent.setup();
     const other: TabView = { ...tab, tabId: "w1:t2", label: "2" };
     const { rerender } = render(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this tab")).toBeInTheDocument();
 
     rerender(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={other} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={other} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
 
     expect(screen.queryByPlaceholderText("name this tab")).toBeNull();
@@ -181,7 +204,39 @@ describe("TabActionsSheet — rename", () => {
 });
 
 describe("TabActionsSheet — close", () => {
-  it("closes only after a two-tap confirm, then calls onClosed and closes the sheet", async () => {
+  // Only the clock the settle window reads is faked; user-event and MSW keep real timers.
+  beforeEach(() => vi.useFakeTimers({ toFake: ["performance"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("asks first, naming the tab and the panes that close with it", async () => {
+    const user = userEvent.setup();
+    const props = renderSheet();
+
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+
+    expect(screen.getByRole("heading", { name: "Close “Tab 1”?" })).toBeInTheDocument();
+    expect(screen.getByText("Its 2 panes close, and anything running in them stops. This can't be undone.")).toBeInTheDocument();
+    expect(props.onClosed).not.toHaveBeenCalled();
+  });
+
+  it("names the tab once: the question takes the sheet's title in place of the name", async () => {
+    const user = userEvent.setup();
+    renderSheet({ name: "server" });
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    const dialog = screen.getByRole("dialog", { name: "Close “server”?" });
+    expect(within(dialog).getAllByText(/server/)).toHaveLength(1);
+    expect(within(dialog).getAllByRole("heading")).toHaveLength(1);
+  });
+
+  it("names a lone pane in the singular", async () => {
+    const user = userEvent.setup();
+    renderSheet({ tab: { ...tab, label: "review", paneCount: 1 }, name: "review" });
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    expect(screen.getByRole("heading", { name: "Close “review”?" })).toBeInTheDocument();
+    expect(screen.getByText("Its pane closes, and anything running in it stops. This can't be undone.")).toBeInTheDocument();
+  });
+
+  it("closes once confirmed, then calls onClosed and closes the sheet", async () => {
     const user = userEvent.setup();
     let url = "";
     server.use(
@@ -193,20 +248,14 @@ describe("TabActionsSheet — close", () => {
     const props = renderSheet();
 
     await user.click(screen.getByRole("button", { name: "Close tab" }));
-    expect(props.onClosed).not.toHaveBeenCalled(); // first tap only arms
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    expect(url).toBe(""); // a double tap closes nothing
 
-    // Armed, the row names the blast radius (paneCount = 2).
-    await user.click(screen.getByRole("button", { name: "Tap again to close 2 panes" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
     await waitFor(() => expect(props.onClosed).toHaveBeenCalledExactlyOnceWith("w1:t1"));
     expect(url).toContain("/api/tab/w1%3At1/close");
     expect(props.onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("singularises the blast-radius confirm when the tab holds one pane", async () => {
-    const user = userEvent.setup();
-    renderSheet({ tab: { ...tab, paneCount: 1 } });
-    await user.click(screen.getByRole("button", { name: "Close tab" }));
-    expect(screen.getByRole("button", { name: "Tap again to close 1 pane" })).toBeInTheDocument();
   });
 
   it("does NOT close the sheet or fire onClosed when the close fails", async () => {
@@ -218,9 +267,10 @@ describe("TabActionsSheet — close", () => {
     );
     const props = renderSheet();
     await user.click(screen.getByRole("button", { name: "Close tab" }));
-    await user.click(screen.getByRole("button", { name: "Tap again to close 2 panes" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close tab" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close tab" })).not.toHaveAttribute("aria-busy", "true"));
     expect(props.onClosed).not.toHaveBeenCalled();
     expect(props.onClose).not.toHaveBeenCalled();
   });

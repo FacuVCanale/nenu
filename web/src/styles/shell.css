@@ -1,0 +1,57 @@
+/* The shell's own chrome: the sidebar's brand row, the collapsed rail and the phone's tab bar. */
+.workbench-brand { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--foreground); text-decoration: none; font-size: var(--text-subhead); font-weight: 600; letter-spacing: -0.025em; border-radius: var(--radius-sm); }
+.workbench-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 52px; padding: 0 12px 0 16px; flex-shrink: 0; }
+.workbench-sidebar-rail { display: none; }
+
+@layer components {
+/* The collapsed rail: the sidebar's actions as icons, then two letters per project and loose workspace,
+   each on its own hue so a herd of client-*-portal workspaces stays tellable apart. */
+.rail-attention { position: relative; }
+.rail-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--status-blocked); }
+.rail-divider { width: 24px; height: 1px; margin: 6px 0; flex-shrink: 0; background: var(--border); }
+.rail-link { --rail-surface: var(--workbench-sidebar); position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-lg); background: var(--rail-surface); text-decoration: none; }
+@media (hover: hover) {
+  .rail-link:hover { --rail-surface: var(--workbench-row-hover); }
+}
+.rail-link[aria-current="page"] { --rail-surface: var(--workbench-row-selected); }
+.rail-tile { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); background: light-dark(oklch(0.93 0.035 var(--rail-hue, 250)), oklch(0.31 0.045 var(--rail-hue, 250))); color: light-dark(oklch(0.42 0.1 var(--rail-hue, 250)), oklch(0.9 0.05 var(--rail-hue, 250))); font-size: var(--text-caption); line-height: 1; font-weight: 600; letter-spacing: 0.02em; }
+.rail-tile-dot { position: absolute; top: 3px; right: 3px; box-shadow: 0 0 0 2px var(--rail-surface); }
+/* A floating label, so it takes the popover surface and the float shadow. The pointer can rest on it.
+   A long name wraps rather than losing its end, which is what tells client-x-events from client-x-orders. */
+.rail-tip { position: fixed; z-index: 60; max-width: 20rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); overflow-wrap: anywhere; translate: 0 -50%; animation: rail-tip-in 150ms ease-out; }
+.rail-tip[data-leaving] { pointer-events: none; animation: rail-tip-out 120ms ease-in forwards; }
+
+/* The phone's tab bar: in flow under the route, so nothing scrolls behind it, clear of the home indicator,
+   and pinned to the bottom even when the route draws nothing yet (a redirect on its way).
+   Five tabs of one weight, New included, so the Needs you badge is what draws the eye. */
+.bottom-tab-bar { display: flex; flex-shrink: 0; margin-top: auto; align-items: flex-start; justify-content: space-around; padding: 6px 12px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--chrome); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.bottom-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 64px; height: 48px; border-radius: var(--radius-lg); color: var(--subtle-foreground); font-size: var(--text-micro); line-height: var(--text-micro--line-height); font-weight: var(--text-micro--font-weight); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: scale 120ms ease-out; }
+.bottom-tab:active { scale: 0.97; }
+.bottom-tab[aria-current="page"], .bottom-tab[aria-pressed="true"] { color: var(--foreground); }
+.bottom-tab:disabled { color: var(--disabled-foreground); cursor: default; scale: none; }
+/* Anchored by its left edge just right of the icon's centre, so a second digit grows away from the icon. */
+.bottom-tab-badge { position: absolute; top: 1px; left: calc(50% + 4px); display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 9999px; background: var(--status-blocked); color: var(--background); box-shadow: 0 0 0 2px var(--background); font-size: var(--text-micro); line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bottom-tab:focus-visible, .rail-link:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+}
+
+@keyframes rail-tip-in { from { opacity: 0; transform: translateX(-4px); } }
+@keyframes rail-tip-fade { from { opacity: 0; } }
+@keyframes rail-tip-out { to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-tab { transition: none; }
+  .bottom-tab:active { scale: none; }
+  .rail-tip { animation: rail-tip-fade 100ms ease-out; }
+  .rail-tip[data-leaving] { animation: rail-tip-out 120ms ease-in forwards; }
+}
+
+@media (min-width: 1024px) {
+  .workbench-sidebar-rail { display: flex; flex: 0 0 56px; flex-direction: column; align-items: center; gap: 6px; min-height: 0; overflow-y: auto; padding: 4px 0 12px; border-right: 1px solid var(--border); background: var(--workbench-sidebar); scrollbar-width: none; }
+  .bottom-tab-bar { display: none; }
+  .workbench-expand { width: 44px; height: 44px; margin-bottom: 8px; }
+}
+
+/* Writing on a phone: the tab bar steps aside while the keyboard is up. */
+@media (max-width: 1023px) and (pointer: coarse) {
+  .workbench-main:has(:is(input, textarea, [contenteditable="true"]):focus) > .bottom-tab-bar { display: none; }
+}

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PaneStrip } from "./pane-strip";
-import type { AgentView } from "@/lib/types";
+import type { AgentView, ProjectView } from "@/lib/types";
 
 function pane(
   paneId: string,
@@ -64,6 +64,92 @@ describe("PaneStrip", () => {
     expect(screen.getByText("auth-refactor")).toBeInTheDocument();
     expect(screen.getByText("deploy")).toBeInTheDocument();
     expect(screen.queryByText("ignored")).toBeNull();
+  });
+
+  it("names a pill once, without the pane id Herdr gave it", () => {
+    render(
+      <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} />,
+    );
+    // The name, then its status in words (the dot is colour only), and nothing else.
+    expect(screen.getByRole("button", { name: "claude, idle" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "codex, idle" })).toBeInTheDocument();
+    expect(screen.queryByText(/p1|p2/)).toBeNull();
+  });
+
+  it("numbers panes that share a name, and only those", () => {
+    render(
+      <PaneStrip
+        panes={[
+          pane("w1:p1", "claude", "agent", { paneLabel: "Payments adapter" }),
+          pane("w1:p2", "claude", "agent", { paneLabel: "deploy" }),
+          pane("w1:p3", "claude", "agent", { paneLabel: "Payments adapter" }),
+        ]}
+        currentPaneId="w1:p2"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Payments adapter · 1, idle",
+      "deploy, idle",
+      "Payments adapter · 2, idle",
+    ]);
+  });
+
+  it("calls a project's thread by its title, as the rest of Nenu does", () => {
+    const projects: ProjectView[] = [{
+      slug: "awam", name: "Awam", status: "active",
+      threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
+    }];
+    render(
+      <PaneStrip
+        panes={[pane("w1:p1", "claude", "agent", { paneLabel: "Blocked Claude" }), pane("w1:p2", "codex")]}
+        projects={projects}
+        currentPaneId="w1:p2"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Panel depósito/ })).toBeInTheDocument();
+    expect(screen.queryByText("Blocked Claude")).toBeNull();
+  });
+
+  it("names the actions sheet as its pill does", () => {
+    const projects: ProjectView[] = [{
+      slug: "awam", name: "Awam", status: "active",
+      threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
+    }];
+    render(
+      <PaneStrip
+        panes={[pane("w1:p1", "claude", "agent", { paneLabel: "Blocked Claude" }), pane("w1:p2", "codex")]}
+        projects={projects}
+        currentPaneId="w1:p2"
+        onSelect={vi.fn()}
+        onRenamed={vi.fn()}
+        onClosed={vi.fn()}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Panel depósito/ }));
+    expect(screen.getByRole("dialog", { name: "Panel depósito" })).toBeInTheDocument();
+  });
+
+  // A destructive confirmation that says only "Payments adapter" doesn't say which of the two closes.
+  it("names a repeated pane's sheet and its close confirmation with its number, as its pill does", async () => {
+    const user = userEvent.setup();
+    render(
+      <PaneStrip
+        panes={[
+          pane("w1:p1", "claude", "agent", { paneLabel: "Payments adapter" }),
+          pane("w1:p2", "claude", "agent", { paneLabel: "Payments adapter" }),
+        ]}
+        currentPaneId="w1:p1"
+        onSelect={vi.fn()}
+        onRenamed={vi.fn()}
+        onClosed={vi.fn()}
+      />,
+    );
+    fireEvent.contextMenu(screen.getAllByRole("button", { name: /Payments adapter/ })[1]!);
+    expect(screen.getByRole("dialog", { name: "Payments adapter · 2" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(screen.getByRole("heading", { name: "Close “Payments adapter · 2”?" })).toBeInTheDocument();
   });
 
   it("fires onSelect with the pane id when a pane is tapped", async () => {
@@ -128,6 +214,27 @@ describe("PaneStrip", () => {
     await user.click(screen.getByRole("button", { name: /claude/ }));
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("marks the open pill, and only it, as opening its actions when they are wired", () => {
+    render(
+      <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: /claude/ });
+    expect(open).toHaveAttribute("aria-haspopup", "dialog");
+    expect(open.querySelector("[data-chip-actions]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /codex/ }).querySelector("[data-chip-actions]")).toBeNull();
+  });
+
+  // A read-only device's sheet holds only a note, so the open pill promises nothing; a long-press
+  // still shows the note.
+  it("puts no actions affordance on the open pill on a read-only device", () => {
+    render(
+      <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} readOnly onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: /claude/ });
+    expect(open).not.toHaveAttribute("aria-haspopup");
+    expect(open.querySelector("[data-chip-actions]")).toBeNull();
   });
 
   it("still navigates on a tap of an INACTIVE pill even when actions are wired", async () => {

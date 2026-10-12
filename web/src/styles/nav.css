@@ -1,0 +1,162 @@
+/* The navigation: the desktop sidebar and the phone's Browse sheet draw the same rows.
+   Adapted from T3 Code apps/web/src/index.css at 191a4ef (MIT, see THIRD_PARTY_NOTICES.md). */
+.workbench-sidebar { display: none; }
+
+/* New surfaces live in the components layer so Tailwind utilities on the same element still win. */
+@layer components {
+/* Navigation: quiet rows, muted section labels, a subtle fill for the current row.
+   The tree's one grid: a row's own padding, then a fold column at every depth (a chevron on a node
+   that folds, empty on a leaf), then the mark and the title, each depth one indent further in. Dots
+   and titles at the same depth line up whether or not the row folds. */
+.workbench-navigation { --nav-pad: 10px; --nav-fold: 20px; --nav-indent: 16px; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; color: var(--foreground); }
+.nav-top { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 6px; }
+.nav-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 16px; scrollbar-width: thin; }
+.nav-footer { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding: 8px; }
+.nav-footer > button { align-self: flex-start; }
+.nav-label { display: flex; align-items: center; gap: 6px; padding: 16px 10px 4px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 400; }
+.nav-row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 32px; padding: 5px var(--nav-pad, 10px); border-radius: var(--radius-md); color: var(--foreground); font-size: var(--text-footnote); text-align: left; text-decoration: none; cursor: pointer; }
+.nav-row > svg { flex-shrink: 0; color: var(--muted-foreground); }
+/* The lead rows' 16px icons take the 18px a project's avatar does, so every top-level name starts at one x. */
+.nav-top .nav-row > svg { margin-inline: 1px; }
+/* Hover only where a pointer hovers: on a phone a tap would leave the row under it lit. */
+@media (hover: hover) {
+  :is(.nav-row, .nav-pane):hover { background: var(--workbench-row-hover); }
+  .nav-row:disabled:hover, button.nav-pane:disabled:hover { background: none; }
+}
+/* A finger gets the same tint the moment it lands, and it fades as the finger lifts. A row already
+   filled as current or picked keeps its fill. */
+@media (hover: none) {
+  :is(.nav-row, .nav-pane) { transition: background-color 120ms ease-out; }
+  :is(.nav-row, .nav-pane):active:not(:disabled, [aria-current="page"], [aria-selected="true"]) { background: var(--workbench-row-hover); transition-duration: 0ms; }
+}
+.nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
+/* One fill at a time: while the list shows Needs you or a search, that is the sidebar's place, not Home. */
+.workbench-navigation:not([data-list="browse"]) > .nav-top > .nav-row[aria-current="page"]:not(:hover) { background: none; }
+/* The workspace holding the open chat, while folded; open, the chat's own row carries the mark. */
+.nav-ws:not(:has(> .nav-ws-body)) .nav-row[aria-current="true"] { background: var(--workbench-row-hover); }
+.nav-row:disabled { cursor: default; opacity: 0.5; background: none; }
+.nav-row-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-search { cursor: text; background: var(--workbench-row-hover); }
+.nav-search:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
+.nav-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: inherit; }
+.nav-empty { padding: 12px 10px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: 1.5; }
+/* A project or workspace: its icon, its name, and the chevron in the row's end padding, so the whole row stays one hover target. */
+.nav-project { position: relative; margin-top: 10px; }
+.nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 32px; }
+.nav-lead { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; color: var(--muted-foreground); }
+.nav-disclosure { position: absolute; z-index: 1; inset-block: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted-foreground); cursor: pointer; }
+.nav-disclosure-end { right: 4px; width: 26px; }
+.nav-disclosure > svg, .nav-history > svg { transition: transform 150ms ease-out; }
+.nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: var(--text-caption); }
+.nav-count { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+
+/* The tree under a project or workspace. */
+.nav-thread { position: relative; }
+.nav-tree-row { min-height: 28px; padding-left: calc(var(--nav-pad, 10px) + var(--nav-fold, 20px) + (var(--nav-depth, 1) - 1) * var(--nav-indent, 16px)); color: var(--muted-foreground); }
+.nav-tree-row[aria-current="page"] { color: var(--foreground); }
+.nav-tree-row.nav-tree-head { color: var(--foreground); }
+.nav-tree-row.nav-tree-resolved:not([aria-current="page"]) { color: var(--muted-foreground); }
+.nav-tree-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 14px; }
+.nav-thread > .nav-disclosure { left: calc(var(--nav-pad, 10px) + (var(--nav-depth, 1) - 1) * var(--nav-indent, 16px)); width: var(--nav-fold, 20px); }
+.nav-dots { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; }
+.nav-row-word { flex-shrink: 0; font-size: var(--text-caption); }
+/* History: everything resolved, grey, behind one row that starts closed. Its chevron sits in the
+   depth-1 fold column and its name where depth-1 marks start; the rest of it lives on the project page. */
+.nav-history { gap: 0; padding-left: var(--nav-pad, 10px); color: var(--muted-foreground); font-size: var(--text-caption); }
+.nav-history > svg { margin-inline: calc((var(--nav-fold, 20px) - 14px) / 2); }
+.nav-history > .nav-count { margin-left: 6px; }
+.nav-history-all { color: var(--muted-foreground); font-size: var(--text-caption); }
+
+/* A workspace's panes, one level in; a split tab's label at depth 1 and its panes at depth 2. */
+.nav-ws > .nav-project { margin-top: 0; }
+.nav-ws-body { padding-bottom: 4px; }
+.nav-ws-body .nav-pane { --nav-depth: 1; min-height: 28px; padding-block: 3px; padding-left: calc(var(--nav-pad, 10px) + var(--nav-fold, 20px) + (var(--nav-depth) - 1) * var(--nav-indent, 16px)); }
+.nav-ws-body .nav-pane-nested { --nav-depth: 2; }
+.nav-tab-label { display: flex; align-items: center; gap: 8px; padding: 4px var(--nav-pad, 10px) 2px calc(var(--nav-pad, 10px) + var(--nav-fold, 20px)); color: var(--muted-foreground); font-size: var(--text-caption); }
+
+/* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */
+.nav-group { padding-top: 14px; }
+.nav-group > .nav-label { padding: 0 10px 6px; color: var(--subtle-foreground); font-weight: 500; }
+.nav-group > .nav-project-section:first-of-type > .nav-project { margin-top: 0; }
+.nav-kbd { margin-left: auto; color: var(--subtle-foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-caption); }
+.nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: auto; padding: 0 5px; border-radius: 9999px; background: color-mix(in oklch, var(--status-blocked) 22%, transparent); color: var(--status-blocked); font-size: var(--text-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
+.nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
+.nav-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: var(--radius-sm); background: var(--primary); color: var(--primary-foreground); font-size: var(--text-micro); font-weight: 700; }
+.nav-project-section > .nav-project > .nav-row { font-weight: 500; }
+.nav-host { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 4px -8px -8px; padding: 0 6px 0 14px; border-top: 1px solid var(--border); }
+.nav-host-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
+.nav-host-name, .nav-host-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-host-name { font-size: var(--text-footnote); }
+.nav-host-meta { color: var(--subtle-foreground); font-size: var(--text-caption); }
+
+/* A chat's row in every list (tree, search, Needs you, Recent, the pane switcher): mark, name, where it lives. */
+.nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px var(--nav-pad, 10px); border-radius: var(--radius-md); color: var(--foreground); text-decoration: none; }
+.nav-pane:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+button.nav-pane { width: 100%; text-align: left; cursor: pointer; }
+.nav-pane[aria-current="page"] { background: var(--workbench-row-selected); }
+/* A row that opens nothing (an unreachable session): the name and the line under it both in the
+   disabled ink, so the state never reads louder than the name. */
+button.nav-pane:disabled { color: var(--disabled-foreground); cursor: default; }
+button.nav-pane:disabled .nav-pane-detail { color: inherit; }
+/* A row whose destination is still loading: a spinner where its mark was (OpeningMark). */
+.nav-opening { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; color: var(--muted-foreground); }
+.nav-pane-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 14px; color: var(--muted-foreground); }
+.nav-pane-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.nav-pane-title, .nav-pane-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-pane-title { font-size: var(--text-footnote); }
+.nav-pane-detail { color: var(--muted-foreground); font-size: var(--text-caption); }
+.nav-pane-status { flex-shrink: 0; font-size: var(--text-caption); font-weight: 500; }
+.nav-chat-time { flex-shrink: 0; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.nav-group > .nav-label > .nav-count, .nav-fold > .nav-count { margin-left: 0; color: inherit; font-size: inherit; }
+/* A section heading that folds its rows (the pane switcher's Recent and Shells). */
+.nav-fold { display: inline-flex; align-items: center; gap: 6px; color: inherit; cursor: pointer; }
+.nav-fold > svg { flex-shrink: 0; transition: transform 150ms ease-out; }
+.nav-fold[aria-expanded="true"] > svg { transform: rotate(90deg); }
+/* Search: one flat list of what matched, the pick filled like the current row, the match in semibold. */
+.nav-result[aria-selected="true"] { background: var(--workbench-row-selected); }
+.nav-match { background: none; color: inherit; font-weight: 600; }
+.nav-label-end { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* Where a pane lives: the place gives up its width before the tab, which tells rows apart. */
+.nav-pane-detail:has(> .nav-place) { display: flex; min-width: 0; white-space: pre; }
+.nav-place { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nav-place-tab { flex-shrink: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; }
+.workbench-sidebar .nav-label:first-child { padding-top: 10px; }
+
+/* A phone's sheet and drawer: row content on the 16px gutter the sheet's title sits on. */
+.workbench-navigation[data-variant="sheet"] .nav-scroll { margin-inline: calc(-1 * var(--nav-pad, 10px)); padding-inline: 0; }
+.workbench-navigation[data-variant="sheet"] :is(.nav-top, .nav-footer) { padding-inline: 0; }
+.workbench-navigation[data-variant="sheet"] .nav-host { margin-inline: 0; padding-inline: 0; }
+.workbench-navigation[data-variant="drawer"] .nav-scroll { padding-inline: calc(16px - var(--nav-pad, 10px)); }
+.workbench-navigation[data-variant="drawer"] .nav-host { padding-left: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg { transition: none; }
+}
+
+@media (min-width: 1024px) {
+  .workbench-sidebar { display: flex; flex-direction: column; width: 272px; flex-shrink: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--workbench-sidebar); }
+  .workbench-shell[data-sidebar-collapsed="true"] > .workbench-sidebar { display: none; }
+}
+
+/* Touch: every row reaches 44px, and every chevron a 44px target that stays off the mark beside it. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .workbench-navigation { --nav-fold: 36px; }
+  .nav-row { min-height: 44px; font-size: var(--text-body); }
+  .nav-disclosure-end { right: 0; width: 36px; }
+  .nav-disclosure::before { content: ""; position: absolute; inset-block: 0; left: 50%; width: 44px; transform: translateX(-50%); }
+  /* The end chevron sits on the row's edge: its target grows inward, so the list never scrolls sideways. */
+  .nav-disclosure-end::before { left: auto; right: 0; transform: none; }
+  .nav-fold { position: relative; }
+  .nav-fold::before { content: ""; position: absolute; inset: -13px -8px; }
+  .nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 36px; }
+  .nav-kbd { display: none; }
+  .nav-history { font-size: var(--text-footnote); }
+  .nav-history-all { font-size: var(--text-footnote); }
+  .nav-pane { min-height: 52px; padding-block: 6px; }
+  .nav-ws-body .nav-pane { min-height: 44px; }
+  .nav-tab-label { font-size: var(--text-footnote); }
+  .nav-pane-title { font-size: var(--text-body); }
+  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-row-word { font-size: var(--text-footnote); }
+}

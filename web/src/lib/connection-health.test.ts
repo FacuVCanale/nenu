@@ -5,6 +5,7 @@ import {
   effectiveAnchor,
   isLostLatched,
   lastHealthyAt,
+  lastLiveAt,
   latchLost,
   markLive,
   markWake,
@@ -82,6 +83,21 @@ describe("connection-health store", () => {
   });
 
   // Sticky-escalation latch — the fix for a mid-outage app switch downgrading red → amber.
+  it("dates the herd by the last live read, and by nothing before the first one", () => {
+    // Opening the page is not a live read: until one lands there is no herd this page saw live.
+    expect(lastLiveAt()).toBeUndefined();
+    vi.advanceTimersByTime(4_000);
+    markLive();
+    const live = Date.now();
+    expect(lastLiveAt()).toBe(live);
+    // A wake grants grace to the escalation clock; it says nothing about when the herd was live.
+    vi.advanceTimersByTime(9_000);
+    markWake();
+    expect(lastLiveAt()).toBe(live);
+    __resetConnectionHealth();
+    expect(lastLiveAt()).toBeUndefined();
+  });
+
   describe("sticky-escalation latch", () => {
     it("latchLost sets the latch and notifies once; repeat calls are no-ops", () => {
       let hits = 0;

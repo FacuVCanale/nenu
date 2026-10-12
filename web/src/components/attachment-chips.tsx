@@ -6,8 +6,8 @@ import { imageLabel } from "@/lib/message-images";
 import { cn } from "@/lib/utils";
 
 /**
- * The draft's images, above the text: a 40px thumbnail, "Image N", and a small remove control whose
- * hit area grows to 44px through a pseudo-element. One row; it scrolls sideways when it overflows.
+ * The draft's images, above the text: a 40px thumbnail, "Image N", and a small remove control that
+ * a touch screen reaches at 44px through the shared .hit-area. One row; it scrolls sideways when it overflows.
  */
 export function AttachmentChips({
   items,
@@ -72,9 +72,9 @@ function AttachmentChip({
         )}
       </span>
       <span className="flex min-w-0 flex-col items-start leading-tight">
-        <span className="text-xs font-medium">{label}</span>
+        <span className="text-caption font-medium">{label}</span>
         {item.status !== "ready" && (
-          <span className={cn("text-[11px]", failed ? "text-destructive" : "text-muted-foreground")}>
+          <span className={cn("text-caption", failed ? "text-destructive" : "text-muted-foreground")}>
             {failed ? "Failed · tap to retry" : "Uploading…"}
           </span>
         )}
@@ -106,7 +106,7 @@ function AttachmentChip({
       )}
       <button
         type="button"
-        className="relative grid size-6 place-items-center rounded-full text-muted-foreground after:absolute after:-inset-2.5 after:content-[''] hover:bg-muted hover:text-foreground"
+        className="hit-area grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
         onPointerDown={(e) => e.preventDefault()}
         onClick={onRemove}
         aria-label={`Remove ${label}`}

@@ -17,22 +17,34 @@ function pane(paneId: string, workspaceId: string, times: { active?: number; see
 const tab = (workspaceId: string): TabView => ({ tabId: `${workspaceId}:t`, workspaceId, number: 1, label: "main", focused: false, paneCount: 1 });
 
 describe("workspaceTree", () => {
-  it("puts the workspace that moved or was opened last first, and only marks the one on screen", () => {
+  it("puts the workspace whose agent moved last first, and only marks the one on screen", () => {
     const herd = {
       workspaces: [workspace("old", 1), workspace("here", 2), workspace("busy", 3), workspace("visited", 4)],
       tabs: [tab("old"), tab("here"), tab("busy"), tab("visited")],
       agents: [
         pane("old:p", "old", { active: 10, seen: 5 }),
         pane("here:p", "here", { active: 20, seen: 30 }),
-        // An agent that just changed state counts, not only the last time someone opened it.
         pane("busy:p", "busy", { active: 90, seen: 1 }),
         pane("visited:p", "visited", { active: 2, seen: 60 }),
       ],
       shellPanes: [],
     };
-    const branches = workspaceTree(herd, "", "here:p");
-    expect(branches.map((branch) => branch.workspace.workspaceId)).toEqual(["busy", "visited", "here", "old"]);
+    const branches = workspaceTree(herd, "here:p");
+    expect(branches.map((branch) => branch.workspace.workspaceId)).toEqual(["busy", "here", "old", "visited"]);
     expect(branches.filter((branch) => branch.current).map((branch) => branch.workspace.workspaceId)).toEqual(["here"]);
+  });
+
+  it("keeps a workspace in its place when you open one of its panes", () => {
+    const herd = (seen: number) => ({
+      workspaces: [workspace("a", 1), workspace("b", 2)],
+      tabs: [tab("a"), tab("b")],
+      agents: [pane("a:p", "a", { active: 50, seen: 50 }), pane("b:p", "b", { active: 40, seen })],
+      shellPanes: [],
+    });
+    const order = (seen: number, current: string) => workspaceTree(herd(seen), current).map((branch) => branch.workspace.workspaceId);
+    // Opening b's pane bumps when it was seen, never where its workspace sits.
+    expect(order(40, "a:p")).toEqual(["a", "b"]);
+    expect(order(999, "b:p")).toEqual(["a", "b"]);
   });
 
   it("keeps Herdr's order between workspaces nothing has happened in", () => {

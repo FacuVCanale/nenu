@@ -1,12 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Check, Loader2 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DOCK_TILE } from "@/components/dock-tile";
 import { ECHO_DONE_MS, useActionEcho } from "@/hooks/use-action-echo";
 import type { EchoPhase } from "@/hooks/use-action-echo";
 import { useOperatorQuickReplies } from "@/lib/operator-config";
 import { quickRepliesFor } from "@/lib/quick-replies";
+import { cn } from "@/lib/utils";
 
 interface QuickActionsContentProps {
   /** Resolves true once the reply is verified sent — drives the ✓ and the deferred close. */
@@ -18,11 +19,16 @@ interface QuickActionsContentProps {
   disabled?: boolean;
 }
 
-// Module-level so it isn't a fresh component type each render (which would remount the grid).
+// The shipped and the operator's group names are lowercase words ("confirm"); a label reads as a
+// sentence-case name, never as a shouted tag.
+const sentenceCase = (title: string) => title.charAt(0).toLocaleUpperCase() + title.slice(1);
+
+// Module-level so it isn't a fresh component type each render (which would remount the chips).
+// Replies are chips in a wrapping flow: the same raised tile as the Keys pad, as a 40px pill, so a
+// short "yes" stays short and a long operator phrase gets the width it needs.
 function Group({
   title,
   items,
-  cols,
   disabled,
   busy,
   phaseOf,
@@ -30,32 +36,31 @@ function Group({
 }: {
   title: string;
   items: readonly string[];
-  cols: string;
   disabled?: boolean;
   /** Some reply in the dock is in flight — the untapped siblings dim and lock out. */
   busy: boolean;
   phaseOf: (id: string) => EchoPhase;
   onFire: (text: string) => void;
 }) {
+  const labelId = useId();
   return (
-    <div>
-      <p className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">{title}</p>
-      <div className={`grid gap-2 ${cols}`}>
+    <div role="group" aria-labelledby={labelId}>
+      <p id={labelId} className="mb-2 text-footnote text-muted-foreground">{sentenceCase(title)}</p>
+      <div className="flex flex-wrap gap-2">
         {items.map((t) => {
           const phase = phaseOf(t);
           return (
             <Button
               key={t}
               type="button"
-              // The tapped reply goes accent (and stays undimmed under `disabled`, so it reads over
-              // its dimmed siblings) — the same busy language the dialog option rows use.
-              variant={phase === "idle" ? "outline" : "default"}
+              // The tapped reply fills with ink, and aria-busy keeps that fill while the dock is
+              // disabled, so it reads over its unavailable siblings: the same busy language the dialog
+              // option rows use.
+              variant={phase === "idle" ? "ghost" : "default"}
               disabled={disabled || busy}
+              aria-busy={phase === "pending" || undefined}
               onClick={() => onFire(t)}
-              className={cn(
-                "h-12 gap-1.5 text-sm font-medium",
-                phase !== "idle" && "disabled:opacity-100",
-              )}
+              className={cn("hit-area h-10 gap-1.5 rounded-full px-4 text-subhead font-normal", phase === "idle" ? DOCK_TILE : "border border-foreground")}
             >
               {phase === "pending" && <Loader2 className="size-4 animate-spin" />}
               {phase === "done" && <Check className="size-4" />}
@@ -68,7 +73,7 @@ function Group({
   );
 }
 
-// The Quick-actions body — the two one-tap reply grids, no chrome of its own. Docked in-flow by the
+// The Quick-actions body — the one-tap reply groups, no chrome of its own. Docked in-flow by the
 // composer (same ComposerDock wrapper as Keys), so it never covers the mirror. Padding matches
 // NavTray so both docks read identically.
 //
@@ -109,13 +114,12 @@ export function QuickActionsContent({
   };
 
   return (
-    <div className="space-y-4 border-t border-border/60 bg-muted/30 px-3 py-2.5">
+    <div className="space-y-4 px-3 pb-3">
       {groups.map((g) => (
         <Group
           key={g.title}
           title={g.title}
           items={g.items}
-          cols="grid-cols-2"
           disabled={disabled}
           busy={echo.pending}
           phaseOf={echo.phaseOf}

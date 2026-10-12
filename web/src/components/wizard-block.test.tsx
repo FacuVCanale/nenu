@@ -46,7 +46,7 @@ describe("WizardBlock — question step presentation", () => {
     render(<WizardBlock wizard={model} onAction={vi.fn()} />);
 
     expect(
-      screen.getByRole("group", { name: "Which focus area should we work on?" }),
+      screen.getByRole("region", { name: "Which focus area should we work on?" }),
     ).toBeInTheDocument();
     // Stepper: the three question chips plus the fixed Submit chip; the current one is marked.
     const chips = screen.getAllByRole("listitem");
@@ -124,7 +124,7 @@ describe("WizardBlock — review (Submit) step presentation", () => {
     const model = fixtureModel("claude--wizard-submit.txt");
     render(<WizardBlock wizard={model} onAction={onAction} />);
 
-    expect(screen.getByRole("group", { name: "Review your answers" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Review your answers" })).toBeInTheDocument();
     // The Submit chip is the current step now.
     const chips = screen.getAllByRole("listitem");
     expect(chips[3]).toHaveTextContent("Submit");

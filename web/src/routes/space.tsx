@@ -5,6 +5,7 @@ import { MessageSquare, Plus } from "lucide-react";
 import { AppHeader, SettingsGear } from "@/components/app-header";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { workspaceEntry, workspaceName } from "@/lib/spaces";
@@ -28,14 +29,14 @@ export function SpaceRoute() {
   // transient poll failure or a reconnect (or an idle-lock remount where the space died while locked)
   // doesn't evict a still-valid one. Mirrors DetailRoute's closed-pane recovery.
   // Tell "closed under you" apart from "deep-link that never resolved": track whether we ever saw
-  // this space (a ref write during render is idempotent). "Space closed" would misdescribe
-  // /space/<bad-id>, which was never open.
+  // this workspace (a ref write during render is idempotent). "Workspace closed" would misdescribe
+  // /space/<bad-id>, which was never open. The app calls it a workspace everywhere else, so does this.
   const gone = !workspace;
   const everExisted = useRef(false);
   if (workspace) everExisted.current = true;
   useEffect(() => {
     if (gone && data.bridge === "connected" && !data.error) {
-      setStatus(everExisted.current ? "Space closed" : "Space not found", "info");
+      setStatus(everExisted.current ? "Workspace closed" : "Workspace not found", "info");
       navigate(homePath(data.session), { replace: true });
     }
   }, [gone, data.bridge, data.error, data.session, navigate]);
@@ -45,20 +46,16 @@ export function SpaceRoute() {
 
   return (
     <div className="workbench-chat flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      <AppHeader bridge={data.bridge} error={data.error} onHome={() => navigate(homePath(data.session))}
-        rightTrail={<SettingsGear session={data.session} />}>
-        <span className="truncate text-[15px] font-semibold leading-tight lg:text-sm">{workspace ? workspaceName(workspace) : "Workspace"}</span>
-      </AppHeader>
+      <AppHeader bridge={data.bridge} error={data.error} title={workspace ? workspaceName(workspace) : "Workspace"}
+        rightTrail={<SettingsGear session={data.session} />} />
       <ReadOnlyBanner device={data.device} />
       {workspace && (
-        <div className="flex flex-1 flex-col items-center gap-3 border-t border-border/40 px-4 py-16 text-center text-sm text-muted-foreground">
-          <MessageSquare aria-hidden className="size-5" />
-          <p>Nothing runs in this workspace yet.</p>
-          {canCreate(data) && (
-            <Button type="button" variant="outline" onClick={() => openNewAgent({ kind: "tab", workspaceId: workspace.workspaceId })}>
+        <div className="flex flex-1 flex-col border-t border-border/40">
+          <EmptyState icon={MessageSquare} title="Nothing runs in this workspace yet" className="my-auto" action={canCreate(data) && (
+            <Button type="button" onClick={() => openNewAgent({ kind: "tab", workspaceId: workspace.workspaceId })}>
               <Plus aria-hidden className="size-4" />Start an agent or a shell
             </Button>
-          )}
+          )}>A workspace opens on its pane. This one has none yet.</EmptyState>
         </div>
       )}
     </div>

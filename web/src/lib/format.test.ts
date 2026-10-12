@@ -1,4 +1,4 @@
-import { initials, shortCwd, timeAgo, timeAgoShort } from "./format";
+import { clockTime, initials, shortCwd, timeAgo, timeAgoShort } from "./format";
 
 describe("shortCwd", () => {
   it("collapses /home/<user> to ~", () => {
@@ -49,6 +49,11 @@ describe("shortCwd", () => {
     const out = shortCwd("/home/you/a/very/long/nested/path", 10);
     expect(out.length).toBeLessThanOrEqual(10);
     expect(out.startsWith("…")).toBe(true);
+  });
+
+  it("counts the leading …/ as the two characters it is", () => {
+    const path = "/srv/aa/bb/cc/dd/ee/ff/gg/hh/last";
+    for (let max = 7; max <= path.length; max++) expect(shortCwd(path, max).length, `max ${max}`).toBeLessThanOrEqual(max);
   });
 });
 
@@ -104,5 +109,13 @@ describe("timeAgoShort", () => {
 
   it("says 'now' rather than 'just now'", () => {
     expect(timeAgoShort(now - 1000, now)).toBe("now");
+  });
+});
+
+describe("clockTime", () => {
+  // A clock time reads "9:05", never "09:05": the zero is a column filler for a table of times,
+  // and these sit one at a time under a message or at the end of a work line.
+  it("drops the hour's leading zero", () => {
+    expect(clockTime(new Date(2026, 9, 10, 9, 5).getTime())).toMatch(/^9:05/);
   });
 });

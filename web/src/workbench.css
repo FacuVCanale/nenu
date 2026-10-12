@@ -1,6 +1,8 @@
 /* Workbench layout and navigation. Adapted from T3 Code apps/web/src/index.css at 191a4ef.
    MIT, Copyright (c) 2026 T3 Tools Inc. See THIRD_PARTY_NOTICES.md.
-   Interface faces and component styles only: every color comes from the tokens in index.css. */
+   Interface faces and component styles only: every color comes from the tokens in index.css.
+   What one area owns lives in styles/<area>.css, loaded after this file (main.tsx); this file keeps
+   the faces, the shell frame, the header, the page column, the dialog and the touch hit area. */
 @font-face {
   font-family: "DM Sans Variable";
   font-style: normal;
@@ -34,279 +36,42 @@
    large screen; a chat centres its conversation and composer in one column of their own. */
 :root { --page-gutter: 16px; --page-column: clamp(760px, 50vw, 960px); --chat-column: 48rem; }
 @media (min-width: 640px) { :root { --page-gutter: 32px; } }
-.workbench-sidebar { display: none; }
-.workbench-brand { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--foreground); text-decoration: none; font-size: 14px; font-weight: 600; letter-spacing: -0.025em; border-radius: 6px; }
-.workbench-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 52px; padding: 0 12px 0 16px; flex-shrink: 0; }
-.workbench-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 7px; color: var(--muted-foreground); cursor: pointer; }
+.workbench-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
 .workbench-icon-button:hover { color: var(--foreground); background: var(--workbench-row-hover); }
-.workbench-sidebar-rail { display: none; }
 
 /* New surfaces live in the components layer so Tailwind utilities on the same element still win. */
 @layer components {
-/* Navigation: quiet rows, muted section labels, a subtle fill for the current row. */
-.workbench-navigation { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; color: var(--foreground); }
-.nav-top { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 6px; }
-.nav-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 16px; scrollbar-width: thin; }
-.nav-footer { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding: 8px; }
-.nav-footer > button { align-self: flex-start; }
-.nav-label { display: flex; align-items: center; gap: 6px; padding: 16px 10px 4px; color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
-.nav-row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 32px; padding: 5px 10px; border-radius: 8px; color: var(--foreground); font-size: 13px; text-align: left; text-decoration: none; cursor: pointer; }
-.nav-row > svg { flex-shrink: 0; color: var(--muted-foreground); }
-.nav-row:hover { background: var(--workbench-row-hover); }
-.nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
-/* The workspace holding the open chat, while folded; open, the chat's own row carries the mark. */
-.nav-ws:not(:has(> .nav-ws-body)) .nav-row[aria-current="true"] { background: var(--workbench-row-hover); }
-.nav-row:disabled { cursor: default; opacity: 0.5; background: none; }
-.nav-row-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-search { cursor: text; background: var(--workbench-row-hover); }
-.nav-search:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
-.nav-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: inherit; }
-.nav-empty { padding: 12px 10px; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
-/* Group by: a 28px segmented switch at the head of the list. */
-/* A project: the chevron sits in the row's padding, so the whole row stays one hover target. */
-.nav-project { position: relative; margin-top: 10px; }
-.nav-project > .nav-disclosure:first-child + .nav-row { padding-left: 32px; }
-.nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 32px; }
-.nav-disclosure { position: absolute; z-index: 1; inset-block: 0; left: 4px; display: inline-flex; align-items: center; justify-content: center; width: 26px; color: var(--muted-foreground); cursor: pointer; }
-.nav-disclosure-end { left: auto; right: 4px; }
-.nav-disclosure:disabled { cursor: default; }
-.nav-disclosure > svg, .nav-history > svg { transition: transform 150ms ease-out; }
-.nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
-.nav-row-nested { padding-left: 32px; }
-.nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 12px; }
-.nav-count { margin-left: auto; color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
-/* History: everything resolved, grey, behind one row that starts closed. */
-.nav-history { gap: 6px; padding-left: 29px; color: var(--muted-foreground); font-size: 12px; }
-.nav-history > .nav-count { margin-left: 0; }
-
-/* Workspace → tab → pane. A workspace is a heading with its tally; rows carry title, session and state. */
-.nav-ws { margin-top: 6px; }
-.nav-ws + .nav-ws { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); padding-top: 6px; }
-.nav-ws-head { display: flex; align-items: center; gap: 2px; }
-.nav-ws-toggle { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px 6px 4px; border-radius: 8px; text-align: left; cursor: pointer; }
-.nav-ws-toggle:hover { background: var(--workbench-row-hover); }
-.nav-ws-toggle:disabled { cursor: default; background: none; }
-.nav-ws-toggle:focus-visible, .nav-ws-open:focus-visible, .nav-pane:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.nav-ws-chevron { flex-shrink: 0; color: var(--muted-foreground); transition: transform 150ms ease-out; }
-.nav-ws-toggle[aria-expanded="true"] > .nav-ws-chevron { transform: rotate(90deg); }
-.nav-ws-title { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-.nav-ws-name { overflow: hidden; color: var(--foreground); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.nav-ws-meta { overflow: hidden; color: var(--muted-foreground); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.nav-ws-open { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; color: var(--muted-foreground); }
-.nav-ws-open:hover { background: var(--workbench-row-hover); color: var(--foreground); }
-.nav-ws-body { padding: 0 0 4px 12px; }
-/* The sidebar's workspaces: one 30px row each, like the projects above them. */
-.nav-ws.nav-ws-compact { margin-top: 0; border-top: 0; padding-top: 0; }
-.nav-ws-compact > .nav-project { margin-top: 0; }
-.nav-ws-compact > .nav-ws-body { padding-left: 14px; }
-.nav-ws-compact .nav-pane { min-height: 28px; padding-block: 3px; }
-.nav-ws-compact .nav-pane-detail { display: none; }
-.nav-ws-compact .nav-tab-label { padding-top: 4px; }
-
-/* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */
-.nav-group { padding-top: 14px; }
-.nav-group > .nav-label { padding: 0 10px 6px; color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-size: 11.5px; font-weight: 500; }
-.nav-group > .nav-project-section:first-of-type > .nav-project { margin-top: 0; }
-.nav-kbd { margin-left: auto; color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
-.nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: auto; padding: 0 5px; border-radius: 9px; background: color-mix(in oklch, var(--status-blocked) 22%, transparent); color: var(--status-blocked); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
-.nav-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; background: var(--primary); color: var(--primary-foreground); font-size: 10px; font-weight: 700; }
-.nav-project-section > .nav-project > .nav-row { font-weight: 500; }
-/* Depth 1 sits just inside the project; each level adds 20px, and a fold head keeps 20px for its chevron. */
-.nav-thread { position: relative; }
-.nav-tree-row { min-height: 28px; padding-left: calc(var(--nav-depth, 1) * 20px - 6px); color: var(--muted-foreground); }
-.nav-tree-row[aria-current="page"] { color: var(--foreground); }
-.nav-tree-row.nav-tree-head { padding-left: calc(var(--nav-depth, 1) * 20px + 14px); color: var(--foreground); }
-.nav-tree-row.nav-tree-resolved:not([aria-current="page"]) { color: var(--muted-foreground); }
-.nav-thread > .nav-disclosure { left: calc(var(--nav-depth, 1) * 20px - 8px); width: 20px; }
-.nav-dots { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; }
-.nav-row-word { flex-shrink: 0; font-size: 11px; }
-.nav-host { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 4px -8px -8px; padding: 0 6px 0 14px; border-top: 1px solid var(--border); }
-.nav-host-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
-.nav-host-name, .nav-host-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-host-name { font-size: 12.5px; }
-.nav-host-meta { color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-size: 11px; }
-
-/* The collapsed rail: the sidebar's actions as icons, then a letter per project and loose workspace. */
-.rail-attention { position: relative; }
-.rail-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--status-blocked); }
-.rail-divider { width: 24px; height: 1px; margin: 6px 0; background: var(--border); }
-.rail-letter { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 9px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; text-decoration: none; }
-.rail-letter > .nav-avatar { width: 20px; height: 20px; border-radius: 6px; }
-.rail-letter-outline { box-shadow: inset 0 0 0 1px var(--border); }
-.rail-letter:hover { background: var(--workbench-row-hover); color: var(--foreground); }
-.rail-letter-current { background: var(--workbench-row-selected); color: var(--foreground); }
-.rail-letter-outline.rail-letter-current { box-shadow: inset 0 0 0 1px var(--input); }
-
-/* The phone's tab bar: in flow under the route, so nothing scrolls behind it, clear of the home indicator. */
-.bottom-tab-bar { display: flex; flex-shrink: 0; align-items: flex-start; justify-content: space-around; padding: 6px 12px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: color-mix(in oklab, var(--background) 86%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
-.bottom-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 64px; height: 48px; color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-size: 10.5px; font-weight: 500; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.bottom-tab[aria-current="page"], .bottom-tab[aria-pressed="true"] { color: var(--foreground); }
-.bottom-tab-badge { position: absolute; top: 2px; right: 14px; display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--status-blocked); color: var(--background); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.bottom-tab-new { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 16px; background: var(--foreground); color: var(--background); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: scale 120ms ease-out; }
-.bottom-tab-new:active { scale: 0.96; }
-.bottom-tab-new:disabled { opacity: 0.4; cursor: default; }
-.bottom-tab:focus-visible, .bottom-tab-new:focus-visible, .rail-letter:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.nav-tab-label { display: flex; align-items: center; gap: 8px; padding: 8px 10px 2px 12px; color: var(--muted-foreground); font-size: 12px; }
-.nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px 10px; border-radius: 8px; color: var(--foreground); text-decoration: none; }
-.nav-pane:hover { background: var(--workbench-row-hover); }
-.nav-pane[aria-current="page"] { background: var(--workbench-row-selected); }
-.nav-pane-nested { padding-left: 22px; }
-.nav-pane-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 14px; color: var(--muted-foreground); }
-.nav-pane-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-.nav-pane-title, .nav-pane-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-pane-title { font-size: 13px; }
-.nav-pane-detail { color: var(--muted-foreground); font-size: 11.5px; }
-.nav-pane-status { flex-shrink: 0; font-size: 11.5px; font-weight: 500; }
-/* The phone's Needs you and Recent: a chat a row, where it lives under its name, its age on the right. */
-.nav-chat-time { flex-shrink: 0; color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-size: 12px; font-variant-numeric: tabular-nums; }
-.nav-group > .nav-label > .nav-count { margin-left: 0; color: inherit; font-size: inherit; }
-.workbench-sidebar .nav-label:first-child { padding-top: 10px; }
-
 /* A page's scroller and its column (see --page-gutter); a utility may still move one edge. */
 .page-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px var(--page-gutter) calc(env(safe-area-inset-bottom) + 2rem); }
 @media (min-width: 640px) { .page-body { padding-top: 36px; } }
 .page-column { width: 100%; max-width: var(--page-column); }
 
-/* Project frame: chat, then the task panel on wide screens; a header toggle below that. */
-.project-frame { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.project-panel { display: flex; flex-direction: column; width: 360px; flex-shrink: 0; min-height: 0; overflow-y: auto; padding: 20px 20px 32px; border-left: 1px solid var(--border); }
-.project-overlay { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px calc(env(safe-area-inset-bottom) + 24px); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
-/* 30px to the eye; the ::after band gives a coarse pointer its 44px without a taller header. */
-.project-toggle { position: relative; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--foreground); font-size: 12.5px; font-weight: 500; cursor: pointer; }
-.project-toggle > svg { color: var(--muted-foreground); }
-@media (hover: hover) { .project-toggle:hover { background: var(--workbench-row-hover); } }
-.project-toggle::after { content: ""; position: absolute; inset: -7px -2px; }
-.quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: 7px; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
-.quiet-action:hover, .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
-
-.task-list { display: flex; flex-direction: column; gap: 1px; }
-/* The threads a coordinator runs, hung under its row on a guide line aligned with its dot. */
-.task-branch { margin-left: 11px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
-.task-row { display: flex; align-items: flex-start; border-radius: 8px; }
-.task-row:hover { background: var(--workbench-row-hover); }
-[aria-current="true"] > .task-row { background: var(--workbench-row-selected); }
-.task-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 7px 8px; text-align: left; border-radius: 8px; }
-.task-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
-.task-row:hover .task-close, .task-close:focus-visible { opacity: 1; }
-.task-close:hover { color: var(--foreground); background: var(--workbench-row-selected); }
-.task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); cursor: pointer; }
-.task-fold:hover { color: var(--foreground); background: var(--workbench-row-selected); }
-/* History: everything resolved, in grey, behind one row that opens and closes in place. */
-.task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; }
-.task-history-toggle:hover { background: var(--workbench-row-hover); }
-.task-fold > svg, .task-history-toggle > svg { transition: transform 150ms ease-out; }
-.task-fold[aria-expanded="true"] > svg, .task-history-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
-
 /* Native modal: the browser owns focus and the inert page; this only dresses it. */
-.app-dialog { margin: auto; width: min(26rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); color: var(--popover-foreground); box-shadow: 0 24px 48px -12px rgb(0 0 0 / 25%); }
+.app-dialog { margin: auto; width: min(26rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); }
 .app-dialog::backdrop { background: rgb(0 0 0 / 40%); }
-
 }
 
-.workbench-context-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px; border-radius: 7px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); cursor: pointer; }
-.workbench-context-trigger:hover { background: var(--accent); }
-.workbench-shell :is(a, button, summary):focus-visible, .workbench-context-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* Every route's header wears the chrome, the same surface as the status-bar band above it. No blur
+   yet: nothing scrolls under an in-flow header, and a backdrop-filter would trap the fixed menus
+   it opens. Unlayered, so it outranks the bg utility the header markup still carries. */
+.workbench-app-header { background: var(--chrome); }
 
-.workbench-chat > header { background: var(--background); }
-.workbench-chat-menu { width: 44px; height: 44px; flex-shrink: 0; justify-content: center; margin-inline: 0; padding: 0; }
-.workbench-chat-menu > span { width: 28px; height: 28px; background: transparent; box-shadow: none; }
-.workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
-/* The home indicator's inset IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
-.workbench-composer { width: calc(100% - 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
-.workbench-telemetry { border-top: 0; }
-/* The composer: one rounded box (draft + a single round action), then a thin row of quiet controls. */
-.composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
-.composer-box { display: flex; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: 16px; transition: border-color 150ms ease-out; }
-.composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
-.composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
-.composer-input::placeholder { color: var(--muted-foreground); }
-/* The one action: a 32px circle. Send takes the accent only once there is something to send. */
-.composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
-.composer-send:disabled { opacity: 1; background: var(--muted); color: var(--muted-foreground); }
-.composer-stop { border: 1.5px solid currentColor; color: var(--foreground); background: transparent; }
-.composer-stop:hover { background: var(--accent); }
-.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: 13px; color: var(--muted-foreground); }
-.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; white-space: nowrap; cursor: pointer; }
-.composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
-@media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
-.composer-quiet:disabled { opacity: 0.5; cursor: default; }
-.composer-quiet:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 /* Touch reach without visual bulk: a centred, invisible 44px target around a smaller control. */
 .hit-area { position: relative; }
 @media (pointer: coarse) {
   .hit-area::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
 }
-.workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
-
-/* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
-   keyboard can shrink the visual viewport without changing `dvh` on older iOS Safari, so
-   useAppViewport mirrors that live height into --app-viewport-height and the cap leaves room for the
-   header, the toolbar below the draft and the safe-area padding. */
-.workbench-composer [data-slot="chat-input"] {
-  max-height: min(12rem, 40dvh, max(5.5rem, calc(var(--app-viewport-height, 100dvh) - 16rem)));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .task-fold > svg, .task-history-toggle > svg, .nav-disclosure > svg, .nav-history > svg, .nav-ws-chevron, .bottom-tab-new { transition: none; }
-  .bottom-tab-new:active { scale: none; }
-}
 
 @media (min-width: 1024px) {
-  .workbench-sidebar { display: flex; flex-direction: column; width: 272px; flex-shrink: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--workbench-sidebar); }
-  .workbench-shell[data-sidebar-collapsed="true"] > .workbench-sidebar { display: none; }
-  .workbench-sidebar-rail { display: flex; flex: 0 0 56px; flex-direction: column; align-items: center; gap: 6px; min-height: 0; overflow-y: auto; padding: 4px 0 12px; border-right: 1px solid var(--border); background: var(--workbench-sidebar); scrollbar-width: none; }
-  .bottom-tab-bar { display: none; }
-  .workbench-expand { width: 44px; height: 44px; margin-bottom: 8px; }
   /* Every header is the same bar on a desk, whatever its right side holds and whatever route draws it. */
-  .workbench-app-header { min-height: 52px; gap: 8px; padding: 0 8px 0 var(--page-gutter); background: var(--background); }
-  .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
-  .workbench-composer > button[aria-label="Switch pane"] { display: none; }
-  .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }
+  .workbench-app-header { min-height: 52px; gap: 8px; padding: 0 8px 0 var(--page-gutter); }
 }
 
-/* Touch: every target reaches 44px, and the hover-only close is always visible. */
+/* Touch: every target reaches 44px. */
 @media (max-width: 1023px), (pointer: coarse) {
-  .nav-row, .workbench-context-trigger, .quiet-action, .task-main { min-height: 44px; }
-  .task-close, .task-fold { opacity: 1; width: 44px; height: 44px; margin: 0; }
-  .task-history-toggle { min-height: 44px; }
   .workbench-icon-button { width: 44px; height: 44px; }
-  .nav-row { font-size: 15px; }
-  .nav-disclosure { width: 36px; left: 0; }
-  .nav-disclosure-end { left: auto; right: 0; }
-  .nav-project > .nav-disclosure:first-child + .nav-row, .nav-row-nested { padding-left: 36px; }
-  .nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 36px; }
-  .nav-tree-row { padding-left: calc(var(--nav-depth, 1) * 22px - 6px); }
-  .nav-tree-row.nav-tree-head { padding-left: calc(var(--nav-depth, 1) * 22px + 26px); }
-  .nav-thread > .nav-disclosure { left: calc(var(--nav-depth, 1) * 22px - 10px); width: 36px; }
-  .nav-kbd { display: none; }
-  .nav-history { padding-left: 33px; font-size: 13px; }
-  .nav-ws-toggle { min-height: 52px; }
-  .nav-ws-name { font-size: 16px; }
-  .nav-ws-meta { font-size: 13px; }
-  .nav-ws-open { width: 44px; height: 44px; }
-  .nav-pane, .nav-ws-compact .nav-pane { min-height: 52px; padding-block: 6px; }
-  .nav-ws-compact .nav-pane { min-height: 44px; }
-  .nav-pane-title { font-size: 15px; }
-  .nav-pane-detail, .nav-pane-status { font-size: 13px; }
-  .nav-tab-label { font-size: 13px; }
 }
 
 @media (max-width: 1023px) {
   .workbench-app-header { min-height: 48px; gap: 4px; padding: 0 8px 0 4px; }
-}
-
-@media (pointer: coarse) {
-  .workbench-menu-item { min-height: 44px; }
-}
-
-/* Writing on a phone: the tab and pane strips step aside while the keyboard is up. */
-@media (max-width: 1023px) and (pointer: coarse) {
-  .workbench-main:has(:is(input, textarea, [contenteditable="true"]):focus) > .bottom-tab-bar { display: none; }
-  .workbench-chat[data-keyboard-open] [data-workbench-navigation-band] { display: none; }
-  /* The keyboard covers the home indicator, whose inset iOS still reports; the composer sits on the keys. */
-  .workbench-chat[data-keyboard-open] .workbench-composer { margin-bottom: 8px; }
 }

@@ -13,13 +13,31 @@ interface FindBarProps {
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
-  /** What is being searched — the mirror says "output", the transcript says "history". */
+  /** What is being searched: "chat", "terminal", or the history page's "history". */
   subject?: string;
 }
 
+/**
+ * The scrollTop that leaves a find hit a third of the way down what the reader can see: the list's
+ * box below any chrome drawn over its top (`inset`). A third, not the middle, so the lines before the
+ * match give it context and each step lands the eye in the same place.
+ */
+export function thirdScrollTop({ scrollTop, viewTop, viewBottom, hitTop, inset = 0 }: {
+  scrollTop: number;
+  viewTop: number;
+  viewBottom: number;
+  hitTop: number;
+  inset?: number;
+}): number {
+  const top = viewTop + inset;
+  return Math.max(0, Math.round(scrollTop + hitTop - (top + (viewBottom - top) / 3)));
+}
+
 // Compact one-row find bar that takes over the header while searching the pane mirror. Thumb-reach:
-// the input fills the row, the match count sits inline, and prev/next/close are right-aligned. Enter
-// jumps to the next match (Shift+Enter the previous), Escape closes — matching a desktop find bar.
+// the input fills the row, the match count sits inline, and prev/next/close are right-aligned, each
+// the app's icon button (44 px under a finger). Under a desk's width the header starts 4 px in, so the
+// bar pads its search glass onto the page's gutter, where the text and the strips start. Enter jumps
+// to the next match (Shift+Enter the previous), Escape closes — matching a desktop find bar.
 export function FindBar({
   query,
   onQueryChange,
@@ -39,7 +57,7 @@ export function FindBar({
   const countLabel = query ? (count > 0 ? `${current + 1}/${count}` : "0/0") : "";
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+    <div className="flex min-w-0 flex-1 items-center gap-1.5 max-lg:pl-[calc(var(--page-gutter)-4px)] coarse:gap-2">
       <Search className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
       <input
         ref={inputRef}
@@ -63,7 +81,7 @@ export function FindBar({
         }}
         placeholder={`Find in ${subject}…`}
         aria-label={`Find in ${subject}`}
-        className="h-9 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+        className="h-9 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground coarse:h-11"
       />
       <span className="shrink-0 whitespace-nowrap px-1 font-mono text-xs tabular-nums text-muted-foreground">
         {countLabel}
@@ -71,7 +89,7 @@ export function FindBar({
       <Button
         variant="ghost"
         size="icon"
-        className="size-9 shrink-0 text-muted-foreground"
+        className="shrink-0 text-muted-foreground"
         disabled={count === 0}
         onClick={onPrev}
         aria-label="Previous match"
@@ -81,7 +99,7 @@ export function FindBar({
       <Button
         variant="ghost"
         size="icon"
-        className="size-9 shrink-0 text-muted-foreground"
+        className="shrink-0 text-muted-foreground"
         disabled={count === 0}
         onClick={onNext}
         aria-label="Next match"
@@ -91,7 +109,7 @@ export function FindBar({
       <Button
         variant="ghost"
         size="icon"
-        className="size-9 shrink-0 text-muted-foreground"
+        className="shrink-0 text-muted-foreground"
         onClick={onClose}
         aria-label="Close find"
       >

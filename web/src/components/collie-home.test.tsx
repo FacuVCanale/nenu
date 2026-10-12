@@ -40,11 +40,4 @@ describe("CollieHome", () => {
     expect(container.querySelector(".dog-gallop")).toHaveClass("dog-gallop--running");
     expect(screen.getByRole("button", { name: "Nenu home — reconnecting" })).toBeInTheDocument();
   });
-
-  it("shows the wordmark only when asked", () => {
-    const { rerender } = render(<CollieHome trouble={false} />);
-    expect(screen.queryByText("Nenu")).toBeNull();
-    rerender(<CollieHome trouble={false} wordmark />);
-    expect(screen.getByText("Nenu")).toBeInTheDocument();
-  });
 });

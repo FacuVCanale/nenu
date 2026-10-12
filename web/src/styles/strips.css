@@ -1,0 +1,72 @@
+/* The tab and pane strips above a chat, and the project's panel toggle beside them. */
+@layer components {
+/* 30px to the eye; the ::after band gives a coarse pointer its 44px without a taller header. */
+.project-toggle { position: relative; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9999px; color: var(--foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; }
+.project-toggle > svg { color: var(--muted-foreground); }
+@media (hover: hover) { .project-toggle:hover { background: var(--workbench-row-hover); } }
+.project-toggle::after { content: ""; position: absolute; inset: -7px -2px; }
+
+/* A strip (components/ui/chip): one row of chips that scrolls sideways, on the header's chrome.
+   --reach is how far a chip's touch target hangs below the row (set on a coarse pointer, below). */
+.strip { --reach: 0px; position: relative; display: flex; flex-shrink: 0; align-items: center; gap: 8px; height: 36px; padding-inline: calc(var(--page-gutter) - 8px); background: var(--chrome); }
+/* The pane row paints over the tab row, so a tab's reach goes under a pane pill, never over it. */
+.strip[data-workbench-navigation-band="tabs"] { z-index: 1; }
+.strip[data-workbench-navigation-band="panes"] { z-index: 2; }
+
+/* An edge the row can still scroll toward fades out, so a chip past it is seen to exist. 40px is
+   about five letters of a chip's name: on a phone the first letter of a name cut 21px from the edge
+   keeps about half its ink, where at 24px it kept about 85% and the name read as stopped mid-word.
+   It still reads as cut, and a whole chip that ends inside the fade dims with it. The row is only as
+   wide as its chips, so a trailing + sits right after the last one until they overflow. It clips 4px
+   past its chips on each side, where the focus ring (2px, 2px out) of the first and last one draws. */
+.strip-scroller { --fade-start: 0px; --fade-end: 0px; position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 0; height: 100%; padding-inline: 4px; margin-inline: -4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
+.strip-scroller::-webkit-scrollbar { display: none; }
+.strip-scroller[data-overflow~="start"] { --fade-start: 40px; }
+.strip-scroller[data-overflow~="end"] { --fade-end: 40px; }
+/* The chips, as wide as they need: the strip watches this box to keep the open one in view. */
+.strip-chips { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
+
+/* One chip for a tab and a pane. The open one takes the neutral selection fill: the accent is for
+   focus and on-states, not for where you are. A name past the cap truncates. */
+.strip-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 6px; height: 28px; min-width: 44px; max-width: min(60vw, 240px); padding-inline: 12px; border: 1px solid transparent; border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; white-space: nowrap; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; transition: background-color 150ms ease-out, color 150ms ease-out, scale 120ms ease-out; }
+.strip-chip[aria-current="true"] { background: var(--workbench-row-selected); color: var(--foreground); }
+/* The tab focused in the desktop TUI. */
+.strip-chip[data-focused]:not([aria-current="true"]) { border-style: dashed; border-color: var(--border); }
+.strip-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.strip-chip-tag { flex-shrink: 0; color: var(--subtle-foreground); font-variant-numeric: tabular-nums; }
+/* On the open chip's fill the subtle ink drops under 4.5:1 in light (#6b6b75 on #ebebee). */
+.strip-chip[aria-current="true"] .strip-chip-tag { color: var(--muted-foreground); }
+/* Says the open chip opens its actions. */
+.strip-chip-more { flex-shrink: 0; width: 14px; height: 14px; margin-inline-end: -4px; color: var(--muted-foreground); }
+
+.strip-add { position: relative; display: inline-grid; flex-shrink: 0; place-items: center; width: 32px; height: 28px; border-radius: 9999px; color: var(--muted-foreground); transition: background-color 150ms ease-out, color 150ms ease-out; }
+
+/* The touch target: the chip's outer edge (the pseudo-element sits inside its 1px border) plus the reach. */
+.strip-chip::after, .strip-add::after { content: ""; position: absolute; inset: -1px; bottom: calc(-1px - var(--reach)); }
+
+@media (hover: hover) {
+  .strip-chip:not([aria-current="true"]):hover, .strip-add:hover { background: var(--workbench-row-hover); color: var(--foreground); }
+}
+.strip-chip:active { scale: 0.97; }
+@media (prefers-reduced-motion: reduce) {
+  .strip-chip, .strip-add { transition: none; }
+  .strip-chip:active { scale: none; }
+}
+
+/* A phone: both rows at 32px, so the thread starts 9px higher than it did under the two old rows,
+   and a 28px chip leaves 4px between the two open ones. Each chip reaches 44px by hanging 16px below
+   its row, never above it: the header paints over its own edge. The pane row covers a tab's reach,
+   so with both rows a tab keeps 30px. The scroller grows by the reach without growing the row, and
+   lets every tap through but a chip's. */
+@media (pointer: coarse) {
+  .strip { --reach: 16px; height: 32px; }
+  .strip-scroller { align-self: stretch; height: auto; margin-bottom: calc(-1 * var(--reach)); padding-bottom: var(--reach); pointer-events: none; }
+  .strip-chip, .strip-add { pointer-events: auto; }
+  .strip-add { width: 44px; }
+}
+}
+
+/* Writing on a phone: the tab and pane strips step aside while the keyboard is up. */
+@media (max-width: 1023px) and (pointer: coarse) {
+  .workbench-chat[data-keyboard-open] [data-workbench-navigation-band] { display: none; }
+}

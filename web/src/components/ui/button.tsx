@@ -3,24 +3,35 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// The primary action is ink (foreground fill, background label), one per surface; the blue accent is
+// for focus, links and on-states. Unavailable comes from its own tokens rather than opacity, which
+// made a disabled primary the brightest block on a dark screen. A button disabled only while its own
+// action runs says aria-busy and keeps its look. Focus is the app-wide ring (index.css).
+// Heights live in the ui-button-* classes (index.css, components layer): 44px on a coarse pointer,
+// and a caller's own h-* or size-* still wins. `block` is the large primary of a card or a sheet.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,scale] duration-150 ease-out motion-reduce:transition-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-ring active:scale-[0.96] motion-reduce:active:scale-100 select-none",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,opacity,scale] duration-150 ease-out motion-reduce:transition-none disabled:pointer-events-none disabled:not-aria-busy:text-disabled-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 active:scale-[0.96] motion-reduce:active:scale-100 select-none",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+        default: "bg-foreground text-background hover:bg-foreground/90 disabled:not-aria-busy:bg-disabled",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
-        outline: "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:not-aria-busy:bg-disabled",
+        outline: "border bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:not-aria-busy:bg-disabled",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-11 rounded-md px-6 has-[>svg]:px-4 text-base",
-        icon: "size-9",
+        default: "ui-button-default px-4 py-2 has-[>svg]:px-3",
+        sm: "ui-button-sm rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
+        lg: "ui-button-lg rounded-md px-6 has-[>svg]:px-4 text-base",
+        icon: "ui-button-icon",
+        // A card's or a sheet's one commit (Submit 3, Choose Boxy, Answer in thread): full width, the
+        // option rows' radius and type, so the action and the choices above it read as one family.
+        // min-h, not h: a long label wraps instead of running past the card. Its press is 0.98: the
+        // base 0.96 visibly jumps a bar this wide.
+        block: "min-h-10 w-full whitespace-normal rounded-lg px-4 py-2 text-center text-body coarse:min-h-11 has-[>svg]:px-4 active:scale-[0.98]",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

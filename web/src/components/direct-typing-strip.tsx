@@ -16,16 +16,18 @@ export function DirectTypingStrip({ onStop }: { onStop: () => void }) {
   return (
     <div className="flex items-center gap-2 px-1 pb-1 text-xs text-primary">
       <Keyboard className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">
+      {/* One line beside "Stop typing" on a 390px phone; a narrower one wraps it rather than cut it. */}
+      <span className="min-w-0 flex-1">
         <span className="font-medium">Typing into terminal</span>
-        <span className="text-muted-foreground"> — keys go straight through</span>
+        <span className="text-muted-foreground"> — keys go straight in</span>
       </span>
+      {/* Named for what it stops: while a turn runs, the turn's own Stop sits on the row below. */}
       <button
         type="button"
         onClick={onStop}
-        className="shrink-0 rounded-md px-2 py-0.5 font-medium underline-offset-2 transition-colors hover:underline active:bg-muted"
+        className="hit-area shrink-0 rounded-md px-2 py-1 font-medium underline-offset-2 transition-colors hover:underline active:bg-muted"
       >
-        Stop
+        Stop typing
       </button>
     </div>
   );

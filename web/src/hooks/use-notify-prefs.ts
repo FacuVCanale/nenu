@@ -3,18 +3,19 @@ import { useCallback, useEffect, useState } from "react";
 import { getNotifyPrefs, setNotifyPrefs, type NotifyPrefs } from "@/lib/api";
 
 // Settings-page controller for the bridge-wide notification-type prefs (which agent statuses push).
-// Loads once on mount; a toggle is optimistic — flip the switch immediately, POST the single-key
+// Loads once on mount, and says when that load failed so the page never shows a guess; a toggle is optimistic — flip the switch immediately, POST the single-key
 // partial, and revert on failure — so it feels instant. These prefs live on the bridge and fan out
 // to every device (like the snooze), so there's nothing per-device to persist locally.
 export function useNotifyPrefs() {
   const [prefs, setPrefs] = useState<NotifyPrefs | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
     getNotifyPrefs()
       .then((p) => alive && setPrefs(p))
-      .catch(() => {});
+      .catch(() => alive && setLoadFailed(true));
     return () => {
       alive = false;
     };
@@ -33,5 +34,5 @@ export function useNotifyPrefs() {
     }
   }, []);
 
-  return { prefs, busy, toggle };
+  return { prefs, loadFailed, busy, toggle };
 }

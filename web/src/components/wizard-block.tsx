@@ -3,7 +3,15 @@ import { AlertTriangle, Check, Loader2 } from "lucide-react";
 
 import { WizardStepper } from "@/components/wizard-stepper";
 import type { WizardModel, WizardOption } from "@/lib/blocks";
-import { OptionButton, PromptPanel, QuestionHeading } from "@/components/option-button";
+import {
+  DialogCard,
+  OptionButton,
+  OptionList,
+  QuestionHeading,
+  SECONDARY_ACTION,
+  SecondaryActions,
+} from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import {
   WIZARD_BACK_KEYS,
   WIZARD_CANCEL_KEYS,
@@ -49,10 +57,10 @@ export function WizardBlock({ wizard, onAction, disabled }: WizardBlockProps) {
   // review step are no-ops, so disable those arrows rather than send a keystroke that does nothing.
   // When no chip reads as current (an unknown theme's highlight), both stay enabled — the TUI still
   // clamps, and keeping nav available is the safer degradation.
-  const busyIcon = <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />;
+  const busyIcon = <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />;
 
   return (
-    <PromptPanel ariaLabel={review ? "Review your answers" : wizard.question}>
+    <DialogCard label={review ? "Review your answers" : wizard.question}>
       {/* Stepper: one chip per question plus the fixed Submit step, flanked by the same back/next
           navigation the TUI drives with ←/→ (each tap sends exactly that one key). */}
       <WizardStepper
@@ -78,7 +86,7 @@ export function WizardBlock({ wizard, onAction, disabled }: WizardBlockProps) {
       ) : (
         <ReviewStep wizard={wizard} locked={locked} sendingId={sending} onPress={press} />
       )}
-    </PromptPanel>
+    </DialogCard>
   );
 }
 
@@ -100,7 +108,7 @@ function QuestionStep({
   return (
     <>
       <QuestionHeading>{question}</QuestionHeading>
-      <div className="flex flex-col gap-1">
+      <OptionList aria-label={question}>
         {answers.map((option, i) => {
           const id = `opt-${i}`;
           const busy = sendingId === id;
@@ -114,37 +122,39 @@ function QuestionStep({
               onClick={() => onPress(id, option.keys)}
               trailing={
                 busy ? (
-                  <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+                  <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
                 ) : option.chosen ? (
-                  <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-label="Current answer" />
+                  <Check className="size-4 shrink-0 text-primary" aria-label="Current answer" />
                 ) : null
               }
             />
           );
         })}
-      </div>
+      </OptionList>
       {/* The escape row ("Chat about this") ends the WHOLE wizard — the tool call resolves as
-          declined — so it renders apart and de-emphasised, never like an answer. */}
-      {escapes.map((option, i) => {
-        const id = `esc-${i}`;
-        return (
-          <button
-            key={i}
-            type="button"
-            disabled={locked}
-            onClick={() => onPress(id, option.keys)}
-            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
-          >
-            <span className="min-w-0 flex-1">
-              {option.label}
-              <span className="text-muted-foreground"> — ends the questions</span>
-            </span>
-            {sendingId === id ? (
-              <Loader2 className="size-3.5 shrink-0 animate-spin" aria-label="Sending" />
-            ) : null}
-          </button>
-        );
-      })}
+          declined — so it sits with the card's utilities, never like an answer. */}
+      {escapes.length > 0 && (
+        <SecondaryActions>
+          {escapes.map((option, i) => {
+            const id = `esc-${i}`;
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={locked}
+                onClick={() => onPress(id, option.keys)}
+                className={SECONDARY_ACTION}
+              >
+                {option.label}
+                <span className="font-normal"> — ends the questions</span>
+                {sendingId === id ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
+                ) : null}
+              </button>
+            );
+          })}
+        </SecondaryActions>
+      )}
     </>
   );
 }
@@ -162,47 +172,48 @@ function ReviewStep({
 }) {
   return (
     <>
-      <div className="text-sm font-medium text-foreground">Review your answers</div>
+      <QuestionHeading>Review your answers</QuestionHeading>
       {wizard.answers.length > 0 && (
-        <dl className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+        <dl className="flex flex-col gap-1.5 rounded-lg bg-muted/60 px-3 py-2.5 text-footnote">
           {wizard.answers.map((qa, i) => (
             <div key={i}>
-              <dt className="text-xs text-muted-foreground">{qa.question}</dt>
-              <dd className="text-sm font-medium text-foreground">{qa.answer}</dd>
+              <dt className="text-muted-foreground">{qa.question}</dt>
+              <dd className="font-medium text-foreground">{qa.answer}</dd>
             </div>
           ))}
         </dl>
       )}
       {wizard.incomplete && (
-        <div className="flex items-center gap-1.5 text-xs text-status-working">
-          <AlertTriangle className="size-3.5 shrink-0" />
+        <p className="flex items-center gap-2 text-body text-status-working">
+          <AlertTriangle aria-hidden className="size-4 shrink-0" />
           You have not answered all questions
-        </div>
+        </p>
       )}
-      <div className="flex flex-col gap-1.5">
-        <button
-          type="button"
-          disabled={locked}
-          onClick={() => onPress("submit", WIZARD_SUBMIT_KEYS)}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/60 bg-primary/15 px-3 py-2 text-sm font-medium text-foreground transition-colors active:bg-primary/25 disabled:opacity-60"
-        >
-          {sendingId === "submit" ? (
-            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
-          ) : null}
-          Submit answers
-        </button>
+      <Button
+        type="button"
+        size="block"
+        disabled={locked}
+        aria-busy={sendingId === "submit" || undefined}
+        onClick={() => onPress("submit", WIZARD_SUBMIT_KEYS)}
+      >
+        {sendingId === "submit" ? (
+          <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
+        ) : null}
+        Submit answers
+      </Button>
+      <SecondaryActions>
         <button
           type="button"
           disabled={locked}
           onClick={() => onPress("cancel", WIZARD_CANCEL_KEYS)}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
+          className={SECONDARY_ACTION}
         >
           {sendingId === "cancel" ? (
-            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-label="Sending" />
+            <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
           ) : null}
           Cancel
         </button>
-      </div>
+      </SecondaryActions>
     </>
   );
 }

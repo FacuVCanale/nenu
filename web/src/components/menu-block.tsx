@@ -9,7 +9,13 @@ import {
   MENU_RIGHT_KEYS,
   MENU_UP_KEYS,
 } from "@/lib/harness/menu-hints";
-import { OptionGroupCaption, PromptPanel } from "@/components/option-button";
+import {
+  DialogCard,
+  QuestionHeading,
+  SECONDARY_ACTION,
+  SecondaryActions,
+} from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import { parseNativeModelMenu } from "@/lib/native-model-menu";
 import { NativeModelMenu } from "@/components/native-model-menu";
 import { NativeMenuContent } from "@/components/native-menu-content";
@@ -64,84 +70,95 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
   }
 
   const spinner = (
-    <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+    <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
   );
 
+  // The arrows are the large primary's neutral sibling, side by side: same height and radius.
   const navButton = (id: string, label: string, keys: string[], icon: ReactNode) => (
-    <button
+    <Button
       key={id}
       type="button"
+      size="block"
+      variant="secondary"
       aria-label={label}
       disabled={locked}
+      aria-busy={sending === id || undefined}
       onClick={() => press(id, { keys, nav: true })}
-      className="flex h-9 flex-1 items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground shadow-sm transition-colors active:border-primary/50 active:bg-primary/5 disabled:opacity-60"
+      className="flex-1"
     >
       {sending === id ? spinner : icon}
-    </button>
+    </Button>
   );
 
-  return (
-    <PromptPanel ariaLabel={menu.title}>
-      <OptionGroupCaption>{menu.title}</OptionGroupCaption>
+  const commits = menu.actions.filter((a) => !a.cancel);
+  const cancels = menu.actions.filter((a) => a.cancel);
 
+  return (
+    <DialogCard label={menu.title}>
+      <QuestionHeading>{menu.title}</QuestionHeading>
+
+      {/* The screen's own lines, read as the card's content. */}
       <NativeMenuContent menu={menu} lines={lines} />
 
-      {/* Arrow cluster — only the directions the screen itself advertised (a `❯` row for Up/Down, an
+      {/* Arrow pad — only the directions the screen itself advertised (a `❯` row for Up/Down, an
           "←/→ to <verb>" row for Left/Right). Each is one keystroke; they move a highlight and commit
           nothing, so they take the weaker identity guard. */}
       {(menu.nav.upDown || menu.nav.leftRight !== undefined) && (
-        <div className="flex items-center gap-1.5">
-          {menu.nav.upDown && navButton("up", "Move up", MENU_UP_KEYS, <ArrowUp className="size-4" />)}
+        <div className="flex items-center gap-2">
+          {menu.nav.upDown && navButton("up", "Move up", MENU_UP_KEYS, <ArrowUp className="size-5" />)}
           {menu.nav.upDown &&
-            navButton("down", "Move down", MENU_DOWN_KEYS, <ArrowDown className="size-4" />)}
+            navButton("down", "Move down", MENU_DOWN_KEYS, <ArrowDown className="size-5" />)}
           {/* The ←/→ pair sits AROUND the value it adjusts ("←  ◐ Medium effort  →"): the arrows are
               meaningless without it, and the row is re-derived every poll, so the label tracks the
               live value. Rendered in app space, not mirror space — no `dark:` question arises. */}
           {menu.nav.leftRight !== undefined && (
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               {navButton(
                 "left",
                 `Left — ${menu.nav.leftRight.verb} (${menu.nav.leftRight.label})`,
                 MENU_LEFT_KEYS,
-                <ArrowLeft className="size-4" />,
+                <ArrowLeft className="size-5" />,
               )}
-              <span className="min-w-0 flex-1 truncate text-center font-mono text-[11px] text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-center text-footnote text-muted-foreground">
                 {menu.nav.leftRight.label}
               </span>
               {navButton(
                 "right",
                 `Right — ${menu.nav.leftRight.verb} (${menu.nav.leftRight.label})`,
                 MENU_RIGHT_KEYS,
-                <ArrowRight className="size-4" />,
+                <ArrowRight className="size-5" />,
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* The footer's own actions. Cancel (Esc) is de-emphasised like every other abort affordance in
-          the block family — it is not a peer of the things that commit. */}
-      <div className="flex flex-col gap-1">
-        {menu.actions
-          .filter((a) => !a.cancel)
-          .map((action, i) => {
+      {/* The footer's own actions: the first is the card's one large primary, any other its quieter
+          peer. Cancel (Esc) leaves without committing, so it sits with the utilities below. */}
+      {commits.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {commits.map((action, i) => {
             const id = `action-${i}`;
             return (
-              <button
+              <Button
                 key={id}
                 type="button"
+                size="block"
+                variant={i === 0 ? "default" : "secondary"}
                 disabled={locked}
+                aria-busy={sending === id || undefined}
                 onClick={() => press(id, { keys: action.keys, nav: false })}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/60 bg-primary/15 px-3 py-2 text-sm font-medium text-foreground transition-colors active:bg-primary/25 disabled:opacity-60"
               >
-                {sending === id ? spinner : null}
+                {sending === id ? <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" /> : null}
                 {action.label}
-              </button>
+              </Button>
             );
           })}
-        {menu.actions
-          .filter((a) => a.cancel)
-          .map((action, i) => {
+        </div>
+      )}
+      {cancels.length > 0 && (
+        <SecondaryActions>
+          {cancels.map((action, i) => {
             const id = `cancel-${i}`;
             return (
               <button
@@ -149,14 +166,15 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
                 type="button"
                 disabled={locked}
                 onClick={() => press(id, { keys: action.keys, nav: false })}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
+                className={SECONDARY_ACTION}
               >
                 {sending === id ? spinner : null}
                 {action.label}
               </button>
             );
           })}
-      </div>
-    </PromptPanel>
+        </SecondaryActions>
+      )}
+    </DialogCard>
   );
 }

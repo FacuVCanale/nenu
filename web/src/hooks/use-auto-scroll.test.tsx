@@ -175,6 +175,74 @@ describe("useAutoScroll — resize re-pin", () => {
     expect(box.top).toBe(400);
   });
 
+  // The terminal mirror sits over the same composer (see live-conversation.test.tsx, T09): replacing
+  // the draft empties the box for one layout, the list grows and clamps, then shrinks back unseen.
+  it("keeps following when an edit beside the list moves it for one layout", () => {
+    const onAtBottomChange = vi.fn();
+    function Following() {
+      const { scrollRef, onScroll, isAtBottom } = useAutoScroll<HTMLDivElement>({ onAtBottomChange });
+      return (
+        <div>
+          <div ref={scrollRef} onScroll={onScroll} data-testid="scroll" data-at-bottom={String(isAtBottom)} />
+          <textarea aria-label="Draft" />
+        </div>
+      );
+    }
+    const { getByTestId, getByLabelText } = render(<Following />);
+    const el = getByTestId("scroll");
+    const box = { height: 3145, client: 439, top: 0 };
+    Object.defineProperties(el, {
+      scrollHeight: { configurable: true, get: () => box.height },
+      clientHeight: { configurable: true, get: () => box.client },
+      scrollTop: { configurable: true, get: () => box.top, set: (v: number) => { box.top = Math.max(0, Math.min(v, box.height - box.client)); } },
+    });
+    el.scrollTo = ((o: ScrollToOptions) => { el.scrollTop = o.top ?? 0; }) as HTMLElement["scrollTo"];
+    act(() => { el.scrollTo({ top: box.height }); fireEvent.scroll(el); });
+
+    fireEvent.input(getByLabelText("Draft"), { target: { value: "Línea 1" } });
+    box.client = 587;
+    el.scrollTop = box.top;
+    box.client = 439;
+    fireEvent.scroll(el);
+
+    expect(el.dataset.atBottom).toBe("true");
+    expect(onAtBottomChange).not.toHaveBeenCalledWith(false);
+    expect(box.top).toBe(2706);
+  });
+
+  // The mirror's Find and the History search are one-line inputs: a keystroke there never resizes
+  // anything, and the jump to the match it starts is a move up the list has to make.
+  it("lets a jump to a search match leave the tail right after a keystroke in a search box", () => {
+    const onAtBottomChange = vi.fn();
+    function Searching() {
+      const { scrollRef, onScroll, isAtBottom } = useAutoScroll<HTMLDivElement>({ onAtBottomChange });
+      return (
+        <div>
+          <input aria-label="Find" />
+          <div ref={scrollRef} onScroll={onScroll} data-testid="scroll" data-at-bottom={String(isAtBottom)} />
+        </div>
+      );
+    }
+    const { getByTestId, getByLabelText } = render(<Searching />);
+    const el = getByTestId("scroll");
+    const box = { height: 3145, client: 439, top: 0 };
+    Object.defineProperties(el, {
+      scrollHeight: { configurable: true, get: () => box.height },
+      clientHeight: { configurable: true, get: () => box.client },
+      scrollTop: { configurable: true, get: () => box.top, set: (v: number) => { box.top = Math.max(0, Math.min(v, box.height - box.client)); } },
+    });
+    el.scrollTo = ((o: ScrollToOptions) => { el.scrollTop = o.top ?? 0; }) as HTMLElement["scrollTo"];
+    act(() => { el.scrollTo({ top: box.height }); fireEvent.scroll(el); });
+
+    fireEvent.input(getByLabelText("Find"), { target: { value: "needle" } });
+    el.scrollTop = 0;
+    act(() => { fireEvent.scroll(el); });
+
+    expect(box.top).toBe(0);
+    expect(el.dataset.atBottom).toBe("false");
+    expect(onAtBottomChange).toHaveBeenCalledWith(false);
+  });
+
   it("no-ops without a ResizeObserver (jsdom / older browsers)", () => {
     vi.stubGlobal("ResizeObserver", undefined);
     // Mounting must not throw when the observer is absent — the effect bails on the typeof guard.

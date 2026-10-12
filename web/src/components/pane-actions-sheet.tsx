@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Pencil, XCircle } from "lucide-react";
 
 import { BottomSheet } from "@/components/ui/sheet";
-import { ActionRow, DestructiveActionRow, RenameView } from "@/components/action-sheet-rows";
-import { usePendingConfirm } from "@/hooks/use-pending-confirm";
+import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
 import * as api from "@/lib/api";
 import { setStatus } from "@/lib/status";
-import { paneDisplayName } from "@/lib/types";
 import type { AgentView } from "@/lib/types";
 
 interface PaneActionsSheetProps {
@@ -14,6 +12,9 @@ interface PaneActionsSheetProps {
   onClose: () => void;
   /** The pane these actions target. Null while nothing is selected (sheet closed). */
   pane: AgentView | null;
+  /** What the strip calls the pane, its number included when two share a name: the sheet's title
+   *  and its close confirmation say the same. */
+  name: string;
   /** Session scope for the rename/close writes (undefined = primary). */
   session?: string;
   /** This device isn't authorised to write — show a read-only note instead of the actions. */
@@ -25,19 +26,21 @@ interface PaneActionsSheetProps {
   onClosed: (paneId: string) => void;
 }
 
-type Mode = "actions" | "rename";
+type Mode = "actions" | "rename" | "confirm";
 
-// Long-press actions for a single pane: rename (set/clear its label) and close (kill). Reached by
-// long-pressing a pane pill. Opens on an action-list view (Rename / Close pane); rename is a second
-// tap away so the sheet doesn't shove a keyboard-triggering input at you just to close a pane. The
-// action rows + rename view are the SHARED pieces (action-sheet-rows) the tab sheet also uses, so the
-// two stay identical. The label is user text rendered only into an <input> value / text node — never
-// markup — so it stays within the pane-output XSS boundary. Both actions are writes, so under
-// read-only they're replaced by a note.
+// Actions for a single pane: rename (set/clear its label) and close (kill). Reached from the open
+// pill's chevron, a tap on it or a long-press on any pill. Opens on an action-list view (Rename /
+// Close pane); rename is a second tap away so the sheet doesn't shove a keyboard-triggering input at
+// you just to close a pane, and Close asks first, saying what stops. The action rows, confirmation
+// and rename view are the SHARED pieces (action-sheet-rows) the tab sheet also uses, so the two stay
+// identical. The label is user text rendered only into an <input> value / text node — never markup —
+// so it stays within the pane-output XSS boundary. Both actions are writes, so under read-only
+// they're replaced by a note.
 export function PaneActionsSheet({
   open,
   onClose,
   pane,
+  name,
   session,
   readOnly = false,
   onRenamed,
@@ -47,7 +50,6 @@ export function PaneActionsSheet({
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
-  const { pending, confirm, reset } = usePendingConfirm();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset to the action list — and reprefill the label — whenever the sheet opens on a (new) pane,
@@ -57,7 +59,6 @@ export function PaneActionsSheet({
     setMode("actions");
     if (!open) return;
     setLabel(pane?.paneLabel ?? "");
-    reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pane?.paneId]);
 
@@ -86,10 +87,8 @@ export function PaneActionsSheet({
     }
   }
 
-  // Two-tap: the first tap arms (row flips to "Tap again to close"), the second closes.
-  async function requestClose() {
+  async function close() {
     if (!pane || closing) return;
-    if (!confirm(pane.paneId)) return;
     setClosing(true);
     try {
       const res = await api.closePane(pane.paneId, session);
@@ -106,10 +105,8 @@ export function PaneActionsSheet({
     }
   }
 
-  const confirming = !!pane && pending === pane.paneId;
-
   return (
-    <BottomSheet open={open} onClose={onClose} title={pane ? paneDisplayName(pane) : "Pane"}>
+    <BottomSheet open={open} onClose={onClose} title={name}>
       {readOnly ? (
         <p className="py-2 text-sm text-muted-foreground">
           Read-only — this device isn't authorised to rename or close panes.
@@ -121,23 +118,35 @@ export function PaneActionsSheet({
             label="Rename"
             onClick={() => setMode("rename")}
           />
-          <DestructiveActionRow
+          <ActionRow
             icon={<XCircle className="size-4 shrink-0" />}
             label="Close pane"
-            confirmLabel="Tap again to close"
-            closingLabel="Closing…"
-            armed={confirming}
-            closing={closing}
-            onClick={() => void requestClose()}
+            destructive
+            onClick={() => setMode("confirm")}
           />
         </div>
+      ) : mode === "confirm" ? (
+        <ConfirmView
+          title={`Close “${name}”?`}
+          message={
+            pane?.kind === "shell"
+              ? "Anything running in this shell stops. This can't be undone."
+              : "The agent in this pane stops. This can't be undone."
+          }
+          confirmLabel="Close pane"
+          busy={closing}
+          onConfirm={() => void close()}
+          onCancel={() => setMode("actions")}
+        />
       ) : (
         <RenameView
           inputRef={inputRef}
+          title="Rename pane"
+          fieldLabel="Pane name"
           label={label}
           onLabelChange={setLabel}
           onSave={() => void save()}
-          onBack={() => setMode("actions")}
+          onCancel={() => setMode("actions")}
           saving={saving}
           // A blank pane field clears the label (blank → null on the bridge), so Save stays enabled.
           canSave={true}
