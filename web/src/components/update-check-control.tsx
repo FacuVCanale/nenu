@@ -3,7 +3,7 @@ import { ArrowUpRight, Check, Copy, Loader2 } from "lucide-react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
 import { Button, buttonVariants } from "@/components/ui/button";
-import { ListSection, listRowClass } from "@/components/ui/list-group";
+import { ListRow, ListSection, listRowClass } from "@/components/ui/list-group";
 import { checkForUpdates, fetchConfig } from "@/lib/api";
 import { BUILD, isStaleBuild } from "@/lib/build";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
@@ -17,31 +17,40 @@ import { updateStatus, type UpdateCheck, type UpdateStatus } from "./update-stat
 // whether this bundle is stale from the build the bridge serves (lib/server-build.ts, fed live by
 // every poll's header). A manual check forces a fresh upstream look, which can take ~10s.
 
+const RELOAD_FAILED = "Update could not finish. Your session is unchanged. Try again when the connection improves.";
+
+/** A failed check remembers the `checkedAt` it failed against: once the bridge's own periodic check
+ *  moves it on, the failure is old news and the card shows what that check found. */
+type CheckRun = "idle" | "checking" | { failedAt: number | null };
+
 export function UpdateCheckControl() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const update = data?.update;
+  const checkedAt = update?.checkedAt ?? null;
   const revalidator = useRevalidator();
   const staleInterface = useStaleInterface();
-  const [check, setCheck] = useState<UpdateCheck>("idle");
+  const [run, setRun] = useState<CheckRun>("idle");
   const [reload, setReload] = useState<"idle" | "busy" | "failed">("idle");
+  const check: UpdateCheck = typeof run === "string" ? run : run.failedAt === checkedAt ? "failed" : "idle";
   const status = updateStatus(update, { staleInterface, check });
+  const footer = reload === "failed" ? RELOAD_FAILED : status.detail;
 
   async function runCheck() {
-    setCheck("checking");
-    const priorCheckedAt = update?.checkedAt ?? null;
+    setRun("checking");
+    const priorCheckedAt = checkedAt;
     try {
       const result = await checkForUpdates();
       // The bridge is fail-soft: a GitHub fetch error keeps prior state and STILL returns 200. If
       // `checkedAt` didn't advance (or never ran), the check silently failed — surface that rather
       // than let the stale state read as an authoritative "Up to date".
       if (result.checkedAt === null || result.checkedAt === priorCheckedAt) {
-        setCheck("failed");
+        setRun({ failedAt: priorCheckedAt });
         return;
       }
-      setCheck("idle");
+      setRun("idle");
       revalidator.revalidate();
     } catch {
-      setCheck("failed");
+      setRun({ failedAt: priorCheckedAt });
     }
   }
 
@@ -51,24 +60,23 @@ export function UpdateCheckControl() {
     if (!(await checkForUpdate())) setReload("failed");
   }
 
-  const failedReload = reload === "failed" && (
-    <span role="status">Update could not finish. Your session is unchanged. Try again when the connection improves.</span>
-  );
-
   // The row reads like an app in an update list: the version and its state, the one action at the
-  // end. What the state needs explained goes under the card.
+  // end. What the state needs explained goes under the card. The badge and the footer sit in live
+  // regions that stay mounted, so a check's outcome or a failed reload is read out: a region that
+  // mounts together with its text usually is not.
   return (
-    <ListSection title="Updates" footer={failedReload || status.detail}>
-      <div className={listRowClass}>
-        <div className="min-w-0 flex-1">
-          <div className="text-body">{update ? `Nenu ${update.current}` : "Nenu"}</div>
-          {(status.badge || status.meta) && (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <ListSection title="Updates" footer={footer && <span aria-live="polite">{footer}</span>}>
+      <ListRow
+        title={update ? `Nenu ${update.current}` : "Nenu"}
+        hint={
+          <div className="flex flex-wrap items-center gap-y-1">
+            <span role="status" className="flex">
               {status.badge && <Badge status={status} />}
-              {status.meta && <span className="text-footnote text-muted-foreground">{status.meta}</span>}
-            </div>
-          )}
-        </div>
+            </span>
+            {status.meta && <span>{status.meta}</span>}
+          </div>
+        }
+      >
         {status.action?.kind === "check" && (
           // The badge shows the check running, so the button keeps its size and place meanwhile.
           <Button variant="outline" disabled={check === "checking"} aria-busy={check === "checking" || undefined} onClick={runCheck}>
@@ -88,7 +96,7 @@ export function UpdateCheckControl() {
             <ArrowUpRight aria-hidden="true" />
           </a>
         )}
-      </div>
+      </ListRow>
       {status.command && <CommandRow command={status.command} />}
     </ListSection>
   );
@@ -118,7 +126,7 @@ function Badge({ status }: { status: UpdateStatus }) {
     <span
       data-slot="badge"
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-muted px-2 py-0.5 text-caption font-medium",
+        "mr-2 inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-muted px-2 py-0.5 text-caption font-medium",
         status.tone === "neutral" ? "text-muted-foreground" : "text-foreground",
       )}
     >
