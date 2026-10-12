@@ -8,8 +8,9 @@ interface SwitchProps {
   "aria-label"?: string;
 }
 
-// Minimal accessible toggle (no Radix dependency): a button with role="switch". The thumb slides
-// across a pill track; colors follow the theme tokens used elsewhere.
+// Minimal accessible toggle (no Radix dependency): a button with role="switch". iOS proportions on a
+// coarse pointer (51x31, a 27px thumb), 40x24 on a fine one, and a white thumb in both themes; the
+// hit-area reaches 44px on touch. Focus is the app-wide ring (index.css).
 function Switch({ checked, onCheckedChange, disabled, id, ...rest }: SwitchProps) {
   return (
     <button
@@ -21,23 +22,17 @@ function Switch({ checked, onCheckedChange, disabled, id, ...rest }: SwitchProps
       onClick={() => onCheckedChange(!checked)}
       data-slot="switch"
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-        // The OFF track needs real contrast against the card it sits on, or you can't read your own
-        // settings: `bg-muted` is 1.09:1 on a white card, and the thumb is white on top of that —
-        // a white blob on white, legible only by its shadow. WCAG 1.4.11 wants 3:1 for state.
-        // A border carries the off state instead, since a fill dark enough to read would look
-        // switched-on.
-        // Solid border, not /60: `rounded-full` on a 24px pill leaves no straight edge, so the whole
-        // stroke is antialiased and an alpha border renders lighter than it computes (2.65:1 spec →
-        // 1.74:1 actual). Full strength survives the antialiasing.
-        checked ? "bg-primary" : "border-2 border-muted-foreground bg-muted",
+        "hit-area inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-out motion-reduce:transition-none coarse:h-[31px] coarse:w-[51px] disabled:cursor-not-allowed disabled:opacity-50",
+        // Off is a solid track, not a hollow outline. The track alone is 1.27:1 on a white card, so
+        // an inset ring carries the 3:1 that WCAG 1.4.11 asks of the state: 3.3:1 light, 3.6:1 dark.
+        checked ? "bg-primary" : "bg-switch-off shadow-[inset_0_0_0_1px_var(--switch-ring)]",
       )}
       {...rest}
     >
       <span
         className={cn(
-          "inline-block size-5 transform rounded-full bg-background shadow transition-transform",
-          checked ? "translate-x-[1.375rem]" : "translate-x-0.5",
+          "pointer-events-none block size-5 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition-transform duration-200 ease-out motion-reduce:transition-none coarse:size-[27px]",
+          checked ? "translate-x-[18px] coarse:translate-x-[22px]" : "translate-x-0.5",
         )}
       />
     </button>
