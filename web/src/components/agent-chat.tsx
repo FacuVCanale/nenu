@@ -396,9 +396,9 @@ export function AgentChat({
       agent?.status === "working"
     );
   const showConversation = conversationCapable && !prefs.rawTerminal;
-  // The bridge's reading of this pane's dialog (ADR 0057). It replaces the popover drawn from the
-  // client's own parse for every dialog the card can answer; a preview (its side panel and notes)
-  // and a generic menu (its arrows) keep the full controls, and the terminal keeps everything.
+  // The bridge's reading of this pane's dialog (ADR 0057). The card answers every dialog it can; a
+  // preview (its side panel and notes) and a generic menu (its arrows) keep their grammar's full
+  // controls, drawn in the card's place (`dialogInline`), and the terminal keeps everything.
   const interactions = useInteractions(session, showConversation && !gone);
   const interaction = interactions.interactions.find((i) => i.paneId === paneId);
   const receipt = interactions.receipts.find((r) => r.paneId === paneId);
@@ -769,6 +769,24 @@ export function AgentChat({
       liveModelBlock, modelPresent, modelSource.observe, modelSource.isCurrent, panels.modelCompleted],
   );
 
+  // A dialog the card does not answer (a generic menu, a preview with its side panel and notes, or one
+  // the bridge has not read yet) is drawn by its own grammar's block, in the same place as the card:
+  // the conversation's newest line, inside its scroller, never floating over the transcript. It waits
+  // for the bridge's first answer (or failure), so a dialog the card will cover never flashes first.
+  const bridgeHeard = interactions.loaded || interactions.stale;
+  const dialogInline = !subagent && showConversation && bridgeHeard && dialogPresent && !modelPresent && !unknownInteraction && !showCard && !receipt;
+  const conversationFooterWithDialog = useMemo(() => !dialogInline ? threadFooter : <>
+    {threadFooter}
+    <div data-follow-stop className="mt-5">
+      <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
+        onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
+        onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
+        onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
+    </div>
+  </>, [dialogInline, threadFooter, modelSource.text, agent?.agent, handlePromptAction, handleWizardAction,
+    handlePreviewAction, handleMultiSelectAction, handleMenuAction, readOnly, gone, connecting]);
+  const dialogInThread = (showCard && cardCovers) || dialogInline;
+
   // NOTE: the composer is deliberately NOT auto-focused on open/switch — that would pop the Android
   // keyboard and cover the output. You read the pane first, then tap the input to type. (Explicit
   // actions inside the composer still focus it; the mirror tap focuses it via composerRef.)
@@ -1030,13 +1048,13 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <QuestionLiveContext.Provider value={interaction === undefined ? null : showCard && cardCovers ? "card" : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
+            <QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
               onMatchCount={findOpen ? handleMatchCount : undefined}
-              footer={threadFooter} waiting={showCard && cardCovers} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
+              footer={conversationFooterWithDialog} waiting={dialogInThread} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -1118,14 +1136,6 @@ export function AgentChat({
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
           {!showConversation && conversationFooter && <div className="max-h-[40dvh] overflow-y-auto px-3 pb-1">{conversationFooter}</div>}
-          {!subagent && showConversation && dialogPresent && !modelPresent && !unknownInteraction && !showCard && !receipt && (
-            <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
-              <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
-                onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
-                onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
-                onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
-            </section>
-          )}
           {!subagent && showConversation && wait?.kind === "interaction" && (
             <TerminalWaitRow key={wait.hint} hint={wait.hint} text={text} agent={agent?.agent}
               onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }} />
