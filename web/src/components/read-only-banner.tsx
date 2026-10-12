@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 // drops to read-only (the backend rejects every terminal-driving action anyway). Renders nothing
 // when the feature is off, the device is authorised, or the state isn't known yet — so it costs
 // nothing on a normal single-user deployment. `device` comes from the snapshot (HomeData.device).
-// One neutral line: the restriction is the fact, and the device name is the part that may give way.
+// One neutral line: the restriction is the fact, and the device name, last, is what gives way.
 export function ReadOnlyBanner({
   device,
   className,
@@ -26,8 +26,10 @@ export function ReadOnlyBanner({
       )}
     >
       <Lock aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="shrink-0 font-medium text-foreground">Read-only on this device</span>
-      {device?.device && <span className="min-w-0 truncate"> · {device.device}</span>}
+      <p className="min-w-0 truncate">
+        <span className="font-medium text-foreground">Read-only on this device</span>
+        {device?.device && ` · ${device.device}`}
+      </p>
     </div>
   );
 }
