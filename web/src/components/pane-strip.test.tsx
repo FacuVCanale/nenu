@@ -112,6 +112,25 @@ describe("PaneStrip", () => {
     expect(screen.queryByText("Blocked Claude")).toBeNull();
   });
 
+  it("names the actions sheet as its pill does", () => {
+    const projects: ProjectView[] = [{
+      slug: "awam", name: "Awam", status: "active",
+      threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
+    }];
+    render(
+      <PaneStrip
+        panes={[pane("w1:p1", "claude", "agent", { paneLabel: "Blocked Claude" }), pane("w1:p2", "codex")]}
+        projects={projects}
+        currentPaneId="w1:p2"
+        onSelect={vi.fn()}
+        onRenamed={vi.fn()}
+        onClosed={vi.fn()}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Panel depósito/ }));
+    expect(screen.getByRole("dialog", { name: "Panel depósito" })).toBeInTheDocument();
+  });
+
   it("fires onSelect with the pane id when a pane is tapped", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
