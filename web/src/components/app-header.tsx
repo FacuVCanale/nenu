@@ -22,7 +22,7 @@ interface AppHeaderProps {
   bridge: BridgeStatus | undefined;
   error: boolean;
 
-  /** The screen's name in the bar: the 17 px headline on a phone, with an optional 13 px line under it. */
+  /** The screen's name in the bar and its h1: the 17 px headline on a phone, with an optional 13 px line under it. */
   title?: ReactNode;
   subtitle?: ReactNode;
   /** The page is showing the title as its own heading right now (ColumnPage), so the bar leaves it out. */
@@ -103,7 +103,7 @@ export function AppHeader({
                 aria-hidden={titleHidden || undefined}
                 className={cn("flex min-w-0 flex-col transition-opacity duration-150 ease-out motion-reduce:duration-100", titleHidden && "opacity-0")}
               >
-                <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
+                <h1 className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</h1>
                 {subtitle && <span className="truncate text-footnote text-muted-foreground">{subtitle}</span>}
               </div>
             )}
