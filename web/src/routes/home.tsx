@@ -1,13 +1,14 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
-import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Loader2, MessagesSquare, Wifi } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
+import { EmptyState } from "@/components/ui/empty-state";
+import { BusySendSheet, HomeHeading, HomeStarters, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
-import { lockReasonOf } from "@/components/question-card";
+import { lockReasonOf, type LockReason } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
@@ -15,8 +16,7 @@ import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue, isDefiniteRefusal } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
-import { useConnectionHealth } from "@/lib/connection-health";
-import { greeting, homeHeadline, needsYouItems, outageHeadline, recentChats, reviewQueue, runningWorkflows, type Outage } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -25,39 +25,38 @@ import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from 
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-// Whether Home has drawn a live herd since the page opened. Until then the shared connection anchor
-// (lib/connection-health.ts) only marks when the page loaded, so it cannot date the herd on screen.
-let sawLive = false;
-
 // Home answers "what needs me now", top to bottom: one sentence, a composer that reaches a
 // coordinator or starts a thread, what needs you (answered in place), the chats that moved last, what
 // is ready to review and the workflows still running. Projects and workspaces live in the sidebar
 // (Browse on a phone), so Home never repeats them. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
-// When the link fails, a brief failure changes nothing on screen (the quiet retry). A sustained one
-// names what is unreachable, Nenu or Herdr, dates the herd it last saw and greys those lists out; a
-// refusal says so at once. A first load that never reached Nenu has no herd to show, so the whole
-// body says that instead.
+// When the link fails, the connection banner (root.tsx) is the one place that names the problem and
+// dates the herd. Home keeps saying what the work is: a brief failure changes nothing on screen (the
+// quiet retry), a sustained one or a refusal greys the lists out so nothing reads live, and a composer
+// that cannot send says what it waits for. A first load that never reached Nenu has no herd to show,
+// so the body only says what will be here.
 export function HomeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const navigation = useContext(WorkbenchNavigationContext);
   const now = Date.now();
   const live = !data.error && data.bridge === "connected";
-  const readOnly = isReadOnly(data.device);
+  // Why answering and sending are paused, if they are: one reading for the cards and the composer.
+  const lock = lockReasonOf({ ...data, readOnly: isReadOnly(data.device) });
   const interactions = useInteractions(data.session, live);
   const activity = useHomeActivity(live ? data.agents : [], data.session);
   const lost = useConnectionLost(isConnecting(data));
-  const anchor = useConnectionHealth();
   const opening = useOpeningPath();
-  useEffect(() => { if (live) sawLive = true; }, [live]);
-
-  const outage: Outage | null = data.authError ? "refused" : !lost ? null : data.error ? "nenu" : "herdr";
+  // The herd on screen is not live: a refusal at once, an outage once it is sustained.
+  const stale = data.authError || lost;
+  // The composer says a failed read is why it waits only once the outage is sustained (a brief one is
+  // the quiet retry); Herdr down, a refusal and a read-only device are said at once.
+  const composerLock = lock === "offline" && !lost ? undefined : lock;
   // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
   if (data.bridge === undefined) {
     return <ColumnPage data={data} title="Home">
       <h1 className="sr-only">Home</h1>
-      <HomeUnreachable refused={outage === "refused"} lost={lost} />
+      <HomeWithoutHerd refused={data.authError} lost={lost} />
     </ColumnPage>;
   }
 
@@ -71,9 +70,7 @@ export function HomeRoute() {
   const reviews = reviewQueue(data.projects, data.pullRequests);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
-  // The cached herd carries its own date; Herdr's outage is dated by the last live read, once there was one.
-  const { title, detail } = outage ? outageHeadline(outage, data.lastSeenAt ?? (sawLive ? anchor : undefined), data.agents.length)
-    : homeHeadline(counts, data.agents.length);
+  const { title, detail } = homeHeadline(counts, data.agents.length);
 
   // On a phone the date sits right under the header, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
@@ -83,11 +80,11 @@ export function HomeRoute() {
           {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
           <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
         </p>
-        <h1 className="text-large-title text-balance">{title}</h1>
+        <h1 className={cn("text-large-title text-balance", stale && "text-muted-foreground")}>{title}</h1>
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
       <div className="flex flex-col">
-        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} outage={outage} />
+        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} lock={composerLock} />
         <Reveal>{live && !data.agents.length && (
           <div className="pt-6 lg:pt-7">
             <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />
@@ -95,11 +92,11 @@ export function HomeRoute() {
         )}</Reveal>
       </div>
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
-      <div className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
+      <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         {calm
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
-            interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} opening={opening} />}
+            interactions={interactions} lockReason={lock} opening={opening} />}
         <RecentChats chats={recent} session={data.session} now={now} opening={opening} />
         <ReadyToReviewList entries={reviews} session={data.session} opening={opening} />
         {running.length > 0 && (
@@ -114,6 +111,23 @@ export function HomeRoute() {
     </div>
   </ColumnPage>;
 }
+
+/**
+ * Home before any herd was read. While the first reads retry quietly it says it is connecting; once
+ * the banner names an outage or a refusal, and holds its Retry or Sign in, the body says what will be
+ * here and, for an outage, what to check, so the problem and its one way out are never stated twice.
+ */
+function HomeWithoutHerd({ refused, lost }: { refused: boolean; lost: boolean }) {
+  if (!refused && !lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {window.location.host}.</EmptyState>;
+  return (
+    <EmptyState icon={MessagesSquare} title="Nothing to show yet">
+      Your threads, questions and reviews show up here once {refused ? "you sign in again." : "Nenu answers. Check this device's network or VPN."}
+    </EmptyState>
+  );
+}
+
+/** What unlocks the composer, said as what to do: "<verb> to start an agent". */
+const LOCKED_VERB: Record<LockReason, string> = { "read-only": "Use an authorised device", refused: "Sign in again", offline: "Reconnect", herdr: "Reconnect" };
 
 /** Where the composer sends: a project's coordinator, a new thread in a workspace, or a new workspace. */
 type Target = { kind: "new" } | { kind: "workspace"; workspaceId: string; label: string } | { kind: "project"; project: ProjectView; coordinator: AgentView };
@@ -155,11 +169,12 @@ class Unavailable extends Error {}
  * Type here and pick where it goes. A project sends to its live coordinator through the shared
  * queue; while the coordinator is mid-turn an action sheet asks, at every send, whether it reads the
  * message now or after this turn, when its CLI has both measured (ADR 0056; the bridge maps each to
- * the CLI's own key). A send that
+ * the CLI's own key). It asks only once the queue is known to take the message: a coordinator that
+ * can't goes straight to the card that opens it. A send that
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
-function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; outage: Outage | null }) {
+function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; lock: LockReason | undefined }) {
   const [message, setMessage] = useState("");
   const [choice, setChoice] = useState<string | null>(readTarget);
   const [asking, setAsking] = useState(false);
@@ -180,10 +195,12 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
   const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
   const busyChoice = target.kind === "project" ? busyChoiceFor(target.coordinator.agent) : null;
-  const placeholder = outage === "refused" ? `Sign in again to ${action}` : outage ? `Reconnect to ${action}`
-    : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
+  // A locked box says what it waits for, from the moment it locks; the banner says what went wrong.
+  const reason = disabled && lock ? `${LOCKED_VERB[lock]} to ${action}` : null;
+  const placeholder = reason ?? (target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…");
 
-  async function send(mode: DeliveryMode) {
+  /** Send in `mode`, or with "ask" only check that the queue takes it and then ask when it is read. */
+  async function send(mode: DeliveryMode | "ask") {
     if (target.kind !== "project") return;
     const text = message.trim();
     const paneId = target.coordinator.paneId;
@@ -196,6 +213,7 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
     try {
       const page = await fetchMessageQueue(paneId, data.session);
       if (!page.available) throw new Unavailable();
+      if (mode === "ask") return setAsking(true);
       const previous = unsure.current;
       attempt = previous?.paneId === paneId && previous.text === text ? previous : { paneId, text, id: crypto.randomUUID() };
       unsure.current = attempt;
@@ -228,7 +246,7 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
     else if (!text) return;
     // A turn running asks when to read it, if the CLI's two behaviours were measured (ADR 0056);
     // otherwise the row waits for the turn to end, as the queue always did.
-    else if (turnRunning(target.coordinator, "")) return busyChoice ? setAsking(true) : void send("afterTurn");
+    else if (turnRunning(target.coordinator, "")) return void send(busyChoice ? "ask" : "afterTurn");
     else return void send("asap");
     setMessage("");
   }
@@ -247,7 +265,10 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
               if (!locked) submit();
             }
           }}
-          className="field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-body outline-none placeholder:text-muted-foreground disabled:placeholder:text-disabled-foreground" />
+          // Before a banner shows, the reason is the only explanation on screen, so it stays readable;
+          // the greyed picker and Send say the box is locked.
+          className={cn("field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-body outline-none placeholder:text-muted-foreground",
+            !reason && "disabled:placeholder:text-disabled-foreground")} />
         <div className="flex items-center gap-2 px-2.5 pt-1 pb-2.5">
           <label className={cn("relative inline-flex h-9 min-w-0 items-center gap-1 rounded-md bg-muted px-2.5 text-footnote focus-within:ring-2 focus-within:ring-ring coarse:h-11",
             locked && "text-disabled-foreground")}>
@@ -267,10 +288,11 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
             </select>
           </label>
           <span className="flex-1" />
-          {/* Ink once there is something to send; until then Start still opens the sheet, quietly. */}
+          {/* The thread's own Send (composer.tsx): ink once there is something to send; until then
+              Start still opens the sheet, quietly. */}
           <Button type="submit" size="icon" variant={message.trim() ? "default" : "secondary"} disabled={locked || (target.kind === "project" && !message.trim())}
-            aria-label={target.kind === "project" ? "Send" : "Start"} aria-busy={busy || undefined} className="rounded-md">
-            {busy ? <Loader2 aria-hidden className="animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden />}
+            aria-label={target.kind === "project" ? "Send" : "Start"} aria-busy={busy || undefined} className="composer-action composer-send hit-area">
+            {busy ? <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden className="size-4" strokeWidth={2.5} />}
           </Button>
         </div>
       </form>

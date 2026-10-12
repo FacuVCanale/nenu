@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLoaderData, useNavigate, useParams, useRouteLoaderData } from "react-router";
+import { Link, useLoaderData, useParams, useRouteLoaderData } from "react-router";
 import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search, X } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FindBar } from "@/components/find-bar";
 import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
+import { linkPhrase, linkProblemOf, type LinkProblem } from "@/lib/connection";
 import { displayName } from "@/lib/display-name";
 import { HISTORY_PAGE_SIZE, ROOT_ROUTE_ID, type HistoryData, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
 import { matchingEntries, step, userTurnIndices } from "@/lib/transcript-search";
 import type { TranscriptEntry } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // Pane history route — the agent's own transcript, which is the ONLY conversation history a Claude
 // pane can have. Its terminal runs on the alternate screen, so Herdr retains no scrollback ring at
@@ -32,9 +34,9 @@ import type { TranscriptEntry } from "@/lib/types";
 
 /**
  * Why there's nothing to read, in the user's terms. Each is an ordinary state, not an error. `name`
- * may be "this pane", so it never starts a sentence; `offline` is why the snapshot can't be trusted.
+ * may be "this pane", so it never starts a sentence; `problem` is why the snapshot can't be trusted.
  */
-function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, offline: string | undefined) {
+function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, problem: LinkProblem | null) {
   switch (reason) {
     case "disabled":
       return { title: "History is off", body: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT)." };
@@ -45,7 +47,8 @@ function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: 
     case "no-log":
       return { title: "No transcript yet", body: `There's no transcript for ${name} yet.` };
     case "error":
-      return { title: "Couldn't read the transcript", body: offline ? `${offline} Open History again once it's back.` : "Go back and open History again." };
+      return { title: "Couldn't read the transcript", body: !problem ? "Go back and open History again."
+        : `${linkPhrase(problem)}. ${problem === "refused" ? "Sign in again, then open History." : "Open History again once it's back."}` };
   }
 }
 
@@ -60,7 +63,6 @@ export function HistoryRoute() {
   const data = useLoaderData() as HistoryData;
   const root = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { paneId = "" } = useParams();
-  const navigate = useNavigate();
   const session = data.session;
 
   const pane =
@@ -71,8 +73,8 @@ export function HistoryRoute() {
   const name = pane ? displayName(pane, root.projects) : undefined;
   // Only a healthy snapshot can say the pane is gone, the guard DetailRoute closes a pane on. A failed
   // read or a disconnected Herdr leaves a live pane out too, and is said in the connection banner's words.
-  const offline = root.error ? "Nenu can't reach its bridge right now." : root.bridge !== "connected" ? "Herdr is unavailable right now." : undefined;
-  const gone = !pane && !offline;
+  const problem = linkProblemOf(root);
+  const gone = !pane && !problem;
 
   // Pages walked back beyond the first request (only reachable on a log longer than HISTORY_PAGE_SIZE).
   const [older, setOlder] = useState<TranscriptEntry[]>([]);
@@ -203,18 +205,22 @@ export function HistoryRoute() {
   }, []);
 
   const matchCursor = matches.indexOf(cursor);
-  const back = () => navigate(panePath(paneId, session));
+  // The pane this history belongs to, or Home once the pane is gone: the one way out, in the bar and
+  // on an empty page alike.
+  const back = gone ? { to: homePath(session), label: "Home" } : { to: panePath(paneId, session), label: name ?? "the pane" };
   const total = Math.max(data.total, entries.length);
   const empty = gone
     ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
-    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", pane?.kind === "shell", offline);
+    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", pane?.kind === "shell", problem);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AppHeader
         bridge={root.bridge}
         error={root.error}
-        onHome={back}
+        title="History"
+        subtitle={name}
+        back={back}
         override={
           findOpen ? (
             <FindBar
@@ -237,23 +243,16 @@ export function HistoryRoute() {
             </button>
           )
         }
-        // Explicit exit from reading mode. The Nenu mark also returns to the pane, but this is a
-        // full-screen reading view you deliberately entered — it should be as obvious to leave as it
-        // was to open, without relying on the phone's back gesture.
+        // The header's back hides on a desk, where the sidebar is the way around; History is a reading
+        // view you chose to open, so the desk gets its own way out, and each width has exactly one.
         rightTrail={
-          <button type="button" onClick={back} aria-label="Close history" className="workbench-icon-button">
-            <X aria-hidden="true" size={17} />
-          </button>
-        }
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <ScrollText aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate font-semibold leading-tight">History</span>
+          <div className="flex max-lg:hidden">
+            <Link to={back.to} aria-label="Close history" className="workbench-icon-button">
+              <X aria-hidden="true" size={17} />
+            </Link>
           </div>
-          {name && <div className="truncate text-xs leading-tight text-muted-foreground">{name}</div>}
-        </div>
-      </AppHeader>
+        }
+      />
 
       {/* The text scrolls under the home indicator; everything that floats stops above it.
           ChatMessageList pins its Latest pill to its own box, so that box ends at the inset (this
@@ -264,10 +263,11 @@ export function HistoryRoute() {
             icon={ScrollText}
             title={empty.title}
             className="h-full justify-center"
+            // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link.
             action={
-              <Button onClick={() => (gone ? navigate(homePath(session)) : back())} className="max-w-[min(20rem,80vw)]">
-                <span className="truncate">{gone ? "Back to Home" : `Back to ${name ?? "the pane"}`}</span>
-              </Button>
+              <Link to={back.to} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
+                <span className="truncate">Back to {back.label}</span>
+              </Link>
             }
           >
             {empty.body}

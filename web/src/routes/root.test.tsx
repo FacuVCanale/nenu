@@ -32,6 +32,11 @@ describe("BootSplash", () => {
     expect(screen.queryByText(/Can.t reach Nenu/)).not.toBeInTheDocument();
   });
 
+  it("draws the page column where the app lands, centred, so nothing jumps when it arrives", () => {
+    const { container } = renderSplash();
+    expect(container.querySelector("main > .page-column")).toHaveClass("mx-auto");
+  });
+
   it("draws the app's own tab bar, so it does not change under the thumb when the app arrives", () => {
     const { container } = renderSplash("/?s=qa");
     const bar = container.querySelector<HTMLElement>(".bottom-tab-bar")!;
@@ -46,8 +51,9 @@ describe("BootSplash", () => {
     const { container } = renderSplash();
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
     expect(screen.queryByText(/Connecting to/)).not.toBeInTheDocument();
-    expect(screen.getByText(`Can’t reach Nenu at ${window.location.host}`)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    // No real header is drawn yet, so the problem is the page's title.
+    expect(screen.getByRole("heading", { level: 1, name: `Can’t reach Nenu at ${window.location.host}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toHaveClass("ui-button-lg", "bg-foreground");
     // The frame stays, so the screen does not jump when Retry or the network brings the app back.
     expect(container.querySelector(".workbench-app-header")).not.toBeNull();
   });
@@ -67,8 +73,15 @@ describe("RootError", () => {
 
   it("reads as Nenu's problem, with a Reload, and keeps the raw message behind a disclosure", async () => {
     const router = crash({ element: <Boom /> });
-    expect(await screen.findByRole("heading", { name: "Nenu hit a problem" })).toBeInTheDocument();
+    // The crash draws none of the app's chrome, so its title is the page's one h1.
+    expect(await screen.findByRole("heading", { level: 1, name: "Nenu hit a problem" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    // The shared empty state: its title size, and its one action style (the large ink button).
+    const page = screen.getByRole("heading", { name: "Nenu hit a problem" }).closest("[data-slot=empty-state]");
+    expect(page).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Nenu hit a problem" })).toHaveClass("text-headline");
+    expect(screen.getByRole("button", { name: "Reload" })).toHaveClass("ui-button-lg", "bg-foreground");
+    expect(screen.getByRole("button", { name: "Copy details" })).toHaveClass("ui-button-lg");
     const raw = screen.getByText(/reading 'charAt'/);
     expect(raw).not.toBeVisible();
     fireEvent.click(screen.getByText("Technical details"));
@@ -113,7 +126,7 @@ describe("RootError", () => {
 
   it("answers a 404 with Page not found, not the crash screen", async () => {
     const router = crash({ loader: () => { throw new Response(null, { status: 404 }); }, element: <p>never</p> }, "/gone?s=qa");
-    expect(await screen.findByText("Page not found")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/?s=qa");
     expect(screen.queryByText("Nenu hit a problem")).not.toBeInTheDocument();
     router.dispose();
@@ -176,6 +189,18 @@ describe("which 'last seen' the connection bar shows", () => {
     expect(shownLastSeenAt(home(AFTERNOON), pane({ text: "", lastSeenAt: undefined }))).toBe(
       AFTERNOON,
     );
+  });
+
+  it("dates a herd that came live from the bridge by the last live read, once the link drops", () => {
+    // Herdr down: the bridge still answers, so the snapshot is not a stale cache and carries no stamp.
+    const herdrDown = { ...home(undefined), error: false, bridge: "disconnected" as const };
+    expect(shownLastSeenAt(herdrDown, undefined, NOON)).toBe(NOON);
+    // A live herd needs no date, and a page that never saw one live has nothing to date it by.
+    expect(shownLastSeenAt({ ...herdrDown, bridge: "connected" }, undefined, NOON)).toBeUndefined();
+    expect(shownLastSeenAt(herdrDown, undefined, undefined)).toBeUndefined();
+    // The cached herd's own stamp still wins, and an undatable mirror still borrows nothing.
+    expect(shownLastSeenAt(home(AFTERNOON), undefined, NOON)).toBe(AFTERNOON);
+    expect(shownLastSeenAt(herdrDown, pane({ lastSeenAt: undefined }), NOON)).toBeUndefined();
   });
 
   it("falls back to the snapshot when the pane itself is live", () => {

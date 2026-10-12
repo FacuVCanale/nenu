@@ -10,8 +10,11 @@ import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
+import { isConnecting, linkPhrase } from "@/lib/connection";
+import { lastLiveAt } from "@/lib/connection-health";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
-import { cantReachNenu, ConnectionBanner } from "@/components/connection-banner";
+import { PageBody } from "@/components/column-page";
+import { ConnectionBanner } from "@/components/connection-banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NewAgentHost } from "@/components/new-agent-sheet";
@@ -40,10 +43,16 @@ import { NotFound } from "@/routes/not-found";
  * A stale pane with NO text is not a case: nothing old is on screen, so the herd's stamp is the
  * honest one. Live pane data likewise falls through — the pane is current, and the banner is then
  * describing whatever the snapshot is doing.
+ *
+ * A herd with no stamp of its own while the link is down came from this page's own reads (Herdr down
+ * still answers with the last herd the bridge saw), so it is dated by `liveAt`, the last read on this
+ * page that came back live. That stamp is page-wide (any session, snapshot or pane read), so it is an
+ * approximation: a session switched to mid-outage, or a page left hidden while the bridge kept polling,
+ * can be dated off by that gap. A page that never had a live read dates nothing.
  */
-export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined): number | undefined {
+export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined, liveAt?: number): number | undefined {
   if (pane?.error && pane.text) return pane.lastSeenAt;
-  return home.lastSeenAt;
+  return home.lastSeenAt ?? (isConnecting(home) ? liveAt : undefined);
 }
 
 // The data root: owns the snapshot loader, drives polling, and fans the herd out to the child
@@ -87,7 +96,7 @@ export function RootLayout() {
         bridge={data.bridge}
         error={data.error}
         authError={data.authError}
-        lastSeenAt={shownLastSeenAt(data, pane)}
+        lastSeenAt={shownLastSeenAt(data, pane, lastLiveAt())}
       />
       <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session} panes={paneRoots}><Outlet /></FilePreviewProvider></WorkbenchShell>
       <NewAgentHost />
@@ -123,23 +132,21 @@ export function BootSplash() {
             <span className="grid size-11 shrink-0 place-items-center lg:hidden"><img src="/nenu-mark.png" alt="" className="nenu-mark size-6" /></span>
             <Bone className="h-4" width="120px" />
           </header>
-          <main className="page-body">
-            <div className="page-column">
-              {stuck ? (
-                <EmptyState icon={WifiOff} title={cantReachNenu()}
-                  action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
-                  Nenu keeps trying. Check that this device can reach the host.
-                </EmptyState>
-              ) : (
-                <>
-                  <p role="status" className="text-footnote text-muted-foreground">Connecting to {window.location.host}&hellip;</p>
-                  <div className="mt-4 flex flex-col gap-3" aria-hidden="true">
-                    {[0, 1, 2].map((row) => <Bone key={row} className="h-14 rounded-lg" />)}
-                  </div>
-                </>
-              )}
-            </div>
-          </main>
+          <PageBody>
+            {stuck ? (
+              <EmptyState icon={WifiOff} title={linkPhrase("nenu", window.location.host)} titleAs="h1"
+                action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
+                Nenu keeps trying. Check that this device can reach the host.
+              </EmptyState>
+            ) : (
+              <>
+                <p role="status" className="text-footnote text-muted-foreground">Connecting to {window.location.host}&hellip;</p>
+                <div className="mt-4 flex flex-col gap-3" aria-hidden="true">
+                  {[0, 1, 2].map((row) => <Bone key={row} className="h-14 rounded-lg" />)}
+                </div>
+              </>
+            )}
+          </PageBody>
           {/* The app's own tab bar, so it does not change on hand-off; inert until there is a herd to open. */}
           <div inert className="contents">
             <BottomTabBar active={pathname === "/" ? "home" : null} homeTo={homePath(session)} attention={0}
@@ -165,7 +172,7 @@ function Bone({ className, width }: { className?: string; width?: string }) {
 export function RootError() {
   const error = useRouteError();
   if (isRouteErrorResponse(error) && error.status === 404) {
-    return <main className="flex min-h-[100dvh] flex-col justify-center"><NotFound /></main>;
+    return <main className="flex min-h-[100dvh] flex-col justify-center"><NotFound titleAs="h1" /></main>;
   }
   return <Crash error={error} />;
 }
@@ -190,27 +197,25 @@ function Crash({ error }: { error: unknown }) {
     }
   }
   return (
-    <main className="flex min-h-[100dvh] flex-col items-center justify-center px-6 py-12 text-center">
+    <main className="flex min-h-[100dvh] flex-col justify-center">
       {/* The one screen without the app's chrome, so the mark says whose it is. */}
-      <img src="/nenu-mark.png" alt="" className="nenu-mark mb-4 size-12" />
-      <h1 className="text-title text-balance">Nenu hit a problem</h1>
-      <p className="mt-2 max-w-sm text-subhead text-muted-foreground text-pretty">
+      <EmptyState icon={<img src="/nenu-mark.png" alt="" className="nenu-mark size-12" />} title="Nenu hit a problem" titleAs="h1" className="pb-0"
+        action={<div className="flex flex-wrap justify-center gap-3">
+          <Button size="lg" onClick={() => {
+            // Reload home, but stay in the session you were in (read from the live URL, since the
+            // router context may be the throwing one). Primary → plain "/".
+            const session = normalizeSession(new URLSearchParams(window.location.search).get(SESSION_PARAM));
+            window.location.assign(homePath(session));
+          }}>
+            <RotateCw aria-hidden="true" />Reload
+          </Button>
+          <Button size="lg" variant="outline" onClick={() => void copy()}>
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy details"}
+          </Button>
+        </div>}>
         Reply drafts stay saved on this device. Reload to try again.
-      </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Button size="lg" onClick={() => {
-          // Reload home, but stay in the session you were in (read from the live URL, since the
-          // router context may be the throwing one). Primary → plain "/".
-          const session = normalizeSession(new URLSearchParams(window.location.search).get(SESSION_PARAM));
-          window.location.assign(homePath(session));
-        }}>
-          <RotateCw aria-hidden="true" />Reload
-        </Button>
-        <Button size="lg" variant="outline" onClick={() => void copy()}>
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy details"}
-        </Button>
-      </div>
-      <details ref={disclosure} className="mt-8 w-full max-w-md text-left">
+      </EmptyState>
+      <details ref={disclosure} className="mx-auto mt-8 mb-12 w-full max-w-md px-6 text-left">
         <summary className="mx-auto w-fit cursor-pointer rounded-md px-2 py-1 text-footnote text-muted-foreground coarse:min-h-11 coarse:content-center">Technical details</summary>
         <pre className="mt-3 max-h-60 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-footnote whitespace-pre-wrap break-words text-muted-foreground">{details}</pre>
       </details>

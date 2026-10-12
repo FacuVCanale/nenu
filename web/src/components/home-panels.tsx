@@ -1,18 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigation, useRevalidator } from "react-router";
-import { AlertCircle, ChevronRight, FolderPlus, Loader2, LockKeyhole, Sparkles, Wifi, WifiOff, Workflow, type LucideIcon } from "lucide-react";
+import { Link, useNavigation } from "react-router";
+import { AlertCircle, ChevronRight, FolderPlus, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { buttonVariants } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
 import type { BusyChoice } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
-import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -279,35 +277,3 @@ export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean
   );
 }
 
-/**
- * Home before any snapshot ever arrived: no herd to show, so the page says what is happening. Quiet
- * while the first failures retry, then the host it cannot reach and a Retry; a refusal says so at once.
- */
-export function HomeUnreachable({ refused, lost }: { refused: boolean; lost: boolean }) {
-  const revalidator = useRevalidator();
-  // Only the operator's own retry marks the button: the poll is loading most of an outage, waiting on
-  // reads to a host that does not answer, and Retry has to stay in reach through it.
-  const [retrying, setRetrying] = useState(false);
-  const host = window.location.host;
-  if (refused) {
-    return (
-      <EmptyState icon={LockKeyhole} title="Access refused"
-        action={<a href={PROXY_AUTH_PATH} className={buttonVariants({ variant: "secondary" })}>Sign in</a>}>
-        Nenu answered and turned this device away. Sign in again to see your herd.
-      </EmptyState>
-    );
-  }
-  if (!lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {host}.</EmptyState>;
-  async function retry() {
-    setRetrying(true);
-    try { await revalidator.revalidate(); } finally { setRetrying(false); }
-  }
-  return (
-    <EmptyState icon={WifiOff} title={`Can't reach Nenu at ${host}`}
-      action={<Button variant="secondary" onClick={() => void retry()} aria-busy={retrying || undefined} disabled={retrying}>
-        <BusyLabel busy={retrying}>Retry</BusyLabel>
-      </Button>}>
-      Nenu keeps trying. Check this device's network or VPN.
-    </EmptyState>
-  );
-}

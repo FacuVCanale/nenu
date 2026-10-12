@@ -28,4 +28,9 @@ describe("EmptyState", () => {
     expect(screen.getByRole("heading")).toHaveClass("text-headline");
     expect(screen.getByText("Body")).toHaveClass("text-subhead", "text-muted-foreground");
   });
+
+  it("takes a picture in place of an icon, for the one screen without the app's chrome", () => {
+    const { container } = render(<EmptyState icon={<img src="/nenu-mark.png" alt="" />} title="Nenu hit a problem" />);
+    expect(container.querySelector("[data-slot=empty-state] img")).toHaveAttribute("src", "/nenu-mark.png");
+  });
 });

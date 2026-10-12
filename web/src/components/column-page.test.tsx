@@ -105,3 +105,11 @@ describe("ColumnPage — the large title", () => {
     expect(screen.getByRole("link", { name: "Back to AWAM Comercio SaaS" })).toHaveAttribute("href", "/project/awam");
   });
 });
+
+describe("ColumnPage — the column", () => {
+  it("centres its column in the content area, as Settings and the chat centre theirs", () => {
+    renderPage("/");
+    const column = screen.getByRole("main").firstElementChild!;
+    expect(column).toHaveClass("page-column", "mx-auto");
+  });
+});
