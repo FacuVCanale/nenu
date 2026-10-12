@@ -4,7 +4,7 @@ import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, RecentChats, RunningWorkCard, SendNotice } from "@/components/home-panels";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
@@ -17,7 +17,6 @@ import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
 import { turnRunning } from "@/lib/turn";
 import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence, a composer that reaches a
@@ -101,13 +100,18 @@ function rememberTarget(value: string): void {
   }
 }
 
-type Sent = { tone: "ok" | "error"; text: string; paneId?: string };
+/** What became of the last send: a quiet line when it went, a card naming the cause and the way on when it did not. */
+type Sent = { tone: "ok"; text: string; paneId: string } | { tone: "error"; title: string; detail: string; paneId: string };
+
+/** A send the bridge refused before anything was queued: the coordinator's queue is not reachable from here. */
+class Unavailable extends Error {}
 
 /**
  * Type here and pick where it goes. A project sends to its live coordinator through the shared
  * queue; while the coordinator is mid-turn an action sheet asks, at every send, whether it reads the
- * message now or after this turn (ADR 0056; the bridge maps each to the CLI's own key). A workspace or "New workspace" opens the new-chat
- * sheet with the message filled in, to pick agent and folder.
+ * message now or after this turn (ADR 0056; the bridge maps each to the CLI's own key). A send that
+ * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
+ * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
 function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean }) {
   const [message, setMessage] = useState("");
@@ -133,21 +137,24 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
     if (target.kind !== "project") return;
     const text = message.trim();
     const paneId = target.coordinator.paneId;
+    const name = `${target.project.name}'s coordinator`;
     setAsking(false);
     setBusy(true);
     setSent(null);
     try {
       const page = await fetchMessageQueue(paneId, data.session);
-      if (!page.available) throw new Error("This coordinator can't take messages from here. Open it to reply.");
+      if (!page.available) throw new Unavailable();
       const id = crypto.randomUUID();
       const next = await changeMessageQueue(paneId, { scope: page.scope, action: "add", id, text, deliveryMode: mode }, data.session);
       const row = next.available ? next.messages.find((m) => m.id === id) : undefined;
       setMessage("");
       setSent(row?.state === "paused"
-        ? { tone: "error", text: `Held: ${row.error ?? "the coordinator could not take it yet"}.`, paneId }
-        : { tone: "ok", text: row ? `Queued for ${target.project.name}'s coordinator.` : `Sent to ${target.project.name}'s coordinator.`, paneId });
+        ? { tone: "error", title: `Held for ${name}`, detail: `${row.error ?? "It could not take the message yet"}. It waits in the coordinator's queue.`, paneId }
+        : { tone: "ok", text: row ? `Queued for ${name}.` : `Sent to ${name}.`, paneId });
     } catch (err) {
-      setSent({ tone: "error", text: err instanceof Error && err.message ? err.message : "Could not send. Try again.", paneId });
+      setSent(err instanceof Unavailable
+        ? { tone: "error", title: `${name} can't take messages from Home`, detail: "Your message is still in the box. Open the coordinator to send it from its chat.", paneId }
+        : { tone: "error", title: `Couldn't send to ${name}`, detail: `${err instanceof Error && err.message ? err.message : "Check the connection and try again"}. Your message is still in the box.`, paneId });
     } finally {
       setBusy(false);
     }
@@ -206,12 +213,14 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
         <BusySendSheet open={asking} name={`${target.project.name}'s coordinator`} agent={target.coordinator.agent}
           onPick={(mode) => void send(mode)} onCancel={() => setAsking(false)} />
       )}
-      {sent && (
-        <p role="status" className={cn("flex flex-wrap items-center gap-x-2 text-[13px]", sent.tone === "error" ? "text-destructive" : "text-muted-foreground")}>
+      {sent?.tone === "ok" && (
+        <p role="status" className="flex items-center gap-2 text-footnote text-muted-foreground">
+          <Check aria-hidden className="size-3.5 shrink-0 text-status-done" />
           {sent.text}
-          {sent.paneId && <Link to={panePath(sent.paneId, data.session)} className="font-medium text-foreground underline-offset-2 hover:underline">Open</Link>}
+          <Link to={panePath(sent.paneId, data.session)} className="inline-flex items-center font-medium text-foreground underline-offset-2 hover:underline coarse:min-h-11">Open</Link>
         </p>
       )}
+      {sent?.tone === "error" && <SendNotice title={sent.title} detail={sent.detail} to={panePath(sent.paneId, data.session)} />}
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { ChevronRight, Workflow } from "lucide-react";
+import { AlertCircle, ChevronRight, Workflow } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
+import { buttonVariants } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
 import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
@@ -155,5 +156,21 @@ export function BusySendSheet({ open, name, agent, onPick, onCancel }: {
         Cancel
       </button>
     </BottomSheet>
+  );
+}
+
+/** Why a send from Home did not go, and the one way on: the coordinator's own chat. */
+export function SendNotice({ title, detail, to }: { title: string; detail: string; to: string }) {
+  return (
+    <div role="alert" className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+      <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-3">
+        <div className="flex flex-col gap-0.5">
+          <p className="text-subhead font-medium text-pretty">{title}</p>
+          <p className="text-footnote text-pretty text-muted-foreground">{detail}</p>
+        </div>
+        <Link to={to} className={buttonVariants({ variant: "secondary" })}>Open coordinator</Link>
+      </div>
+    </div>
   );
 }
