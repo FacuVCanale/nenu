@@ -117,6 +117,25 @@ describe("workbench notifications", () => {
     expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
   });
 
+  it("leaves a message that overflows its box to the finger's scroll, and takes the swipe from short ones", () => {
+    // jsdom lays nothing out: the text box reports the size a long raw error measured in the bench.
+    const overflow = { scroll: 842, client: 256 };
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(() => overflow.scroll);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => overflow.client);
+    render(<StatusArea />);
+    act(() => setStatus("Send failed: a very long raw error from the bridge", "error", null));
+    const longText = screen.getByText(/very long raw error/).parentElement!;
+    expect(longText).toHaveClass("touch-pan-y");
+    expect(longText).not.toHaveClass("touch-none");
+
+    overflow.scroll = overflow.client;
+    act(() => setStatus("Tab closed", "info"));
+    const shortText = screen.getByText("Tab closed").parentElement!;
+    expect(shortText).toHaveClass("touch-none");
+    scrollHeight.mockRestore();
+    clientHeight.mockRestore();
+  });
+
   it("makes a notice with a destination one control that opens it and clears the notice", async () => {
     const router = createMemoryRouter([
       { path: "/", element: <><p>Home page</p><StatusArea /></> },
