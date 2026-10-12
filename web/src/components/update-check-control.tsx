@@ -64,7 +64,7 @@ export function UpdateCheckControl() {
           <div className="text-body">{update ? `Nenu ${update.current}` : "Nenu"}</div>
           {(status.badge || status.meta) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {status.badge && <Badge status={status} working={check === "checking"} />}
+              {status.badge && <Badge status={status} />}
               {status.meta && <span className="text-footnote text-muted-foreground">{status.meta}</span>}
             </div>
           )}
@@ -113,7 +113,7 @@ function useStaleInterface(): boolean {
   return isStaleBuild(BUILD.id, serverBuild);
 }
 
-function Badge({ status, working }: { status: UpdateStatus; working: boolean }) {
+function Badge({ status }: { status: UpdateStatus }) {
   return (
     <span
       data-slot="badge"
@@ -123,7 +123,7 @@ function Badge({ status, working }: { status: UpdateStatus; working: boolean }) 
       )}
     >
       {/* The colour rides a dot, so the words keep full contrast on the tint in both themes. */}
-      {working && <Loader2 aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />}
+      {status.working && <Loader2 aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />}
       {status.tone !== "neutral" && (
         <span aria-hidden="true" className={cn("size-1.5 rounded-full", status.tone === "error" ? "bg-destructive" : "bg-primary")} />
       )}

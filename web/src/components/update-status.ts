@@ -19,6 +19,8 @@ export interface UpdateStatus {
   /** The state in two or three words, or null when there is nothing to badge. */
   badge: string | null;
   tone: "neutral" | "new" | "error";
+  /** The badge is the manual check running, so it carries a spinner. */
+  working?: boolean;
   /** A few words beside the badge, under the version: when upstream was last checked. */
   meta?: string;
   /** The sentence the state needs said, for the card's footer. */
@@ -53,7 +55,7 @@ export function updateStatus(
     return { badge: `${update.latest} available`, tone: "new", detail: "The release notes list how to update.", action: notes(update.latestUrl) };
   }
   if (update?.majorAvailable) {
-    return { badge: `${update.majorAvailable} available`, tone: "new", detail: "A new major version. The routine update skips it; this command takes it.", command: MAJOR_COMMAND, action: notes(update.majorUrl) };
+    return { badge: `Major ${update.majorAvailable} available`, tone: "new", detail: "A new major version. The routine update skips it; this command takes it.", command: MAJOR_COMMAND, action: notes(update.majorUrl) };
   }
   if (!update) return { ...checkBadge(check), detail: "Check whether a new version is available.", action: CHECK };
   // A running or failed check takes the line on its own, so the row keeps its height meanwhile.
@@ -63,8 +65,8 @@ export function updateStatus(
   return { badge: update.releaseAvailable ? null : "Up to date", tone: "neutral", meta, action: CHECK };
 }
 
-function checkBadge(check: UpdateCheck): Pick<UpdateStatus, "badge" | "tone"> {
-  if (check === "checking") return { badge: "Checking…", tone: "neutral" };
+function checkBadge(check: UpdateCheck): Pick<UpdateStatus, "badge" | "tone" | "working"> {
+  if (check === "checking") return { badge: "Checking…", tone: "neutral", working: true };
   if (check === "failed") return { badge: "Couldn't check", tone: "error" };
   return { badge: null, tone: "neutral" };
 }
