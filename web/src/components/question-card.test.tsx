@@ -645,6 +645,25 @@ describe("QuestionCard", () => {
       expect(document.querySelector("[data-question-card]")).toHaveAttribute("aria-busy", "true");
     });
 
+    it("spins only where the tap landed while its thread opens", async () => {
+      const menu: Interaction = { ...base, kind: "menu", family: "claude", question: "Rewind", options: [{ index: 0, label: "Continue", role: "neutral" }] };
+      const card = (opening: boolean) => <QuestionCard compact title="panel depo" interaction={menu} onAnswer={ok} onOpen={() => {}} opening={opening} />;
+      const spins = (el: HTMLElement) => el.querySelector(".animate-spin") !== null;
+      const user = userEvent.setup();
+      const { rerender } = render(card(false));
+      const header = () => screen.getByRole("button", { name: /panel depo.*open thread/i });
+      const action = () => screen.getByRole("button", { name: "Answer in thread" });
+      await user.click(action());
+      rerender(card(true));
+      expect([spins(action()), spins(header())]).toEqual([true, false]);
+      expect(header()).not.toHaveAttribute("aria-busy");
+      rerender(card(false));
+      await user.click(header());
+      rerender(card(true));
+      expect([spins(action()), spins(header())]).toEqual([false, true]);
+      expect(action()).not.toHaveAttribute("aria-busy");
+    });
+
     it("goes to the thread by one label, as the card's one large primary", () => {
       setup({ interaction: permission, compact: true, title: "panel depo" });
       const go = screen.getByRole("button", { name: "Answer in thread" });
