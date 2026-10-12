@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cssRules } from "@/test/css-rules";
+import { cssRules, declarations } from "@/test/css-rules";
 
 // The project area's contracts that fail silently: jsdom lays nothing out and matches no :hover or
 // :focus-visible, so these read the declared rules and the bench measures the rendered result
 // (redesign-shots/project, scene R).
 
 const css = readFileSync(resolve(import.meta.dirname, "project.css"), "utf8");
+const LAYER = "@layer components";
 
 describe("a row's actions", () => {
   // The words sit over the row's age on the row's own fill (background: inherit). Shown on a bare
@@ -24,5 +25,16 @@ describe("a row's actions", () => {
       const lit = cssRules(css).some((rule) => rule.selectors.includes(row!) && rule.decls.background !== undefined && rule.atRules.join() === atRules.join());
       expect(lit, `${row} shows the actions but gives the row no fill`).toBe(true);
     }
+  });
+});
+
+describe("the project panel's tabs", () => {
+  // The panel opens from 1280px, which a touch tablet held sideways has; its tabs drew 32px tall there.
+  it("reach 44px on a coarse pointer, without growing the row they sit in", () => {
+    const px = (value: string | undefined) => Number(/^(-?[\d.]+)px/.exec(value ?? "")?.[1] ?? Number.NaN);
+    const tab = declarations(css, ".panel-tab", [LAYER]);
+    const reach = declarations(css, ".panel-tab::after", [LAYER, "@media (pointer: coarse)"]);
+    expect(px(tab.height)).toBeLessThanOrEqual(36);
+    expect(px(tab.height) - 2 * px(reach.inset)).toBe(44);
   });
 });
