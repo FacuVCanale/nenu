@@ -13,6 +13,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare } from "lucide-react";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
+import { agentName } from "@/hooks/use-message-queue";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
@@ -1275,30 +1276,32 @@ export function AgentChat({
 /**
  * A screen that waits on a key no grammar could name: one row above the composer, in flow so it
  * never covers the chat. It says what is going on in words, keeps the screen's own hint, and leads to
- * the terminal and its keys. Collapsing leaves a chip, since the composer stays paused while that
- * screen is up. It offers no key of its own: a declared cancel key is ADR 0053 rule 2, still Proposed.
+ * the terminal and its keys. Collapsing leaves a chip naming the waiting screen; the composer is not
+ * paused (a message waits for the answer). It offers no key of its own: a declared cancel key is
+ * ADR 0053 rule 2, still Proposed. Only the sentence is a live region, never the buttons around it.
  */
 function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?: string; onShow: () => void; onKeys: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
-  const who = agent ? agent.charAt(0).toUpperCase() + agent.slice(1) : "The agent";
+  // It needs the operator, so its dot is the blocked one the pane carries in the header.
+  const dot = <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-blocked" />;
   return (
-    <div role="status" aria-label="Terminal waiting" className="mb-2">
+    <section aria-label="Terminal waiting" className="mb-2">
       {collapsed ? (
-        <button type="button" onClick={() => setCollapsed(false)}
+        <button type="button" aria-expanded={false} onClick={() => setCollapsed(false)}
           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground transition-colors active:bg-muted">
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-working" />
-          Composer paused
+          {dot}
+          Terminal waiting on a key
           <ChevronUp aria-hidden className="size-4 text-muted-foreground" />
         </button>
       ) : (
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
           <div className="flex items-start gap-3">
-            <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-status-working" />
+            <span className="mt-1.5 flex">{dot}</span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <p className="text-[15px] leading-5 font-medium text-foreground">{who} is showing a screen Nenu can't answer</p>
+              <p role="status" className="text-[15px] leading-5 font-medium text-foreground">{agentName(agent)} is showing a screen Nenu can't answer</p>
               <p className="truncate font-mono text-[13px] leading-[18px] text-muted-foreground">{hint}</p>
             </div>
-            <button type="button" aria-label="Collapse" onClick={() => setCollapsed(true)}
+            <button type="button" aria-label="Collapse" aria-expanded onClick={() => setCollapsed(true)}
               className="-mt-3 -mr-3 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted">
               <ChevronDown aria-hidden className="size-4" />
             </button>
@@ -1313,6 +1316,6 @@ function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
