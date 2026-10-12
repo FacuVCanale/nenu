@@ -3,7 +3,7 @@
 .project-frame { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .project-panel { display: flex; flex-direction: column; width: 360px; flex-shrink: 0; min-height: 0; overflow-y: auto; padding: 20px 20px 32px; border-left: 1px solid var(--border); }
 .project-overlay { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px calc(env(safe-area-inset-bottom) + 24px); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
-.quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: 7px; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
+.quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
 .quiet-action:hover, .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 
 .task-list { display: flex; flex-direction: column; gap: 1px; }
@@ -13,10 +13,10 @@
 .task-row:hover { background: var(--workbench-row-hover); }
 [aria-current="true"] > .task-row { background: var(--workbench-row-selected); }
 .task-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 7px 8px; text-align: left; border-radius: 8px; }
-.task-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
+.task-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); opacity: 0; cursor: pointer; }
 .task-row:hover .task-close, .task-close:focus-visible { opacity: 1; }
 .task-close:hover { color: var(--foreground); background: var(--workbench-row-selected); }
-.task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); cursor: pointer; }
+.task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
 .task-fold:hover { color: var(--foreground); background: var(--workbench-row-selected); }
 /* History: everything resolved, in grey, behind one row that opens and closes in place. */
 .task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; }

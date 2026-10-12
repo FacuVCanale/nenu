@@ -36,7 +36,7 @@
    large screen; a chat centres its conversation and composer in one column of their own. */
 :root { --page-gutter: 16px; --page-column: clamp(760px, 50vw, 960px); --chat-column: 48rem; }
 @media (min-width: 640px) { :root { --page-gutter: 32px; } }
-.workbench-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 7px; color: var(--muted-foreground); cursor: pointer; }
+.workbench-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
 .workbench-icon-button:hover { color: var(--foreground); background: var(--workbench-row-hover); }
 
 /* New surfaces live in the components layer so Tailwind utilities on the same element still win. */
@@ -47,11 +47,14 @@
 .page-column { width: 100%; max-width: var(--page-column); }
 
 /* Native modal: the browser owns focus and the inert page; this only dresses it. */
-.app-dialog { margin: auto; width: min(26rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); color: var(--popover-foreground); box-shadow: 0 24px 48px -12px rgb(0 0 0 / 25%); }
+.app-dialog { margin: auto; width: min(26rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); }
 .app-dialog::backdrop { background: rgb(0 0 0 / 40%); }
 }
 
-.workbench-shell :is(a, button, summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* Every route's header wears the chrome, the same surface as the status-bar band above it. No blur
+   yet: nothing scrolls under an in-flow header, and a backdrop-filter would trap the fixed menus
+   it opens. Unlayered, so it outranks the bg utility the header markup still carries. */
+.workbench-app-header { background: var(--chrome); }
 
 /* Touch reach without visual bulk: a centred, invisible 44px target around a smaller control. */
 .hit-area { position: relative; }
@@ -61,7 +64,7 @@
 
 @media (min-width: 1024px) {
   /* Every header is the same bar on a desk, whatever its right side holds and whatever route draws it. */
-  .workbench-app-header { min-height: 52px; gap: 8px; padding: 0 8px 0 var(--page-gutter); background: var(--background); }
+  .workbench-app-header { min-height: 52px; gap: 8px; padding: 0 8px 0 var(--page-gutter); }
 }
 
 /* Touch: every target reaches 44px. */

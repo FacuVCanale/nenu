@@ -78,7 +78,6 @@ describe("chrome", () => {
   it("gives every header the status bar's surface, mixed from the page background", () => {
     expect(indexCss).toMatch(/--chrome:\s*color-mix\(in oklab, var\(--background\)/);
     expect(read("workbench.css")).toMatch(/^\.workbench-app-header \{[^}]*background: var\(--chrome\)/m);
-    expect(read("styles/chat.css")).toMatch(/\.workbench-chat > header \{[^}]*background: var\(--chrome\)/);
   });
 
   it("starts the loading strip under the status bar, not behind it", () => {
