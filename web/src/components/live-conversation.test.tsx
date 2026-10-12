@@ -143,6 +143,25 @@ describe("LiveConversation", () => {
     vi.restoreAllMocks();
   });
 
+  // The phone keyboard shrinks the list while the operator types a reply on the card: the box they
+  // type in sits at the card's foot, so following goes to the bottom, not the question's first line.
+  it("follows to the bottom while the operator types inside the question", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const question = <section data-follow-stop aria-label="Which plan?"><textarea aria-label="Reply" /></section>;
+    const view = (h: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={h} loading={false} error={false} footer={question} /></MemoryRouter>;
+    const { container, rerender } = render(view(history));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1700, client: 400 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { top: this.hasAttribute("data-follow-stop") ? 1000 - box.top : 0 } as DOMRect;
+    });
+    act(() => { screen.getByRole("textbox", { name: "Reply" }).focus(); });
+    box.client = 250;
+    rerender(view({ ...history, entries: [...history.entries, { uuid: "more", ts: "", role: "assistant", parts: [{ kind: "text", text: "more" }] }] }));
+    expect(box.top).toBe(1450);
+    vi.restoreAllMocks();
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
