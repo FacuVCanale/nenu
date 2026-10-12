@@ -7,7 +7,7 @@ import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
-import { atTail } from "@/hooks/use-auto-scroll";
+import { atTail, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 
@@ -88,6 +88,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // The list's height just before an older page goes in above the reader. Restoring adds only the
   // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
   const anchorHeight = useRef<number | null>(null);
+  const editShift = useEditShift(scrollRef);
   const shown = frozen ?? history;
   const entries = shown?.available ? shown.entries : [];
   const latest = history?.available ? history.entries.at(-1) : undefined;
@@ -264,7 +265,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const cap = stopCap(el);
     if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
       if (!following.current) followLatest();
-    } else if (up) {
+    } else if (up && !(following.current && editShift())) {
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);
