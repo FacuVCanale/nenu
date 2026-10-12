@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
@@ -37,21 +37,22 @@ const template: TemplateView = {
 };
 
 /** The actions on a project page, with the New flow mounted at the root as the app mounts it. */
-function renderActions(on: ProjectView, { session, onStarted = vi.fn() }: { session?: string; onStarted?: () => void } = {}) {
+function renderActions(on: ProjectView, { session, onStarted = vi.fn(), others = [] }: { session?: string; onStarted?: () => void; others?: ProjectView[] } = {}) {
   onTestFinished(() => openNewDialog(false));
   const data = {
     bridge: "connected", device: undefined, session, sessions: [], error: false, authError: false, snoozedUntil: null, update: undefined,
-    tabs: [], shellPanes: [], workspaces: [], agents: [], projects: [on],
+    tabs: [], shellPanes: [], workspaces: [], agents: [], projects: [on, ...others],
   } as unknown as HomeData;
+  let loads = 0;
   const router = createMemoryRouter([{
     id: ROOT_ROUTE_ID,
     path: "/",
-    loader: () => data,
+    loader: () => (loads += 1, data),
     element: <><NewAgentHost /><Outlet /></>,
     children: [{ path: "project/:projectSlug", element: <NewNodeActions project={on} session={session} onStarted={onStarted} /> }],
   }], { initialEntries: [`/project/${on.slug}`] });
   render(<RouterProvider router={router} />);
-  return { router, onStarted, user: userEvent.setup() };
+  return { router, onStarted, loads: () => loads, user: userEvent.setup() };
 }
 
 function serveOptions(options: { templates?: TemplateView[]; profiles?: string[] } = {}) {
@@ -146,6 +147,32 @@ it("offers only a top-level thread when upstream herdr-projects runs the project
 it("offers nothing to start in a paused project, which Organizations would refuse", () => {
   const { container } = render(<NewNodeActions project={{ ...project, status: "paused" }} onStarted={() => {}} />);
   expect(container).toBeEmptyDOMElement();
+});
+
+it("lets a start the person dismissed land without closing or moving what they opened next", async () => {
+  serveOptions();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  server.use(http.post("/api/org/node/start", async () => { await held; return HttpResponse.json({ ok: true, node: { id: "t-4000" } }); }));
+  const { user, onStarted, loads, router } = renderActions(project);
+
+  await user.click(await screen.findByRole("button", { name: "New thread" }));
+  const dialog = within(await screen.findByRole("dialog", { name: "New thread" }));
+  await user.type(dialog.getByLabelText("Title"), "Billing");
+  await user.type(dialog.getByLabelText("Task"), "Coordinate billing.");
+  await user.click(dialog.getByRole("button", { name: "Create thread" }));
+  await dialog.findByRole("button", { name: "Starting…" });
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  act(() => openNewDialog());
+  expect(await screen.findByRole("dialog", { name: "New" })).toBeInTheDocument();
+
+  // The late answer still lands: something refreshes the page.
+  const before = loads() + onStarted.mock.calls.length;
+  release();
+  await waitFor(() => expect(loads() + onStarted.mock.calls.length).toBeGreaterThan(before));
+  expect(screen.getByRole("dialog", { name: "New" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/project/nenu");
 });
 
 it("keeps the dialog open with Organizations' refusal", async () => {
