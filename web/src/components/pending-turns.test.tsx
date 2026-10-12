@@ -35,6 +35,23 @@ describe("PendingTurns", () => {
     expect(screen.queryByRole("dialog", { name: "Queued message" })).toBeNull();
   });
 
+  it("closes the open ⋯ when the message starts going, and does not reopen it on its own", async () => {
+    const user = userEvent.setup();
+    const handlers = actions();
+    const { rerender } = render(<PendingTurns sends={[queued]} actions={handlers} />);
+    await user.click(screen.getByRole("button", { name: "Queued message actions" }));
+    expect(screen.getByRole("dialog", { name: "Queued message" })).toBeInTheDocument();
+
+    // The turn ends and the bridge starts delivering it: nothing is left to manage.
+    rerender(<PendingTurns sends={[{ ...queued, queueState: "sending" }]} actions={handlers} />);
+    expect(screen.queryByRole("dialog", { name: "Queued message" })).toBeNull();
+
+    // A delivery that falls back to the queue offers the ⋯ again, closed until it is tapped.
+    rerender(<PendingTurns sends={[queued]} actions={handlers} />);
+    expect(screen.getByRole("button", { name: "Queued message actions" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("dialog", { name: "Queued message" })).toBeNull();
+  });
+
   it("keeps a failed send's remedy on the line, where the failure is", async () => {
     const user = userEvent.setup();
     const handlers = actions();
