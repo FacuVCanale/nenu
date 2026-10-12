@@ -20,6 +20,13 @@ describe("quickRepliesFor", () => {
     expect(items).not.toContain("skip");
   });
 
+  // The dock shows a group's title as written, so an operator's "iOS release" keeps its case; the
+  // shipped titles are written in the sentence case the dock reads in.
+  it("ships its group titles in sentence case", () => {
+    expect(quickRepliesFor("claude", false).map((g) => g.title)).toEqual(["Confirm", "Common"]);
+    expect(quickRepliesFor("shell", true).map((g) => g.title)).toEqual(["Confirm"]);
+  });
+
   it("isShell wins over the agent string — the caller knows the pane kind, the string may drift", () => {
     expect(quickRepliesFor("claude", true)).toEqual(quickRepliesFor("shell", true));
   });
