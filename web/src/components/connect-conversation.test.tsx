@@ -47,6 +47,37 @@ describe("ConnectConversation", () => {
     expect(connectConversation).toHaveBeenCalledWith("w2:codex", ID, undefined);
   });
 
+  // The one the operator wants may have started after the first search (opened a moment ago in the
+  // terminal): a loaded list still offers to look again.
+  it("searches again from a loaded list", async () => {
+    const user = userEvent.setup();
+    const LATER = "99999999-8888-7777-6666-555555555555";
+    vi.mocked(fetchConversations)
+      .mockResolvedValueOnce({ conversations: [{ id: ID, title: "My terminal session" }] })
+      .mockResolvedValueOnce({ conversations: [{ id: ID, title: "My terminal session" }, { id: LATER, title: "Opened just now" }] });
+    render(<ConnectConversation paneId="w2:codex" disabled={false} onConnected={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Find Codex conversations" }));
+    await screen.findByLabelText("Conversation to connect");
+
+    await user.click(screen.getByRole("button", { name: "Search again" }));
+
+    expect(await screen.findByRole("option", { name: /Opened just now/ })).toBeInTheDocument();
+    expect(fetchConversations).toHaveBeenCalledTimes(2);
+    await user.selectOptions(screen.getByLabelText("Conversation to connect"), LATER);
+    await user.click(screen.getByRole("button", { name: "Connect history" }));
+    expect(connectConversation).toHaveBeenCalledWith("w2:codex", LATER, undefined);
+  });
+
+  // On a phone, opening the disclosure should bring the keyboard up for the ID, not ask for a second tap.
+  it("moves focus to the session ID when its disclosure opens", async () => {
+    const user = userEvent.setup();
+    render(<ConnectConversation paneId="w2:codex" disabled={false} onConnected={() => {}} />);
+    const disclosure = screen.getByRole("button", { name: "Enter a session ID" });
+    expect(document.getElementById(disclosure.getAttribute("aria-controls")!)).not.toBeNull();
+    await user.click(disclosure);
+    expect(screen.getByRole("textbox", { name: "Session ID" })).toHaveFocus();
+  });
+
   it("says when no conversation runs here instead of an empty list", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConversations).mockResolvedValue({ conversations: [] });
