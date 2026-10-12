@@ -127,8 +127,14 @@ function HomeWithoutHerd({ refused, lost }: { refused: boolean; lost: boolean })
   );
 }
 
-/** What unlocks the composer, said as what to do: "<verb> to start an agent". */
-const LOCKED_VERB: Record<LockReason, string> = { "read-only": "Use an authorised device", refused: "Sign in again", offline: "Reconnect", herdr: "Reconnect" };
+/**
+ * What unlocks the composer, said as what to do: "<verb> to start an agent". A read-only device has
+ * nothing to do here, so it reads as the thread's composer does. Kept to one line at 375 px: Safari
+ * sizes the box by its value, not its placeholder, so a wrapped placeholder is cut in half.
+ */
+const LOCKED_VERB: Record<Exclude<LockReason, "read-only">, string> = { refused: "Sign in again", offline: "Reconnect", herdr: "Reconnect" };
+const lockedPlaceholder = (lock: LockReason, action: string) =>
+  lock === "read-only" ? "Read-only — device not authorised" : `${LOCKED_VERB[lock]} to ${action}`;
 
 /** Where the composer sends: a project's coordinator, a new thread in a workspace, or a new workspace. */
 type Target = { kind: "new" } | { kind: "workspace"; workspaceId: string; label: string } | { kind: "project"; project: ProjectView; coordinator: AgentView };
@@ -196,11 +202,12 @@ function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; proj
   ];
   const target = targets.find((candidate) => valueOf(candidate) === choice) ?? targets[0]!;
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
-  const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
+  // The Send to chip names the project, so the box says only what to do.
+  const action = target.kind === "project" ? "ask the coordinator" : "start an agent";
   const busyChoice = target.kind === "project" ? busyChoiceFor(target.coordinator.agent) : null;
   // A locked box says what it waits for, from the moment it locks; the banner says what went wrong.
-  const reason = disabled && lock ? `${LOCKED_VERB[lock]} to ${action}` : null;
-  const placeholder = reason ?? (target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…");
+  const reason = disabled && lock ? lockedPlaceholder(lock, action) : null;
+  const placeholder = reason ?? (target.kind === "project" ? "Ask the coordinator…" : "Describe a task…");
 
   /** Send in `mode`, or with "ask" only check that the queue takes it and then ask when it is read. */
   async function send(mode: DeliveryMode | "ask") {
