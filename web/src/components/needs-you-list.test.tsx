@@ -13,13 +13,13 @@ const blocked: AgentView = {
 };
 
 const interactions: InteractionsState = {
-  interactions: [], receipts: [], stale: false, loaded: true, refresh: () => {}, answer: () => Promise.resolve({ ok: true }),
+  interactions: [], receipts: [], stale: false, loaded: true, refresh: () => {}, answer: () => Promise.resolve({ ok: true }), refusalFor: () => undefined,
 };
 
 function renderRow() {
   render(
     <MemoryRouter>
-      <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId }]} receipts={[]} interactions={interactions} readOnly={false} />
+      <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId }]} receipts={[]} interactions={interactions} lockReason={undefined} />
     </MemoryRouter>,
   );
   return screen.getByRole("link");
