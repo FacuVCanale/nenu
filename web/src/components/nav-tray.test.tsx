@@ -26,12 +26,28 @@ describe("NavTray", () => {
     ]);
   });
 
-  it("digits live on the 123 tab (hidden on Keys) and fire as ['1']..['9']", async () => {
+  // The dock is already titled Keys, so the tray's own segments name what each pad holds.
+  it("names its two pads Arrows and 123, opening on Arrows", async () => {
+    const user = userEvent.setup();
+    render(<NavTray onSend={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "Keys" })).toBeNull();
+    const arrows = screen.getByRole("button", { name: "Arrows" });
+    const digits = screen.getByRole("button", { name: "123" });
+    expect(arrows).toHaveAttribute("aria-pressed", "true");
+    expect(digits).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(digits);
+    expect(arrows).toHaveAttribute("aria-pressed", "false");
+    expect(digits).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("digits live on the 123 tab (hidden on Arrows) and fire as ['1']..['9']", async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();
     render(<NavTray onSend={onSend} />);
 
-    // Default tab is "Keys" — the digit pad isn't mounted yet.
+    // The tray opens on Arrows — the digit pad isn't mounted yet.
     expect(screen.queryByRole("button", { name: "1" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "123" }));
@@ -131,7 +147,7 @@ describe("NavTray", () => {
     expect(onSend).toHaveBeenLastCalledWith(["Enter"]);
   });
 
-  it("a sticky ⇧ armed on the Keys tab stages a shifted digit tapped on the 123 tab (queue survives the switch)", async () => {
+  it("a sticky ⇧ armed on the Arrows tab stages a shifted digit tapped on the 123 tab (queue survives the switch)", async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();
     render(<NavTray onSend={onSend} />);
@@ -230,21 +246,25 @@ describe("NavTray", () => {
 
     // off
     expect(alt()).toHaveAttribute("aria-pressed", "false");
+    expect(alt()).toHaveAttribute("data-state", "off");
     expect(isLocked()).toBe(false);
 
     // once — armed, no lock glyph yet
     await user.click(alt());
     expect(alt()).toHaveAttribute("aria-pressed", "true");
+    expect(alt()).toHaveAttribute("data-state", "once");
     expect(isLocked()).toBe(false);
 
     // locked — armed, lock glyph shows
     await user.click(alt());
     expect(alt()).toHaveAttribute("aria-pressed", "true");
+    expect(alt()).toHaveAttribute("data-state", "locked");
     expect(isLocked()).toBe(true);
 
     // off again
     await user.click(alt());
     expect(alt()).toHaveAttribute("aria-pressed", "false");
+    expect(alt()).toHaveAttribute("data-state", "off");
     expect(isLocked()).toBe(false);
   });
 
@@ -413,16 +433,16 @@ describe("NavTray", () => {
     render(<NavTray onSend={onSend} />);
 
     const enter = screen.getByRole("button", { name: /Enter/ });
-    expect(enter).toHaveClass("bg-muted/35"); // quiet key at rest
+    expect(enter).toHaveAttribute("data-echo", "idle"); // quiet key at rest
     await user.click(enter);
 
     // Filled the instant it's tapped — synchronous, no network wait. That IS the fix.
-    expect(screen.getByRole("button", { name: /Enter/ })).toHaveClass("bg-secondary");
+    expect(screen.getByRole("button", { name: /Enter/ })).toHaveAttribute("data-echo", "pending");
 
     release();
-    // Settles back to the resting outline once the ✓ window elapses.
+    // Settles back to rest once the ✓ window elapses.
     await vi.waitFor(
-      () => expect(screen.getByRole("button", { name: /Enter/ })).not.toHaveClass("bg-secondary"),
+      () => expect(screen.getByRole("button", { name: /Enter/ })).toHaveAttribute("data-echo", "idle"),
       { timeout: 3000 },
     );
   });
@@ -435,7 +455,7 @@ describe("NavTray", () => {
     await user.click(screen.getByRole("button", { name: "Esc" }));
 
     await vi.waitFor(() =>
-      expect(screen.getByRole("button", { name: "Esc" })).not.toHaveClass("bg-secondary"),
+      expect(screen.getByRole("button", { name: "Esc" })).toHaveAttribute("data-echo", "idle"),
     );
   });
 
@@ -448,8 +468,8 @@ describe("NavTray", () => {
     await user.click(screen.getByRole("button", { name: "Tab" }));
 
     expect(onSend).not.toHaveBeenCalled();
-    // Tab stays at rest (outline); the chip in the strip carries the feedback instead.
-    expect(screen.getByRole("button", { name: "Tab" })).not.toHaveClass("bg-secondary");
+    // Tab stays at rest; the chip in the strip carries the feedback instead.
+    expect(screen.getByRole("button", { name: "Tab" })).toHaveAttribute("data-echo", "idle");
     expect(screen.getByRole("button", { name: /Remove Ctrl/ })).toBeInTheDocument();
   });
 });
