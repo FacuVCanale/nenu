@@ -180,7 +180,7 @@ function hitPath(hit: SearchHit, herd: Herd, session?: string): string {
   return panePath(hit.pane.paneId, session);
 }
 
-/** The search's matches as one list: Projects, then Chats, each row named as everywhere else with the match in semibold. */
+/** The search's matches as one list (Projects, Workspaces, then Chats), each row named as everywhere else with the match in semibold. */
 function SearchResults({ groups, query, listId, selected, herd, session, onPick }: {
   groups: SearchGroup[];
   query: string;
@@ -196,7 +196,7 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick 
   if (groups.length === 0) return <p className="nav-empty">No matches for “{query.trim()}”</p>;
   let index = 0;
   return (
-    <div role="listbox" id={listId} aria-label="Search results" className="nav-results">
+    <div role="listbox" id={listId} aria-label="Search results">
       {groups.map((group) => (
         <div key={group.label} role="group" aria-label={group.label} className="nav-group">
           <div className="nav-label" aria-hidden>
@@ -220,10 +220,14 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick 
 }
 
 function HitMark({ hit }: { hit: SearchHit }) {
-  if (hit.kind === "project") return <span className="nav-avatar" aria-hidden>{hit.project.name.trim().charAt(0).toUpperCase() || "P"}</span>;
+  if (hit.kind === "project") return <ProjectAvatar name={hit.project.name} />;
   if (hit.kind === "node") return <NodeDot state={hit.state} />;
   if (hit.kind === "workspace") return <LayoutGrid aria-hidden size={14} />;
   return <PaneMark pane={hit.pane} />;
+}
+
+function ProjectAvatar({ name }: { name: string }) {
+  return <span className="nav-avatar" aria-hidden>{name.trim().charAt(0).toUpperCase() || "P"}</span>;
 }
 
 function hitState(hit: SearchHit): string {
@@ -425,7 +429,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
         <Link className="nav-row" to={projectPath(project.slug, session)} aria-current={projectSlug === project.slug && !nodeId ? "page" : undefined}>
           <span className="nav-lead">
             <OpeningMark to={projectPath(project.slug, session)}>
-              <span className="nav-avatar" aria-hidden>{project.name.trim().charAt(0).toUpperCase() || "P"}</span>
+              <ProjectAvatar name={project.name} />
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>
