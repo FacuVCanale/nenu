@@ -2523,10 +2523,10 @@ describe("Composer — placeholder", () => {
     else expect(box).toBeEnabled();
   });
 
-  it("draws no + and no Send where nothing can be written, and keeps both while a draft can wait", () => {
+  it("draws no + where nothing can be written, Send only as a disabled slot, and keeps both while a draft can wait", () => {
     renderComposer({ readOnly: true });
     expect(screen.queryByRole("button", { name: "Message shortcuts" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     cleanup();
     renderComposer({ disconnected: true });
     expect(screen.getByRole("button", { name: "Message shortcuts" })).toBeInTheDocument();
