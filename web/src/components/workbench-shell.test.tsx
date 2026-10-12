@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
@@ -443,7 +443,8 @@ it("folds every workspace to two letters no other tile shares, and names it on h
   expect(tiles[6]).toHaveFocus();
 });
 
-it("keeps a rail item's name up when the pointer slips into the gap and back", async () => {
+/** The fleet's folded rail with client-alpha-portal's name up; from there the test drives the clock. */
+async function railNamed() {
   desktop();
   const { sidebar, user } = setup(fleet);
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
@@ -451,9 +452,17 @@ it("keeps a rail item's name up when the pointer slips into the gap and back", a
   const tile = within(nav).getByRole("link", { name: /^client-alpha-portal\b/ });
   await user.hover(tile);
   expect(await screen.findByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
+  vi.useFakeTimers();
+  onTestFinished(() => vi.useRealTimers());
+  return { nav, tile };
+}
+const railName = () => screen.queryByRole("tooltip", { hidden: true });
+
+it("keeps a rail item's name up when the pointer slips into the gap and back", async () => {
+  const { nav, tile } = await railNamed();
   // A browser moving within the rail sends only pointerover; user-event's pointerout would read as leaving it.
   fireEvent.pointerOver(nav);
   fireEvent.pointerOver(tile);
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
+  act(() => vi.advanceTimersByTime(250));
+  expect(railName()).toHaveTextContent("client-alpha-portal");
 });
