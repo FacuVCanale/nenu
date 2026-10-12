@@ -1048,7 +1048,7 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));
-    expect(await screen.findByText("Answered: Yes")).toBeVisible();
+    expect(await screen.findByText("Approved · mkfifo fixture-fifo")).toBeVisible();
   });
 
   it("keeps the popover while the bridge has no card for the pane", async () => {

@@ -7,7 +7,7 @@ import type { AnswerOutcome, AnswerRequest, Interaction, InteractionOption } fro
 
 /** Fallback poll for the bridge's dialogs: brisk without the event stream, relaxed with it (ADR 0054). */
 export const INTERACTIONS_POLL_MS = { live: 10_000, fallback: 2_500 } as const;
-/** How long "Answered: X" stays when no new dialog replaces it. */
+/** How long a receipt stays when no new dialog replaces it. */
 export const RECEIPT_MS = 6_000;
 
 /** What an answer may add to the tapped option: typed text, or the persistent option's confirm. */
@@ -18,10 +18,34 @@ export interface Receipt {
   paneId: string;
   signature: string;
   label: string;
+  /** What the answer did, in a few words: "Approved · echo hi > hello.txt", "Answered · Apple". */
+  summary: string;
   at: number;
 }
 
-/** A multi-select checkbox only ticks a row; the dialog is still there afterwards. */
+const RECOMMENDED = /\s*\(recommended\)\s*$/i;
+
+/** What an answer did, said with what it was about: the command approved, the answer chosen. */
+export function receiptSummary(i: Interaction, option: InteractionOption, text?: string): string {
+  const label = option.label.replace(RECOMMENDED, "");
+  const verdict = option.role === "deny" ? "Declined" : "Approved";
+  switch (i.kind) {
+    case "permission":
+      // Without parts (Grok, agy) the plain subject's last row is the command.
+      return `${verdict} · ${i.subject?.command ?? i.subject?.file ?? i.context?.split("\n").at(-1) ?? label}`;
+    case "plan":
+      return option.role === "freeText" && text ? `Sent · ${text}` : `${verdict} · ${label}`;
+    case "multi-select":
+      if (option.role === "primary" && !i.answers && !i.incomplete) {
+        const ticked = i.options.filter((o) => o.checked).map((o) => o.label.replace(RECOMMENDED, ""));
+        return `${label} · ${ticked.join(", ") || "nothing ticked"}`;
+      }
+      break;
+  }
+  if (i.answers || i.incomplete) return option.role === "primary" ? "Submitted your answers" : label;
+  return `Answered · ${text ?? label}`;
+}
+
 /** The new list, reusing each dialog object a read repeated unchanged, so a poll re-renders nothing. */
 function sameDialogs(prev: Interaction[], next: Interaction[]): Interaction[] {
   const kept = new Map(prev.map((i) => [i.paneId, i]));
@@ -32,6 +56,7 @@ function sameDialogs(prev: Interaction[], next: Interaction[]): Interaction[] {
   return merged.length === prev.length && merged.every((i, n) => i === prev[n]) ? prev : merged;
 }
 
+/** A multi-select checkbox only ticks a row; the dialog is still there afterwards. */
 export const isToggle = (i: Interaction, o: InteractionOption) => i.kind === "multi-select" && o.checked !== undefined;
 
 export interface InteractionsState {
@@ -94,8 +119,10 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
         ? { ok: false, error: "Answer this one in the terminal.", code: "unsupported" }
         : { ok: false, error: (err as Error).message || "Answer failed" };
     }
-    if (outcome.ok && !isToggle(i, option)) {
-      setReceipts((rs) => [...rs.filter((r) => r.paneId !== i.paneId), { paneId: i.paneId, signature: i.signature, label: option.label, at: Date.now() }]);
+    // A tick or a step between questions leaves the dialog up: nothing to receipt.
+    if (outcome.ok && !isToggle(i, option) && option.role !== "nav") {
+      const summary = receiptSummary(i, option, extra.text);
+      setReceipts((rs) => [...rs.filter((r) => r.paneId !== i.paneId), { paneId: i.paneId, signature: i.signature, label: option.label, summary, at: Date.now() }]);
     }
     poke();
     return outcome;

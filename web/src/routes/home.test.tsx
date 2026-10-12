@@ -86,7 +86,7 @@ it("answers a dialog in place from Needs you", async () => {
   expect(headline()).toBe("1 thread needs you");
   await user.click(needs.getByRole("button", { name: "Yes" }));
   expect(answers).toEqual([{ pane: "w1:p2", body: { signature: "sig-1", optionIndex: 0 } }]);
-  expect(await needs.findByText("Answered: Yes")).toBeInTheDocument();
+  expect(await needs.findByText("Approved · bun run test")).toBeInTheDocument();
 });
 
 it("offers a blocked pane with no readable dialog as a row into its thread", async () => {
