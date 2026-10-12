@@ -53,6 +53,11 @@
   scrollbar-width: thin;
 }
 
+/* A desk's box is 42px, as the draft's own row there: the + column follows its padding. */
+@media (min-width: 768px) {
+  .composer-lead { padding: 4px 0 4px 4px; }
+}
+
 @media (min-width: 1024px) {
   .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
   .workbench-composer > button[aria-label="Switch pane"] { display: none; }
