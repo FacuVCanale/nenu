@@ -1,15 +1,18 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Folder, FolderGit2, LayoutGrid, MessageCircle, Sparkles, X } from "lucide-react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { AppWindow, ChevronLeft, ChevronRight, Folder, FolderGit2, FolderPlus, MessageCircle, Sparkles, X, type LucideIcon } from "lucide-react";
 import { useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import {
-  BROWSING_SHEET,
+  Field,
   FolderButton,
   NewAgentForm,
   Segmented,
   defaultCwdFor,
   inputField,
   liveDirsOf,
+  selectField,
+  textField,
+  useOnScreen,
   useSpawnInto,
 } from "@/components/new-agent-sheet";
 import { NodeStartForm, errorMessage, startableRoles } from "@/components/node-start";
@@ -21,25 +24,41 @@ import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { projectPath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { useHoldReload } from "@/lib/reload-guard";
-import { SPAWN_AGENTS, loadAgent, loadPermission, suggestDirs, type SpawnAgent, type SpawnTarget } from "@/lib/spawn";
+import { workspaceName } from "@/lib/spaces";
+import { SPAWN_AGENTS, agentLabel, loadAgent, loadPermission, suggestDirs, type SpawnAgent, type SpawnTarget } from "@/lib/spawn";
 import { isReadOnly, type NodeRole, type ProjectView, type WorkspaceView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const DirPicker = lazy(() => import("@/components/dir-picker").then((m) => ({ default: m.DirPicker })));
 
-type NewKind = "thread" | "tab" | "workspace" | "project" | "chat";
+export type NewKind = "thread" | "tab" | "workspace" | "project" | "chat";
 
-const KINDS: ReadonlyArray<{ id: NewKind; label: string; title: string; hint: string; icon: typeof Folder }> = [
-  { id: "thread", label: "Thread", title: "New thread", hint: "A worker in its own branch, with the project brief", icon: MessageCircle },
-  { id: "tab", label: "Tab", title: "New tab", hint: "An agent in this workspace, no coordinator", icon: AppWindow },
-  { id: "workspace", label: "Workspace", title: "New workspace", hint: "A Herdr workspace on a folder you pick", icon: LayoutGrid },
-  { id: "project", label: "Project", title: "New project", hint: "Coordinator, threads and shared memory", icon: Folder },
-  { id: "chat", label: "Quick chat", title: "Quick chat", hint: "One question, no repo, nothing to clean up", icon: Sparkles },
-];
+/** Where the New flow opens: on a kind and the place it starts in. Without a kind a phone opens on the list. */
+export interface NewPreset {
+  kind?: NewKind;
+  workspaceId?: string;
+  project?: string;
+  role?: NodeRole;
+  /** A first message already written, as Home's composer hands it over. */
+  message?: string;
+  /** Called instead of opening `project` once a thread starts in it: the page that asked refreshes itself. */
+  onStarted?: () => void;
+}
 
 /** The workspace a quick chat opens in, created on the first one. */
 export const SCRATCH = "scratch";
 const DESKTOP = "(min-width: 1024px)";
+const matches = (query: string) => typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+
+function titleOf(kind: NewKind, role: NodeRole): string {
+  switch (kind) {
+    case "tab": return "New tab";
+    case "workspace": return "New workspace";
+    case "chat": return "Quick question";
+    case "project": return "New project";
+    case "thread": return role === "coordinator" ? "New coordinator" : "New thread";
+  }
+}
 
 /** Where the person is: the workspace and project of the pane, space or project on screen. */
 export function newContext(data: HomeData | undefined, params: { paneId?: string; spaceId?: string; projectSlug?: string }) {
@@ -71,227 +90,230 @@ export function projectCommand(name: string, goal: string, repo: string): string
   return ["herdr-organizations", "new", ...flags, "--json", "--", shellWord(name.trim() || "…")].join(" ");
 }
 
-/** One place to create a thread, tab, workspace, project or quick chat: a sheet on a phone, a two-pane dialog on a desk. */
-export default function NewDialog({ onClose }: { onClose: () => void }) {
+type KindRow = { id: NewKind; label: string; hint: string; icon: LucideIcon };
+
+const canStart = (project: ProjectView) => startableRoles(project).length > 0;
+
+/**
+ * The one place to start an agent or organize work, whichever button opened it: a bottom sheet on a
+ * phone whose header names the step and steps back, a two-pane dialog of one fixed size on a desk.
+ */
+export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset; onClose: () => void }) {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const params = useParams();
+  const navigate = useNavigate();
+  const revalidator = useRevalidator();
+  const workspaces = data?.workspaces ?? [];
+  const projects = data?.projects ?? [];
   const [context] = useState(() => newContext(data, params));
-  const [workspaceId, setWorkspaceId] = useState(context.workspaceId);
-  const [project, setProject] = useState(context.project ?? data?.projects?.[0]?.slug);
+  const [workspaceId, setWorkspaceId] = useState(preset.workspaceId ?? context.workspaceId);
+  // A thread goes to the project on screen unless that one cannot start it.
+  const [project, setProject] = useState(() => preset.project ?? projects.find((p) => p.slug === context.project && canStart(p))?.slug);
+  const [role, setRole] = useState<NodeRole>(preset.role ?? "worker");
   const [kind, setKind] = useState<NewKind | null>(() => {
-    const desktop = typeof window.matchMedia === "function" && window.matchMedia(DESKTOP).matches;
-    return desktop ? (context.project ? "thread" : "tab") : null;
+    if (preset.kind) return preset.kind;
+    if (!matches(DESKTOP)) return null;
+    return context.project ? "thread" : context.workspaceId ? "tab" : "workspace";
   });
   const [browsing, setBrowsing] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const body = useRef<HTMLElement>(null);
   useHoldReload("new-dialog", true);
 
   const readOnly = isReadOnly(data?.device);
-  const workspaces = data?.workspaces ?? [];
-  const projects = data?.projects ?? [];
-  const chosen = KINDS.find((k) => k.id === kind);
-  const choose = (next: NewKind) => {
+  const workspace = workspaces.find((w) => w.workspaceId === workspaceId);
+  const current = projects.find((p) => p.slug === project) ?? projects.find(canStart);
+  // The role the form starts, which a project without coordinators turns into a thread.
+  const nodeRole = current && startableRoles(current).includes(role) ? role : "worker";
+  // A tab opens in a workspace and a thread in a project; without one, that kind is not offered.
+  const shown = kind === "tab" && !workspace ? null : kind === "thread" && !current ? null : kind;
+  const title = browsing ? "Choose a folder" : shown ? titleOf(shown, nodeRole) : "New";
+  const back = browsing ? () => setBrowsing(false) : shown ? () => choose(null) : null;
+  const step = browsing ? "folder" : shown ?? "list";
+
+  // Each step takes focus as it opens, since the control that opened it is hidden or gone by then. A
+  // desk lands in the step's field to type; a phone on its title, so no keyboard pops up unasked.
+  useEffect(() => {
+    const field = matches("(pointer: fine)") ? body.current?.querySelector<HTMLElement>("[data-autofocus]") : null;
+    (field ?? heading.current)?.focus({ preventScroll: true });
+  }, [step]);
+
+  function choose(next: NewKind | null) {
     setBrowsing(false);
     setKind(next);
-  };
-  const pickWorkspace = (id: string) => {
+  }
+  function pickWorkspace(id: string) {
     setWorkspaceId(id);
     const bound = projects.find((p) => p.workspaceIds?.includes(id));
-    if (bound) setProject(bound.slug);
-  };
+    if (bound && canStart(bound)) setProject(bound.slug);
+  }
+  function threadStarted(slug: string) {
+    // The page that asked refreshes itself; a thread started in another project opens that one.
+    if (preset.onStarted && slug === preset.project) preset.onStarted();
+    else {
+      void revalidator.revalidate();
+      navigate(projectPath(slug, data?.session));
+    }
+    onClose();
+  }
+
+  const start: KindRow[] = [
+    ...(workspace ? [{ id: "tab" as const, label: `Here in ${workspaceName(workspace)}`, hint: "Runs in this workspace, in a new tab", icon: AppWindow }] : []),
+    { id: "workspace", label: "In a new folder", hint: "Pick a folder for a new workspace", icon: FolderPlus },
+    { id: "chat", label: "Quick question", hint: "No folder, nothing to clean up", icon: Sparkles },
+  ];
+  const organize: KindRow[] = [
+    { id: "project", label: "Project", hint: "Agents working toward one goal", icon: Folder },
+    ...(current && projects.some(canStart) ? [{ id: "thread" as const, label: "Thread", hint: `One task in ${current.name}`, icon: MessageCircle }] : []),
+  ];
+  const agentPane = { data, readOnly, message: preset.message, browsing, onBrowsing: setBrowsing, onDone: onClose };
 
   return (
     <BottomSheet
       open
       onClose={onClose}
-      title={browsing ? "Choose a folder" : "New"}
+      title={title}
       className={cn(
+        // The flow draws its own header (one title per step, Back beside it) and lays out its own body.
+        "flex flex-col outline-none [&>div:first-child]:hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:p-0",
         "sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-2xl sm:border sm:pb-4",
-        "outline-none lg:max-w-[760px] lg:pb-0 lg:[&>div:first-child]:hidden",
-        browsing && BROWSING_SHEET,
+        // On a desk every step, the folder picker included, keeps one size.
+        "lg:h-[min(40rem,85dvh)] lg:max-w-[760px] lg:overflow-hidden lg:pb-0",
+        browsing && "h-dvh sm:h-[min(40rem,85dvh)]",
       )}
     >
-      <div className="new-dialog flex flex-1 flex-col lg:-mx-4 lg:-my-3 lg:min-h-[30rem] lg:flex-row">
-        <nav aria-label="Create" className={cn("flex flex-col gap-1 lg:w-[220px] lg:flex-none lg:border-r lg:border-border lg:p-2.5", kind && "max-lg:hidden")}>
-          <span className="hidden px-2.5 pt-1 pb-2 text-xs text-muted-foreground lg:block">Create</span>
-          {workspaces.length > 0 && (
-            <PlaceSelect workspaces={workspaces} projects={projects} value={workspaceId} onChange={pickWorkspace} />
-          )}
-          {KINDS.map((k) => (
-            <button
-              key={k.id}
-              type="button"
-              aria-current={kind === k.id ? "true" : undefined}
-              onClick={() => choose(k.id)}
-              className={cn(
-                "flex min-h-16 w-full items-center gap-3.5 rounded-xl px-2 text-left hover:bg-accent/60 active:bg-accent lg:min-h-0 lg:items-start lg:gap-2.5 lg:rounded-lg lg:p-2.5",
-                kind === k.id && "bg-accent",
-              )}
-            >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted lg:size-auto lg:bg-transparent lg:pt-px">
-                <k.icon className="size-5 lg:size-4" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1 leading-snug">
-                <span className="block text-base font-medium lg:text-[13px]">{k.label}</span>
-                <span className="block text-[13px] text-muted-foreground lg:text-xs">{k.hint}</span>
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 lg:hidden" aria-hidden />
-            </button>
-          ))}
-          <p className="mt-auto hidden p-2.5 text-xs leading-relaxed text-muted-foreground lg:block">
+      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
+        <header className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-md lg:static lg:col-start-2 lg:row-start-1 lg:border-0 lg:bg-transparent lg:backdrop-blur-none">
+          <div className="flex justify-center pt-2 pb-1 sm:hidden" aria-hidden>
+            <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
+          </div>
+          <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-1 px-2 py-1 sm:pt-3 lg:flex lg:gap-2 lg:px-5 lg:pt-4 lg:pb-2">
+            {back ? (
+              <Button type="button" variant="ghost" size="icon" aria-label="Back" onClick={back} className={cn("max-lg:size-11", !browsing && "lg:hidden")}>
+                <ChevronLeft className="size-5" />
+              </Button>
+            ) : <span className="lg:hidden" />}
+            <h2 ref={heading} tabIndex={-1} className="truncate text-center text-headline outline-none lg:flex-1 lg:text-left">{title}</h2>
+            <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose} className="max-lg:size-11">
+              <X className="size-5 lg:size-4" />
+            </Button>
+          </div>
+        </header>
+
+        <nav aria-label="Create" className={cn("flex flex-col gap-4 p-2 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:gap-3 lg:overflow-y-auto lg:border-r lg:border-border lg:p-2.5", shown && "max-lg:hidden")}>
+          <KindGroup title="Start an agent" rows={start} current={shown} onChoose={choose} />
+          <KindGroup title="Organize" rows={organize} current={shown} onChoose={choose} />
+          <p className="mt-auto hidden p-2.5 text-caption text-muted-foreground lg:block">
             Nenu only asks Herdr for this. Projects, threads and memory live in Herdr Organizations.
           </p>
         </nav>
 
-        <section aria-label={chosen?.title} className={cn("flex min-w-0 flex-1 flex-col lg:px-5 lg:py-4", !kind && "max-lg:hidden")}>
-          {chosen && !browsing && (
-            <div className="mb-3 flex items-center gap-1">
-              <Button type="button" variant="ghost" size="icon" className="-ml-2 size-10 lg:hidden" aria-label="All kinds" onClick={() => setKind(null)}>
-                <ChevronLeft className="size-5" />
-              </Button>
-              <h2 className="flex-1 text-base font-semibold lg:text-[17px]">{chosen.title}</h2>
-              <Button type="button" variant="ghost" size="icon" className="hidden size-9 lg:inline-flex" aria-label="Close" onClick={onClose}>
-                <X className="size-4" />
-              </Button>
-            </div>
+        <section ref={body} aria-label={title} className={cn("flex min-w-0 flex-1 flex-col px-4 pt-3 lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:px-5 lg:pt-1 lg:pb-4", !shown && "max-lg:hidden")}>
+          {shown === "thread" && current && (
+            <ThreadPane projects={projects} current={current} onProject={setProject} role={nodeRole} onRole={setRole} readOnly={readOnly}
+              session={data?.session} onStarted={() => threadStarted(current.slug)} />
           )}
-          {kind === "thread" && (
-            <ThreadPane projects={projects} project={project} onProject={setProject} readOnly={readOnly} session={data?.session}
-              onDone={onClose} onNewProject={() => choose("project")} />
+          {shown === "tab" && workspace && (
+            <TabPane workspaces={workspaces} workspaceId={workspace.workspaceId} onWorkspace={pickWorkspace} {...agentPane} />
           )}
-          {kind === "tab" && (
-            <TabPane workspaces={workspaces} workspaceId={workspaceId} onWorkspace={pickWorkspace} data={data} readOnly={readOnly}
-              onBrowsing={setBrowsing} onDone={onClose} onNewWorkspace={() => choose("workspace")} />
-          )}
-          {kind === "workspace" && <AgentPane target={{ kind: "workspace" }} data={data} readOnly={readOnly} onBrowsing={setBrowsing} onDone={onClose} />}
-          {kind === "project" && <ProjectPane data={data} readOnly={readOnly} onBrowsing={setBrowsing} onDone={onClose} />}
-          {kind === "chat" && <QuickChatPane data={data} readOnly={readOnly} onDone={onClose} />}
+          {shown === "workspace" && <AgentPane target={{ kind: "workspace" }} {...agentPane} />}
+          {shown === "project" && <ProjectPane data={data} readOnly={readOnly} browsing={browsing} onBrowsing={setBrowsing} onDone={onClose} />}
+          {shown === "chat" && <QuickChatPane data={data} readOnly={readOnly} message={preset.message} onDone={onClose} />}
         </section>
       </div>
     </BottomSheet>
   );
 }
 
-/** "In AWAM › rediseño mobile": the workspace a tab opens in, and the project a thread starts in. */
-function PlaceSelect({ workspaces, projects, value, onChange }: {
-  workspaces: WorkspaceView[];
-  projects: ProjectView[];
-  value: string | undefined;
-  onChange: (workspaceId: string) => void;
+function KindGroup({ title, rows, current, onChoose }: {
+  title: string;
+  rows: KindRow[];
+  current: NewKind | null;
+  onChoose: (kind: NewKind) => void;
 }) {
-  const name = (w: WorkspaceView) => {
-    const bound = projects.find((p) => p.workspaceIds?.includes(w.workspaceId));
-    return bound ? `${bound.name} › ${w.label}` : w.label;
-  };
-  const current = workspaces.find((w) => w.workspaceId === value);
+  const id = useId();
   return (
-    <label className="relative mx-0.5 mb-1.5 flex h-11 items-center gap-2 rounded-xl bg-muted px-3 text-sm text-muted-foreground lg:hidden">
-      <Folder className="size-4 shrink-0" aria-hidden />
-      <span className="min-w-0 flex-1 truncate">In <span className="font-medium text-foreground">{current ? name(current) : "—"}</span></span>
-      <ChevronDown className="size-3.5 shrink-0" aria-hidden />
-      <select aria-label="In" value={value} onChange={(e) => onChange(e.currentTarget.value)} className="absolute inset-0 cursor-pointer opacity-0">
-        {workspaces.map((w) => <option key={w.workspaceId} value={w.workspaceId}>{name(w)}</option>)}
-      </select>
-    </label>
+    <section aria-labelledby={id} className="flex flex-col">
+      <h3 id={id} className="px-2 pb-1 text-footnote font-medium text-muted-foreground lg:px-2.5 lg:text-caption">{title}</h3>
+      {rows.map((k) => (
+        <button
+          key={k.id}
+          type="button"
+          aria-current={current === k.id ? "true" : undefined}
+          onClick={() => onChoose(k.id)}
+          className="flex min-h-14 w-full items-center gap-3 rounded-lg px-2 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent aria-[current=true]:bg-[var(--workbench-row-selected)] lg:min-h-0 lg:items-start lg:gap-2.5 lg:p-2.5"
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted lg:size-auto lg:bg-transparent lg:pt-0.5">
+            <k.icon className="size-5 lg:size-4" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-body font-medium lg:text-footnote">{k.label}</span>
+            <span className="block text-footnote text-muted-foreground lg:text-caption">{k.hint}</span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-subtle-foreground lg:hidden" aria-hidden />
+        </button>
+      ))}
+    </section>
   );
 }
 
-const selectField = cn(inputField, "appearance-auto");
-
-function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5 text-[13px] font-medium text-muted-foreground">
-      {label}
-      {children}
-      {hint && <span className="text-xs font-normal">{hint}</span>}
-    </label>
-  );
-}
-
-function ThreadPane({ projects, project, onProject, readOnly, session, onDone, onNewProject }: {
+function ThreadPane({ projects, current, onProject, role, onRole, readOnly, session, onStarted }: {
   projects: ProjectView[];
-  project: string | undefined;
+  current: ProjectView;
   onProject: (slug: string) => void;
+  role: NodeRole;
+  onRole: (role: NodeRole) => void;
   readOnly: boolean;
   session?: string;
-  onDone: () => void;
-  onNewProject: () => void;
+  onStarted: () => void;
 }) {
-  const current = projects.find((p) => p.slug === project);
-  const [role, setRole] = useState<NodeRole>("worker");
-  const navigate = useNavigate();
-  const revalidator = useRevalidator();
-  if (!current) {
-    return (
-      <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
-        <p>A thread runs inside a project, with its coordinator and brief. There is no project yet.</p>
-        <Button type="button" variant="outline" className="h-11" onClick={onNewProject}>New project</Button>
-      </div>
-    );
-  }
   const roles = startableRoles(current);
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-3">
       <Field label="Project">
         <select className={selectField} value={current.slug} onChange={(e) => onProject(e.currentTarget.value)}>
           {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
         </select>
       </Field>
-      {roles.length === 0 && <p className="py-3 text-sm text-muted-foreground">{current.name} is paused, so it starts no threads.</p>}
+      {roles.length === 0 && <p className="text-subhead text-muted-foreground">{current.name} is paused, so it starts no threads.</p>}
       {roles.length > 0 && <NodeStartForm key={current.slug} project={current} session={session} readOnly={readOnly}
-        role={roles.includes(role) ? role : "worker"} onRole={setRole}
-        onStarted={() => {
-          void revalidator.revalidate();
-          navigate(projectPath(current.slug, session));
-          onDone();
-        }} />}
+        role={role} onRole={onRole} onStarted={onStarted} />}
     </div>
   );
 }
 
-function AgentPane({ target, data, readOnly, onBrowsing, onDone }: {
-  target: SpawnTarget;
+interface AgentPaneProps {
   data: HomeData | undefined;
   readOnly: boolean;
+  message?: string;
+  browsing: boolean;
   onBrowsing: (browsing: boolean) => void;
   onDone: () => void;
-}) {
+}
+
+function AgentPane({ target, data, readOnly, message, browsing, onBrowsing, onDone }: AgentPaneProps & { target: SpawnTarget }) {
   const spawnInto = useSpawnInto(onDone);
   return (
-    <NewAgentForm defaultCwd={defaultCwdFor(target, data)} liveDirs={liveDirsOf(data)} readOnly={readOnly}
-      onBrowsing={onBrowsing} onSubmit={(values) => spawnInto(target, values)} />
+    <NewAgentForm defaultCwd={defaultCwdFor(target, data)} defaultMessage={message} liveDirs={liveDirsOf(data)} readOnly={readOnly}
+      browsing={browsing} onBrowsing={onBrowsing} onSubmit={(values) => spawnInto(target, values)} />
   );
 }
 
-function TabPane({ workspaces, workspaceId, onWorkspace, data, readOnly, onBrowsing, onDone, onNewWorkspace }: {
+function TabPane({ workspaces, workspaceId, onWorkspace, ...pane }: AgentPaneProps & {
   workspaces: WorkspaceView[];
-  workspaceId: string | undefined;
+  workspaceId: string;
   onWorkspace: (id: string) => void;
-  data: HomeData | undefined;
-  readOnly: boolean;
-  onBrowsing: (browsing: boolean) => void;
-  onDone: () => void;
-  onNewWorkspace: () => void;
 }) {
-  const [browsing, setBrowsing] = useState(false);
-  if (!workspaceId) {
-    return (
-      <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
-        <p>A tab opens inside a workspace, and there is none yet.</p>
-        <Button type="button" variant="outline" className="h-11" onClick={onNewWorkspace}>New workspace</Button>
-      </div>
-    );
-  }
   return (
     <div className="flex flex-1 flex-col gap-3">
-      {!browsing && (
+      {!pane.browsing && (
         <Field label="Workspace">
           <select className={selectField} value={workspaceId} onChange={(e) => onWorkspace(e.currentTarget.value)}>
-            {workspaces.map((w) => <option key={w.workspaceId} value={w.workspaceId}>{w.label}</option>)}
+            {workspaces.map((w) => <option key={w.workspaceId} value={w.workspaceId}>{workspaceName(w)}</option>)}
           </select>
         </Field>
       )}
-      <AgentPane key={workspaceId} target={{ kind: "tab", workspaceId }} data={data} readOnly={readOnly} onDone={onDone}
-        onBrowsing={(next) => { setBrowsing(next); onBrowsing(next); }} />
+      <AgentPane key={workspaceId} target={{ kind: "tab", workspaceId }} {...pane} />
     </div>
   );
 }
@@ -307,9 +329,10 @@ function useHome(): string {
   return home;
 }
 
-function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
+function ProjectPane({ data, readOnly, browsing, onBrowsing, onDone }: {
   data: HomeData | undefined;
   readOnly: boolean;
+  browsing: boolean;
   onBrowsing: (browsing: boolean) => void;
   onDone: () => void;
 }) {
@@ -317,17 +340,13 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
   const [goal, setGoal] = useState("");
   const [repo, setRepo] = useState("");
   const [home, setHome] = useState("");
-  const [browsing, setBrowsingState] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const onScreen = useOnScreen();
   const fetchedHome = useHome();
   const knownHome = home || fetchedHome;
-  const setBrowsing = (next: boolean) => {
-    setBrowsingState(next);
-    onBrowsing(next);
-  };
 
   async function submit() {
     if (busy || readOnly || !name.trim()) return;
@@ -336,6 +355,7 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
     try {
       const created = await createOrgProject({ name: name.trim(), goal: goal.trim() || undefined, repo: repo || undefined }, data?.session);
       void revalidator.revalidate();
+      if (!onScreen.current) return;
       navigate(projectPath(created.project.slug, data?.session));
       onDone();
     } catch (failure) {
@@ -346,9 +366,9 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
 
   if (browsing) {
     return (
-      <Suspense fallback={<p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>}>
-        <DirPicker home={knownHome} shortcuts={suggestDirs(liveDirsOf(data))} onHome={setHome} onBack={() => setBrowsing(false)}
-          onPick={(path) => { setRepo(path); setBrowsing(false); }} />
+      <Suspense fallback={<p className="px-2 py-3 text-subhead text-muted-foreground">Loading…</p>}>
+        <DirPicker home={knownHome} shortcuts={suggestDirs(liveDirsOf(data))} onHome={setHome}
+          onPick={(path) => { setRepo(path); onBrowsing(false); }} />
       </Suspense>
     );
   }
@@ -356,49 +376,56 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
   return (
     <form className="flex flex-1 flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <Field label="Name">
-        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Wholesale dashboard" />
+        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Wholesale dashboard" data-autofocus />
       </Field>
       <Field label="Goal">
         {/* Organizations keeps the goal on one line, so a line break becomes a space. */}
-        <textarea className={cn(inputField, "h-auto resize-none py-2")} rows={2} maxLength={500} value={goal}
+        <textarea className={textField} rows={2} maxLength={500} value={goal}
           onChange={(e) => setGoal(e.target.value.replace(/[\r\n]+/g, " "))} placeholder="What should be true when this project is done?" />
       </Field>
       <div className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-medium text-muted-foreground">Repository</span>
+        <span className="text-footnote font-medium text-muted-foreground">Repository</span>
         {repo ? (
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
-              <FolderButton label="Repository" shown={shown} parent={shown.slice(0, -baseName(shown).length - 1) || "/"} onClick={() => setBrowsing(true)} />
+              <FolderButton label="Repository" shown={shown} parent={shown.slice(0, -baseName(shown).length - 1) || "/"} onClick={() => onBrowsing(true)} />
             </div>
             <Button type="button" variant="ghost" size="icon" className="size-11" aria-label="Remove repository" onClick={() => setRepo("")}>
               <X className="size-4" />
             </Button>
           </div>
         ) : (
-          <Button type="button" variant="outline" className="h-11 justify-start gap-2" onClick={() => setBrowsing(true)}>
+          <Button type="button" variant="outline" className="h-11 justify-start gap-2" onClick={() => onBrowsing(true)}>
             <FolderGit2 className="size-4" aria-hidden />Add folder
           </Button>
         )}
-        <span className="text-xs text-muted-foreground">Threads get their own worktree and branch in it. Agents, models and how many threads run at once are set in the project's PROJECT.md.</span>
+        <span className="text-footnote text-muted-foreground">Threads get their own worktree and branch in it. Agents, models and how many threads run at once are set in the project's PROJECT.md.</span>
       </div>
-      {readOnly && <p className="text-sm text-muted-foreground">Read-only: this device is not authorised to create.</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="mt-auto flex flex-col gap-3 border-t border-border pt-3 lg:-mx-5 lg:flex-row lg:items-center lg:px-5 lg:pb-3">
-        <code aria-label="Command" className="min-w-0 flex-1 overflow-x-auto font-mono text-[11.5px] whitespace-nowrap text-muted-foreground [scrollbar-width:none]">
-          {projectCommand(name, goal, repo)}
-        </code>
+      {readOnly && <p className="text-subhead text-muted-foreground">Read-only: this device is not authorised to create.</p>}
+      {error && <p role="alert" className="text-subhead text-destructive">{error}</p>}
+      <div className="mt-auto flex flex-col gap-3 border-t border-border pt-3 lg:-mx-5 lg:flex-row lg:items-start lg:px-5">
+        {/* What the bridge runs, for whoever wants it in a terminal; folded away, and only on a desk. */}
+        <details className="group min-w-0 flex-1 max-lg:hidden">
+          <summary className="flex h-9 w-fit cursor-pointer list-none items-center gap-1 rounded-md text-footnote text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="size-3.5 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none" aria-hidden />
+            Command
+          </summary>
+          <code aria-label="Command" className="block pb-1 font-mono text-code text-muted-foreground select-all [overflow-wrap:anywhere]">
+            {projectCommand(name, goal, repo)}
+          </code>
+        </details>
         <Button type="submit" className="h-11 lg:h-9" disabled={busy || readOnly || !name.trim()} aria-busy={busy || undefined}>{busy ? "Creating…" : "Create project"}</Button>
       </div>
     </form>
   );
 }
 
-function QuickChatPane({ data, readOnly, onDone }: { data: HomeData | undefined; readOnly: boolean; onDone: () => void }) {
+function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data: HomeData | undefined; readOnly: boolean; message?: string; onDone: () => void }) {
   const [agent, setAgent] = useState<Exclude<SpawnAgent, "shell">>(() => {
     const last = loadAgent();
     return last === "shell" ? "claude" : last;
   });
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(preset);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const spawnInto = useSpawnInto(onDone);
@@ -423,14 +450,14 @@ function QuickChatPane({ data, readOnly, onDone }: { data: HomeData | undefined;
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <Segmented label="Agent" options={SPAWN_AGENTS.filter((a) => a.id !== "shell")} value={agent} onChange={(id) => setAgent(id as typeof agent)} />
       <textarea aria-label="Message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
-        placeholder="Ask anything" className={cn(inputField, "h-auto resize-none py-2")} />
-      <p className="text-xs text-muted-foreground">
+        placeholder="Ask anything" className={textField} data-autofocus />
+      <p className="text-footnote text-muted-foreground">
         Opens in the <span className="font-medium text-foreground">{SCRATCH}</span> workspace on <code>~</code>
         {scratch ? "." : ", which is created the first time."}
       </p>
-      {readOnly && <p className="text-sm text-muted-foreground">Read-only: this device is not authorised to create.</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="h-11" disabled={busy || readOnly} aria-busy={busy || undefined}>{busy ? "Starting…" : "Start chat"}</Button>
+      {readOnly && <p className="text-subhead text-muted-foreground">Read-only: this device is not authorised to create.</p>}
+      {error && <p role="alert" className="text-subhead text-destructive">{error}</p>}
+      <Button type="submit" className="h-11" disabled={busy || readOnly} aria-busy={busy || undefined}>{busy ? "Starting…" : `Ask ${agentLabel(agent)}`}</Button>
     </form>
   );
 }

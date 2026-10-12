@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
+import { useRevalidator } from "react-router";
 
-import { Segmented } from "@/components/new-agent-sheet";
+import { Field, Segmented, inputField, openNewDialog, selectField, textField, useOnScreen } from "@/components/new-agent-sheet";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { fetchOrgStartOptions, startOrgNode } from "@/lib/api";
 import type { NodeRole, ProjectView, TemplateView } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type StartOptions =
   | { kind: "loading" }
@@ -42,30 +43,28 @@ export function useStartOptions(project: string, session: string | undefined): S
   return options;
 }
 
-/** "New thread" and "New coordinator" for a project, each opening the start form in a dialog. */
-export function NewNodeActions({ project, session, onStarted }: {
+/**
+ * "New thread" and "New coordinator" for a project, each opening the one New flow on that project
+ * and role. The page that shows them refreshes through `onStarted`, so starting never navigates away.
+ */
+export function NewNodeActions({ project, onStarted }: {
   project: ProjectView;
+  /** The New flow starts in the snapshot's session, which is the page's. */
   session?: string;
   onStarted: () => void;
 }) {
-  const [role, setRole] = useState<NodeRole | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const roles = startableRoles(project);
   if (roles.length === 0) return null;
-  return <>
+  return (
     <div className="flex flex-wrap gap-1">
-      {roles.map((candidate) => (
-        <button key={candidate} type="button" className="quiet-action" aria-haspopup="dialog" onClick={() => setRole(candidate)}>
-          <Plus aria-hidden className="size-4" />New {ROLE_NOUN[candidate]}
+      {roles.map((role) => (
+        <button key={role} type="button" className="quiet-action" aria-haspopup="dialog"
+          onClick={() => openNewDialog({ kind: "thread", project: project.slug, role, onStarted })}>
+          <Plus aria-hidden className="size-4" />New {ROLE_NOUN[role]}
         </button>
       ))}
     </div>
-    <Dialog open={role !== null} onClose={() => { if (!submitting) setRole(null); }} title={`New ${ROLE_NOUN[role ?? "worker"]}`}
-      className="w-[min(32rem,calc(100vw-2rem))]">
-      {role && <NodeStartForm key={role} project={project} session={session} role={role}
-        onSubmitting={setSubmitting} onCancel={() => setRole(null)} onStarted={() => { setRole(null); onStarted(); }} />}
-    </Dialog>
-  </>;
+  );
 }
 
 /**
@@ -73,17 +72,17 @@ export function NewNodeActions({ project, session, onStarted }: {
  * open coordinators (Organizations' `node start`), with a profile or from a template when the host
  * has them. `onRole` adds the Thread/Coordinator switch; without it the role is the caller's.
  */
-export function NodeStartForm({ project, session, role, onRole, onStarted, onCancel, onSubmitting, readOnly = false }: {
+export function NodeStartForm({ project, session, role, onRole, onStarted, readOnly = false }: {
   project: ProjectView;
   session?: string;
   role: NodeRole;
   onRole?: (role: NodeRole) => void;
   onStarted: () => void;
-  onCancel?: () => void;
-  onSubmitting?: (submitting: boolean) => void;
   readOnly?: boolean;
 }) {
   const options = useStartOptions(project.slug, session);
+  const revalidator = useRevalidator();
+  const onScreen = useOnScreen();
   const [form, setForm] = useState<StartForm>({ title: "", parent: "root", task: "", profile: "", template: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,24 +93,24 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
   const template = templates.some((candidate) => candidate.name === form.template) ? form.template : "";
   // Nesting comes with coordinators: a host that cannot start one cannot start under one either.
   const parents = roles.includes("coordinator") ? project.threads.filter((thread) => thread.role === "coordinator" && thread.status === "open") : [];
-  const busy = (next: boolean) => {
-    setSubmitting(next);
-    onSubmitting?.(next);
-  };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (readOnly) return;
-    busy(true);
+    setSubmitting(true);
     setError(null);
     try {
       const { title, parent, task, profile } = form;
       await startOrgNode({ project: project.slug, role, title, parent, task, ...(template ? { template } : profile ? { profile } : {}) }, session);
-      busy(false);
+      if (!onScreen.current) {
+        void revalidator.revalidate();
+        return;
+      }
+      setSubmitting(false);
       onStarted();
     } catch (failure) {
       setError(errorMessage(failure));
-      busy(false);
+      setSubmitting(false);
     }
   }
 
@@ -121,39 +120,38 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
   };
 
   return (
-    <form className="mt-4 space-y-3" onSubmit={(event) => void submit(event)}>
+    <form className="flex flex-col gap-3" onSubmit={(event) => void submit(event)}>
       {onRole && roles.length > 1 && <Segmented label="Role" options={ROLES.filter((option) => roles.includes(option.id))} value={role} onChange={onRole} />}
-      <label className="block text-sm font-medium">Title
-        <input className={FIELD} value={form.title} required onChange={set("title")} />
-      </label>
-      {parents.length > 0 && <label className="block text-sm font-medium">Parent
-        <select className={FIELD} value={form.parent} onChange={set("parent")}>
+      <Field label="Title">
+        <input className={inputField} value={form.title} required onChange={set("title")} data-autofocus />
+      </Field>
+      {parents.length > 0 && <Field label="Parent">
+        <select className={selectField} value={form.parent} onChange={set("parent")}>
           <option value="root">Project root</option>
           {parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.title}</option>)}
         </select>
-      </label>}
+      </Field>}
       {/* On screen while the names load, so the form does not jump under the person's typing. */}
-      {!template && <label className="block text-sm font-medium">Profile
-        <select className={FIELD} value={form.profile} disabled={options.kind === "loading"} onChange={set("profile")}>
+      {!template && <Field label="Profile">
+        <select className={selectField} value={form.profile} disabled={options.kind === "loading"} onChange={set("profile")}>
           <option value="">Project default</option>
           {profiles.map((profile) => <option key={profile} value={profile}>{profile}</option>)}
         </select>
-      </label>}
-      {templates.length > 0 && <label className="block text-sm font-medium">Template
-        <select className={FIELD} value={template} onChange={set("template")}>
+      </Field>}
+      {templates.length > 0 && <Field label="Template">
+        <select className={selectField} value={template} onChange={set("template")}>
           <option value="">None</option>
           {templates.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name} · {candidate.scope}</option>)}
         </select>
-      </label>}
-      <label className="block text-sm font-medium">Task
-        <textarea className={`${FIELD} min-h-32 py-2`} value={form.task} required onChange={set("task")} />
-      </label>
-      {options.kind === "error" && <p className="text-xs text-muted-foreground">Profiles and templates are unavailable: {options.message}</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="flex justify-end gap-2 pt-1">
-        {onCancel && <Button type="button" size="lg" variant="ghost" className="text-sm" disabled={submitting} onClick={onCancel}>Cancel</Button>}
-        <Button type="submit" size="lg" className="text-sm" disabled={submitting || readOnly} aria-busy={submitting || undefined}>{submitting ? "Starting…" : `Create ${ROLE_NOUN[role]}`}</Button>
-      </div>
+      </Field>}
+      <Field label="Task">
+        <textarea className={cn(textField, "min-h-32 resize-y")} value={form.task} required onChange={set("task")} />
+      </Field>
+      {options.kind === "error" && <p className="text-footnote text-muted-foreground">Profiles and templates are unavailable: {options.message}</p>}
+      {error && <p role="alert" className="text-subhead text-destructive">{error}</p>}
+      <Button type="submit" className="mt-1 h-11" disabled={submitting || readOnly} aria-busy={submitting || undefined}>
+        {submitting ? "Starting…" : `Create ${ROLE_NOUN[role]}`}
+      </Button>
     </form>
   );
 }
