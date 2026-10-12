@@ -1,5 +1,7 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { Check, Loader2 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 interface Props {
   rows: { name: string; description: string }[];
@@ -7,11 +9,16 @@ interface Props {
   disabled?: boolean;
   onApply: (name: string) => Promise<void>;
   onCancel: () => void;
+  /** Shown between the list and the actions, so Use model stays the last thing above the edge. */
+  more?: ReactNode;
 }
 
 // Row presentation adapted from T3 Code ModelListRow.tsx (MIT; THIRD_PARTY_NOTICES.md).
 // Choosing a row edits only local state. The parent owns fresh-menu validation and transport.
-export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCancel }: Props) {
+// The chosen row carries one mark, a trailing check, as an iOS list does; a radio dot beside it said
+// the same thing twice. On a phone the picker is a bottom sheet, so Use model spans it at 50px and
+// Cancel gives way to the sheet's own close.
+export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCancel, more }: Props) {
   const id = useId();
   const [selection, setSelection] = useState<string | undefined>(() =>
     rows.find((row) => row.name === currentModel)?.name ?? rows[0]?.name,
@@ -76,30 +83,34 @@ export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCanc
               event.preventDefault();
               choose(next, true);
             }}
-            className={`group relative flex min-h-11 w-full min-w-0 items-center gap-3 rounded-md px-2.5 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${selected?.name === row.name ? "bg-foreground/[0.08] text-foreground" : ""}`}
+            className="group relative flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:text-disabled-foreground"
           >
-            <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-border" aria-hidden="true">
-              {selected?.name === row.name && <span className="size-2 rounded-full bg-foreground" />}
-            </span>
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-xs font-medium leading-snug">{row.name}</span>
-                {row.name === currentModel && <span className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground">Current</span>}
+                <span className="truncate text-body font-medium">{row.name}</span>
+                {row.name === currentModel && <span className="shrink-0 rounded-sm border border-border px-1.5 text-micro text-muted-foreground">Current</span>}
               </span>
-              {row.description && <span id={`${id}-description-${index}`} className="mt-1 block text-xs leading-snug text-muted-foreground">{row.description}</span>}
+              {row.description && <span id={`${id}-description-${index}`} className="mt-0.5 block text-footnote text-muted-foreground">{row.description}</span>}
             </span>
-            {selected?.name === row.name && <Check aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />}
+            {selected?.name === row.name && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}
           </button>
         ))}
-        {rows.length === 0 && <p className="px-2.5 py-3 text-xs text-muted-foreground">No models available yet.</p>}
+        {rows.length === 0 && <p className="px-3 py-3 text-footnote text-muted-foreground">No models available yet.</p>}
       </div>
-      {error && <p role="alert" className="px-4 pb-3 text-xs text-destructive [overflow-wrap:anywhere]">{error}</p>}
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-        <button type="button" onClick={onCancel} className="inline-flex min-h-11 items-center justify-center rounded-md px-3 text-xs font-medium text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">Cancel</button>
-        <button type="button" disabled={locked || !selected} onClick={() => void apply()} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
-          {busy && <Loader2 aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" />}
+      {error && <p role="alert" className="px-4 pb-3 text-footnote text-destructive [overflow-wrap:anywhere]">{error}</p>}
+      {more}
+      <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2 max-lg:pt-3">
+        <Button type="button" variant="ghost" onClick={onCancel} className="text-muted-foreground max-lg:hidden">Cancel</Button>
+        <Button
+          type="button"
+          disabled={locked || !selected}
+          aria-busy={busy || undefined}
+          onClick={() => void apply()}
+          className="max-lg:h-[50px] max-lg:w-full max-lg:rounded-xl max-lg:text-body"
+        >
+          {busy && <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />}
           {busy ? "Applying…" : "Use model"}
-        </button>
+        </Button>
       </div>
     </div>
   );
