@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, RouterProvider, useMatch } from "react-router";
 import { onTestFinished } from "vitest";
 import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
@@ -20,8 +20,15 @@ const data: HomeData = {
 
 beforeEach(() => localStorage.clear());
 
+/** A chat's title as agent-chat draws it on a phone: the navigation opens from it, as it once did from the mark. */
+function ChatTitle() {
+  const navigation = useContext(WorkbenchNavigationContext);
+  if (!useMatch("/pane/:paneId")) return <span>Screen</span>;
+  return <button type="button" data-chat-title aria-haspopup="dialog" aria-expanded={navigation?.open} onClick={navigation?.onOpen}>Chat title</button>;
+}
+
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
-  const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
+  const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><ChatTitle /></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
   const routes = ["/pane/:paneId", "/pane/:paneId/history", "/project/:projectSlug", "/project/:projectSlug/node/:nodeId", "*"].map((path) => ({ path, element }));
   const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
   const { unmount } = render(<RouterProvider router={router} />);
@@ -263,11 +270,12 @@ it("folds to the rail while a thread is docked, unless expanded during that dock
   expect(localStorage.getItem("nenu:sidebar-collapsed:v1")).toBe("0");
 });
 
-it("can reopen the mobile workspace drawer after navigation and Escape", async () => {
-  const { user } = setup();
-  const trigger = screen.getByRole("button", { name: "Open navigation" });
+it("can reopen the mobile workspace drawer from the chat title after navigation and Escape", async () => {
+  const { router, user } = setup(herd, "/pane/dev%3Amobile?s=work");
+  const trigger = screen.getByRole("button", { name: "Chat title" });
   await user.click(trigger);
-  await user.click(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("link", { name: /Improve interface/ }));
+  await user.click(within(screen.getByRole("region", { name: "Recent" })).getByRole("link", { name: /Rediseño de Nenu/ }));
+  expect(router.state.location.pathname).toBe("/pane/dev%3Adone");
   expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   await user.click(trigger);
   expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
@@ -357,9 +365,9 @@ const herd: HomeData = {
   }],
 };
 
-it("opens the mark's drawer from the top: what needs you, the chats that moved last, then folded projects and workspaces", async () => {
+it("opens the chat title's drawer from the top: what needs you, the chats that moved last, then folded projects and workspaces", async () => {
   const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
-  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
   // A drawer from the left edge, not the sheet that rises from the bottom.
   expect(drawer.querySelector(".side-sheet-panel")).not.toBeNull();
@@ -386,14 +394,14 @@ it("opens the mark's drawer from the top: what needs you, the chats that moved l
   await user.click(workspaces.getByRole("button", { name: "Developer panes" }));
   expect(workspaces.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "true");
   await user.click(nav.getByRole("button", { name: "Close" }));
-  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
   expect(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
 });
 
 it("searches and starts something new from the drawer's header", async () => {
   const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
   render(<NewDialogProbe />);
-  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await user.click(screen.getByRole("button", { name: "Chat title" }));
   const nav = within(screen.getByRole("dialog", { name: "Navigation" }));
   await user.click(nav.getByRole("button", { name: "Search" }));
   const search = nav.getByRole("searchbox", { name: "Search projects and chats" });
