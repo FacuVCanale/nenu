@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Play, RefreshCw } from "lucide-react";
 
-import { FIELD, errorMessage, useStartOptions } from "@/components/node-start";
+import { errorMessage, useStartOptions } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { SelectField } from "@/components/ui/select-field";
 import { openOrgProject, replaceOrgCoordinator } from "@/lib/api";
 import { liveState } from "@/lib/org-tree";
 import { setStatus } from "@/lib/status";
@@ -75,9 +76,9 @@ function ReplaceCoordinatorDialog({ project, agent, session, onReplaced, onCance
         {options.kind === "loading" && <p className="text-subhead text-muted-foreground">Reading the agents this host can run…</p>}
         {options.kind === "error" && <p role="alert" className="text-subhead text-destructive">The agents are unavailable: {options.message}</p>}
         {profiles.length > 0 && <label className="block text-subhead font-medium">New one runs on
-          <select className={FIELD} value={profile} onChange={(event) => setChoice(event.currentTarget.value)}>
+          <SelectField className="mt-1" value={profile} onChange={(event) => setChoice(event.currentTarget.value)}>
             {profiles.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
+          </SelectField>
         </label>}
         {error && <p role="alert" className="text-subhead text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
