@@ -249,6 +249,21 @@ describe("the sidebar", () => {
     expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
+  it("opens History on its five newest nodes and leaves the rest to the project page", async () => {
+    const done = (n: number, day: number, extra: Partial<ProjectView["threads"][number]> = {}) =>
+      thread(`h${n}`, `done ${n}`, "root", { status: "resolved", updated: `2026-10-0${day}T00:00:00Z`, ...extra });
+    const org: ProjectView = { ...awam, threads: [
+      done(1, 1), done(2, 2), done(3, 3, { role: "coordinator" }), done(4, 4), done(5, 5), done(6, 6), done(7, 7), done(8, 8, { parentId: "h3" }),
+    ] };
+    const user = open("/", { ...herd, projects: [org] });
+    const project = within(screen.getByRole("region", { name: "AWAM" }));
+    await user.click(project.getByRole("button", { name: /^History/ }));
+    // The five that moved last, still drawn coordinators first; the rest is one tap away.
+    const names = project.getAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent).filter((name) => name?.startsWith("done"));
+    expect(names).toEqual(["done 3", "done 7", "done 6", "done 5", "done 4"]);
+    expect(project.getByRole("link", { name: "Show all 8 in project" })).toHaveAttribute("href", "/project/awam");
+  });
+
   it("marks Home as the page on screen only on Home", () => {
     open("/");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
