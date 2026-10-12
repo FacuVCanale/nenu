@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 
 import { ListRow, ListSection } from "@/components/ui/list-group";
-import { Switch } from "@/components/ui/switch";
+import { Switch, switchSlot } from "@/components/ui/switch";
 import { useNotifyPrefs } from "@/hooks/use-notify-prefs";
 import type { NotifyPrefs } from "@/lib/api";
 
@@ -21,23 +22,35 @@ const ROWS: ReadonlyArray<{ key: keyof NotifyPrefs; label: string; hint: string 
 export type DevicePush = "on" | "off" | "blocked" | "unavailable";
 
 export function NotifyPrefsControl({ thisDevice, children }: { thisDevice?: DevicePush; children?: ReactNode }) {
-  const { prefs, busy, toggle } = useNotifyPrefs();
-  const footer = `Applies to every device with push on.${thisDevice ? ` This device: ${thisDevice}.` : ""}`;
+  const { prefs, loadFailed, busy, toggle } = useNotifyPrefs();
+  const footer = (
+    <>
+      {loadFailed && <span className="text-destructive">Couldn't load these settings.</span>}{" "}
+      Applies to every device with push on.{thisDevice ? ` This device: ${thisDevice}.` : ""}
+    </>
+  );
 
   return (
     <ListSection title="Notify when" footer={footer}>
       {/* Rendered before `prefs` lands, not after. ROWS is static, so the group's SHAPE is known from
           the first frame — only the switch values are pending. Gating the list on `prefs` grew the
-          page a moment after paint and pushed everything under it down. The switches stay disabled
-          until the real values arrive, so nothing can be toggled from a placeholder state. */}
+          page a moment after paint and pushed everything under it down. Until the real values
+          arrive each row holds a spinner in the switch's slot (an off switch would claim a value the
+          bridge never sent), and an empty slot if the load failed, which the footer says. */}
       {ROWS.map((row) => (
         <ListRow key={row.key} title={row.label} hint={row.hint}>
-          <Switch
-            checked={prefs?.[row.key] ?? false}
-            disabled={busy || !prefs}
-            onCheckedChange={(next) => void toggle(row.key, next)}
-            aria-label={row.label}
-          />
+          <div className={switchSlot}>
+            {prefs ? (
+              <Switch
+                checked={prefs[row.key]}
+                disabled={busy}
+                onCheckedChange={(next) => void toggle(row.key, next)}
+                aria-label={row.label}
+              />
+            ) : (
+              !loadFailed && <Loader2 aria-hidden="true" className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />
+            )}
+          </div>
         </ListRow>
       ))}
       {children}
