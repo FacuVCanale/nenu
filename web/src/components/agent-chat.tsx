@@ -8,10 +8,11 @@ import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesChip, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, X } from "lucide-react";
+import { ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare } from "lucide-react";
+import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
@@ -1137,7 +1138,7 @@ export function AgentChat({
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
           {!showConversation && conversationFooter && <div className="max-h-[40dvh] overflow-y-auto px-3 pb-1">{conversationFooter}</div>}
           {!subagent && showConversation && wait?.kind === "interaction" && (
-            <TerminalWaitRow key={wait.hint} hint={wait.hint} text={text} agent={agent?.agent}
+            <TerminalWaitRow key={wait.hint} hint={wait.hint} agent={agent?.agent} onShow={() => setRawTerminal(true)}
               onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }} />
           )}
           {!subagent && showConversation && waitNotice !== null && (
@@ -1273,34 +1274,45 @@ export function AgentChat({
 
 /**
  * A screen that waits on a key no grammar could name: one row above the composer, in flow so it
- * never covers the chat. The terminal tail and the Keys tray sit behind "Show terminal". Dismissing
- * hides it only for this hint; the composer stays blocked, because the dialog is still there.
+ * never covers the chat. It says what is going on in words, keeps the screen's own hint, and leads to
+ * the terminal and its keys. Collapsing leaves a chip, since the composer stays paused while that
+ * screen is up. It offers no key of its own: a declared cancel key is ADR 0053 rule 2, still Proposed.
  */
-function TerminalWaitRow({ hint, text, agent, onKeys }: { hint: string; text: string; agent?: string; onKeys: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const tailId = useId();
-  if (dismissed) return null;
+function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?: string; onShow: () => void; onKeys: () => void }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const who = agent ? agent.charAt(0).toUpperCase() + agent.slice(1) : "The agent";
   return (
-    <div role="status" aria-label="Terminal waiting" className="mx-3 mb-1.5 rounded-lg border border-border/60 bg-muted/40 text-sm">
-      <div className="flex min-h-11 items-center gap-1 pl-3">
-        <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber-500" />
-        <span className="min-w-0 flex-1 truncate px-1.5 text-muted-foreground">{hint}</span>
-        <button type="button" aria-label="Show terminal" aria-expanded={expanded} aria-controls={tailId}
-          className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground" onClick={() => setExpanded(!expanded)}>
-          <ChevronDown aria-hidden className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+    <div role="status" aria-label="Terminal waiting" className="mb-2">
+      {collapsed ? (
+        <button type="button" onClick={() => setCollapsed(false)}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground transition-colors active:bg-muted">
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-working" />
+          Composer paused
+          <ChevronUp aria-hidden className="size-4 text-muted-foreground" />
         </button>
-        <button type="button" aria-label="Dismiss" className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground"
-          onClick={() => setDismissed(true)}>
-          <X aria-hidden className="size-4" />
-        </button>
-      </div>
-      {expanded && <div id={tailId} className="border-t border-border/60 pb-1">
-        <div className="max-h-40 overflow-auto"><AnsiOutput text={text} agent={agent} /></div>
-        <button type="button" className="inline-flex min-h-11 items-center gap-2 px-3 text-sm" onClick={onKeys}>
-          <Keyboard aria-hidden className="size-4" />Keys
-        </button>
-      </div>}
+      ) : (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-start gap-3">
+            <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-status-working" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <p className="text-[15px] leading-5 font-medium text-foreground">{who} is showing a screen Nenu can't answer</p>
+              <p className="truncate font-mono text-[13px] leading-[18px] text-muted-foreground">{hint}</p>
+            </div>
+            <button type="button" aria-label="Collapse" onClick={() => setCollapsed(true)}
+              className="-mt-3 -mr-3 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted">
+              <ChevronDown aria-hidden className="size-4" />
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={onShow} className={cn(PRIMARY_ACTION, "w-auto flex-1")}>
+              <TerminalSquare aria-hidden className="size-4" />Show terminal
+            </button>
+            <button type="button" onClick={onKeys} className={cn(NEUTRAL_ACTION, "w-auto")}>
+              <Keyboard aria-hidden className="size-4" />Keys
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
