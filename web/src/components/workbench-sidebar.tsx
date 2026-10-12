@@ -4,6 +4,8 @@ import { Bot, ChevronRight, House, Inbox, LayoutGrid, Plus, Search, Settings, Te
 
 import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot } from "@/components/status-badge";
 import { Highlight, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
@@ -145,7 +147,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
           ? <NeedsYouList data={data} panes={attention} labelled={!phone} onNavigate={onNavigate} />
           : <>
             {variant === "drawer" && <DrawerSections data={data} onNavigate={onNavigate} />}
-            <SidebarTree data={data} onNavigate={onNavigate} folded={phone} />
+            <SidebarTree data={data} onNavigate={onNavigate} folded={phone} onNewChat={phone ? onNewChat : undefined} />
           </>}
       </div>
 
@@ -288,7 +290,7 @@ function ChatRow({ pane, projects, current, now, session, onNavigate }: {
  * project and workspace starts closed, and what the operator opens there lasts while the sheet does,
  * so the next open is compact again and the desk's remembered folds stay the desk's.
  */
-function SidebarTree({ data, onNavigate, folded = false }: { data: HomeData; onNavigate?: () => void; folded?: boolean }) {
+function SidebarTree({ data, onNavigate, onNewChat, folded = false }: { data: HomeData; onNavigate?: () => void; onNewChat?: () => void; folded?: boolean }) {
   const { paneId, projectSlug } = useParams();
   const { prefs, setExpanded, setWorkspaceOpen } = useSidebarPrefs({ persist: !folded });
   const projects = data.projects ?? [];
@@ -314,7 +316,7 @@ function SidebarTree({ data, onNavigate, folded = false }: { data: HomeData; onN
           expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} startFolded={folded} />
       </section>
     )}
-    {projects.length === 0 && !hasWorkspaces && <Empty />}
+    {projects.length === 0 && !hasWorkspaces && <Empty onNewChat={onNewChat} />}
   </>;
 }
 
@@ -528,6 +530,12 @@ function ThreadRow({ node, depth, slug, session, current, onNavigate, fold }: {
   );
 }
 
-function Empty() {
-  return <p className="nav-empty">Your agent chats will appear here.</p>;
+/** An empty herd: what will be here, where it comes from, and on a phone, whose sheet has no New row, a way to start. */
+function Empty({ onNewChat }: { onNewChat?: () => void }) {
+  return (
+    <EmptyState className="px-2.5 py-8" title="No agents yet"
+      action={onNewChat && <Button type="button" onClick={onNewChat}><Plus aria-hidden />New agent</Button>}>
+      Start one with New. Agents you start in Herdr show up here too.
+    </EmptyState>
+  );
 }
