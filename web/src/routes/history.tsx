@@ -224,10 +224,12 @@ export function HistoryRoute() {
           ) : undefined
         }
         rightLead={
-          // A PWA has no browser find, so the view has to provide its own.
-          <button type="button" onClick={() => setFindOpen(true)} aria-label="Find in history" className={HEADER_ICON}>
-            <Search aria-hidden="true" className="size-5" />
-          </button>
+          // A PWA has no browser find, so the view has to provide its own, once there is text to search.
+          entries.length > 0 && (
+            <button type="button" onClick={() => setFindOpen(true)} aria-label="Find in history" className={HEADER_ICON}>
+              <Search aria-hidden="true" className="size-5" />
+            </button>
+          )
         }
         // Explicit exit from reading mode. The Nenu mark also returns to the pane, but this is a
         // full-screen reading view you deliberately entered — it should be as obvious to leave as it
