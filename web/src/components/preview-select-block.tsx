@@ -204,7 +204,8 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
         </div>
       ) : null}
 
-      {pointed && (
+      {/* An open note editor owns the card until it is saved or dropped: choosing now would lose it. */}
+      {pointed && !editorOpen && (
         <button
           type="button"
           disabled={locked}

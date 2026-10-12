@@ -620,12 +620,17 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
 function StaticOptions({ options, labelsOnly, clamp = false }: { options: InteractionOption[]; labelsOnly: boolean; clamp?: boolean }) {
   return (
     <ul aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
-      {options.map((option) => (
-        <li key={option.index} className="flex min-w-0 flex-col">
-          <span className="text-[15px] leading-5 text-foreground">{recommendedLabel(option.label).text}</span>
-          {option.description && !labelsOnly && <span className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>}
-        </li>
-      ))}
+      {options.map((option) => {
+        const { text, recommended } = recommendedLabel(option.label);
+        return (
+          <li key={option.index} className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] leading-5 text-foreground">
+              {text}{recommended && <RecommendedBadge />}
+            </span>
+            {option.description && !labelsOnly && <span className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>}
+          </li>
+        );
+      })}
     </ul>
   );
 }
