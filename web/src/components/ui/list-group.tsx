@@ -1,7 +1,5 @@
 import { useId, type ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
-
 // A grouped inset list, as iOS Settings draws one: a 13px header, one card holding the rows with a
 // hairline between them that starts at the text, and a 13px footer for what the rows need said.
 
@@ -14,20 +12,10 @@ export const listRowClass =
 export const listRowPressable =
   "select-none transition-colors duration-150 ease-out first:rounded-t-xl last:rounded-b-xl hover:bg-accent active:bg-muted motion-reduce:transition-none focus-visible:outline-offset-[-2px]";
 
-export function ListSection({
-  title,
-  footer,
-  children,
-  className,
-}: {
-  title?: ReactNode;
-  footer?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
+export function ListSection({ title, footer, children }: { title?: ReactNode; footer?: ReactNode; children: ReactNode }) {
   const headingId = useId();
   return (
-    <section aria-labelledby={title ? headingId : undefined} className={cn("flex flex-col", className)}>
+    <section aria-labelledby={title ? headingId : undefined} className="flex flex-col">
       {title && (
         <h2 id={headingId} className="px-4 pb-1.5 text-footnote font-medium text-muted-foreground">
           {title}
@@ -41,23 +29,14 @@ export function ListSection({
   );
 }
 
-/** A row: a title, an optional one-line hint under it, and its control at the end. */
-export function ListRow({
-  title,
-  hint,
-  children,
-  className,
-}: {
-  title: ReactNode;
-  hint?: ReactNode;
-  children?: ReactNode;
-  className?: string;
-}) {
+/** A row: a title, an optional hint under it (a sentence, or a line of status), and its control at
+ *  the end. */
+export function ListRow({ title, hint, children }: { title: ReactNode; hint?: ReactNode; children?: ReactNode }) {
   return (
-    <div data-slot="list-row" className={cn(listRowClass, className)}>
+    <div data-slot="list-row" className={listRowClass}>
       <div className="min-w-0 flex-1">
         <div className="text-body">{title}</div>
-        {hint && <p className="text-footnote text-pretty text-muted-foreground">{hint}</p>}
+        {hint && <div className="text-footnote text-pretty text-muted-foreground">{hint}</div>}
       </div>
       {children}
     </div>
