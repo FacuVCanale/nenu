@@ -163,11 +163,11 @@ the unit name; the Herdr action runs from anywhere.
   Encoded history pages are reused only up to 256 KiB; larger history responses stay uncached in
   encoded form. `bun scripts/history-response-bench.ts <history-response.json>` measures this path
   without printing transcript content.
-- **"Type into terminal" is armed by a named choice and dies with the pane view.** Long-pressing Send
-  opens a menu; the hold never arms it alone. It disarms on a pane switch, a composer lock (gone pane,
-  read-only, idle pause), a hidden page, and a failed batch — never persisted, never restored. Don't
-  lift it, and don't add the reply guard's `composerReady` pre-flight to it; the reasoning for both
-  sits in `web/src/components/send-mode-menu.tsx`'s header.
+- **"Type into terminal" is armed by a named choice and dies with the pane view.** It is a named row
+  of the composer's + menu; no gesture arms it. It disarms on a pane switch, a composer lock (gone
+  pane, read-only, idle pause), a hidden page, and a failed batch — never persisted, never restored.
+  Don't lift it, and don't add the reply guard's `composerReady` pre-flight to it; the reasoning for
+  both sits in `web/src/hooks/use-direct-typing.ts`'s header.
 - **The operator's rows in `commands.toml` replace the shipped command catalog on the panes they
   address, never merge into it** ([ADR 0018](./.adr/0018-operator-command-rows-replace-the-catalog.md));
   the bridge re-reads the file behind an mtime check, so edits are live and need no restart.

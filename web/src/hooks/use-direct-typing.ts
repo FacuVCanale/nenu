@@ -57,7 +57,7 @@ interface DirectTypingOptions {
 // Herdr writes.
 //
 // It does NOT own the entry point. Arming is an explicit NAMED choice — the "Type into terminal" row
-// of the pane header's ⋯ menu, beside Keys (published by the composer as a ComposerControl).
+// of the composer's + menu, beside Keys (a ComposerControl).
 //
 // WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
 // bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per
@@ -187,7 +187,7 @@ export function useDirectTyping({
   // all mean the same thing: the mirror on screen has stopped tracking the pane, and the next
   // keystroke would go into a terminal the user is no longer actually looking at. Disarm rather
   // than hold the mode open across the gap — the cost is one re-arm, the alternative is typing
-  // blind. Never persisted, never restored — see the lifecycle note in send-mode-menu.tsx.
+  // blind. Never persisted, never restored — see the lifecycle note at the top of this file.
   useEffect(() => {
     if (!active || !suspended) return;
     clearMode();
