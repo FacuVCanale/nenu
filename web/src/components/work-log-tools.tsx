@@ -196,7 +196,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
         <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} current={focused} /></p>
         {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} current={focused} /></pre>}
         {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} current={focused} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
-          : <p className="text-footnote text-muted-foreground">{asking ? "Waiting for your answer" : active ? "Running…" : "No output recorded"}</p>}
+          : <p className="text-footnote text-muted-foreground">{asking ? "Waiting on you" : active ? "Running…" : "No output recorded"}</p>}
       </div>}
     </div>
   );
