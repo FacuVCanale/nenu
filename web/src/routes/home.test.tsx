@@ -146,6 +146,18 @@ describe("a project's coordinator", () => {
     expect(await main.findByText("Queued for Hub's coordinator.")).toBeInTheDocument();
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "afterTurn" })]);
   });
+
+  it("sends at once while only background work runs, as the terminal does", async () => {
+    const posts = queue();
+    const waiting = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1"
+      ? { ...a, status: "working" as const, turn: { running: false, background: true, source: "claude-session" as const } }
+      : a) };
+    const { user, main } = await setup(waiting);
+    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Status?{Enter}");
+    expect(await main.findByText("Sent to Hub's coordinator.")).toBeInTheDocument();
+    expect(main.queryByRole("button", { name: "Queue for later" })).not.toBeInTheDocument();
+    expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "asap" })]);
+  });
 });
 
 it("lists pull requests ready to review with their diff and checks", async () => {

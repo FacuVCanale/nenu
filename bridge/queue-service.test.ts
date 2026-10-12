@@ -113,6 +113,19 @@ it("trusts Codex's rollout over its painted cue when the bridge knows the rollou
   expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked", turn: open }, idleHerdr, "afterTurn")).toEqual({ ready: true, busy: true });
 });
 
+// Captured 2026-10-12 in a disposable Herdr 0.9.3: Claude 2.1.296 after its turn ended, a background
+// agent still running. Herdr said working, the session file busy, and Enter started a new turn at once.
+it("does not hold a row for background work alone: only a running turn holds it (ADR 0067)", async () => {
+  const { queueReadiness } = await import("./queue-readiness.ts");
+  const text = await repoFile("web/src/lib/harness/claude/fixtures/background-agent-v2296.txt");
+  const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
+  const background = { running: false, background: true, source: "claude-session" as const };
+  expect(await queueReadiness({ paneId: "pane", agent: "claude", status: "working", turn: background }, herdr, "afterTurn")).toEqual({ ready: true, busy: false });
+  expect(await queueReadiness({ paneId: "pane", agent: "claude", status: "working", turn: background }, herdr, "asap")).toEqual({ ready: true, busy: false });
+  const running = { running: true, source: "claude-session" as const };
+  expect(await queueReadiness({ paneId: "pane", agent: "claude", status: "working", turn: running }, herdr, "afterTurn")).toEqual({ ready: false, reason: "working" });
+});
+
 it("holds a row while Claude's own state reports a dialog, without reading the screen", async () => {
   const { queueReadiness } = await import("./queue-readiness.ts");
   const herdr = { readPane: async () => { throw new Error("must not read"); } };

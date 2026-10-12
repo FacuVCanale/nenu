@@ -40,3 +40,21 @@ describe("Claude 2.1.296 composer while a turn runs", () => {
     expect(claudeAdapter.composerReady!(screen("  Esc to cancel"))).toBe(false);
   });
 });
+
+// While a background agent runs, Claude 2.1.296 adds "↓ to manage" to the hint row under the box: the
+// arrow opens its agent list, and the box still takes typing (Enter there started a new turn, measured
+// 2026-10-12). Read as a menu key, it refused every send to such a Claude.
+describe("Claude 2.1.296 composer while a background agent runs", () => {
+  it("accepts the input box", () => {
+    expect(ready("background-agent")).toBe(true);
+    expect(claudeAdapter.extractInputDraft(fixture("background-agent"))).toBeNull();
+  });
+
+  it("accepts that one hint and no other arrow hint", () => {
+    const rule = "─".repeat(60);
+    const screen = (footer: string) => splitLines(parseAnsi([rule, "❯ ", rule, footer].join("\n")));
+    expect(claudeAdapter.composerReady!(screen("  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents · ↓ to manage"))).toBe(true);
+    expect(claudeAdapter.composerReady!(screen("  ↑/↓ to navigate · Enter to select"))).toBe(false);
+    expect(claudeAdapter.composerReady!(screen("  ↓ to select"))).toBe(false);
+  });
+});
