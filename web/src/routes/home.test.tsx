@@ -151,15 +151,40 @@ describe("a project's coordinator", () => {
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", scope: "s1", action: "add", text: "Start phase two", deliveryMode: "asap" })]);
   });
 
-  it("asks whether to steer or queue while it works", async () => {
-    const posts = queue((body) => [{ id: body.id, text: body.text, state: "queued", createdAt: 1, revision: 1, deliveryMode: body.deliveryMode }]);
-    const working = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1" ? { ...a, status: "working" as const } : a) };
+  const working = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1" ? { ...a, status: "working" as const } : a) };
+  const queued = (body: Record<string, unknown>) => [{ id: body.id, text: body.text, state: "queued", createdAt: 1, revision: 1, deliveryMode: body.deliveryMode }];
+
+  it("asks in an action sheet whether it reads the message now or after this turn, each time", async () => {
+    const posts = queue(queued);
     const { user, main } = await setup(working);
-    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Also the landing{Enter}");
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Also the landing{Enter}");
     expect(posts).toEqual([]);
-    await user.click(main.getByRole("button", { name: "Queue for later" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Hub's coordinator is working" }));
+    expect(sheet.getByText("When should it read this?")).toBeVisible();
+    // The rows say what the coordinator's CLI does with each choice (ADR 0056).
+    expect(sheet.getByRole("button", { name: /^Send now/ })).toHaveTextContent(/Steers this turn/);
+    expect(sheet.getByRole("button", { name: /^Send after this turn/ })).toHaveTextContent(/runs as the next turn/);
+    await user.click(sheet.getByRole("button", { name: /^Send after this turn/ }));
     expect(await main.findByText("Queued for Hub's coordinator.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "afterTurn" })]);
+    // The choice is made at every send, never remembered.
+    await user.type(box, "And the footer{Enter}");
+    await user.click(within(await screen.findByRole("dialog", { name: "Hub's coordinator is working" })).getByRole("button", { name: /^Send now/ }));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    // Codex reads "now" as a steer into the running turn.
+    expect(posts[1]).toEqual(expect.objectContaining({ pane: "c1", text: "And the footer", deliveryMode: "steer" }));
+  });
+
+  it("keeps the draft when the busy choice is cancelled", async () => {
+    const posts = queue(queued);
+    const { user, main } = await setup(working);
+    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Not yet{Enter}");
+    await user.click(within(await screen.findByRole("dialog", { name: "Hub's coordinator is working" })).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(main.getByRole("textbox", { name: "Message for Hub's coordinator" })).toHaveValue("Not yet");
+    expect(posts).toEqual([]);
   });
 
   it("sends at once while only background work runs, as the terminal does", async () => {
@@ -170,7 +195,7 @@ describe("a project's coordinator", () => {
     const { user, main } = await setup(waiting);
     await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Status?{Enter}");
     expect(await main.findByText("Sent to Hub's coordinator.")).toBeInTheDocument();
-    expect(main.queryByRole("button", { name: "Queue for later" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "asap" })]);
   });
 });
