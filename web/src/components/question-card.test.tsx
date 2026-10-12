@@ -224,6 +224,17 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith(permission.options[1], { confirm: true });
   });
 
+  it("keeps an armed answer's label the row's full width: Confirm runs out beside what it applies to", async () => {
+    // A pill at the row's end squeezed a long label ("Yes, and always allow access to /private/…")
+    // into a narrow column on a phone; on the detail line it takes no width from the label.
+    const { user } = setup({ interaction: permission });
+    await user.click(screen.getByRole("button", { name: /don’t ask again/ }));
+    const armed = screen.getByRole("button", { name: /^Confirm/ });
+    const detail = within(armed).getByText("Applies to future prompts");
+    expect(detail.parentElement).toContainElement(within(armed).getByText("Confirm"));
+    expect(armed).toHaveClass("bg-[var(--workbench-row-selected)]");
+  });
+
   it("arms the row when the bridge asks for a confirm, without a notice repeating it", async () => {
     const onAnswer = vi.fn((): Promise<AnswerOutcome> => Promise.resolve({ ok: false, error: "This answer changes a setting. Confirm it.", code: "confirm_required" }));
     const { user } = setup({ interaction: permission, onAnswer });
