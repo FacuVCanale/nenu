@@ -32,7 +32,7 @@ describe("SnoozeControl", () => {
     render(<SnoozeControl snoozedUntil={null} />);
 
     const menu = screen.getByRole("combobox", { name: "Do not disturb" });
-    expect(screen.getByText("Off")).toBeInTheDocument();
+    expect(screen.getByText("Off", { selector: "span" })).toBeInTheDocument();
     expect(within(menu).getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Off",
       "For 30 minutes",
@@ -69,7 +69,7 @@ describe("SnoozeControl", () => {
     render(<SnoozeControl snoozedUntil={until} />);
 
     const time = new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    expect(screen.getByText(new RegExp(`Until .*${time}`))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Until .*${time}`), { selector: "span" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Do not disturb" }), "Off");
 
