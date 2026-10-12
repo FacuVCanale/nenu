@@ -35,6 +35,8 @@ interface LiveConversationProps {
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 const OLDER_PAGE_SIZE = 120;
+/** How close to the top, in px, a reader moving up gets before the next older page starts loading. */
+const OLDER_PAGE_MARGIN = 800;
 /** Room kept above a `[data-follow-stop]` element when following lands on it. */
 const STOP_MARGIN = 12;
 
@@ -83,7 +85,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const onCap = useRef(false);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
-  const anchor = useRef<{ height: number; top: number } | null>(null);
+  // The list's height just before an older page goes in above the reader. Restoring adds only the
+  // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
+  const anchorHeight = useRef<number | null>(null);
   const shown = frozen ?? history;
   const entries = shown?.available ? shown.entries : [];
   const latest = history?.available ? history.entries.at(-1) : undefined;
@@ -168,7 +172,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
 
   const followLatest = useCallback(() => {
     cancelOlder();
-    anchor.current = null;
+    anchorHeight.current = null;
     following.current = true;
     setPaused(false);
     setFrozen(null);
@@ -207,11 +211,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (anchor.current) {
-      const saved = anchor.current;
-      anchor.current = null;
+    if (anchorHeight.current !== null) {
+      const before = anchorHeight.current;
+      anchorHeight.current = null;
       restoring.current = true;
-      el.scrollTop = saved.top + (el.scrollHeight - saved.height);
+      el.scrollTop += el.scrollHeight - before;
       if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
       restoreFrame.current = requestAnimationFrame(() => { restoring.current = false; });
     } else if (following.current) {
@@ -264,6 +268,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);
+      // Heading for the top: fetch the next page before the reader gets there. Not after a failure
+      // (Retry asks again) nor during find (a page landing would shift its matches).
+      if (el.scrollTop < OLDER_PAGE_MARGIN && !olderError && !searching) void loadOlder();
     } else if (following.current) {
       pin(el);
     }
@@ -301,7 +308,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         return;
       }
       const el = scrollRef.current;
-      anchor.current = el ? { height: el.scrollHeight, top: el.scrollTop } : null;
+      anchorHeight.current = el ? el.scrollHeight : null;
       setFrozen({
         ...base,
         entries: [...older, ...base.entries],

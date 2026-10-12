@@ -37,7 +37,7 @@ const scopeFor = (session: string, pane: AgentView) =>
 const TICK_FALLBACK_MS = 2000;
 /** How long an add waits for its row's first move before answering, so an idle send answers sent. */
 const ADD_SETTLE_MS = 1500;
-// After a delivery, an `afterTurn` row waits until Herdr has seen the turn start. A turn that never
+// After a delivery, an `afterTurn` row waits until the turn has visibly started. A turn that never
 // visibly starts must not hold the scope for good.
 const TURN_START_CAP_MS = 20_000;
 const BUSY_RETRY_MS = 300;
@@ -116,7 +116,11 @@ export class QueueService {
     if (submit === "tab" && !this.extras.audit) return { wait: "working" };
     return { ready: { context: current, submit, busy: readiness.busy } };
   }
-  /** Whether the turn the scope's last delivery started has visibly begun (ADR 0056 rule 5). */
+  /**
+   * Whether the turn the scope's last delivery started has visibly begun (ADR 0056 rule 5): Herdr's
+   * state moved, or the CLI's own state shows the turn running. The second matters while background
+   * work keeps Herdr at working, since its counter then stays put (measured).
+   */
   private turnStarted(scope: string, pane: AgentView): boolean {
     const mark = this.turns.get(scope);
     if (!mark) return true;
@@ -124,7 +128,7 @@ export class QueueService {
       mark.seq !== undefined && pane.stateChangeSeq !== undefined
         ? pane.stateChangeSeq !== mark.seq
         : pane.status !== mark.status;
-    if (moved || Date.now() - mark.at > TURN_START_CAP_MS) {
+    if (moved || pane.turn?.running || Date.now() - mark.at > TURN_START_CAP_MS) {
       this.turns.delete(scope);
       return true;
     }

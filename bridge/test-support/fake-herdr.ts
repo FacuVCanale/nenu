@@ -74,6 +74,8 @@ export class FakeHerdr {
   private readonly subscribers = new Set<{ socket: Socket<unknown>; types: Set<string>; panes: Set<string> }>();
   private readonly counters = new Map<string, number>();
   private readonly pending = new Map<Socket<unknown>, string>();
+  /** A reply's bytes the socket has not taken yet; a Unix socket takes about 8 KiB per write on macOS. */
+  private readonly outbox = new Map<Socket<unknown>, Buffer>();
   private listener: UnixSocketListener<unknown> | null = null;
   private ticker: ReturnType<typeof setInterval> | null = null;
   /** Every call, in order. Reads included, so a window can be sliced by time. */
@@ -131,8 +133,10 @@ export class FakeHerdr {
           this.pending.delete(socket);
           this.handle(socket, buf.slice(0, nl));
         },
+        drain: (socket) => this.flush(socket),
         close: (socket) => {
           this.pending.delete(socket);
+          this.outbox.delete(socket);
           for (const sub of this.subscribers) if (sub.socket === socket) this.subscribers.delete(sub);
         },
       },
@@ -237,11 +241,26 @@ export class FakeHerdr {
       this.calls.push({ method: req.method, params, at: Date.now() });
       if (req.method === "events.subscribe") return this.subscribe(socket, id, params);
       if (req.method === "pane.wait_for_output") return this.waitForOutput(socket, id, params);
-      socket.end(JSON.stringify({ id, result: this.dispatch(req.method, params) }) + "\n");
+      this.reply(socket, JSON.stringify({ id, result: this.dispatch(req.method, params) }) + "\n");
     } catch (err) {
       const e = err instanceof FakeError ? err : new FakeError("internal", (err as Error).message);
-      socket.end(JSON.stringify({ id, error: { code: e.code, message: e.message } }) + "\n");
+      this.reply(socket, JSON.stringify({ id, error: { code: e.code, message: e.message } }) + "\n");
     }
+  }
+
+  /** The one reply a connection gets, then the close; what the socket refuses now goes out on drain. */
+  private reply(socket: Socket<unknown>, line: string): void {
+    this.outbox.set(socket, Buffer.from(line));
+    this.flush(socket);
+  }
+
+  private flush(socket: Socket<unknown>): void {
+    const rest = this.outbox.get(socket);
+    if (!rest) return;
+    const written = Math.max(0, socket.write(rest));
+    if (written < rest.length) return void this.outbox.set(socket, rest.subarray(written));
+    this.outbox.delete(socket);
+    socket.end();
   }
 
   private dispatch(method: string, params: Record<string, unknown>): Record<string, unknown> {
@@ -286,7 +305,7 @@ export class FakeHerdr {
    * (`(?m)`) become JavaScript flags, which is all the bridge's trigger pattern uses.
    */
   private waitForOutput(socket: Socket<unknown>, id: string, params: Record<string, unknown>): void {
-    const reply = (body: Record<string, unknown>) => void socket.end(JSON.stringify({ id, ...body }) + "\n");
+    const reply = (body: Record<string, unknown>) => this.reply(socket, JSON.stringify({ id, ...body }) + "\n");
     const fail = (e: FakeError) => reply({ error: { code: e.code, message: e.message } });
     const paneId = String(params.pane_id ?? "");
     const match = (params.match ?? {}) as { type?: string; value?: string };
