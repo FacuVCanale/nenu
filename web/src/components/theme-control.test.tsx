@@ -56,4 +56,27 @@ describe("ThemeControl", () => {
     expect([...document.documentElement.classList]).toEqual([]);
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
+
+  it("is one tab stop: only the selected option takes Tab", async () => {
+    const { ThemeControl } = await load("light");
+    render(<ThemeControl />);
+    expect(screen.getAllByRole("radio").map((o) => o.tabIndex)).toEqual([-1, 0, -1]);
+  });
+
+  it("moves the selection with the arrow keys, wrapping at the ends, and keeps focus on it", async () => {
+    const { ThemeControl } = await load(null);
+    render(<ThemeControl />);
+    const user = userEvent.setup();
+
+    screen.getByRole("radio", { name: "System" }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("radio", { name: "Light" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Light" })).toHaveFocus();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("light");
+
+    await user.keyboard("{ArrowLeft}{ArrowLeft}");
+    expect(screen.getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Dark" })).toHaveFocus();
+  });
 });
+
