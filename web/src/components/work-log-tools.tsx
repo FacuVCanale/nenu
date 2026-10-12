@@ -1,5 +1,5 @@
 import { useContext, useId, useState, type ReactNode } from "react";
-import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
+import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, MessageCircleQuestion, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
 import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
@@ -66,9 +66,30 @@ export function useToolImages() {
   return (part: ToolPart, owner?: string) => toolImages(part, owner, viewer, url);
 }
 
-const STEP_ICONS: Record<StepKind | "thinking", LucideIcon> = {
-  terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Bot, plan: ListTodo, tool: Wrench, thinking: Brain,
+type StepIconKind = StepKind | "question" | "thinking";
+const STEP_ICONS: Record<StepIconKind, LucideIcon> = {
+  terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Bot, plan: ListTodo, tool: Wrench,
+  question: MessageCircleQuestion, thinking: Brain,
 };
+
+/** A call as its line draws it: the timeline's verbs, and the words that say what it acted on. */
+interface CallStep extends Omit<ToolStepDescription, "kind"> {
+  kind: StepKind | "question";
+  text: string;
+}
+
+// Claude's AskUserQuestion and Codex's request_user_input, the calls that ask the operator a question.
+const QUESTION_TOOL = /^(?:AskUserQuestion|(?:.+\.)?request_user_input(?:_async)?)$/;
+
+/**
+ * A call that opens a dialog on the operator reads by what it asks, not by the CLI's name for it: a
+ * Question with the question it asks, a Plan with the plan's title. Every other call is the timeline's.
+ */
+function describeCall(part: ToolPart): CallStep {
+  if (QUESTION_TOOL.test(part.name)) return { kind: "question", done: "Question", doing: "Question", target: "text", text: part.questions?.[0]?.title ?? part.summary };
+  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", target: "text", text: firstLine(part.summary) };
+  return { ...describeTool(part.name), text: part.summary };
+}
 
 // 36px on a mouse, 44px under a finger, both from padding around one 20px line.
 const LINE = "flex w-full min-w-0 items-center gap-2 py-2 text-left text-subhead min-h-9 coarse:min-h-11";
@@ -101,7 +122,7 @@ function StepLine({ icon, live, label, expanded, controls, onToggle, children }:
   </button>;
 }
 
-function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
+function StepIcon({ kind }: { kind: StepIconKind }) {
   const Icon = STEP_ICONS[kind];
   return <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />;
 }
@@ -140,7 +161,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live }: { id
   const contentId = useId();
   const images = useToolImages();
   const open = expanded || focused || matches(part, query);
-  const step = describeTool(part.name);
+  const step = describeCall(part);
   const failed = !!part.result?.isError;
   const running = !part.result && active;
   const verb = running ? step.doing : step.done;
@@ -148,11 +169,11 @@ export function ToolStep({ id, part, owner, query, active, focused, live }: { id
   const truncated = !!part.result?.truncated;
   return (
     <div data-tool={id} data-step={step.kind} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} />} live={live} label={[verb, part.summary, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+      <StepLine icon={<StepIcon kind={step.kind} />} live={live} label={[verb, step.text, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
         <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
-        <StepTarget text={part.summary} format={step.target} query={query} />
+        <StepTarget text={step.text} format={step.target} query={query} />
         {failed ? <FailedChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
         {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
       </StepLine>
