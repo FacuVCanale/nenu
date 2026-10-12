@@ -94,13 +94,20 @@ const ASK: Record<string, string> = {
 const QUESTION_TOOL = /^(?:AskUserQuestion|(?:.+\.)?request_user_input(?:_async)?)$/;
 
 /**
+ * A plan's title from its summary, which the journal keeps as one line: up to its next heading, and
+ * without the "Plan:" Claude opens most of them with, since the line already says Plan.
+ */
+function planTitle(summary: string): string {
+  return firstLine(summary.split(/\s#{1,6}\s/, 1)[0] ?? "").replace(/^Plan:\s*/i, "");
+}
+
+/**
  * A call that opens a dialog on the operator reads by what it asks, not by the CLI's name for it: a
  * Question with the question it asks, a Plan with the plan's title. Every other call is the timeline's.
  */
 function describeCall(part: ToolPart): CallStep {
   if (QUESTION_TOOL.test(part.name)) return { kind: "question", done: "Question", doing: "Question", ask: "Question", target: "text", text: part.questions?.[0]?.title ?? part.summary };
-  // Claude titles most plans "Plan: …", and the line already says Plan.
-  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "text", text: firstLine(part.summary).replace(/^Plan:\s*/i, "") };
+  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "text", text: planTitle(part.summary) };
   const step = describeTool(part.name);
   return { ...step, ask: ASK[step.done] ?? step.doing, text: part.summary };
 }
