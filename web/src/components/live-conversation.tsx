@@ -456,7 +456,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               <MessageSquare className="size-5" />
               <p>{emptyCopy}</p>
-              {shown && !shown.available && shown.reason !== "disabled" && recovery}
+              {shown && !shown.available && shown.reason !== "disabled" && recovery && <div className="w-full max-w-sm">{recovery}</div>}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
             </div>{footer}</>}
           </div>
