@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe, Load
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchArtifactMetadata, fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
 import { displayPath } from "@/lib/display-path";
+import { shortCwd } from "@/lib/format";
 import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { IMAGE_EXTENSION } from "@/lib/message-images";
@@ -33,15 +34,18 @@ function exitMs(): number {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 120 : 150;
 }
 
+/** The folder that holds a file, from the folder of the pane it is read through; "" at its top. */
+function folderOf(path: string, cwd: string | undefined): string {
+  const { dir } = displayPath(path, cwd, Infinity);
+  return dir.length > 1 ? dir.slice(0, -1) : dir;
+}
+
 /**
- * The line under a file's name: its path from the folder of the pane it is read through, cut in the
- * middle to `max` characters (lib/display-path.ts). A file at the top of that folder needs no line,
- * the name already says it all; a name too long to share the line leaves it to the folder.
+ * The line under a file's name: the folder that holds it, giving up whole folders from the front to
+ * fit `max` characters, and whose folder it is when another pane reads it. The name is the heading.
  */
-function whereLine(path: string, cwd: string | undefined, name: string, from: string, max: number): string {
-  const { dir, base } = displayPath(path, cwd, max);
-  const where = dir + base === name ? "" : (dir + base).length > max ? displayPath(path, cwd, max + base.length + 1).dir : dir + base;
-  return [where, from && `from ${from}`].filter(Boolean).join(" · ");
+function whereLine(folder: string, from: string, max: number): string {
+  return [folder && shortCwd(folder, max), from && `from ${from}`].filter(Boolean).join(" · ");
 }
 
 /**
@@ -261,8 +265,8 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   }) : [];
   const cwd = panes.find((pane) => pane.paneId === source)?.cwd;
   const title = useFitted(titleRef, heading, name, (max) => shortName(name, max), narrow ? 21 : 80);
-  const fullWhere = whereLine(filePath, cwd, name, sourceLabel, Infinity);
-  const where = useFitted(whereRef, heading, fullWhere, (max) => whereLine(filePath, cwd, name, sourceLabel, max), narrow ? 28 : 96);
+  const folder = folderOf(filePath, cwd);
+  const where = useFitted(whereRef, heading, whereLine(folder, sourceLabel, Infinity), (max) => whereLine(folder, sourceLabel, max), narrow ? 28 : 96);
   const Icon = html ? Globe : FileText;
 
   return createPortal(<div className={cn("file-preview-backdrop", image && "file-preview-backdrop--image")} data-leaving={leaving ? "" : undefined}
