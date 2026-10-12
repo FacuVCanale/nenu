@@ -513,15 +513,17 @@ describe("an outage", () => {
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeEnabled();
   });
 
-  it("says Herdr can't be reached once it is sustained, with when the herd on screen was synced", async () => {
+  // The connection banner (root.tsx) is the one place that names the problem and dates the herd;
+  // Home keeps saying what the work is, greyed, and its composer says what it is waiting for.
+  it("keeps its work headline through a sustained Herdr outage, and leaves naming it to the banner", async () => {
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
     const { update, main } = await setup();
     const needs = within(main.getByRole("region", { name: /^Needs you/ }));
     await needs.findByRole("button", { name: "Yes" });
-    const since = sustained();
+    sustained();
     await update({ ...data, bridge: "disconnected" });
-    expect(headline()).toBe("Can't reach Herdr");
-    expect(subline()).toBe(`Last synced ${clockTime(since)}`);
+    expect(headline()).toBe("1 thread needs you");
+    expect(main.queryByText(/Can.t reach|Last synced|Showing the last herd|Nenu keeps trying/)).not.toBeInTheDocument();
     // The herd stays to look at and open; what it cannot vouch for is paused.
     expect(await needs.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
     expect(needs.getByRole("button", { name: "Yes" })).toBeDisabled();
@@ -529,18 +531,33 @@ describe("an outage", () => {
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
   });
 
-  it("says Nenu can't be reached when the bridge stops answering, dated by the cached herd", async () => {
+  it("keeps its work headline when Nenu stops answering, without dating the herd a second time", async () => {
     sustained();
-    const at = Date.now() - 3 * 60_000;
-    await setup({ ...data, error: true, lastSeenAt: at });
-    expect(headline()).toBe("Can't reach Nenu");
-    expect(subline()).toBe(`Last synced ${clockTime(at)}`);
+    await setup({ ...data, error: true, lastSeenAt: Date.now() - 3 * 60_000 });
+    expect(headline()).toBe("1 thread needs you");
+    expect(screen.queryByText(/Can.t reach|Last synced/)).not.toBeInTheDocument();
   });
 
-  it("says access was refused at once, without waiting for an outage, and asks to sign in", async () => {
+  it("keeps its work headline when access is refused, and its composer asks to sign in", async () => {
     await setup({ ...data, error: true, authError: true });
-    expect(headline()).toBe("Access refused");
+    expect(headline()).toBe("1 thread needs you");
+    expect(screen.queryByText(/Access refused/)).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Sign in again to start an agent");
+  });
+
+  it("says why the composer is locked the moment Herdr goes down, before the outage is sustained", async () => {
+    const { update, main } = await setup();
+    await update({ ...data, bridge: "disconnected" });
+    const box = main.getByRole("textbox", { name: "Task for a new agent" });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAttribute("placeholder", "Reconnect to start an agent");
+  });
+
+  it("says why the composer is locked on a read-only device", async () => {
+    const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
+    const box = main.getByRole("textbox", { name: "Task for a new agent" });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAttribute("placeholder", "Use an authorised device to start an agent");
   });
 
   it("tells each Needs you card the real reason answers are paused", async () => {
