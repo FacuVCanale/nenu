@@ -121,7 +121,7 @@ export function ThreadsPanel({ project, threads, coordinator, title, subtitle, a
       <div role="tablist" aria-label="Project panel" className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-3">
         {TABS.map(([key, label, Icon]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
-            className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-footnote font-medium transition-colors duration-150",
+            className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-footnote font-medium transition-colors duration-150",
               tab === key ? "bg-[var(--workbench-row-selected)] text-foreground" : "text-muted-foreground hover:bg-[var(--workbench-row-hover)] hover:text-foreground")}>
             <Icon aria-hidden className="size-3.5" />{label}
           </button>
