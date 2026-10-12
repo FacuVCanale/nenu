@@ -56,6 +56,7 @@ export function QuestionCard({
   const [notice, setNotice] = useState<Notice | null>(null);
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
+  const noticeLine = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     if (armed === null) return;
@@ -67,6 +68,10 @@ export function QuestionCard({
   useEffect(() => {
     if (writing) form.current?.scrollIntoView?.({ block: "nearest" });
   }, [writing]);
+  // A refusal is read at the card's foot, which a tall card can hold below the fold.
+  useEffect(() => {
+    if (notice) noticeLine.current?.scrollIntoView?.({ block: "nearest" });
+  }, [notice]);
 
   if (!i) {
     if (!receipt) return null;
@@ -254,7 +259,7 @@ export function QuestionCard({
         </div>
       )}
 
-      {notice && <p role="status" className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-status-working")}>{notice.text}</p>}
+      {notice && <p ref={noticeLine} role="status" className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-status-working")}>{notice.text}</p>}
     </Frame>
   );
 }

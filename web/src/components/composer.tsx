@@ -1294,7 +1294,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       ? "Type into the terminal…"
                       : isShell
                         ? "Type a shell command…"
-                        : placeholder ?? "Type a reply…"
+                        // A dialog owns the agent's keyboard: Send queues behind the answer, or refuses.
+                        : dialogPresent
+                          ? nativeWorkbench && queue.page?.available ? "Message for after you answer…" : "Answer the agent first…"
+                          : placeholder ?? "Type a reply…"
               }
               autoCorrect={direct.active ? "off" : undefined}
               spellCheck={direct.active ? false : undefined}

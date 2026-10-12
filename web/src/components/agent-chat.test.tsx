@@ -604,7 +604,7 @@ describe("AgentChat — mirror tap must not pop the keyboard on option taps", ()
   it("does NOT focus the composer when a native prompt option is tapped", async () => {
     const user = userEvent.setup();
     renderChat({ text: MENU_TEXT });
-    const box = screen.getByPlaceholderText(/type a reply/i);
+    const box = screen.getByPlaceholderText("Answer the agent first…");
     const yes = await screen.findByRole("button", { name: "Yes" });
 
     await user.click(yes);
