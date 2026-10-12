@@ -70,9 +70,11 @@
 }
 
 /* The image viewer: the picture alone on black, edge to edge, dark under either theme as a photo
-   app is. The scrim is its own layer so a pull down can fade it while the picture follows the finger. */
+   app is. The scrim is its own layer so a pull down can fade it while the picture follows the finger.
+   Its text is a fixed white: the build resolves every light-dark() token once, at :root, so a
+   color-scheme on this subtree cannot flip them (measured: the bars read #27272a on black in light). */
 .file-preview-backdrop--image { padding: 0; background: transparent; }
-.file-preview-panel--image { width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; box-shadow: none; color-scheme: dark; color: var(--foreground); }
+.file-preview-panel--image { width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; box-shadow: none; color-scheme: dark; color: #fff; }
 .file-preview-backdrop--image .file-preview-panel--image { translate: none; }
 @starting-style { .file-preview-backdrop--image .file-preview-panel--image { opacity: 1; translate: none; } }
 .file-preview-backdrop--image[data-leaving] .file-preview-panel--image { opacity: 0; translate: none; }
@@ -85,7 +87,7 @@
 .image-viewer-zoom > img { max-width: 100%; max-height: 100%; object-fit: contain; -webkit-user-drag: none; }
 @media (min-width: 640px) { .image-viewer-zoom { padding: 72px; } }
 .image-viewer-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 72px 16px; }
-.image-viewer-error > * { max-width: 36rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); }
+.image-viewer-error > * { max-width: 36rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--card-foreground); }
 
 .image-viewer-bar { position: absolute; inset-inline: 0; display: flex; align-items: center; gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right)); background: color-mix(in oklab, #000 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%); transition: opacity 200ms ease-out, visibility 0s; }
 .image-viewer-top { top: 0; justify-content: space-between; min-height: calc(48px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
