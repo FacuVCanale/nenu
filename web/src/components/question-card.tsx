@@ -75,8 +75,6 @@ export interface QuestionCardProps {
   title?: ReactNode;
   /** Where the full dialog lives: the terminal mirror in a thread, the thread from Home (its header). */
   onOpen?: () => void;
-  /** The thread card's way to the terminal; Home's card opens from its header instead. */
-  openLabel?: string;
   /** The keys pad next to the terminal, for a text row the card cannot type (Home has none: `onOpen` is on the card). */
   onKeys?: () => void;
   /**
@@ -94,7 +92,7 @@ type Writing = { to: "reply"; option: InteractionOption } | { to: "note" } | nul
 
 export function QuestionCard({
   interaction: i, receipt, onAnswer, readOnly = false, lockReason, refused, compact = false, title, onOpen,
-  openLabel = "Terminal", onKeys, approveNeedsDetail = compact,
+  onKeys, approveNeedsDetail = compact,
 }: QuestionCardProps) {
   const [busy, setBusy] = useState<number | null>(null);
   const [armed, setArmed] = useState<number | null>(null);
@@ -436,7 +434,7 @@ export function QuestionCard({
             ))}
             {!compact && onOpen && (
               <button type="button" onClick={onOpen} className={cn(SECONDARY, "sm:ml-auto")}>
-                <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabel}
+                <TerminalSquare aria-hidden className="size-4 shrink-0" />Terminal
               </button>
             )}
           </SecondaryActions>
