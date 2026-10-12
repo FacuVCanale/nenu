@@ -64,7 +64,7 @@ export function UpdateCheckControl() {
           <div className="text-body">{update ? `Nenu ${update.current}` : "Nenu"}</div>
           {(status.badge || status.meta) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {status.badge && <Badge status={status} />}
+              {status.badge && <Badge status={status} working={check === "checking"} />}
               {status.meta && <span className="text-footnote text-muted-foreground">{status.meta}</span>}
             </div>
           )}
@@ -113,8 +113,7 @@ function useStaleInterface(): boolean {
   return isStaleBuild(BUILD.id, serverBuild);
 }
 
-function Badge({ status }: { status: UpdateStatus }) {
-  const working = status.badge === "Checking…";
+function Badge({ status, working }: { status: UpdateStatus; working: boolean }) {
   return (
     <span
       data-slot="badge"
