@@ -10,7 +10,7 @@ import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
 import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
-import { useSidebarPrefs, type SidebarPrefs } from "@/hooks/use-sidebar-prefs";
+import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
@@ -31,11 +31,12 @@ export interface SidebarRequest {
  * threads) and the workspaces no project holds, and the host it all runs on. On a phone it leads with
  * what needs you and the chats that moved last, and its projects and workspaces start folded.
  */
-export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions = true, phone = false }: {
+export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, phone = false }: {
   data: HomeData;
-  /** False where New, Search, Needs you and Home are already one tap away (the tab bar, the drawer's header). */
-  actions?: boolean;
-  /** The phone's navigation: Needs you and Recent first, every project and workspace folded. */
+  /**
+   * The phone's navigation: Needs you and Recent first, every project and workspace folded, and no
+   * New, Search, Needs you or Home rows, which its tab bar or drawer header already offer.
+   */
   phone?: boolean;
   onNavigate?: () => void;
   onNewChat?: () => void;
@@ -78,8 +79,8 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions
 
   return (
     <nav className="workbench-navigation" aria-label="Projects and chats">
-      {(actions || searching) && <div className="nav-top">
-        {actions && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
+      {(!phone || searching) && <div className="nav-top">
+        {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
           <Plus aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
         </button>}
         {searching ? (
@@ -93,16 +94,16 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions
                 if (event.key === "Enter" && !event.nativeEvent.isComposing) openFirstMatch();
               }} />
           </label>
-        ) : actions && (
+        ) : !phone && (
           <button type="button" className="nav-row" onClick={() => { setMode("browse"); setSearching(true); }} aria-keyshortcuts="Meta+K">
             <Search aria-hidden size={16} /><span className="nav-row-text">Search</span><kbd className="nav-kbd" aria-hidden>⌘K</kbd>
           </button>
         )}
-        {actions && <button type="button" className="nav-row" aria-pressed={mode === "needs-you"} aria-label={attention.length ? `Needs you, ${attention.length}` : "Needs you"} onClick={() => setMode(mode === "needs-you" ? "browse" : "needs-you")}>
+        {!phone && <button type="button" className="nav-row" aria-pressed={mode === "needs-you"} aria-label={attention.length ? `Needs you, ${attention.length}` : "Needs you"} onClick={() => setMode(mode === "needs-you" ? "browse" : "needs-you")}>
           <Inbox aria-hidden size={16} /><span className="nav-row-text">Needs you</span>
           {attention.length > 0 && <span className="nav-badge" aria-hidden>{attention.length}</span>}
         </button>}
-        {actions && <Link className="nav-row" to={homePath(data.session)} onClick={onNavigate}><House aria-hidden size={16} />Home</Link>}
+        {!phone && <Link className="nav-row" to={homePath(data.session)} onClick={onNavigate}><House aria-hidden size={16} />Home</Link>}
       </div>}
 
       <div className="nav-scroll">
@@ -186,18 +187,12 @@ function ChatRow({ chat, now, session, onNavigate }: { chat: DrawerChat; now: nu
  */
 function SidebarTree({ data, query, onNavigate, folded = false }: { data: HomeData; query: string; onNavigate?: () => void; folded?: boolean }) {
   const { paneId, projectSlug } = useParams();
-  const stored = useSidebarPrefs();
-  const [sheetFolds, setSheetFolds] = useState<SidebarPrefs>({ expanded: {}, workspaces: {} });
-  const { prefs, setExpanded, setWorkspaceOpen } = folded ? {
-    prefs: sheetFolds,
-    setExpanded: (slug: string, open: boolean) => setSheetFolds((last) => ({ ...last, expanded: { ...last.expanded, [slug]: open } })),
-    setWorkspaceOpen: (id: string, open: boolean) => setSheetFolds((last) => ({ ...last, workspaces: { ...last.workspaces, [id]: open } })),
-  } : stored;
+  const { prefs, setExpanded, setWorkspaceOpen } = useSidebarPrefs({ persist: !folded });
   const searching = query.trim() !== "";
   const groups = sidebarProjects(data, query);
   const loose = looseWorkspaces(data);
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-  useRevealProject(folded ? undefined : currentProject, stored.setExpanded);
+  useRevealProject(folded ? undefined : currentProject, setExpanded);
   const workspaces = <WorkspaceTree compact source={{ ...data, ...loose }} query={query} session={data.session} currentPaneId={paneId}
     expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} startFolded={folded} />;
   const hasWorkspaces = workspaceTree({ ...data, ...loose }, query, paneId).length > 0;

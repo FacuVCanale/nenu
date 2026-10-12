@@ -23,7 +23,7 @@ const WHY: Record<Harness, string> = {
 };
 
 /** The start of a message to Main that names the child and the tool that reaches it. */
-export function forwardDraft(harness: Harness, agent: Pick<SubagentView, "id" | "name">): string {
+function forwardDraft(harness: Harness, agent: Pick<SubagentView, "id" | "name">): string {
   return harness === "codex"
     ? `Send to sub-agent "${agent.name}" (${agent.id}) with send_input: `
     : `Send to subagent "${agent.name}" (${agent.id}) with SendMessage: `;
