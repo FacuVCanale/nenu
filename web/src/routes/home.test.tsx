@@ -327,7 +327,9 @@ describe("Recent", () => {
     for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Hub coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
       expect(recent.getByRole("link", { name: new RegExp(`^${parts.join(",\\s*")}$`) })).toBeInTheDocument();
     }
-    expect(recent.getByText("1 working now")).toBeInTheDocument();
+    // How many are working is the headline's to say ("1 working" under it), not Recent's again.
+    expect(subline()).toMatch(/1 working/);
+    expect(recent.queryByText(/working now/)).not.toBeInTheDocument();
     await user.click(recent.getByRole("link", { name: /^Landing/ }));
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
   });
