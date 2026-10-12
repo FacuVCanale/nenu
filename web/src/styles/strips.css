@@ -27,6 +27,8 @@
 .strip-chip[data-focused]:not([aria-current="true"]) { border-style: dashed; border-color: var(--border); }
 .strip-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .strip-chip-tag { flex-shrink: 0; color: var(--subtle-foreground); font-variant-numeric: tabular-nums; }
+/* On the open chip's fill the subtle ink drops under 4.5:1 in light (#6b6b75 on #ebebee). */
+.strip-chip[aria-current="true"] .strip-chip-tag { color: var(--muted-foreground); }
 /* Says the open chip opens its actions. */
 .strip-chip-more { flex-shrink: 0; width: 14px; height: 14px; margin-inline-end: -4px; color: var(--muted-foreground); }
 
