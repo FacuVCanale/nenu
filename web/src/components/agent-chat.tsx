@@ -1024,7 +1024,7 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <QuestionLiveContext.Provider value={interaction !== undefined}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
+            <QuestionLiveContext.Provider value={interaction === undefined ? null : showCard && cardCovers ? "card" : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}

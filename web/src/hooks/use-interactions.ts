@@ -22,6 +22,16 @@ export interface Receipt {
 }
 
 /** A multi-select checkbox only ticks a row; the dialog is still there afterwards. */
+/** The new list, reusing each dialog object a read repeated unchanged, so a poll re-renders nothing. */
+function sameDialogs(prev: Interaction[], next: Interaction[]): Interaction[] {
+  const kept = new Map(prev.map((i) => [i.paneId, i]));
+  const merged = next.map((i) => {
+    const old = kept.get(i.paneId);
+    return old && JSON.stringify(old) === JSON.stringify(i) ? old : i;
+  });
+  return merged.length === prev.length && merged.every((i, n) => i === prev[n]) ? prev : merged;
+}
+
 export const isToggle = (i: Interaction, o: InteractionOption) => i.kind === "multi-select" && o.checked !== undefined;
 
 export interface InteractionsState {
@@ -55,7 +65,7 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     enabled,
     deps: [session],
     read: (signal) => fetchInteractions(session, signal),
-    onRead: (next) => { setList(next.interactions); setStale(false); setLoaded(true); },
+    onRead: (next) => { setList((prev) => sameDialogs(prev, next.interactions)); setStale(false); setLoaded(true); },
     onFail: () => setStale(true),
     delay: () => isLiveHealthy() ? INTERACTIONS_POLL_MS.live : INTERACTIONS_POLL_MS.fallback,
     wakes: (event) => event.topic === "interaction" || event.topic === "resync",

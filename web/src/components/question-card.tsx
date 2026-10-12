@@ -4,7 +4,7 @@ import { Check, Keyboard, Loader2, MessageSquareText, TerminalSquare } from "luc
 
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
-import type { AnswerOutcome, Interaction, InteractionKind, InteractionOption, InteractionStep } from "@/lib/types";
+import type { AnswerOutcome, Interaction, InteractionAnswer, InteractionKind, InteractionOption, InteractionStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // One card for every dialog the bridge detected (ADR 0057): the newest line of a thread, and compact
@@ -145,7 +145,7 @@ export function QuestionCard({
   }
 
   const reply = writing?.to === "reply" ? writing.option : undefined;
-  const replyLabel = (o: InteractionOption) => (i.kind === "plan" ? "Reply…" : `${o.label.replace(/[.…]+$/, "")}…`);
+  const replyLabel = (o: InteractionOption) => (i.kind === "plan" ? "Reply…" : `${bare(o.label)}…`);
   const rowProps = (option: InteractionOption) => ({
     option, armed: armed === option.index, busy: busy === option.index,
     // A typed note must never vanish into an answer that cannot carry it.
@@ -159,9 +159,8 @@ export function QuestionCard({
     </button>
   );
   const steps = i.steps ?? [];
-  // The highlighted chip; a screen read without its colours falls back to the first one unanswered.
-  const flagged = steps.findIndex((s) => s.current);
-  const current = flagged >= 0 ? flagged : steps.findIndex((s) => !s.answered);
+  // The bridge marks the question on screen; a review marks none.
+  const current = steps.findIndex((s) => s.current);
 
   return (
     <Frame compact={compact} label={i.question}>
@@ -180,7 +179,8 @@ export function QuestionCard({
       </div>
       {steps.length > 1 && !compact && <Stepper steps={steps} />}
       <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-base font-medium leading-snug")}>{i.question}</p>
-      {i.context && <Context interaction={i} text={i.context} compact={compact} approvable={i.kind === "permission" && !approvalHidden} />}
+      {i.answers ? <ReviewAnswers answers={i.answers} />
+        : i.context && <Context interaction={i} text={i.context} compact={compact} approvable={i.kind === "permission" && !approvalHidden} />}
       {typing && <p className="text-xs text-muted-foreground">Someone is typing in this dialog in the terminal. Answer there, or wait.</p>}
       {readOnly && <p className="text-xs text-muted-foreground">Read-only on this device.</p>}
       {approvalHidden && <p className="text-xs text-muted-foreground">The full request isn't on this card. {compact ? "Open the thread" : "Open the terminal"} to approve it.</p>}
@@ -193,10 +193,10 @@ export function QuestionCard({
         ))}
         <div className="flex flex-row flex-wrap gap-2">
           {choices.map((option) => <Pill key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} />)}
-          {!reply && replies.map((option) => replyButton(option, cn(PILL, "border border-border bg-transparent text-muted-foreground disabled:opacity-50")))}
-          {notable && !writing && <NoteButton locked={locked} textId={textId} className={cn(PILL, "border border-border bg-transparent text-muted-foreground disabled:opacity-50")} onClick={() => write({ to: "note" })} />}
+          {!reply && replies.map((option) => replyButton(option, cn(PILL, OUTLINED)))}
+          {notable && !writing && <NoteButton locked={locked} textId={textId} className={cn(PILL, OUTLINED)} onClick={() => write({ to: "note" })} />}
           {onOpen && (
-            <button type="button" onClick={onOpen} className={cn(PILL, "ml-auto border border-border bg-transparent text-muted-foreground")}>
+            <button type="button" onClick={onOpen} className={cn(PILL, OUTLINED, "ml-auto")}>
               <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabel}
             </button>
           )}
@@ -211,7 +211,7 @@ export function QuestionCard({
         {(decisions.length > 0 || (!answers && replies.length > 0 && !reply)) && (
           <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap">
             {decisions.map((option) => <DecisionButton key={option.index} {...rowProps(option)} />)}
-            {!answers && !reply && replies.map((option) => replyButton(option, cn(DECISION, "border border-border bg-transparent text-muted-foreground disabled:opacity-50")))}
+            {!answers && !reply && replies.map((option) => replyButton(option, cn(DECISION, OUTLINED)))}
           </div>
         )}
       </>}
@@ -249,7 +249,7 @@ export function QuestionCard({
           {notable && !writing && <NoteButton locked={locked} textId={textId} className={SECONDARY} onClick={() => write({ to: "note" })} />}
           {onKeys && inTerminal.map((option) => (
             <button key={option.index} type="button" data-in-terminal onClick={onKeys} className={SECONDARY}
-              aria-label="Type your own answer in the terminal" title={`${option.label.replace(/[.…]+$/, "")} in the terminal`}>
+              aria-label="Type your own answer in the terminal" title={`${bare(option.label)} in the terminal`}>
               <Keyboard aria-hidden className="size-3.5 shrink-0" />Type your own
             </button>
           ))}
@@ -303,26 +303,11 @@ function Stepper({ steps }: { steps: InteractionStep[] }) {
 }
 
 /**
- * What the operator decides on: a command or plan in mono, a review's answers as a list, else text.
+ * What the operator decides on: a command or plan in mono, a question's own detail as text.
  * A command Home can approve is never clamped: approving needs it whole (ADR 0057 §4).
  */
 function Context({ interaction: i, text, compact, approvable }: { interaction: Interaction; text: string; compact: boolean; approvable: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  if ((i.kind === "wizard" || i.kind === "multi-select") && text.includes(" → ")) {
-    return (
-      <ul aria-label="Your answers" className="flex flex-col gap-1.5 rounded-xl bg-muted/60 px-3 py-2.5 text-[13px] leading-snug">
-        {text.split("\n").map((row, n) => {
-          const [asked, answer] = row.split(" → ");
-          return (
-            <li key={n} className="flex min-w-0 flex-col">
-              <span className="text-muted-foreground">{asked}</span>
-              <span className="font-medium text-foreground">{answer}</span>
-            </li>
-          );
-        })}
-      </ul>
-    );
-  }
   if (ANSWER_KINDS.has(i.kind)) {
     return <p className={cn("min-w-0 whitespace-pre-wrap break-words text-[13px] text-muted-foreground", compact && "line-clamp-2")}>{text}</p>;
   }
@@ -345,6 +330,20 @@ function Context({ interaction: i, text, compact, approvable }: { interaction: I
   );
 }
 
+/** A review: what Submit sends, question over answer. */
+function ReviewAnswers({ answers }: { answers: InteractionAnswer[] }) {
+  return (
+    <ul aria-label="Your answers" className="flex flex-col gap-1.5 rounded-xl bg-muted/60 px-3 py-2.5 text-[13px] leading-snug">
+      {answers.map((a, n) => (
+        <li key={n} className="flex min-w-0 flex-col">
+          <span className="text-muted-foreground">{a.question}</span>
+          <span className="font-medium text-foreground">{a.answer}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function NoteButton({ locked, textId, className, onClick }: { locked: boolean; textId: string; className: string; onClick: () => void }) {
   return (
     <button type="button" disabled={locked} aria-expanded={false} aria-controls={textId} onClick={onClick} className={className}>
@@ -356,6 +355,7 @@ function NoteButton({ locked, textId, className, onClick }: { locked: boolean; t
 const PILL = "inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium transition-colors active:scale-[0.99]";
 const DECISION = "inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-[15px] font-medium transition-colors active:scale-[0.99]";
 const LIST_ROW = "flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] transition-colors hover:bg-muted/50 active:bg-muted";
+const OUTLINED = "border border-border bg-transparent text-muted-foreground disabled:opacity-50";
 const SECONDARY = "inline-flex min-h-10 items-center gap-1.5 rounded-lg px-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:opacity-50";
 
 interface RowProps {
@@ -364,6 +364,20 @@ interface RowProps {
   busy: boolean;
   disabled: boolean;
   onPress: () => void;
+}
+
+/** A label without its trailing dots or ellipsis, to end it with our own. */
+const bare = (label: string) => label.replace(/[.…]+$/, "");
+
+/** Weight by role: the one-tap answer filled, a persistent one dashed, a deny outlined in red. */
+function toneClass(tone: InteractionOption["role"] | "armed") {
+  return cn(
+    tone === "primary" && "bg-foreground text-background",
+    tone === "neutral" && "border border-border bg-secondary text-foreground",
+    tone === "persistent" && "border border-dashed border-border bg-secondary text-foreground",
+    tone === "deny" && "border border-status-blocked/40 bg-transparent text-status-blocked",
+    tone === "armed" && "border border-status-working bg-status-working/15 text-foreground",
+  );
 }
 
 /** The label without the agent's "(Recommended)" suffix, and whether it carried one. */
@@ -396,17 +410,13 @@ function AnswerRow({ option, toggle, busy, disabled, onPress }: RowProps & { tog
 /** A decision (approve, deny, submit): a button whose weight follows its role. */
 function DecisionButton({ option, armed, busy, disabled, onPress }: RowProps) {
   const tone = armed ? "armed" : option.role;
-  const { text } = labelOf(option);
+  const text = option.label;
   const detail = option.role === "persistent" ? "Changes a setting beyond this answer" : option.description;
   return (
     <button type="button" disabled={disabled} onClick={onPress} data-role={option.role}
       className={cn(
         DECISION, "w-full lg:w-auto", "disabled:opacity-50", busy && "disabled:opacity-100",
-        tone === "primary" && "bg-foreground text-background",
-        tone === "neutral" && "border border-border bg-secondary text-foreground",
-        tone === "persistent" && "border border-dashed border-border bg-secondary text-foreground",
-        tone === "deny" && "border border-status-blocked/40 bg-transparent text-status-blocked",
-        tone === "armed" && "border border-status-working bg-status-working/15 text-foreground",
+        toneClass(tone),
       )}>
       <span className="flex min-w-0 flex-1 flex-col py-1.5">
         <span className="break-words">{armed ? `Tap again to confirm: ${text}` : text}</span>
@@ -422,17 +432,13 @@ function DecisionButton({ option, armed, busy, disabled, onPress }: RowProps) {
 /** Home's one-line option. */
 function Pill({ option, toggle, armed, busy, disabled, onPress }: RowProps & { toggle: boolean }) {
   const tone = armed ? "armed" : option.role;
-  const { text } = labelOf(option);
+  const text = option.label;
   return (
     <button type="button" disabled={disabled} onClick={onPress} data-role={option.role}
       aria-pressed={toggle ? Boolean(option.checked) : undefined}
       className={cn(
         PILL, "disabled:opacity-50", busy && "disabled:opacity-100",
-        tone === "primary" && "bg-foreground text-background",
-        tone === "neutral" && "border border-border bg-secondary text-foreground",
-        tone === "persistent" && "border border-dashed border-border bg-secondary text-foreground",
-        tone === "deny" && "border border-status-blocked/40 bg-transparent text-status-blocked",
-        tone === "armed" && "border border-status-working bg-status-working/15 text-foreground",
+        toneClass(tone),
       )}>
       {toggle && <Checkbox checked={Boolean(option.checked)} />}
       <span className="min-w-0 break-words py-1.5">{armed ? `Tap again to confirm: ${text}` : text}</span>

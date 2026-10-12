@@ -37,6 +37,23 @@ type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 const OLDER_PAGE_SIZE = 120;
 /** Room kept above a `[data-follow-stop]` element when following lands on it. */
 const STOP_MARGIN = 12;
+
+/**
+ * Where following stops for a question at the tail taller than the list: its first line. Null when
+ * there is none or it fits, so the bottom is the stop.
+ */
+function stopCap(el: HTMLElement): number | null {
+  const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
+  if (!stop) return null;
+  const cap = el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN;
+  return cap < el.scrollHeight - el.clientHeight ? cap : null;
+}
+
+/** The operator is typing in a box inside the question (a reply, a note). */
+function typingIn(el: HTMLElement): boolean {
+  const active = document.activeElement;
+  return (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) && Boolean(active.closest("[data-follow-stop]")) && el.contains(active);
+}
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
   "no-session": "Send the first message to start the conversation, or connect an existing session.",
@@ -62,6 +79,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // Where the list last stood, set by every pin: only a move up from here is the reader leaving the
   // tail (see useAutoScroll for why geometry alone can't tell).
   const lastTop = useRef(0);
+  // The last pin landed on a question's first line, so a shift above it should carry the view along.
+  const onCap = useRef(false);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
   const anchor = useRef<{ height: number; top: number } | null>(null);
@@ -140,9 +159,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // box sits at its foot) the bottom wins again, so the phone keyboard never hides the box.
   const pin = useCallback((el: HTMLElement) => {
     const bottom = el.scrollHeight - el.clientHeight;
-    const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
-    const cap = stop && !stop.contains(document.activeElement) ? el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN : bottom;
-    el.scrollTo({ top: cap < bottom ? Math.max(cap, Math.min(el.scrollTop, bottom)) : bottom, behavior: "auto" });
+    const cap = typingIn(el) ? null : stopCap(el);
+    const top = cap === null ? bottom : onCap.current ? cap : Math.max(cap, Math.min(el.scrollTop, bottom));
+    el.scrollTo({ top, behavior: "auto" });
+    onCap.current = cap !== null && top === cap;
     lastTop.current = el.scrollTop;
   }, []);
 
@@ -232,9 +252,13 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const el = scrollRef.current;
     if (!el) return;
     const up = el.scrollTop < lastTop.current;
+    // Our own pins leave scrollTop where they put it; any other move is the reader's.
+    if (Math.abs(el.scrollTop - lastTop.current) >= 1) onCap.current = false;
     lastTop.current = el.scrollTop;
     if (restoring.current) return;
-    if (atTail(el)) {
+    // Reading inside a question at the tail is being at the tail: its foot may be far below.
+    const cap = stopCap(el);
+    if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
       if (!following.current) followLatest();
     } else if (up) {
       following.current = false;
