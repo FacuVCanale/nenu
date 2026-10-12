@@ -1157,6 +1157,17 @@ describe("AgentChat — why the composer is locked", () => {
     renderChat({ bridge: "disconnected" });
     expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
   });
+
+  // DetailRoute passes the pane's own refusal as authError while the snapshot may still answer.
+  it("asks for a new sign-in when only the pane's read was refused", () => {
+    renderChat({ authError: true });
+    expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
+  });
+
+  it("says under the title that Herdr isn't responding on a device that cannot write, too", () => {
+    renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } });
+    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+  });
 });
 
 // Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box
