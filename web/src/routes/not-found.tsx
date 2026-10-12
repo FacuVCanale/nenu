@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 export function NotFound({ titleAs }: { titleAs?: "h1" }) {
   const session = useSession();
   const { pathname } = useLocation();
+  // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link; bare, the label is 14px.
   return (
     <EmptyState icon={Unlink} title="Page not found" titleAs={titleAs}
       action={<Link to={homePath(session)} className={cn(buttonVariants({ size: "lg" }))}>Go to Home</Link>}>

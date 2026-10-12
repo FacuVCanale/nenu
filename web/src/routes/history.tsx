@@ -263,6 +263,7 @@ export function HistoryRoute() {
             icon={ScrollText}
             title={empty.title}
             className="h-full justify-center"
+            // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link.
             action={
               <Link to={back.to} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
                 <span className="truncate">Back to {back.label}</span>
