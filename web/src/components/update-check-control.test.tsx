@@ -46,7 +46,8 @@ function homeData(update: UpdateInfo | undefined): HomeData {
   };
 }
 
-function renderControl(update: UpdateInfo | undefined, onLoad?: () => void) {
+/** `update` may be a function, read on every load, for a snapshot that changes under the card. */
+function renderControl(update: UpdateInfo | undefined | (() => UpdateInfo | undefined), onLoad?: () => void) {
   const router = createMemoryRouter(
     [
       {
@@ -54,7 +55,7 @@ function renderControl(update: UpdateInfo | undefined, onLoad?: () => void) {
         path: "/",
         loader: () => {
           onLoad?.();
-          return homeData(update);
+          return homeData(typeof update === "function" ? update() : update);
         },
         element: (
           <div data-testid="root">
@@ -65,7 +66,7 @@ function renderControl(update: UpdateInfo | undefined, onLoad?: () => void) {
     ],
     { initialEntries: ["/"] },
   );
-  return render(<RouterProvider router={router} />);
+  return { ...render(<RouterProvider router={router} />), router };
 }
 
 beforeEach(() => {
@@ -191,11 +192,47 @@ describe("UpdateCheckControl — the card owns every update state", () => {
     act(() => observeServerBuild("0.99.0+new.1")); // the bridge serves another build than this bundle
 
     expect(within(updates).getByText("Interface update ready")).toBeInTheDocument();
+    // The footer is a live region before the failure, so the failure is read out when it lands.
+    const footer = within(updates).getByText("The server has a newer interface than this page.");
+    expect(footer).toHaveAttribute("aria-live", "polite");
     await user.click(within(updates).getByRole("button", { name: "Reload interface" }));
 
     expect(checkForUpdate).toHaveBeenCalled();
-    expect(await screen.findByRole("status")).toHaveTextContent("Your session is unchanged");
+    await waitFor(() => expect(footer).toHaveTextContent("Your session is unchanged"));
+    expect(footer.isConnected).toBe(true);
     expect(within(updates).getByRole("button", { name: "Reload interface" })).toBeEnabled();
+  });
+
+  it("reads the check's outcome from a live region that was there before it changed", async () => {
+    server.use(http.post("/api/update/check", () => new HttpResponse(null, { status: 500 })));
+    const user = userEvent.setup();
+    renderControl(upToDate);
+    const updates = await card();
+    const live = within(updates).getByRole("status");
+    expect(live).toHaveTextContent("Up to date");
+
+    await user.click(within(updates).getByRole("button", { name: /check now/i }));
+
+    await waitFor(() => expect(live).toHaveTextContent("Couldn't check"));
+    expect(live.isConnected).toBe(true);
+  });
+
+  it("lets a later check by the bridge clear a failed one", async () => {
+    server.use(http.post("/api/update/check", () => new HttpResponse(null, { status: 500 })));
+    let update = upToDate;
+    const user = userEvent.setup();
+    const { router } = renderControl(() => update);
+    const updates = await card();
+
+    await user.click(within(updates).getByRole("button", { name: /check now/i }));
+    expect(await within(updates).findByText("Couldn't check")).toBeInTheDocument();
+
+    // The bridge's own periodic check lands on a later poll.
+    update = { ...upToDate, checkedAt: upToDate.checkedAt! + 60_000 };
+    await act(() => router.revalidate());
+
+    expect(await within(updates).findByText("Up to date")).toBeInTheDocument();
+    expect(within(updates).queryByText("Couldn't check")).toBeNull();
   });
 
   it("shows a check in flight in the badge, on a button that keeps its place", async () => {
