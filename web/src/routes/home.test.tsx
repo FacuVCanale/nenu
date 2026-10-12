@@ -213,6 +213,16 @@ describe("a project's coordinator", () => {
     expect(posts[1]).toEqual(expect.objectContaining({ pane: "c1", text: "And the footer", deliveryMode: "steer" }));
   });
 
+  it("asks nothing of a busy coordinator whose CLI has no measured choice, and queues it after the turn", async () => {
+    const posts = queue(queued);
+    const pi = { ...working, agents: working.agents.map((a) => a.paneId === "c1" ? { ...a, agent: "pi" } : a) };
+    const { user, main } = await setup(pi);
+    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Also the landing{Enter}");
+    expect(await main.findByText("Queued for Hub's coordinator.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "afterTurn" })]);
+  });
+
   it("keeps the draft when the busy choice is cancelled", async () => {
     const posts = queue(queued);
     const { user, main } = await setup(working);
