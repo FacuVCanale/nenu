@@ -1,14 +1,17 @@
-import type { ReactNode } from "react";
-import { Plug } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 
-import { Card } from "@/components/ui/card";
+import { listRowClass, listRowPressable } from "@/components/ui/list-group";
+import { cn } from "@/lib/utils";
 import type { BridgeStatus, DeviceAuth } from "@/lib/types";
 
-// A small read-only diagnostics panel for Settings: where this client is connected, whether it's a
-// secure context (PWA/push need one), the live bridge status, and — when per-device auth is on —
-// this device's access level. Reads browser globals (location / isSecureContext); the bridge +
-// device come from the polled snapshot (HomeData). Nothing here is configurable; it's for "why
-// isn't X working" triage.
+// Read-only diagnostics for Settings: where this client is connected, whether it's a secure context
+// (PWA/push need one), the live bridge status, and — when per-device auth is on — this device's
+// access level. Reads browser globals (location / isSecureContext); the bridge + device come from the
+// polled snapshot (HomeData). Nothing here is configurable; it's for "why isn't X working" triage, so
+// it waits behind one closed row instead of taking a screen of every visit.
+//
+// Renders rows for a list group: the disclosure row, then the diagnostics it opens.
 export function ConnectionInfo({
   bridge,
   device,
@@ -16,45 +19,70 @@ export function ConnectionInfo({
 }: {
   bridge: BridgeStatus | undefined;
   device: DeviceAuth | undefined;
-  /** Build id the bridge reports it's serving (from /api/config); omitted while loading/offline. */
+  /** Build id the bridge serves, as its responses name it (lib/server-build.ts); omitted until one has. */
   build?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const regionId = useId();
   const b = bridgeLabel(bridge);
   const d = deviceLabel(device);
   const secure = typeof window !== "undefined" && window.isSecureContext;
   const host = typeof window !== "undefined" ? window.location.host : "—";
 
   return (
-    <Card className="gap-0 py-0">
-      <div className="flex items-center gap-3 p-4 pb-3">
-        <Plug className="size-5 shrink-0 text-muted-foreground" />
-        <div>
-          <div className="font-medium">Connection</div>
-          <p className="text-sm text-muted-foreground">Diagnostics for this device.</p>
-        </div>
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={regionId}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(listRowClass, listRowPressable, !open && "rounded-b-xl")}
+      >
+        <span className="min-w-0 flex-1 text-body">Connection details</span>
+        <ChevronRight
+          aria-hidden="true"
+          className={cn(
+            "size-4 shrink-0 text-subtle-foreground transition-transform duration-200 ease-out motion-reduce:transition-none",
+            open && "rotate-90",
+          )}
+        />
+      </button>
+      {/* Collapses on its rows' height (0fr to 1fr), so opening never drops the rows in at once. */}
+      <div
+        id={regionId}
+        inert={!open}
+        className={cn(
+          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <dl className="min-h-0 overflow-hidden">
+          <Row label="Endpoint" mono>
+            {host}
+          </Row>
+          <Row label="Secure context">{secure ? "Yes" : "No (plain HTTP)"}</Row>
+          <Row label="Bridge">
+            <span className={b.tone}>{b.text}</span>
+          </Row>
+          <Row label="Device access">
+            <span className={d.tone}>{d.text}</span>
+          </Row>
+          {/* Always present, even before the value lands: appearing late moved the rows under it. An
+              em dash is a truthful "not known yet" and the same height. */}
+          <Row label="Server build" mono>
+            {build ?? "—"}
+          </Row>
+        </dl>
       </div>
-      <dl className="divide-y divide-border/60 border-t border-border/60">
-        <Row label="Endpoint">{host}</Row>
-        <Row label="Secure context">{secure ? "Yes" : "No (plain HTTP)"}</Row>
-        <Row label="Bridge">
-          <span className={b.tone}>{b.text}</span>
-        </Row>
-        <Row label="Device access">
-          <span className={d.tone}>{d.text}</span>
-        </Row>
-        {/* Always present, even before the value lands: appearing late grew this card and moved
-            everything under it. An em dash is a truthful "not known yet" and the same height. */}
-        <Row label="Server build">{build ?? "—"}</Row>
-      </dl>
-    </Card>
+    </>
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, mono, children }: { label: string; mono?: boolean; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+    <div className="relative flex min-h-10 items-center justify-between gap-4 px-4 py-2 text-subhead before:absolute before:top-0 before:right-0 before:left-4 before:h-px before:bg-border">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-right font-mono text-[13px]">{children}</dd>
+      <dd className={cn("min-w-0 truncate text-right", mono && "font-mono text-footnote")}>{children}</dd>
     </div>
   );
 }

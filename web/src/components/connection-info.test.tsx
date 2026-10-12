@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { ConnectionInfo } from "./connection-info";
@@ -40,3 +41,21 @@ describe("ConnectionInfo — device access row", () => {
     expect(screen.getByText("abc1234")).toBeInTheDocument();
   });
 });
+
+describe("ConnectionInfo — a disclosure, closed by default", () => {
+  it("keeps the diagnostics out of reach until Connection details is opened", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionInfo bridge="connected" device={undefined} build="abc1234" />);
+
+    const toggle = screen.getByRole("button", { name: "Connection details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Endpoint").closest("[inert]")).not.toBeNull();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Endpoint").closest("[inert]")).toBeNull();
+    expect(screen.getByText("abc1234")).toBeInTheDocument();
+  });
+});
+
