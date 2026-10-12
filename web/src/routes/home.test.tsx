@@ -27,7 +27,7 @@ const data: HomeData = {
 
 const permission: Interaction = {
   paneId: "w1:p2", agent: "claude", signature: "sig-1", revision: 1, detectedAt: 1,
-  kind: "permission", family: "permission", question: "Do you want to proceed?", context: "Bash command\nbun run test",
+  kind: "permission", family: "permission", question: "Do you want to proceed?", context: "Bash command\nbun run test", subject: { tool: "Bash", command: "bun run test" },
   options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
   detailComplete: true,
 };
