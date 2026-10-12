@@ -32,6 +32,11 @@ describe("BootSplash", () => {
     expect(screen.queryByText(/Can.t reach Nenu/)).not.toBeInTheDocument();
   });
 
+  it("draws the page column where the app lands, centred, so nothing jumps when it arrives", () => {
+    const { container } = renderSplash();
+    expect(container.querySelector("main > .page-column")).toHaveClass("mx-auto");
+  });
+
   it("draws the app's own tab bar, so it does not change under the thumb when the app arrives", () => {
     const { container } = renderSplash("/?s=qa");
     const bar = container.querySelector(".bottom-tab-bar")!;
