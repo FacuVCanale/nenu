@@ -45,7 +45,7 @@ const META_LINE = "flex min-h-8 max-w-full items-center gap-2 text-left text-foo
 /** Injected text as one quiet line: a loaded skill, a notification. It opens onto its body when it has more than its caption. */
 function ContextLine({ label, text, truncated, query, focused = false }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const caption = <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>;
+  const caption = <span className="min-w-0 truncate"><Highlight text={label} query={query} current={focused} /></span>;
   if (text.trim() === "" || text.trim() === label) return <div data-notice className={META_LINE}>
     <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
     {caption}
@@ -56,7 +56,7 @@ function ContextLine({ label, text, truncated, query, focused = false }: { label
       <ChevronRight aria-hidden="true" className={`size-4 shrink-0 p-px ${open ? "rotate-90" : ""}`} />
       {caption}
     </button>
-    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere] select-text"><MarkdownText text={text} query={query} />
+    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere] select-text"><MarkdownText text={text} query={query} current={focused} />
       {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
@@ -66,7 +66,7 @@ function CompactionLine({ text, time, truncated, query, focused = false }: { tex
   const [expanded, setExpanded] = useState(false);
   const open = expanded || focused || containsQuery(text, query);
   const rule = <span aria-hidden="true" className="h-px min-w-6 flex-1 bg-border" />;
-  const caption = <span className="shrink-0"><Highlight text="Context compacted" query={query} />{time && ` · ${time}`}</span>;
+  const caption = <span className="shrink-0"><Highlight text="Context compacted" query={query} current={focused} />{time && ` · ${time}`}</span>;
   if (!text) return <div data-notice className="flex min-h-8 items-center gap-3 text-footnote text-muted-foreground">{rule}{caption}{rule}</div>;
   return <div data-notice>
     <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)}
@@ -77,7 +77,7 @@ function CompactionLine({ text, time, truncated, query, focused = false }: { tex
       </span>
       {rule}
     </button>
-    {open && <div className="pb-2 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
+    {open && <div className="pb-2 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} current={focused} />
       {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
@@ -123,6 +123,7 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
       <MarkdownText
         text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
+        current={focused}
       />
       {delivers && <ChatMedia text={part.text} compact={compactMedia} uploads={uploads} />}
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}

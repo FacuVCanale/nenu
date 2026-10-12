@@ -8,7 +8,7 @@ import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { describeTool, firstLine, type LiveStep, type StepKind, type ToolStepDescription } from "@/lib/work-timeline";
-import { MarkdownText } from "./markdown-text";
+import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
 import { Elapsed, LiveGlyph } from "./work-activity-label";
@@ -29,9 +29,10 @@ function matches(part: ToolPart, query: string) {
   return [part.name, part.summary, part.result?.text ?? ""].some((text) => containsQuery(text, query));
 }
 
-export function Highlight({ text, query }: { text: string; query: string }) {
+/** `text` with find's hits marked; `current` when it belongs to find's current match, whose hits go solid. */
+export function Highlight({ text, query, current = false }: { text: string; query: string; current?: boolean }) {
   return <>{splitHighlight(text, query).map((piece, index) => piece.hit
-    ? <mark key={index} className="rounded-sm bg-amber-300/70 text-inherit dark:bg-amber-500/40">{piece.text}</mark>
+    ? <mark key={index} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>{piece.text}</mark>
     : <span key={index}>{piece.text}</span>)}</>;
 }
 
@@ -144,17 +145,17 @@ function StepIcon({ kind }: { kind: StepIconKind }) {
  * The folders give up whole leading segments first, then lose characters from their start (the rtl
  * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay.
  */
-function StepTarget({ text, format, query }: { text: string; format: ToolStepDescription["target"] | "thought"; query: string }) {
+function StepTarget({ text, format, query, current }: { text: string; format: ToolStepDescription["target"] | "thought"; query: string; current: boolean }) {
   if (!text) return <span className="flex-1" />;
   if (format === "path") {
     const { dir, base } = displayPath(text, "", 32);
     return <span className="flex min-w-0 flex-1">
-      {dir && <span className="min-w-0 truncate text-muted-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} /></span></span>}
-      <span className="max-w-full shrink-0 truncate text-foreground"><Highlight text={base} query={query} /></span>
+      {dir && <span className="min-w-0 truncate text-muted-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} current={current} /></span></span>}
+      <span className="max-w-full shrink-0 truncate text-foreground"><Highlight text={base} query={query} current={current} /></span>
     </span>;
   }
   return <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", format === "code" && "font-mono text-code", format === "thought" && "italic")}>
-    <Highlight text={text} query={query} />
+    <Highlight text={text} query={query} current={current} />
   </span>;
 }
 
@@ -197,16 +198,16 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
         <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
-        <StepTarget text={step.text} format={step.target} query={query} />
+        <StepTarget text={step.text} format={step.target} query={query} current={focused} />
         {failed ? <FailedChip /> : asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
         {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
       </StepLine>
       <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
       {/* Under a finger the output takes the row's full width: a phone fits few characters of code a line. */}
       {open && <div id={contentId} className="mb-2 ml-6 min-w-0 space-y-2 rounded-lg bg-muted px-3 py-2 coarse:ml-0">
-        <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} /></p>
-        {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} /></pre>}
-        {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
+        <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} current={focused} /></p>
+        {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} current={focused} /></pre>}
+        {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} current={focused} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
           : <p className="text-footnote text-muted-foreground">{asking ? "Waiting for your answer" : active ? "Running…" : "No output recorded"}</p>}
       </div>}
     </div>
@@ -226,10 +227,10 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
     <StepLine icon={<StepIcon kind="thinking" />} live={live} label={`Thinking: ${preview}${truncated ? " · truncated" : ""}`} expanded={open} controls={contentId}
       onToggle={preview ? () => setExpanded((value) => !value) : undefined}>
       {(live || !shown) && <span className={cn("shrink-0", live ? "text-foreground" : "text-muted-foreground")}>Thinking</span>}
-      <StepTarget text={shown} format="thought" query={query} />
+      <StepTarget text={shown} format="thought" query={query} current={focused} />
     </StepLine>
     {open && preview && <div id={contentId} className="min-w-0 pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]">
-      <MarkdownText text={text} query={query} />
+      <MarkdownText text={text} query={query} current={focused} />
       {truncated && <p className="text-footnote">… truncated</p>}
     </div>}
   </div>;
