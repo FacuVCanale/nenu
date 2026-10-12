@@ -14,26 +14,37 @@ import { cn } from "@/lib/utils";
 // One row whose value is the current state, over a native <select>: the phone's own menu lists the
 // pauses, as a Settings row does, instead of a strip of small buttons under a card.
 
-const PAUSES: ReadonlyArray<{ value: string; label: string; until: (now: number) => number }> = [
-  { value: "30m", label: "For 30 minutes", until: (now) => now + 30 * 60_000 },
-  { value: "1h", label: "For 1 hour", until: (now) => now + 60 * 60_000 },
-  { value: "4h", label: "For 4 hours", until: (now) => now + 240 * 60_000 },
-  { value: "tomorrow", label: "Until tomorrow", until: tomorrowMorning },
+const DURATIONS: ReadonlyArray<{ value: string; label: string; minutes: number }> = [
+  { value: "30m", label: "For 30 minutes", minutes: 30 },
+  { value: "1h", label: "For 1 hour", minutes: 60 },
+  { value: "4h", label: "For 4 hours", minutes: 240 },
 ];
+const MORNING = "morning";
 
-/** 8:00 the next calendar day, local time. */
-function tomorrowMorning(now: number): number {
+/** The next 8:00 local time: this morning's while it is still before 8, otherwise tomorrow's. A
+ *  pause picked at 1:00 must not swallow the whole next day. */
+function nextMorning(now: number): number {
   const morning = new Date(now);
-  morning.setDate(morning.getDate() + 1);
   morning.setHours(8, 0, 0, 0);
+  if (morning.getTime() <= now) morning.setDate(morning.getDate() + 1);
   return morning.getTime();
+}
+
+/** The deadline a menu choice asks for: null turns the pause off, undefined is no known choice. */
+function deadlineFor(choice: string, now: number): number | null | undefined {
+  if (choice === "off") return null;
+  if (choice === MORNING) return nextMorning(now);
+  const duration = DURATIONS.find((d) => d.value === choice);
+  return duration && now + duration.minutes * 60_000;
 }
 
 function untilLabel(deadline: number, now: number): string {
   const at = new Date(deadline);
   const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   if (at.toDateString() === new Date(now).toDateString()) return `Until ${time}`;
-  if (at.toDateString() === new Date(tomorrowMorning(now)).toDateString()) return `Until tomorrow, ${time}`;
+  if (at.toDateString() === tomorrow.toDateString()) return `Until tomorrow, ${time}`;
   return `Until ${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
 
@@ -45,11 +56,11 @@ export function SnoozeControl({ snoozedUntil }: { snoozedUntil: number | null })
   const value = snoozed ? untilLabel(snoozedUntil, now) : "Off";
 
   async function choose(choice: string) {
-    const pause = PAUSES.find((p) => p.value === choice);
-    if (choice !== "off" && !pause) return;
+    const deadline = deadlineFor(choice, Date.now());
+    if (deadline === undefined) return;
     setBusy(true);
     try {
-      await setSnooze(pause ? pause.until(Date.now()) : null);
+      await setSnooze(deadline);
       revalidator.revalidate();
     } finally {
       setBusy(false);
@@ -90,11 +101,13 @@ export function SnoozeControl({ snoozedUntil }: { snoozedUntil: number | null })
           </option>
         )}
         <option value="off">Off</option>
-        {PAUSES.map((pause) => (
-          <option key={pause.value} value={pause.value}>
-            {pause.label}
+        {DURATIONS.map((duration) => (
+          <option key={duration.value} value={duration.value}>
+            {duration.label}
           </option>
         ))}
+        {/* Named by the time it ends, so the menu says whether that is this morning or tomorrow's. */}
+        <option value={MORNING}>{untilLabel(nextMorning(now), now)}</option>
       </select>
     </label>
   );
