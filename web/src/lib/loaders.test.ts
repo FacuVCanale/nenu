@@ -799,14 +799,22 @@ describe("loaders — a pane opens before its read lands", () => {
   };
   const within = <T,>(promise: Promise<T>, ms: number) =>
     Promise.race([promise, new Promise<"late">((resolve) => setTimeout(() => resolve("late"), ms))]);
+  // Measured against the navigation's own budget: the read outlasts it well, and the chat opens soon after.
+  let slowRead = 0;
+  let openBy = 0;
+  beforeAll(async () => {
+    const { PANE_FIRST_PAINT_MS } = await import("./loaders");
+    slowRead = PANE_FIRST_PAINT_MS * 5;
+    openBy = PANE_FIRST_PAINT_MS * 3;
+  });
 
   it("opens a pane read before on its last text at once, and the next run brings the fresh read without asking again", async () => {
     const { paneLoader, rootLoader } = await import("./loaders");
     await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") });
     await rootLoader({ request: new Request("http://localhost/") });
-    const reads = slowPane("fresh text", 1500);
+    const reads = slowPane("fresh text", slowRead);
 
-    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), 600);
+    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), openBy);
     expect(opened).not.toBe("late");
     if (opened === "late") return;
     expect(opened.pending).toBe(true);
@@ -820,8 +828,8 @@ describe("loaders — a pane opens before its read lands", () => {
 
   it("opens a pane never read on an empty mirror that says it is on its way", async () => {
     const { paneLoader } = await import("./loaders");
-    slowPane("fresh text", 1500);
-    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), 600);
+    slowPane("fresh text", slowRead);
+    const opened = await within(paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1:p1") }), openBy);
     expect(opened).not.toBe("late");
     if (opened === "late") return;
     expect(opened).toMatchObject({ pending: true, text: "", error: false, revision: 0 });

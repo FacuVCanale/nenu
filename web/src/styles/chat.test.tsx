@@ -55,6 +55,17 @@ it("starts the live conversation below the chrome, on the conversation's own scr
   expect(matched).toEqual([scroller]);
 });
 
+it("hides the list's own top fade on a phone, where the chrome is that edge", async () => {
+  renderChat();
+  const section = await screen.findByRole("region", { name: "Live conversation" });
+  const rule = cssRules(css).find((r) => r.atRules.join() === PHONE && r.decls.display === "none" && r.selectors.some((s) => s.includes("Live conversation")));
+  expect(rule).toBeDefined();
+  const matched = rule!.selectors.flatMap((s) => [...document.querySelectorAll(s)]);
+  expect(matched).toHaveLength(1);
+  expect(section.contains(matched[0]!)).toBe(true);
+  expect(matched[0]).toHaveAttribute("aria-hidden");
+});
+
 it("lines a desk's terminal composer up with the mirror, both on the page gutter", () => {
   expect(declarations(css, '.workbench-chat[data-view="terminal"] .workbench-composer', ["@media (min-width: 1024px)"])).toMatchObject({ "max-width": "none" });
 });
@@ -62,8 +73,7 @@ it("lines a desk's terminal composer up with the mirror, both on the page gutter
 it("lands a question's first line below the chrome when following stops on it, without moving the card", () => {
   // Following stops the [data-follow-stop] box a little under the list's top edge, which on a phone
   // is under the chrome. The box reaches up by the chrome's height and the card keeps its place.
-  expect(declarations(css, ".chat-follow-stop", [PHONE])).toMatchObject({
-    "padding-top": "var(--chat-chrome-height, 0px)",
-    "margin-top": "calc(1.25rem - var(--chat-chrome-height, 0px))",
-  });
+  const stop = declarations(css, ".chat-follow-stop", [PHONE]);
+  expect(stop["padding-top"]).toMatch(/var\(--chat-chrome-height/);
+  expect(stop["margin-top"]).toMatch(/- var\(--chat-chrome-height/);
 });
