@@ -62,6 +62,15 @@ describe("strips on a touch screen", () => {
     expect(chipReach()).toMatchObject({ inset: "-1px", bottom: "calc(-1px - var(--reach))" });
   });
 
+  // 0.65.0 set pointer-events: none on the scroller so taps under a row's reach band reached the
+  // thread. A swipe that started between two chips then hit the row, not the scroller, and scrolled
+  // nothing (bench, Chromium); WebKit on iOS leaves a scroller with pointer-events: none out of its
+  // touch hit test altogether (inferred), which is "I can't scroll the tabs with my finger".
+  it("let a finger scroll a strip from anywhere on it, a chip or the gap between two", () => {
+    expect(declarations(css, ".strip-scroller", [LAYER, COARSE])["pointer-events"]).toBeUndefined();
+    expect(declarations(css, ".strip-scroller", [LAYER])["pointer-events"]).toBeUndefined();
+  });
+
   it("let the pane row cover a tab's reach, and never reach up into the header", () => {
     // Reaching up would gain nothing anyway: the header paints over its own bottom edge.
     expect(chipReach().top).toBeUndefined();
