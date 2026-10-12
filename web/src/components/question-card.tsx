@@ -36,7 +36,8 @@ const SUBMIT = /^submit\b/i;
 /**
  * A preview question: the bridge serves Claude's preview-select as a question whose family is the
  * agent, where every other question carries its prompt family ("select"). Its previews and notes live
- * only in the thread. An explicit marker from the bridge would say this outright.
+ * only in the thread. bridge/interactions-family.test.ts pins that convention over the fixture corpus
+ * until the bridge marks a preview outright.
  */
 const isPreviewQuestion = (i: Interaction) => i.kind === "question" && i.family !== "select";
 
