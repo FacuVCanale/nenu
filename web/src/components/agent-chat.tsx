@@ -1063,6 +1063,9 @@ export function AgentChat({
             <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : "Pane not found"}</h1>
           )}
         </AppHeader>}
+        {/* A project's overlay (its Threads and PRs) brings its own tabs, so only the header stays above
+            it: the rest of the chrome belongs to the chat underneath. */}
+        {!overlay && <>
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 
@@ -1108,7 +1111,7 @@ export function AgentChat({
 
         <SpawnStatus paneId={paneId} />
         {isShell && !spawning && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
-
+        </>}
       </div>
       {overlay && <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col">{overlay}</div>}
 
