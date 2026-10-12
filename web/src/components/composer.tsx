@@ -4,7 +4,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -39,6 +39,7 @@ import type { DeliveryMode } from "@/lib/types";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
+import { ComposerNotice } from "@/components/composer-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
 import { StopControl } from "@/components/stop-control";
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -225,6 +226,17 @@ function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onP
   );
 }
 
+/** A send that did not go through, said above the box until the next edit or send. */
+interface SendFailure {
+  error: string;
+  /** May the text already be in the pane? Then the way forward is to look, never to resend. */
+  delivered: boolean;
+  /** One more line of what to do, when the error alone does not say it. */
+  hint?: string;
+  /** What Try again sends: the message, when it is still where it was (the box, or a quick reply). */
+  retry: { text: string; isDraft: boolean } | null;
+}
+
 /** One line for the mirror view's "You sent" strip: the prose, and how many images went with it. */
 function sentPreview(message: string): string {
   const { text, images } = splitMessageImages(message);
@@ -332,6 +344,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setInput(restored.text);
     attachments.reset(restored.uploads);
     noticeNoEcho(null); // it described the pane we just left
+    setFailure(null);
   }, [session, paneId]);
   const queue = useMessageQueue(paneId, session, nativeWorkbench && !gone && !readOnly);
   // Pending bubbles in the conversation (lib/local-sends.ts) for what this composer sent.
@@ -451,7 +464,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
   const [sending, setSending] = useState(false);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
-  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "retry" | "check" | null>(null);
+  // "Sending…" for the terminal view, which has no bubble to say it.
+  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | null>(null);
+  const [failure, setFailure] = useState<SendFailure | null>(null);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -739,10 +754,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // is kept: the user answers the dialog with its own buttons, then taps Send again. We never
     // queue-and-auto-send here, because the text may be a reaction to state the dialog just changed.
     if (dialogPresent && !(nativeWorkbench && prepareSend)) {
-      setStatus("A dialog is waiting — answer it first, then send.", "error");
+      setFailure({ error: "A dialog is waiting. Answer it first, then send.", delivered: false, retry: null });
       return false;
     }
     setSending(true);
+    setFailure(null);
     // Slash commands are not conversation turns, so they get no bubble.
     const started = beginSend(t, isDraft, !action && nativeWorkbench && !t.startsWith("/"));
     const previous = pendingDeliveryRef.current;
@@ -819,12 +835,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // the same two-tap shape as the destructive-send confirm. The second tap skips the pre-flight
         // ONLY; the type-then-verify guard still runs, so Enter is never fired blind either way.
         forceConfirm.confirm("force");
-        setDeliveryPhase("retry");
+        setDeliveryPhase(null);
         // A password prompt gets the notice AND keeps the override: the notice explains the screen and
         // offers the control that works, the override stays for the case where the detection is wrong.
         noticeNoEcho(res.noEcho !== undefined ? { prompt: res.noEcho, typed: false } : null);
         failSend(started, res.error, res.noEcho !== undefined);
-        setStatus(`${res.error} Tap Send again to type anyway.`, "error");
+        if (res.noEcho !== undefined) setStatus(`${res.error} Tap Send again to type anyway.`, "error");
+        else refused(res.error, false, t, isDraft, "To type it regardless, tap Type anyway.");
         return false;
       } else {
         // "stalled" = the text went into the pane but was never seen in the input box, so NO submit
@@ -839,8 +856,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         noticeNoEcho(secret ? { prompt, typed: true } : null);
         const delivered = res.status === "stalled" || res.textDelivered === true;
         failSend(started, res.error, secret, delivered);
-        setDeliveryPhase(delivered ? "check" : "retry");
-        setStatus(res.error, "error");
+        setDeliveryPhase(null);
+        if (secret) setStatus(res.error, "error");
+        else refused(res.error, delivered, t, isDraft);
         return false;
       }
     } catch (e) {
@@ -851,12 +869,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (unknown) delivery.keep = true;
       const error = unknown ? "No answer from Nenu, so the message may already be sent. Check Terminal before sending again." : e instanceof Error ? e.message : String(e);
       failSend(started, error, false, unknown);
-      setDeliveryPhase(unknown ? "check" : "retry");
-      setStatus(error, "error");
+      setDeliveryPhase(null);
+      if (action) setStatus(error, "error");
+      else refused(error, unknown, t, isDraft);
       return false;
     } finally {
       setSending(false);
     }
+  }
+
+  /** Say a refused send above the box. Try again is offered only while resending cannot type a
+   *  second copy, and only when the message is still where the operator left it. */
+  function refused(error: string, delivered: boolean, text: string, isDraft: boolean, hint?: string) {
+    const inPlace = !isDraft || draftMessage() === text;
+    setFailure({
+      error,
+      delivered,
+      hint: hint ?? (delivered ? "Check the terminal before sending again." : undefined),
+      retry: !delivered && inPlace ? { text, isDraft } : null,
+    });
+  }
+
+  function retryFailed() {
+    const retry = failure?.retry;
+    if (!retry) return;
+    setFailure(null);
+    void send(retry.isDraft ? draftMessage() : retry.text, retry.isDraft);
   }
 
   // Gate the composer's Send through the destructive-input confirm: a matching command arms the
@@ -1086,16 +1124,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     <>
       <div {...dropHandlers} className={cn("composer-surface", dragging && "composer-dragging")}>
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
-        {deliveryPhase && !lastSent && !nativeWorkbench && (
+        {deliveryPhase === "queued" && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
-            {deliveryPhase === "queued" && <Loader2 className="size-3 shrink-0 animate-spin" />}
-            <span>
-              {deliveryPhase === "queued"
-                ? "Sending…"
-                : deliveryPhase === "check"
-                  ? "Not confirmed. Check the terminal before sending again."
-                  : "Not sent. Tap Send to try again."}
-            </span>
+            <Loader2 className="size-3 shrink-0 animate-spin" />
+            <span>Sending…</span>
           </div>
         )}
         {/* Pending-send preview: visible from send until the mirror echoes back (or 6s). Shows the
@@ -1224,6 +1256,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         )}
 
+        {failure && (
+          <ComposerNotice
+            icon={CircleAlert}
+            tone="error"
+            title={failure.delivered ? "Not confirmed" : "Not sent"}
+            actions={(failure.retry || nativeWorkbench) && <>
+              {failure.retry && <Button variant="secondary" size="sm" className="hit-area h-8 coarse:h-9" onClick={retryFailed} disabled={locked || sending}>Try again</Button>}
+              {nativeWorkbench && <Button variant="ghost" size="sm" className="hit-area h-8 coarse:h-9" onClick={() => setRawTerminal(true)}>Open terminal</Button>}
+            </>}
+          >
+            <p>{failure.error}</p>
+            {failure.hint && <p className="mt-1">{failure.hint}</p>}
+          </ComposerNotice>
+        )}
         {/* Stop lives on the row above the box for the whole turn, and never in the Send slot: a draft
             appearing or clearing must not move the target under the thumb. The conversation's live
             turn already says "Working for …" just above, so only the terminal view repeats it here. */}
@@ -1253,7 +1299,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}
-              onChange={direct.active ? direct.onChange : (e) => skills.onChange(e.target.value, e.target.selectionStart)}
+              onChange={direct.active ? direct.onChange : (e) => { setFailure(null); skills.onChange(e.target.value, e.target.selectionStart); }}
               onSelect={(e) => skills.onSelect(e.currentTarget.selectionStart)}
               onFocus={() => { skills.onFocus(); onInputFocus?.(); }}
               onBlur={skills.onBlur}
