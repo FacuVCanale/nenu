@@ -49,9 +49,6 @@ function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: 
   }
 }
 
-/** A header icon button: a 44px box, the size the Settings gear already uses. */
-const HEADER_ICON = "grid size-11 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:text-foreground active:bg-muted/60";
-
 /** Turns rendered on open — a few screens, so first paint stays instant on the longest threads. */
 const INITIAL_RENDER = 60;
 /** Turns added per upward growth step. */
@@ -235,8 +232,8 @@ export function HistoryRoute() {
         rightLead={
           // A PWA has no browser find, so the view has to provide its own, once there is text to search.
           entries.length > 0 && (
-            <button type="button" onClick={() => setFindOpen(true)} aria-label="Find in history" className={HEADER_ICON}>
-              <Search aria-hidden="true" className="size-5" />
+            <button type="button" onClick={() => setFindOpen(true)} aria-label="Find in history" className="workbench-icon-button">
+              <Search aria-hidden="true" size={17} />
             </button>
           )
         }
@@ -244,8 +241,8 @@ export function HistoryRoute() {
         // full-screen reading view you deliberately entered — it should be as obvious to leave as it
         // was to open, without relying on the phone's back gesture.
         rightTrail={
-          <button type="button" onClick={back} aria-label="Close history" className={HEADER_ICON}>
-            <X aria-hidden="true" className="size-5" />
+          <button type="button" onClick={back} aria-label="Close history" className="workbench-icon-button">
+            <X aria-hidden="true" size={17} />
           </button>
         }
       >
