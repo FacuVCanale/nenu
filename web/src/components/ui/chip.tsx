@@ -9,8 +9,9 @@ import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
 // The tab and pane strips above a chat share this one chip, styled in styles/strips.css: a pill with
 // a leading glyph, a name capped so it can't hide its siblings, and a neutral fill on the open one.
 
-/** The fade a strip draws on an edge it can still scroll toward (strips.css: --fade-start/--fade-end). */
-const EDGE_FADE = 24;
+/** The fade a strip draws on an edge it can still scroll toward (strips.css: --fade-start/--fade-end).
+ *  chip.test.tsx reads that width from strips.css, so the two can't drift apart. */
+const EDGE_FADE = 40;
 
 interface ChipProps {
   label: string;

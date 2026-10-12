@@ -36,9 +36,12 @@ describe("strip chips", () => {
     expect(chip["justify-content"]).toBe("center");
   });
 
-  it("fade the edge a strip can still scroll toward", () => {
-    expect(declarations(css, '.strip-scroller[data-overflow~="start"]', [LAYER])["--fade-start"]).toBe("24px");
-    expect(declarations(css, '.strip-scroller[data-overflow~="end"]', [LAYER])["--fade-end"]).toBe("24px");
+  // At 24px the first letter of "She…", cut 21px from the edge, kept about 85% of its ink and the
+  // name read as stopped mid-word (combined QA 19); at 40px it keeps about half
+  // (redesign-shots/sheet-system/strip-fade.ts). The open chip is revealed clear of this width.
+  it("fade the edge a strip can still scroll toward over about five letters of a name", () => {
+    expect(declarations(css, '.strip-scroller[data-overflow~="start"]', [LAYER])["--fade-start"]).toBe("40px");
+    expect(declarations(css, '.strip-scroller[data-overflow~="end"]', [LAYER])["--fade-end"]).toBe("40px");
   });
 });
 
@@ -64,13 +67,5 @@ describe("strips on a touch screen", () => {
     expect(chipReach().top).toBeUndefined();
     // The tab row's reach goes under the pane row, never over its pills.
     expect(Number(band("panes")["z-index"])).toBeGreaterThan(Number(band("tabs")["z-index"]));
-  });
-});
-
-describe("the tab and pane sheets", () => {
-  it("give the sheet's title row over to the edit header while renaming, and never hide the edit header", () => {
-    const rule = cssRules(css).find((r) => r.selectors.some((sel) => sel.startsWith(".sheet-bottom-panel:has([data-sheet-edit-header])")));
-    expect(rule?.decls.display).toBe("none");
-    expect(rule?.selectors.every((sel) => sel.endsWith(":not(:has([data-sheet-edit-header]))"))).toBe(true);
   });
 });

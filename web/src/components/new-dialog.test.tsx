@@ -71,7 +71,10 @@ function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", host = false }:
 
 function desktop() {
   const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query }) as MediaQueryList;
+  window.matchMedia = (query) => ({
+    matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query,
+    addEventListener: () => {}, removeEventListener: () => {},
+  }) as unknown as MediaQueryList;
   onTestFinished(() => { window.matchMedia = matchMedia; });
 }
 
@@ -124,6 +127,31 @@ it("names each step in the sheet's one title, and steps back from its header", a
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByRole("dialog", { name: "New" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+});
+
+it("draws one header, the sheet's own, at every step", async () => {
+  const { user } = setup();
+  const dialog = await screen.findByRole("dialog", { name: "New" });
+  const header = () => ({
+    headings: within(dialog).getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+    closes: within(dialog).getAllByRole("button", { name: "Close" }).length,
+  });
+  expect(header()).toEqual({ headings: ["New"], closes: 1 });
+  await user.click(screen.getByRole("button", { name: /^Here in/ }));
+  expect(header()).toEqual({ headings: ["New tab"], closes: 1 });
+  await user.click(screen.getByRole("button", { name: /^Directory/ }));
+  await screen.findByRole("dialog", { name: "Choose a folder" });
+  expect(header()).toEqual({ headings: ["Choose a folder"], closes: 1 });
+});
+
+it("steps back on a desk only from the folder picker, where the list of kinds stays in view", async () => {
+  desktop();
+  const { user } = setup({ entry: "/?s=work" });
+  expect(await screen.findByRole("dialog", { name: "New tab" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: /^Directory/ }));
+  await user.click(await screen.findByRole("button", { name: "Back" }));
+  expect(screen.getByRole("dialog", { name: "New tab" })).toBeInTheDocument();
 });
 
 it("moves focus to each step as it opens, so a keyboard never drops out of the sheet", async () => {
@@ -180,8 +208,7 @@ it("opens from New on the list, and closes from its header", async () => {
   onTestFinished(() => openNewDialog(false));
   act(() => openNewDialog());
   expect(await screen.findByRole("dialog", { name: "New" })).toBeInTheDocument();
-  // The flow's header replaces the sheet's own, which only CSS hides, and jsdom applies none.
-  await user.click(screen.getAllByRole("button", { name: "Close" }).at(-1)!);
+  await user.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 

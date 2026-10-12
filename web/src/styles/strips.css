@@ -13,14 +13,16 @@
 .strip[data-workbench-navigation-band="tabs"] { z-index: 1; }
 .strip[data-workbench-navigation-band="panes"] { z-index: 2; }
 
-/* An edge the row can still scroll toward fades out, so a chip past it is seen to exist. The row
-   is only as wide as its chips, so a trailing + sits right after the last one until they overflow.
-   It clips 4px past its chips on each side, where the focus ring (2px, 2px out) of the first and
-   last one draws. */
+/* An edge the row can still scroll toward fades out, so a chip past it is seen to exist. 40px is
+   about five letters of a chip's name: on a phone the first letter of a name cut 21px from the edge
+   keeps about half its ink, where at 24px it kept about 85% and the name read as stopped mid-word.
+   It still reads as cut, and a whole chip that ends inside the fade dims with it. The row is only as
+   wide as its chips, so a trailing + sits right after the last one until they overflow. It clips 4px
+   past its chips on each side, where the focus ring (2px, 2px out) of the first and last one draws. */
 .strip-scroller { --fade-start: 0px; --fade-end: 0px; position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 0; height: 100%; padding-inline: 4px; margin-inline: -4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
 .strip-scroller::-webkit-scrollbar { display: none; }
-.strip-scroller[data-overflow~="start"] { --fade-start: 24px; }
-.strip-scroller[data-overflow~="end"] { --fade-end: 24px; }
+.strip-scroller[data-overflow~="start"] { --fade-start: 40px; }
+.strip-scroller[data-overflow~="end"] { --fade-end: 40px; }
 /* The chips, as wide as they need: the strip watches this box to keep the open one in view. */
 .strip-chips { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
 
@@ -68,8 +70,3 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   .workbench-chat[data-keyboard-open] [data-workbench-navigation-band] { display: none; }
 }
-
-/* Renaming a tab or pane: the sheet's own title row gives way to the edit header (Cancel · Rename ·
-   Save) in action-sheet-rows, as an iOS edit sheet does. ui/sheet.tsx has no header slot, so this
-   reaches into its panel (index.css) and hides whatever there does not hold the edit header. */
-.sheet-bottom-panel:has([data-sheet-edit-header]) > :not(:has([data-sheet-edit-header])) { display: none; }

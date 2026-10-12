@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { Check, Copy, MessageSquare, Workflow, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -155,6 +155,13 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
 }
 
 /**
+ * Set by a container whose own heading already names the run (the phone's Processes sheet), so the
+ * details don't say the name a second time. The details are built by the chat and handed to that
+ * sheet whole, which is why this travels by context rather than as a prop.
+ */
+export const RunNamedAbove = createContext(false);
+
+/**
  * A workflow's details, shaped for a side panel or a sheet: header with totals, one card per phase,
  * its agents, and the selected agent's result below them.
  */
@@ -168,6 +175,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
   className?: string;
 }) {
   const selected = selectedAgentId ? allAgents(workflow).find((a) => a.id === selectedAgentId) : undefined;
+  const namedAbove = useContext(RunNamedAbove);
   return (
     <div className={cn("flex flex-col", className)}>
       <div className="flex min-w-0 flex-col gap-5 pb-5">
@@ -178,7 +186,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
               <StatusTag status={workflow.status} />
               {workflow.startedAt !== undefined && <span className="text-xs text-muted-foreground">started {formatClock(workflow.startedAt)} by Claude</span>}
             </div>
-            <h2 className="truncate text-lg font-semibold tracking-tight">{workflow.name}</h2>
+            {!namedAbove && <h2 className="truncate text-lg font-semibold tracking-tight">{workflow.name}</h2>}
             {workflow.summary && <p className="max-w-[560px] text-[13.5px] leading-relaxed text-muted-foreground">{workflow.summary}</p>}
           </div>
           <div className="flex gap-6">

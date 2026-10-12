@@ -154,15 +154,22 @@ it("keeps the last known subagents while the pane reconnects", async () => {
   expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent("1 waiting on you");
 });
 
-it("on a phone, details replace the sheet's content with Back: one sheet, never two", async () => {
+it("on a phone, details replace the sheet's content: one sheet, named once, with the header's Back", async () => {
   const { user } = renderChat();
   await user.click(await chip());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   const sheet = screen.getByRole("dialog", { name: runningRun.name });
-  expect(await within(sheet).findByRole("heading", { name: runningRun.name })).toBeVisible();
-  await user.click(within(sheet).getByRole("button", { name: "Back" }));
+  // Once the details have drawn, the run is named once, by the sheet's own title.
+  expect(await within(sheet).findByText("agents done")).toBeVisible();
+  expect(within(sheet).getAllByRole("heading", { name: runningRun.name })).toHaveLength(1);
+  // The way back is the header's chevron before that title, not a second control in the body.
+  const backs = within(sheet).getAllByRole("button", { name: "Back" });
+  expect(backs).toHaveLength(1);
+  const title = within(sheet).getByRole("heading", { name: runningRun.name });
+  expect(backs[0]!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.click(backs[0]!);
   expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
 });
 

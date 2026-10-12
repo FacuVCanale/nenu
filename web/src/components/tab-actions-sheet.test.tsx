@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -70,14 +70,17 @@ describe("TabActionsSheet — rename", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("name this tab")).toHaveFocus());
   });
 
-  it("edits under an iOS edit header, Cancel · Rename tab · Save, with no Back link", async () => {
+  it("edits under the sheet's one header, Back · Rename tab · Close, with Save under the field", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    expect(screen.getByRole("heading", { name: "Rename tab" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Tab name" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Rename tab" });
+    expect(within(dialog).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Rename tab"]);
+    expect(within(dialog).getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("button", { name: "Close" })).toHaveLength(1);
+    expect(within(dialog).getByRole("textbox", { name: "Tab name" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("can clear the field, but a blank tab name can't be saved", async () => {
@@ -89,11 +92,11 @@ describe("TabActionsSheet — rename", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("Cancel returns to the action list without saving", async () => {
+  it("Back returns to the action list without saving", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
 
     expect(screen.queryByPlaceholderText("name this tab")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -214,6 +217,15 @@ describe("TabActionsSheet — close", () => {
     expect(screen.getByRole("heading", { name: "Close “Tab 1”?" })).toBeInTheDocument();
     expect(screen.getByText("Its 2 panes close, and anything running in them stops. This can't be undone.")).toBeInTheDocument();
     expect(props.onClosed).not.toHaveBeenCalled();
+  });
+
+  it("names the tab once: the question takes the sheet's title in place of the name", async () => {
+    const user = userEvent.setup();
+    renderSheet({ name: "server" });
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    const dialog = screen.getByRole("dialog", { name: "Close “server”?" });
+    expect(within(dialog).getAllByText(/server/)).toHaveLength(1);
+    expect(within(dialog).getAllByRole("heading")).toHaveLength(1);
   });
 
   it("names a lone pane in the singular", async () => {

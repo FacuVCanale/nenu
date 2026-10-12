@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Bot, ChevronDown, ChevronRight, Radio, Terminal, Workflow, X } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, Radio, Terminal, Workflow, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { AgentBar, Meta, PhaseSteps, StateDot } from "./activity-parts";
 import { ArtifactList } from "./artifact-list";
 import { TaskOutput } from "./task-output";
-import { WorkflowDetail } from "./workflow-detail";
+import { RunNamedAbove, WorkflowDetail } from "./workflow-detail";
 
 // The session's background work behind one chip in the composer row: what waits on you, what runs,
 // and what finished, in a list whose rows open in place. Details go to a side panel on a desk and
@@ -227,7 +227,8 @@ export function ProcessPanel({ title, onClose, children }: { title: string; onCl
  * The chip in the composer row: "● 3 running", or "● 1 waiting on you" in the blocked colour. Once
  * nothing waits or runs it goes quiet ("3 done", no dot) so finished work stays one tap away, and it
  * is absent only when the session has nothing at all. A desk opens the list as a popover anchored to the chip; a
- * phone opens a bottom sheet sized to its content, whose content the details replace (with Back).
+ * phone opens a bottom sheet sized to its content, whose content the details replace: the sheet's
+ * header then names the run and steps back to the list.
  * On a desk, details are handed to `onDetail` for the side panel and the popover closes.
  */
 export function ProcessesChip({ processes, published = 0, desktop, open, onOpenChange, list, detail, detailContent, detailName, onBack }: {
@@ -261,13 +262,9 @@ export function ProcessesChip({ processes, published = 0, desktop, open, onOpenC
       ? <WorkbenchPopover open={open} onDismiss={() => onOpenChange(false)} anchorRef={trigger} label="Processes" className="w-[min(26rem,calc(100vw-2rem))] [&>div:last-child]:p-1.5">
         {list}
       </WorkbenchPopover>
-      : <BottomSheet open={open} onClose={() => onOpenChange(false)} title={phoneDetail ? detailName ?? "Details" : "Processes"}>
-        {phoneDetail ? <div className="flex flex-col gap-3">
-          <button type="button" onClick={onBack} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 self-start rounded-md px-2 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft aria-hidden="true" className="size-4" />Back
-          </button>
-          {phoneDetail}
-        </div> : list}
+      : <BottomSheet open={open} onClose={() => onOpenChange(false)} title={phoneDetail ? detailName ?? "Details" : "Processes"}
+        onBack={phoneDetail ? onBack : undefined}>
+        {phoneDetail ? <RunNamedAbove value>{phoneDetail}</RunNamedAbove> : list}
       </BottomSheet>}
   </>;
 }

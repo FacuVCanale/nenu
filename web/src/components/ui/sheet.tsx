@@ -1,5 +1,5 @@
 import * as React from "react";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -53,25 +53,61 @@ const DESKTOP = {
   dialog: { viewport: "lg:justify-start lg:pt-[12dvh]", panel: "lg:max-w-160 lg:max-h-[80dvh]!" },
 } as const;
 
+/** What a sheet's header says: the title, and the way back to the step before when there is one. */
+interface SheetStep {
+  title: string | undefined;
+  back: (() => void) | undefined;
+}
+
+const SheetStepContext = React.createContext<React.Dispatch<React.SetStateAction<SheetStep | null>> | null>(null);
+
+/**
+ * Names the sheet this renders in, and with `onBack` puts the chevron back before the title, for as
+ * long as it is on screen: a step a sheet shows in place of its list (a rename, a confirmation) titles
+ * the sheet's one header instead of drawing a second one. Gone, it hands the sheet its own title back.
+ */
+export function useSheetStep(title: string, onBack?: () => void) {
+  const claim = React.useContext(SheetStepContext);
+  const back = React.useRef(onBack);
+  React.useLayoutEffect(() => {
+    back.current = onBack;
+  });
+  const hasBack = onBack !== undefined;
+  React.useLayoutEffect(() => {
+    if (!claim) return;
+    const step: SheetStep = { title, back: hasBack ? () => back.current?.() : undefined };
+    claim(step);
+    return () => claim((current) => (current === step ? null : current));
+  }, [claim, title, hasBack]);
+}
+
 // A minimal bottom sheet — no Radix, no portals, no extra deps. Renders nothing once closed and
 // gone. Dismisses on backdrop tap or Escape.
 interface BottomSheetProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  /** A sheet with steps: the way back to the step before, a chevron before the title. */
+  onBack?: () => void;
   children: React.ReactNode;
   className?: string;
+  /** The body's own layout, for a sheet that lays its content out edge to edge. */
+  bodyClassName?: string;
+  /** The title, for a sheet that moves focus to it as its steps change. */
+  headingRef?: React.Ref<HTMLHeadingElement>;
   /** Its shape from 1024 px; below that it is always the bottom sheet. */
   desktop?: keyof typeof DESKTOP;
 }
 
-export function BottomSheet({ open, onClose, title, children, className, desktop = "panel" }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, onBack, children, className, bodyClassName, headingRef, desktop = "panel" }: BottomSheetProps) {
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const drag = React.useRef({ startY: 0, atTop: false, engaged: false, dy: 0 });
   const [dragY, setDragY] = React.useState(0);
+  const [step, setStep] = React.useState<SheetStep | null>(null);
   const titleId = React.useId();
-  const { mounted, closing, content } = usePresence(open, { title, children }, viewportRef);
+  const { mounted, closing, content } = usePresence(open, { title, onBack, children }, viewportRef);
+  const header = step ?? { title: content.title, back: content.onBack };
   useDialogFocus(open, panelRef);
 
   // Backdrop dismiss requires press AND release on the backdrop itself (the Radix
@@ -166,7 +202,7 @@ export function BottomSheet({ open, onClose, title, children, className, desktop
       )}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={content.title ? titleId : undefined}
+      aria-labelledby={header.title ? titleId : undefined}
       inert={closing}
     >
       {/* Backdrop: still dismisses on tap, but hidden from assistive tech — the ✕ in the header is
@@ -209,6 +245,11 @@ export function BottomSheet({ open, onClose, title, children, className, desktop
           className,
         )}
       >
+        {/* The one header: the title at the start, the chevron back before it on a sheet with steps,
+            the ✕ at the end. Both buttons reach 44px on a touch screen and hang into the 16px gutter,
+            so the title starts where the rows below do. A long title (a confirmation naming a long
+            tab) wraps whole rather than losing its question mark; the title's padding makes one line
+            as tall as the buttons, so they stay beside its first line. */}
         <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-md">
           {/* Grab handle — pull down (from anywhere at the top) to dismiss. From 640 px a sheet may
               float as a dialog (its owner's or the desk's), where a handle promises a pull that
@@ -216,16 +257,23 @@ export function BottomSheet({ open, onClose, title, children, className, desktop
           <div className="flex justify-center pt-2 pb-1 sm:hidden">
             <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
           </div>
-          <div className="flex items-center justify-between px-4 pb-3 sm:pt-3">
-            <span id={content.title ? titleId : undefined} className="text-sm font-semibold">
-              {content.title}
-            </span>
-            <Button variant="ghost" size="icon" className="lg:-mr-2" onClick={onClose} aria-label="Close">
-              <X className="size-4" />
+          <div className="flex items-start gap-1 px-4 pb-2 sm:pt-3">
+            {header.back && (
+              <Button variant="ghost" size="icon" className="-ml-2 coarse:-ml-3" onClick={header.back} aria-label="Back">
+                <ChevronLeft className="size-5" />
+              </Button>
+            )}
+            <h2 ref={headingRef} id={header.title ? titleId : undefined} tabIndex={-1} className="min-w-0 flex-1 py-1 text-title [overflow-wrap:anywhere] outline-none coarse:py-2">
+              {header.title}
+            </h2>
+            <Button variant="ghost" size="icon" className="-mr-2 coarse:-mr-3" onClick={onClose} aria-label="Close">
+              <X className="size-5" />
             </Button>
           </div>
         </div>
-        <div className="px-4 py-3">{content.children}</div>
+        <div className={cn("px-4 py-3", bodyClassName)}>
+          <SheetStepContext value={setStep}>{content.children}</SheetStepContext>
+        </div>
       </div>
     </div>
   );

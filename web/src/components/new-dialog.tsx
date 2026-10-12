@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
-import { AppWindow, ChevronLeft, ChevronRight, Folder, FolderGit2, FolderPlus, MessageCircle, Sparkles, X, type LucideIcon } from "lucide-react";
+import { AppWindow, ChevronRight, Folder, FolderGit2, FolderPlus, MessageCircle, Sparkles, X, type LucideIcon } from "lucide-react";
 import { useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import {
@@ -18,6 +18,7 @@ import {
 import { NodeStartForm, errorMessage, startableRoles } from "@/components/node-start";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { createOrgProject, fetchHomeDirs } from "@/lib/api";
 import { baseName, tildePath } from "@/lib/dir-picker";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
@@ -96,7 +97,8 @@ const canStart = (project: ProjectView) => startableRoles(project).length > 0;
 
 /**
  * The one place to start an agent or organize work, whichever button opened it: a bottom sheet on a
- * phone whose header names the step and steps back, a two-pane dialog of one fixed size on a desk.
+ * phone whose header names the step and steps back, a two-pane dialog of one fixed size on a desk,
+ * where the list of kinds stays in view and only the folder picker steps back.
  */
 export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset; onClose: () => void }) {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
@@ -116,6 +118,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
     return context.project ? "thread" : context.workspaceId ? "tab" : "workspace";
   });
   const [browsing, setBrowsing] = useState(false);
+  const desk = useMediaQuery(DESKTOP);
   const heading = useRef<HTMLHeadingElement>(null);
   const body = useRef<HTMLElement>(null);
   useHoldReload("new-dialog", true);
@@ -128,7 +131,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   // A tab opens in a workspace and a thread in a project; without one, that kind is not offered.
   const shown = kind === "tab" && !workspace ? null : kind === "thread" && !current ? null : kind;
   const title = browsing ? "Choose a folder" : shown ? titleOf(shown, nodeRole) : "New";
-  const back = browsing ? () => setBrowsing(false) : shown ? () => choose(null) : null;
+  const back = browsing ? () => setBrowsing(false) : shown && !desk ? () => choose(null) : undefined;
   const step = browsing ? "folder" : shown ?? "list";
 
   // Each step takes focus as it opens, since the control that opened it is hidden or gone by then. A
@@ -173,34 +176,20 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
       open
       onClose={onClose}
       title={title}
+      onBack={back}
+      headingRef={heading}
       className={cn(
-        // The flow draws its own header (one title per step, Back beside it) and lays out its own body.
-        "flex flex-col outline-none [&>div:first-child]:hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:p-0",
+        "flex flex-col",
         "sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-2xl sm:border sm:pb-4",
         // On a desk every step, the folder picker included, keeps one size.
         "lg:h-[min(40rem,85dvh)] lg:max-w-[760px] lg:overflow-hidden lg:pb-0",
         browsing && "h-dvh sm:h-[min(40rem,85dvh)]",
       )}
+      // The flow lays out its own body: the list, then each step's form, side by side on a desk.
+      bodyClassName="flex min-h-0 flex-1 flex-col p-0"
     >
-      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
-        <header className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-md lg:static lg:col-start-2 lg:row-start-1 lg:border-0 lg:bg-transparent lg:backdrop-blur-none">
-          <div className="flex justify-center pt-2 pb-1 sm:hidden" aria-hidden>
-            <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
-          </div>
-          <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-1 px-2 py-1 sm:pt-3 lg:flex lg:gap-2 lg:px-5 lg:pt-4 lg:pb-2">
-            {back ? (
-              <Button type="button" variant="ghost" size="icon" aria-label="Back" onClick={back} className={cn("max-lg:size-11", !browsing && "lg:hidden")}>
-                <ChevronLeft className="size-5" />
-              </Button>
-            ) : <span className="lg:hidden" />}
-            <h2 ref={heading} tabIndex={-1} className="truncate text-center text-headline outline-none lg:flex-1 lg:text-left">{title}</h2>
-            <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose} className="max-lg:size-11">
-              <X className="size-5 lg:size-4" />
-            </Button>
-          </div>
-        </header>
-
-        <nav aria-label="Create" className={cn("flex flex-col gap-4 p-2 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:gap-3 lg:overflow-y-auto lg:border-r lg:border-border lg:p-2.5", shown && "max-lg:hidden")}>
+      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <nav aria-label="Create" className={cn("flex flex-col gap-4 p-2 lg:gap-3 lg:overflow-y-auto lg:border-r lg:border-border lg:p-2.5", shown && "max-lg:hidden")}>
           <KindGroup title="Start an agent" rows={start} current={shown} onChoose={choose} />
           <KindGroup title="Organize" rows={organize} current={shown} onChoose={choose} />
           <p className="mt-auto hidden p-2.5 text-caption text-muted-foreground lg:block">
@@ -208,7 +197,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
           </p>
         </nav>
 
-        <section ref={body} aria-label={title} className={cn("flex min-w-0 flex-1 flex-col px-4 pt-3 lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:px-5 lg:pt-1 lg:pb-4", !shown && "max-lg:hidden")}>
+        <section ref={body} aria-label={title} className={cn("flex min-w-0 flex-1 flex-col px-4 pt-3 lg:overflow-y-auto lg:px-5 lg:pt-4 lg:pb-4", !shown && "max-lg:hidden")}>
           {shown === "thread" && current && (
             <ThreadPane projects={projects} current={current} onProject={setProject} role={nodeRole} onRole={setRole} readOnly={readOnly}
               session={data?.session} onStarted={() => threadStarted(current.slug)} />
