@@ -303,12 +303,15 @@ function headerChips(row: string): InteractionStep[] | null {
   return chips.length ? chips : null;
 }
 
-/** Codex's `Question 2/3 (1 unanswered)` as steps; it names no question, so each is "Question n". */
+/**
+ * Codex's `Question 2/3 (1 unanswered)` as steps; it names no question, so each is "Question n". It
+ * counts the unanswered ones without saying which, so a question is marked answered only once none is left.
+ */
 function codexProgress(row: string): InteractionStep[] | null {
   const m = /^Question (\d+)\/(\d+) \((\d+) unanswered\)$/.exec(row);
   if (!m) return null;
   const [at, of, open] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  return Array.from({ length: of }, (_, k) => ({ label: `Question ${k + 1}`, answered: k + 1 < at && k < of - open, current: k + 1 === at }));
+  return Array.from({ length: of }, (_, k) => ({ label: `Question ${k + 1}`, answered: open === 0, current: k + 1 === at }));
 }
 
 /**
