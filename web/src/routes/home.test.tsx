@@ -251,6 +251,19 @@ describe("a project's coordinator", () => {
     expect(posts).toEqual([]);
   });
 
+  it("goes straight to the coordinator when its queue can't take a message from Home, without asking when first", async () => {
+    server.use(http.get("/api/pane/:pane/queue", () => HttpResponse.json({ available: false, messages: [] })));
+    const { user, router, main } = await setup(working);
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Also the landing{Enter}");
+    const notice = within(await main.findByRole("alert"));
+    expect(notice.getByText("Hub's coordinator can't take messages from Home")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(box).toHaveValue("Also the landing");
+    await user.click(notice.getByRole("link", { name: "Open coordinator" }));
+    expect(router.state.location.pathname).toBe("/pane/c1");
+  });
+
   it("says in a card why a send failed, keeps the draft and offers the coordinator in one tap", async () => {
     server.use(http.get("/api/pane/:pane/queue", () => HttpResponse.json({ available: false, messages: [] })));
     const { user, router, main } = await setup(projectData);
