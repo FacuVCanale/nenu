@@ -88,9 +88,10 @@ it("says a node is gone and offers its project or Home", async () => {
   const { router, user } = setup("/project/hub/node/t-9");
   const main = within(await screen.findByRole("main"));
   expect(main.getByRole("heading", { name: "Thread not found" })).toBeInTheDocument();
+  // The line names the project, so the button can stay short: a long name would push it off a phone.
   expect(main.getByText("Hub no longer lists it.")).toBeInTheDocument();
   expect(main.getByRole("link", { name: "Go to Home" })).toBeInTheDocument();
-  await user.click(main.getByRole("link", { name: "Open Hub" }));
+  await user.click(main.getByRole("link", { name: "Open project" }));
   expect(router.state.location.pathname).toBe("/project/hub");
 });
 
