@@ -41,7 +41,8 @@ export function HomeRoute() {
   const navigation = useContext(WorkbenchNavigationContext);
   const now = Date.now();
   const live = !data.error && data.bridge === "connected";
-  const readOnly = isReadOnly(data.device);
+  // Why answering and sending are paused, if they are: one reading for the cards and the composer.
+  const lock = lockReasonOf({ ...data, readOnly: isReadOnly(data.device) });
   const interactions = useInteractions(data.session, live);
   const activity = useHomeActivity(live ? data.agents : [], data.session);
   const lost = useConnectionLost(isConnecting(data));
@@ -80,7 +81,7 @@ export function HomeRoute() {
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
       <div className="flex flex-col">
-        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
+        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} lock={lock} />
         <Reveal>{live && !data.agents.length && (
           <div className="pt-6 lg:pt-7">
             <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />
@@ -92,7 +93,7 @@ export function HomeRoute() {
         {calm
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
-            interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} opening={opening} />}
+            interactions={interactions} lockReason={lock} opening={opening} />}
         <RecentChats chats={recent} session={data.session} now={now} opening={opening} />
         <ReadyToReviewList entries={reviews} session={data.session} opening={opening} />
         {running.length > 0 && (
@@ -170,7 +171,7 @@ class Unavailable extends Error {}
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
-function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean }) {
+function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; lock: LockReason | undefined }) {
   const [message, setMessage] = useState("");
   const [choice, setChoice] = useState<string | null>(readTarget);
   const [asking, setAsking] = useState(false);
@@ -192,8 +193,7 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
   const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
   const busyChoice = target.kind === "project" ? busyChoiceFor(target.coordinator.agent) : null;
   // A locked box says what it waits for, from the moment it locks; the banner says what went wrong.
-  const lock = disabled ? lockReasonOf({ ...data, readOnly: isReadOnly(data.device) }) : undefined;
-  const placeholder = lock ? `${LOCKED_VERB[lock]} to ${action}`
+  const placeholder = disabled && lock ? `${LOCKED_VERB[lock]} to ${action}`
     : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
   /** Send in `mode`, or with "ask" only check that the queue takes it and then ask when it is read. */
