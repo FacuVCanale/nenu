@@ -46,12 +46,13 @@ function Hit({ text }: { text: string }) {
   );
 }
 
-const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone";
-// A code span this short stays on one line: it moves down whole instead of splitting
-// `workbench-composer` at its hyphen or `--page-gutter` after its dashes. Twenty-four monospace
-// characters at the body size measure about 210px, under the narrowest column prose sits in (a bubble
-// on a 390px phone, about 270px). A longer span wraps where it has to, and breaks inside a word only
-// when that one word is wider than the line.
+const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone [overflow-wrap:anywhere]";
+// A short span (an identifier, a flag, a file name) sits in an inline box capped at the line, so it
+// moves down whole instead of splitting `workbench-composer` at its hyphen, and breaks inside itself
+// only when it is wider than a whole line, as in a bubble at page zoom. The box carries no padding of
+// its own: the pill stays on the inline `code`, so a line holding one keeps the paragraph's pitch. A
+// longer span flows inline and wraps where it has to; moved down whole it would leave a ragged gap.
+const WHOLE = "inline-block max-w-full [overflow-wrap:anywhere]";
 const WHOLE_CODE_CHARS = 24;
 
 // Emphasis and links hold child spans (agents nest them — ``**`sha`**`` is routine), so this recurses
@@ -77,13 +78,11 @@ function Span({ span }: { span: MdSpan }) {
       );
     case "code": {
       const path = localFilePath(span.text);
-      const look = cn(INLINE_CODE, span.text.length <= WHOLE_CODE_CHARS ? "whitespace-nowrap" : "[overflow-wrap:anywhere]");
-      if (path && openFile) return <button type="button" className={cn(look, "text-left text-primary underline underline-offset-2")} onClick={() => openFile(path)}><Hit text={span.text} /></button>;
-      return (
-        <code className={look}>
-          <Hit text={span.text} />
-        </code>
-      );
+      const open = path && openFile ? () => openFile(path) : null;
+      const code = <code className={cn(INLINE_CODE, open && "text-primary underline underline-offset-2")}><Hit text={span.text} /></code>;
+      // A button is an inline box already, whatever its length.
+      if (open) return <button type="button" className={cn(WHOLE, "text-left")} onClick={open}>{code}</button>;
+      return span.text.length <= WHOLE_CODE_CHARS ? <span className={WHOLE}>{code}</span> : code;
     }
     case "link":
       // `href` was scheme-checked in the parser. noreferrer/noopener because these URLs come from
