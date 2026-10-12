@@ -278,6 +278,19 @@ describe("LiveConversation", () => {
     expect(screen.getByRole("button", { name: "Scroll to latest" })).toHaveTextContent("2 new");
   });
 
+  // T42: on a slow link the pane showed a spinner in its upper third until the history came back.
+  it("draws the thread's shape while the first load is slow, then the turns", () => {
+    const view = (history: PaneHistoryResponse | null, loading: boolean) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={loading} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(null, true));
+    const skeleton = screen.getByRole("status", { name: "Loading conversation…" });
+    expect(skeleton.querySelectorAll("[data-skeleton-turn]")).toHaveLength(3);
+    expect(container.querySelector(".animate-spin")).toBeNull();
+
+    rerender(view({ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false }, false));
+    expect(screen.queryByRole("status", { name: "Loading conversation…" })).not.toBeInTheDocument();
+    expect(screen.getByText("what changed today?")).toBeInTheDocument();
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
