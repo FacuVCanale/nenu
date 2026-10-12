@@ -30,17 +30,20 @@ import type { TranscriptEntry } from "@/lib/types";
 // The loader is deliberately not revalidated (`shouldRevalidate: false` in router.tsx), so the 1.5 s
 // poll never re-pulls a several-hundred-turn transcript out from under the reader.
 
-/** Why there's nothing to read, in the user's terms. Each is an ordinary state, not an error. */
-function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string) {
+/**
+ * Why there's nothing to read, in the user's terms. Each is an ordinary state, not an error. `name`
+ * may be "this pane", so it never starts a sentence; `offline` is why the snapshot can't be trusted.
+ */
+function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, offline: string | undefined) {
   switch (reason) {
     case "disabled":
       return { title: "History is off", body: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT)." };
     case "no-session":
-      return { title: "No conversation yet", body: `${name} has no agent session, so there's no transcript to read.` };
+      return { title: "No conversation yet", body: `There's no agent session in ${name}, so there's no transcript to read.` };
     case "no-log":
       return { title: "No transcript yet", body: `No transcript file was found for ${name}'s session yet.` };
     case "error":
-      return { title: "Couldn't read the transcript", body: "Go back and open History again." };
+      return { title: "Couldn't read the transcript", body: offline ? `${offline} Open History again once it's back.` : "Go back and open History again." };
   }
 }
 
@@ -64,9 +67,13 @@ export function HistoryRoute() {
   const pane =
     root.agents.find((a) => a.paneId === paneId) ??
     root.shellPanes.find((p) => p.paneId === paneId);
-  // The name every other view gives this pane. A pane that is gone has none, and its raw id means
-  // nothing to a reader, so the header then just says History.
+  // The name every other view gives this pane. A pane missing from the snapshot has none, and its
+  // raw id means nothing to a reader, so the header then just says History.
   const name = pane ? displayName(pane, root.projects) : undefined;
+  // Only a healthy snapshot can say the pane is gone, the guard DetailRoute closes a pane on. A failed
+  // read or a disconnected Herdr leaves a live pane out too, and is said in the connection banner's words.
+  const offline = root.error ? "Nenu can't reach its bridge right now." : root.bridge !== "connected" ? "Herdr is unavailable right now." : undefined;
+  const gone = !pane && !offline;
 
   // Pages walked back beyond the first request (only reachable on a log longer than HISTORY_PAGE_SIZE).
   const [older, setOlder] = useState<TranscriptEntry[]>([]);
@@ -199,9 +206,9 @@ export function HistoryRoute() {
   const matchCursor = matches.indexOf(cursor);
   const back = () => navigate(panePath(paneId, session));
   const total = Math.max(data.total, entries.length);
-  const empty = name
-    ? unavailableCopy(data.unavailable ?? "no-log", name)
-    : { title: "This pane is closed", body: "Its history can't be read from here anymore." };
+  const empty = gone
+    ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
+    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", offline);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -259,8 +266,8 @@ export function HistoryRoute() {
             title={empty.title}
             className="h-full justify-center"
             action={
-              <Button onClick={() => (name ? back() : navigate(homePath(session)))} className="max-w-[min(20rem,80vw)]">
-                <span className="truncate">{name ? `Back to ${name}` : "Back to Home"}</span>
+              <Button onClick={() => (gone ? navigate(homePath(session)) : back())} className="max-w-[min(20rem,80vw)]">
+                <span className="truncate">{gone ? "Back to Home" : `Back to ${name ?? "the pane"}`}</span>
               </Button>
             }
           >
