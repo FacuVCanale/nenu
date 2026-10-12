@@ -10,6 +10,7 @@ import { openNewDialog } from "@/components/new-agent-sheet";
 import { isCatchingUp, isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
 import { homePath } from "@/lib/nav";
+import { liveCoordinator } from "@/lib/projects";
 import { canCreate } from "@/lib/types";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
@@ -121,9 +122,13 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // A pane's chat draws its composer on the bottom edge, and its History is a view of that chat; the
-  // tab bar steps aside there only. A project page never draws one: a live coordinator opens its pane.
-  const tabBar = useParams().paneId === undefined;
+  // The tab bar steps aside where a chat owns the bottom edge: a pane with its composer, that pane's
+  // History, and a project whose live coordinator is opening its pane (the URL stays on the project while
+  // the pane loads). A project without one, and every node page, keep it.
+  const { paneId, projectSlug, nodeId } = useParams();
+  const opensPane = projectSlug !== undefined && nodeId === undefined
+    && liveCoordinator(data.projects?.find((project) => project.slug === projectSlug), data.agents) !== undefined;
+  const tabBar = paneId === undefined && !opensPane;
   const active: TabBarTab = sheet ?? (location.pathname === "/" ? "home" : null);
 
   return (
