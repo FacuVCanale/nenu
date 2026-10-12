@@ -72,11 +72,22 @@ const STEP_ICONS: Record<StepIconKind, LucideIcon> = {
   question: MessageCircleQuestion, thinking: Brain,
 };
 
-/** A call as its line draws it: the timeline's verbs, and the words that say what it acted on. */
+/**
+ * A call as its line draws it: the timeline's verbs, the words that say what it acted on, and `ask`,
+ * the present it reads in while it waits on the operator ("Run"), since it has not run yet.
+ */
 interface CallStep extends Omit<ToolStepDescription, "kind"> {
   kind: StepKind | "question";
+  ask: string;
   text: string;
 }
+
+// The present of each of the timeline's past verbs. One it lacks reads in its "…ing" form: a call
+// that waits must never read as one that already ran.
+const ASK: Record<string, string> = {
+  Ran: "Run", Read: "Read", Edited: "Edit", Wrote: "Write", Searched: "Search", Listed: "List", Fetched: "Fetch",
+  "Searched the web": "Search the web", "Ran agent": "Run agent", "Updated the plan": "Update the plan",
+};
 
 // Claude's AskUserQuestion and Codex's request_user_input, the calls that ask the operator a question.
 const QUESTION_TOOL = /^(?:AskUserQuestion|(?:.+\.)?request_user_input(?:_async)?)$/;
@@ -86,9 +97,10 @@ const QUESTION_TOOL = /^(?:AskUserQuestion|(?:.+\.)?request_user_input(?:_async)
  * Question with the question it asks, a Plan with the plan's title. Every other call is the timeline's.
  */
 function describeCall(part: ToolPart): CallStep {
-  if (QUESTION_TOOL.test(part.name)) return { kind: "question", done: "Question", doing: "Question", target: "text", text: part.questions?.[0]?.title ?? part.summary };
-  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", target: "text", text: firstLine(part.summary) };
-  return { ...describeTool(part.name), text: part.summary };
+  if (QUESTION_TOOL.test(part.name)) return { kind: "question", done: "Question", doing: "Question", ask: "Question", target: "text", text: part.questions?.[0]?.title ?? part.summary };
+  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "text", text: firstLine(part.summary) };
+  const step = describeTool(part.name);
+  return { ...step, ask: ASK[step.done] ?? step.doing, text: part.summary };
 }
 
 // 36px on a mouse, 44px under a finger, both from padding around one 20px line.
@@ -153,28 +165,40 @@ function FailedChip() {
   </span>;
 }
 
+/** A call the operator has to answer for says so on its line: the blocked dot, and the words plain (direction.md). */
+function WaitingChip() {
+  return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 text-caption text-foreground">
+    <span aria-hidden="true" className="size-1.5 rounded-full bg-status-blocked" />Waiting on you
+  </span>;
+}
+
 const OUTPUT = "min-w-0 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]";
 
-/** A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). */
-export function ToolStep({ id, part, owner, query, active, focused, live }: { id: string; part: ToolPart; owner?: string; query: string; active: boolean; focused: boolean; live?: Live }) {
+/**
+ * A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). In a
+ * turn `waiting` on the operator, a call without its result is what they are asked about: it has not
+ * run, so it reads as the request, with no clock and no claim about its output.
+ */
+export function ToolStep({ id, part, owner, query, active, focused, live, waiting = false }: { id: string; part: ToolPart; owner?: string; query: string; active: boolean; focused: boolean; live?: Live; waiting?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   const images = useToolImages();
   const open = expanded || focused || matches(part, query);
   const step = describeCall(part);
   const failed = !!part.result?.isError;
-  const running = !part.result && active;
-  const verb = running ? step.doing : step.done;
-  const status = failed ? "Failed" : !part.result && !active ? "No output recorded" : null;
+  const asking = waiting && !part.result;
+  const running = !part.result && active && !asking;
+  const verb = asking ? step.ask : running ? step.doing : step.done;
+  const status = failed ? "Failed" : asking ? "Waiting on you" : !part.result && !active ? "No output recorded" : null;
   const truncated = !!part.result?.truncated;
   return (
     <div data-tool={id} data-step={step.kind} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} />} live={live} label={[verb, step.text, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+      <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, step.text, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
         <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
         <StepTarget text={step.text} format={step.target} query={query} />
-        {failed ? <FailedChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
+        {failed ? <FailedChip /> : asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
         {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
       </StepLine>
       <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
@@ -183,7 +207,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live }: { id
         <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} /></p>
         {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} /></pre>}
         {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
-          : <p className="text-footnote text-muted-foreground">{active ? "Running…" : "No output recorded"}</p>}
+          : <p className="text-footnote text-muted-foreground">{asking ? "Waiting for your answer" : active ? "Running…" : "No output recorded"}</p>}
       </div>}
     </div>
   );
@@ -213,12 +237,13 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
 
 /**
  * The bottom line of a running turn: the step in progress, marked live. It opens like any step, so a
- * command or a thought cut short on a phone can be read whole while it runs.
+ * command or a thought cut short on a phone can be read whole while it runs. A call the turn is
+ * `waiting` on the operator for keeps this place and reads as waiting.
  */
-export function LiveStepRow({ step, query, focused, marker }: { step: LiveStep; query: string; focused: boolean; marker?: string }) {
+export function LiveStepRow({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
   return <div data-live-step data-turn={marker} className={focused && marker ? "rounded ring-2 ring-primary/60" : undefined}>
     {step.part.kind === "tool"
-      ? <ToolStep id={`${step.entry}:${step.index}`} part={step.part} owner={step.entry} query={query} active focused={focused} live={step} />
+      ? <ToolStep id={`${step.entry}:${step.index}`} part={step.part} owner={step.entry} query={query} active focused={focused} live={step} waiting={waiting} />
       : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} live={step} />}
   </div>;
 }
