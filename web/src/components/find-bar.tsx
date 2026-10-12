@@ -13,8 +13,24 @@ interface FindBarProps {
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
-  /** What is being searched — the mirror says "output", the transcript says "history". */
+  /** What is being searched: "chat", "terminal", or the history page's "history". */
   subject?: string;
+}
+
+/**
+ * The scrollTop that leaves a find hit a third of the way down what the reader can see: the list's
+ * box below any chrome drawn over its top (`inset`). A third, not the middle, so the lines before the
+ * match give it context and each step lands the eye in the same place.
+ */
+export function thirdScrollTop({ scrollTop, viewTop, viewBottom, hitTop, inset = 0 }: {
+  scrollTop: number;
+  viewTop: number;
+  viewBottom: number;
+  hitTop: number;
+  inset?: number;
+}): number {
+  const top = viewTop + inset;
+  return Math.max(0, Math.round(scrollTop + hitTop - (top + (viewBottom - top) / 3)));
 }
 
 // Compact one-row find bar that takes over the header while searching the pane mirror. Thumb-reach:

@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { useStatus } from "@/lib/status";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -10,14 +11,18 @@ import { DetailRoute } from "./detail";
 // Stub the heavy terminal view: this test is about DetailRoute's routing/freshPane logic, not the
 // composer. The stub reports which pane it was handed and whether an agent resolved for it.
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, agent }: { paneId: string; agent?: AgentView }) => (
-    <div data-testid="chat">{`pane:${paneId}:${agent ? "live" : "gone"}`}</div>
+  AgentChat: ({ paneId, agent, text, onSelect }: { paneId: string; agent?: AgentView; text: string; onSelect: (id: string) => void }) => (
+    <div data-testid="chat" data-text={text}>
+      {`pane:${paneId}:${agent ? "live" : "gone"}`}
+      <button type="button" onClick={() => onSelect("w1:p2")}>switch</button>
+    </div>
   ),
 }));
 
 function agentView(paneId: string, kind: "agent" | "shell", tabId = "w1:t1"): AgentView {
   return {
     paneId,
+    paneLabel: `pane ${paneId}`,
     workspaceId: tabId.split(":")[0]!,
     workspaceLabel: "proj",
     workspaceNumber: 1,
@@ -49,6 +54,11 @@ const connected = (agents: AgentView[], shellPanes: AgentView[] = [], tabs: TabV
   authError: false,
 });
 
+/** The toast the route raised, as text. */
+function StatusProbe() {
+  return <p data-testid="status">{useStatus()?.text ?? ""}</p>;
+}
+
 function makeRouter(initialPath: string, homeLoader: () => HomeData) {
   return createMemoryRouter(
     [
@@ -56,7 +66,7 @@ function makeRouter(initialPath: string, homeLoader: () => HomeData) {
         id: ROOT_ROUTE_ID,
         path: "/",
         loader: () => homeLoader(),
-        element: <Outlet />,
+        element: <><Outlet /><StatusProbe /></>,
         children: [
           { index: true, element: <div data-testid="home">HOME</div> },
           {
@@ -134,6 +144,17 @@ describe("DetailRoute — freshPane bootstrap", () => {
   });
 });
 
+describe("DetailRoute — switching panes", () => {
+  it("replaces the chat in history, so the back gesture leaves the chat rather than walking every pane", async () => {
+    const router = makeRouter(panePath("w1:p1"), () => connected([agentView("w1:p1", "agent"), agentView("w1:p2", "agent", "w1:t2")]));
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1:live");
+    await act(async () => screen.getByRole("button", { name: "switch" }).click());
+    expect(await screen.findByText("pane:w1:p2:live")).toBeInTheDocument();
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+});
+
 describe("DetailRoute — the open pane closes", () => {
   // w1 holds three tabs in Herdr's order and w2 one; a tab's id names its pane (w1:t2 → w1:p2).
   const panes = [agentView("w1:p1", "agent", "w1:t1"), agentView("w1:p2", "agent", "w1:t2"), agentView("w1:p3", "shell", "w1:t3"), agentView("w2:p1", "agent", "w2:t1")];
@@ -158,6 +179,7 @@ describe("DetailRoute — the open pane closes", () => {
     const router = await closeUnder("w1:p3", herd(["w1:p1", "w1:p2", "w2:p1"]));
     expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p2:live");
     expect(router.state.location.pathname).toBe(panePath("w1:p2"));
+    expect(screen.getByTestId("status")).toHaveTextContent("Tab w1:t3 closed · showing pane w1:p2");
   });
 
   it("lands on the next tab when the first one closes", async () => {
@@ -173,11 +195,43 @@ describe("DetailRoute — the open pane closes", () => {
     const router = await closeUnder("w1:p1", after, before);
     expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1b:live");
     expect(router.state.location.pathname).toBe(panePath("w1:p1b"));
+    expect(screen.getByTestId("status")).toHaveTextContent("pane w1:p1 closed · showing pane w1:p1b");
   });
 
   it("goes Home when the last tab of its workspace closes, never into another workspace", async () => {
     const router = await closeUnder("w2:p1", herd(["w1:p1", "w1:p2", "w1:p3"]));
     await screen.findByTestId("home");
     expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByTestId("status")).toHaveTextContent("Tab w2:t1 closed · back to Home");
+  });
+
+  it("says a link to a pane this page never saw no longer exists, and lands Home", async () => {
+    const router = makeRouter(panePath("w9:nope"), () => herd(panes.map((p) => p.paneId)));
+    render(<RouterProvider router={router} />);
+    await screen.findByTestId("home");
+    expect(router.state.location.pathname).toBe("/");
+    expect(screen.getByTestId("status")).toHaveTextContent("That pane no longer exists");
+  });
+});
+
+describe("DetailRoute — a pane opened before its read landed", () => {
+  it("asks for the read as soon as the chat shows, and shows it when it lands", async () => {
+    const pane = agentView("w1:p1", "agent");
+    let runs = 0;
+    const router = createMemoryRouter([{
+      id: ROOT_ROUTE_ID, path: "/", loader: () => connected([pane]), element: <Outlet />,
+      children: [{
+        path: "pane/:paneId",
+        loader: ({ params }): PaneData => {
+          runs++;
+          return { paneId: params.paneId ?? "", session: undefined, text: runs === 1 ? "" : "fresh", truncated: false, requestedLines: 600, revision: runs, error: false, authError: false, pending: runs === 1 };
+        },
+        element: <DetailRoute />,
+      }],
+    }], { initialEntries: [panePath("w1:p1")] });
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1:live");
+    await vi.waitFor(() => expect(screen.getByTestId("chat")).toHaveAttribute("data-text", "fresh"));
+    expect(runs).toBe(2);
   });
 });

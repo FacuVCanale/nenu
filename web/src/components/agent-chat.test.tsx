@@ -24,6 +24,7 @@ vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
 import { submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
+import { WorkbenchNavigationContext, type WorkbenchNavigation } from "@/lib/workbench-navigation";
 import { AgentChat } from "./agent-chat";
 import { StatusArea } from "./status-area";
 
@@ -68,7 +69,7 @@ async function openMenuItem(user: ReturnType<typeof userEvent.setup>, name: stri
   await user.click(screen.getByRole("button", { name }));
 }
 
-function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
+function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation) {
   const agent = fixtureAgents[0]!; // a blocked claude agent
   const props: ComponentProps<typeof AgentChat> = {
     paneId: agent.paneId,
@@ -81,7 +82,10 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
     onSelect: vi.fn(),
     ...overrides,
   };
-  const router = createMemoryRouter([{ path: "/", element: <><AgentChat {...props} /><StatusArea /></> }]);
+  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar.
+  const element = <><AgentChat {...props} /><StatusArea /></>;
+  const router = createMemoryRouter([{ path: "/pane/:paneId", element: navigation ? <WorkbenchNavigationContext value={navigation}>{element}</WorkbenchNavigationContext> : element }],
+    { initialEntries: [`/pane/${encodeURIComponent(props.paneId)}`] });
   render(<RouterProvider router={router} />);
   return props;
 }
@@ -140,16 +144,53 @@ function ProjectSentinel() {
 const neighbourShell = { ...fixtureAgents[0]!, paneId: "w1:shell", tabId: "w1:t9", kind: "shell" as const, agent: "shell", status: "idle" as const };
 
 describe("AgentChat — header title block", () => {
-  it("leads with the space, puts the directory on the subline, and drops the redundant agent name", () => {
-    renderChat({ shellPanes: [neighbourShell] }); // claude @ /home/you/webapp → ~/webapp
-    expect(screen.getByText("webapp")).toBeInTheDocument(); // space leads
-    expect(screen.getByText("~/webapp")).toBeInTheDocument(); // directory on the subline
-    // The agent is conveyed by its icon (aria-label only), so its name isn't repeated as text.
-    expect(screen.queryByText(/claude/i)).toBeNull();
+  const named = { ...fixtureAgents[0]!, paneLabel: "Working Claude", tabLabel: "review" };
+
+  it("names the pane as every row does and says where it lives under the name", () => {
+    renderChat({ agent: named, agents: [named] });
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent(/^Working Claude/);
+    expect(within(header).getByText("webapp")).toBeInTheDocument();
+    expect(within(header).getByText("review")).toBeInTheDocument();
+    // The folder is no longer the second line; the place is.
+    expect(within(header).queryByText("~/webapp")).toBeNull();
+  });
+
+  it("leads a phone chat with a back to Home instead of the brand mark", async () => {
+    const props = renderChat({ agent: named, agents: [named] }, { open: false, onOpen: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Back to Home" }));
+    expect(props.onBack).toHaveBeenCalledOnce();
+  });
+
+  it("opens the navigation sheet from the title, where every workspace, tab and pane is one tap away", async () => {
+    const onOpen = vi.fn();
+    renderChat({ agent: named, agents: [named] }, { open: false, onOpen });
+    const title = screen.getByRole("button", { name: /^Working Claude/ });
+    expect(title).toHaveAttribute("aria-haspopup", "dialog");
+    await userEvent.click(title);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("says under the title that Herdr isn't responding as soon as Herdr reports disconnected", () => {
+    renderChat({ agent: named, agents: [named], bridge: "disconnected" });
+    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+  });
+
+  it("keeps the folder one tap away in the ⋯ menu", async () => {
+    renderChat({ agent: named, agents: [named] });
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
+  });
+
+  it("drops the unlabeled grab handle: the terminal view switches panes from the title too", () => {
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell] });
+    expect(screen.queryByRole("button", { name: "Switch pane" })).toBeNull();
   });
 
   // A workspace has no page: its tabs and panes are the strips above the conversation.
-  it("opens nothing from a workspace pane's title, however many panes the workspace holds", () => {
+  it("opens no workspace page from a workspace pane's title, however many panes the workspace holds", () => {
     renderChat({ shellPanes: [neighbourShell] });
     expect(screen.getByText("webapp")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
@@ -234,10 +275,10 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     expect(await screen.findByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("Codex is ready")).not.toBeInTheDocument();
 
-    await openMenuItem(user, "Terminal mirror");
+    await openMenuItem(user, "Terminal view");
     expect(screen.getByText("Codex is ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.getByRole("button", { name: "Terminal mirror" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Terminal view" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("promotes a newly-created shell to the Codex workbench without remounting the pane", async () => {
@@ -449,6 +490,20 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     return (pane: { text: string; revision: number }) => advance(pane);
   }
 
+  // The answered menu leaving the screen is the receipt; a "Sent" toast over the thread repeated it
+  // (T10). What the screen cannot show, a menu that changed under the tap, still says so.
+  it("answers a terminal menu without a Sent toast, and still says when the menu changed under the tap", async () => {
+    const user = userEvent.setup();
+    renderChat({ text: MENU_TEXT });
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledOnce());
+    await act(async () => {});
+    expect(screen.queryByText("Sent")).toBeNull();
+    mockSubmit.mockResolvedValueOnce({ status: "changed" });
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+    expect(await screen.findByText("Menu changed — refreshing")).toBeInTheDocument();
+  });
+
   it("passes the FROZEN revision when the mirror is frozen and the pane advances underneath", async () => {
     // Regression (found in review): the handler used to pass the LIVE loader revision, which keeps
     // advancing via background polls even while the mirror is frozen — so the guard compared
@@ -463,7 +518,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     // Freeze the mirror (opening find pins the tail — the same `following=false` state a scroll-up
     // freeze produces).
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" }));
+    await user.click(screen.getByRole("button", { name: "Find in terminal" }));
 
     // The pane advances while frozen: new output below the menu + a bumped revision.
     act(() => advance({ text: `${MENU_TEXT}\n● proceeding…\n`, revision: 2 }));
@@ -494,7 +549,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     const advance = renderWithLivePane({ text: MENU_TEXT, revision: 1 });
     expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" }));
+    await user.click(screen.getByRole("button", { name: "Find in terminal" }));
     act(() => advance({ text: STATUS_TEXT, revision: 2 }));
     expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
     const input = screen.getByRole("textbox", { name: "" });
@@ -518,7 +573,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     await screen.findByRole("button", { name: /Parser/ });
 
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" })); // freeze the tail
+    await user.click(screen.getByRole("button", { name: "Find in terminal" })); // freeze the tail
     act(() => advance({ text: `${WIZARD_TEXT}\n● advancing…\n`, revision: 2 }));
 
     await user.click(screen.getByRole("button", { name: /Parser/ }));
@@ -688,7 +743,7 @@ describe("AgentChat — history affordance", () => {
     expect(screen.queryByRole("button", { name: /conversation history/i })).not.toBeInTheDocument();
   });
 
-  it("keeps a phone header to one ⋯ of five views, with no group headings", async () => {
+  it("keeps a phone header to one ⋯ of five views beside the pane's own actions", async () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true };
     renderChat({ agent, agents: [agent] });
     for (const name of [/conversation history/i, "Show raw terminal", "Artifacts and files", /^Subagents/]) {
@@ -697,8 +752,8 @@ describe("AgentChat — history affordance", () => {
     await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     const menu = screen.getByRole("dialog", { name: "Conversation actions" });
     expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
-      expect.arrayContaining(["Find in output", "Conversation history", "Artifacts and files", "Terminal mirror", "Display"]));
-    for (const heading of ["Terminal", "Shortcuts", "View"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
+      expect.arrayContaining(["Find in chat", "Conversation history", "Artifacts and files", "Terminal view", "Display"]));
+    for (const heading of ["Terminal", "Shortcuts"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
     // Message tools stay under the composer's chevron, background work behind the processes chip.
     for (const name of ["Keys", "Type into terminal", "Quick replies", "Background activity", "Subagents", "Context and usage"]) {
       expect(within(menu).queryByRole("button", { name })).not.toBeInTheDocument();
@@ -715,7 +770,7 @@ describe("AgentChat — history affordance", () => {
       expect(screen.getByRole("button", { name: "Show raw terminal" })).toBeVisible();
       expect(screen.queryByRole("button", { name: /^Subagents/ })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-      expect(screen.queryByRole("button", { name: "Terminal mirror" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Terminal view" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Artifacts and files" })).toBeVisible();
     } finally {
       window.matchMedia = original;
@@ -763,7 +818,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal mirror" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
     expect(loadOlder()).not.toBeInTheDocument();
   });
@@ -774,6 +829,13 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(loadOlder()).toBeInTheDocument();
     expect(showHistory()).not.toBeInTheDocument();
+  });
+
+  it("says Load older is busy while the older lines are on their way", () => {
+    const agent = { ...fixtureAgents[0]!, kind: "shell" as const, readableLines: 6946 };
+    renderChat({ agent, agents: [agent], requestedLines: 600 });
+    fireEvent.click(loadOlder()!);
+    expect(screen.getByRole("button", { name: /loading/i })).toHaveAttribute("aria-busy", "true");
   });
 
   it("offers nothing when the pane has neither", () => {
@@ -800,7 +862,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true, readableLines: 6946 };
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal mirror" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
     expect(loadOlder()).not.toBeInTheDocument();
   });
@@ -973,6 +1035,157 @@ it("blocks sending immediately after access is refused, without waiting for the 
   __resetConnectionHealth();
   renderChat({ error: true, authError: true });
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+});
+
+// A pane that is gone, when the route cannot move off it (Herdr is not answering, or it never was):
+// say what happened and offer the way on, instead of a dead composer under "(agent gone)".
+describe("AgentChat — a pane that is gone", () => {
+  const closed = { ...fixtureAgents[0]!, paneLabel: "Codex" };
+  const next = { ...fixtureAgents[0]!, paneId: "w1:p9", paneLabel: "Blocked Claude" };
+
+  it("says the pane closed and opens the pane beside it or Home, with no composer", async () => {
+    const props = renderChat({ agent: undefined, closed, next, error: true });
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Pane closed");
+    expect(screen.getByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("(no recent output)")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Open Blocked Claude" }));
+    expect(props.onSelect).toHaveBeenCalledWith("w1:p9");
+    await userEvent.click(screen.getByRole("button", { name: "Home" }));
+    expect(props.onBack).toHaveBeenCalled();
+  });
+
+  it("says a link names a pane Herdr no longer has", () => {
+    renderChat({ agent: undefined });
+    expect(screen.getByRole("heading", { name: "That pane no longer exists" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open / })).toBeNull();
+  });
+
+  it("does not claim a pane is gone while Nenu cannot ask Herdr", () => {
+    renderChat({ agent: undefined, error: true });
+    expect(screen.getByRole("heading", { name: "Nenu can't find this pane yet" })).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1 })).toHaveTextContent(/^Pane$/);
+  });
+});
+
+// A pane opened on the page's last text (its read still on the way) may show an input-box draft that
+// is gone by now; only the fresh read may offer it to Take over.
+describe("AgentChat — a pane opened on its last text", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const box = "─".repeat(40);
+  const withDraft = `hello from the pane\n${box}\n❯ a message recalled an hour ago\n${box}`;
+
+  it.each([[false, true], [true, false]])("pending %s offers the terminal's draft: %s", async (pending, offered) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderChat({ text: withDraft, pending });
+    act(() => vi.advanceTimersByTime(1600));
+    if (offered) expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    else expect(screen.queryByText(/draft in terminal/i)).toBeNull();
+  });
+});
+
+it("says the terminal is on its way, not that it printed nothing, while the pane's first read is pending", () => {
+  const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
+  renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "", pending: true });
+  expect(screen.getByRole("status", { name: "Reading the terminal" })).toBeInTheDocument();
+  expect(screen.queryByText("(no recent output)")).toBeNull();
+});
+
+// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11).
+describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", () => {
+  const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
+  const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
+
+  it("opens the pane's and the tab's actions from the menu", async () => {
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent], tabs });
+    await openMenuItem(user, "Rename or close pane…");
+    const paneSheet = screen.getByRole("dialog", { name: "Working Claude" });
+    expect(within(paneSheet).getByRole("button", { name: /Rename/ })).toBeInTheDocument();
+    expect(within(paneSheet).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
+    await user.click(within(paneSheet).getByRole("button", { name: "Close" }));
+    await openMenuItem(user, "Rename or close tab…");
+    expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
+  });
+
+  it("offers neither on a device that cannot write", async () => {
+    renderChat({ agent, agents: [agent], tabs, device: { enforced: true, device: "spare-phone", authorized: false } });
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
+  });
+});
+
+it("names a project's pane in the pane strip as its rows do", () => {
+  const coordinator = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
+  const projects = [{ slug: "shop", name: "Shop", status: "active" as const, coordinator: { paneId: "w1:p2", agent: "claude", liveStatus: "idle" as const }, threads: [] }];
+  renderChat({ agents: [fixtureAgents[0]!, coordinator], projects });
+  expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
+});
+
+// A project lays its Threads and PRs over the chat (ProjectFrame) and brings its own tabs into the
+// overlay, so only the header stays above it: the strips belong to the chat underneath.
+describe("AgentChat — a project's overlay", () => {
+  const sibling = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "Second pane" };
+
+  it("draws the project's tabs once, inside the overlay", () => {
+    const projectTabs = <div role="tablist" aria-label="Project" />;
+    renderChat({ strip: projectTabs, overlay: <div>{projectTabs}<p>Threads list</p></div> });
+    expect(screen.getAllByRole("tablist", { name: "Project" })).toHaveLength(1);
+    expect(screen.getByText("Threads list")).toBeVisible();
+  });
+
+  it("keeps a worker's chips and the pane row under the overlay", () => {
+    renderChat({ agents: [fixtureAgents[0]!, sibling], strip: <nav aria-label="Threads" />, overlay: <p>Threads list</p> });
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Threads" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Second pane/ })).toBeNull();
+  });
+});
+
+// Find names what it searches, in the menu and in the bar (T31).
+describe("AgentChat — find says what it searches", () => {
+  it("finds in the chat while the conversation shows", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+    renderChat({ agent, agents: [agent] });
+    await openMenuItem(userEvent.setup(), "Find in chat");
+    expect(screen.getByRole("textbox", { name: "Find in chat" })).toHaveAttribute("placeholder", "Find in chat…");
+  });
+
+  it("finds in the terminal while the mirror shows", async () => {
+    renderChat();
+    await openMenuItem(userEvent.setup(), "Find in terminal");
+    expect(screen.getByRole("textbox", { name: "Find in terminal" })).toBeInTheDocument();
+  });
+});
+
+// The composer names why it is locked, the same reason the question card gives: a refused sign-in is
+// not a device that was never authorised, and a silent Herdr is not a lost network.
+describe("AgentChat — why the composer is locked", () => {
+  beforeEach(() => __resetConnectionHealth());
+
+  it("asks for a new sign-in when access was refused", () => {
+    renderChat({ error: true, authError: true });
+    expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
+  });
+
+  it("says Herdr isn't responding as soon as Herdr reports disconnected", () => {
+    renderChat({ bridge: "disconnected" });
+    expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+  });
+
+  // DetailRoute passes the pane's own refusal as authError while the snapshot may still answer.
+  it("asks for a new sign-in when only the pane's read was refused", () => {
+    renderChat({ authError: true });
+    expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
+  });
+
+  it("says under the title that Herdr isn't responding on a device that cannot write, too", () => {
+    renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } });
+    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+  });
 });
 
 // Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box

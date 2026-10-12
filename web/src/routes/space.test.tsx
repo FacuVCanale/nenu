@@ -4,6 +4,7 @@ import { createMemoryRouter, Outlet, RouterProvider, useParams } from "react-rou
 import { vi } from "vitest";
 
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { useStatus } from "@/lib/status";
 import type { AgentView, TabView, WorkspaceView } from "@/lib/types";
 import { SpaceRoute } from "./space";
 
@@ -26,6 +27,10 @@ function home(over: Partial<HomeData>): HomeData {
   };
 }
 
+function StatusProbe() {
+  return <p data-testid="status">{useStatus()?.text ?? ""}</p>;
+}
+
 function PaneStub() {
   return <p>{`pane:${useParams().paneId}`}</p>;
 }
@@ -34,7 +39,7 @@ function PaneStub() {
 function setup(path: string, initial: HomeData) {
   let current = initial;
   const router = createMemoryRouter([{
-    id: ROOT_ROUTE_ID, path: "/", loader: () => current, element: <Outlet />,
+    id: ROOT_ROUTE_ID, path: "/", loader: () => current, element: <><Outlet /><StatusProbe /></>,
     children: [
       { index: true, element: <p>HOME</p> },
       { path: "space/:spaceId", element: <SpaceRoute /> },
@@ -78,7 +83,7 @@ it("opens a workspace that holds a single pane straight onto it", async () => {
 
 it("shows a workspace without a pane as an empty chat that starts one", async () => {
   const { user } = setup("/space/w3", herd);
-  expect(await screen.findByText("Nothing runs in this workspace yet.")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Nothing runs in this workspace yet" })).toBeInTheDocument();
   expect(screen.getByText("empty")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Start an agent or a shell" }));
   expect(openNewAgent).toHaveBeenCalledWith({ kind: "tab", workspaceId: "w3" });
@@ -86,11 +91,12 @@ it("shows a workspace without a pane as an empty chat that starts one", async ()
 
 it("offers nothing to start on a read-only device", async () => {
   setup("/space/w3", { ...herd, device: { enforced: true, device: "spare-phone", authorized: false } });
-  expect(await screen.findByText("Nothing runs in this workspace yet.")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Nothing runs in this workspace yet" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Start an agent or a shell" })).toBeNull();
 });
 
-it("goes Home from a workspace Herdr no longer has", async () => {
+it("goes Home from a workspace Herdr no longer has, and says so in the app's own word", async () => {
   setup("/space/w9", herd);
   expect(await screen.findByText("HOME")).toBeInTheDocument();
+  expect(screen.getByTestId("status")).toHaveTextContent("Workspace not found");
 });

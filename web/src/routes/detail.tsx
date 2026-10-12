@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
-import { useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData } from "react-router";
+import { useLoaderData, useLocation, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { AgentChat } from "@/components/agent-chat";
 import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
+import { displayName } from "@/lib/display-name";
 import { paneAfterClose, tabName } from "@/lib/spaces";
+import { narrowRevalidation } from "@/lib/revalidation";
 import { setStatus } from "@/lib/status";
 import type { AgentView, TabView } from "@/lib/types";
 
@@ -24,6 +26,15 @@ export function DetailRoute() {
   const session = pane.session;
   const navigate = useNavigate();
   const location = useLocation();
+  const { revalidate } = useRevalidator();
+
+  // The loader opened the chat before the pane's read landed (paneLoader): ask for that read now, so
+  // it shows as soon as it lands rather than at the next poll. Only the pane loader re-runs.
+  useEffect(() => {
+    if (!pane.pending) return;
+    narrowRevalidation("pane");
+    void revalidate();
+  }, [pane, revalidate]);
 
   const fresh = (location.state as { freshPane?: AgentView } | null)?.freshPane;
   const listed =
@@ -44,24 +55,25 @@ export function DetailRoute() {
   const seen = lastListed.current?.pane.paneId === paneId;
 
   const agent = listed ?? (fresh && fresh.paneId === paneId && !seen ? fresh : undefined);
-  const tab = root.tabs.find((t) => t.tabId === agent?.tabId);
-  const tabLabel = tab && tabName(tab.label, root.tabs.filter((t) => t.workspaceId === tab.workspaceId).indexOf(tab) + 1);
   const owner = projectForPane(root.projects, paneId);
   const project = owner?.project;
   const gone = !agent;
 
+  // The pane beside a closed one (paneAfterClose): where the route moves, and what the closed view offers.
+  const last = gone && seen ? lastListed.current : null;
+  const nextId = last ? paneAfterClose(last.pane, last.tabs, root) : undefined;
+  const next = nextId === undefined ? undefined : root.agents.find((p) => p.paneId === nextId) ?? root.shellPanes.find((p) => p.paneId === nextId);
+
   // Recover from a closed pane, whether Herdr or this page closed it: once a healthy snapshot no
-  // longer has it, open the pane beside it (paneAfterClose) instead of leaving you on a dead "agent
-  // gone" view, and go Home only when its workspace has nothing left. Guarded on a connected,
-  // non-stale snapshot so a transient poll failure or reconnect doesn't evict a still-valid pane.
+  // longer has it, open the pane beside it instead of leaving you on a dead view, and go Home only
+  // when its workspace has nothing left. The notice names what closed and where you are now. Guarded
+  // on a connected, non-stale snapshot so a transient poll failure or reconnect doesn't evict a
+  // still-valid pane; until then the chat shows the closed view with the same two ways on.
   useEffect(() => {
     if (!gone || root.bridge !== "connected" || root.error) return;
-    const last = seen ? lastListed.current : null;
-    const next = last ? paneAfterClose(last.pane, last.tabs, root) : undefined;
-    const tabClosed = last !== null && !root.tabs.some((t) => t.tabId === last.pane.tabId);
-    setStatus(tabClosed ? "Tab closed" : "Pane closed", "info");
-    navigate(next ? panePath(next, session) : homePath(session), { replace: true });
-  }, [gone, seen, root, navigate, session]);
+    setStatus(closedNotice(last, next, root), "info");
+    navigate(next ? panePath(next.paneId, session) : homePath(session), { replace: true });
+  }, [gone, last, next, root, navigate, session]);
 
   const chat = (slots: Partial<ProjectChatSlots> = {}) => (
     <AgentChat
@@ -70,12 +82,15 @@ export function DetailRoute() {
       paneId={paneId}
       session={session}
       agent={agent}
+      closed={last?.pane}
+      next={next}
       project={project ? { slug: project.slug, name: project.name, role: owner?.thread?.role ?? "coordinator" } : undefined}
       agents={root.agents}
       shellPanes={root.shellPanes}
       tabs={root.tabs}
-      tabLabel={tabLabel}
+      projects={root.projects}
       text={pane.text}
+      pending={pane.pending}
       nativeTelemetry={pane.nativeTelemetry}
       requestedLines={pane.requestedLines}
       revision={pane.revision}
@@ -85,9 +100,21 @@ export function DetailRoute() {
       authError={root.authError || pane.authError}
       // A project's page opens its coordinator, so leaving a project pane goes Home, not back into it.
       onBack={() => navigate(homePath(session))}
-      onSelect={(id) => navigate(panePath(id, session))}
+      // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
+      // the browser's back leaves the chat instead of walking back through every pane visited.
+      onSelect={(id) => navigate(panePath(id, session), { replace: true })}
     />
   );
 
   return owner ? <ProjectFrame owner={owner} paneId={paneId} data={root}>{chat}</ProjectFrame> : chat();
+}
+
+/** What closed and where the route went: a link to a pane this page never saw names no pane at all. */
+function closedNotice(last: { pane: AgentView; tabs: TabView[] } | null, next: AgentView | undefined, now: HomeData): string {
+  if (!last) return "That pane no longer exists";
+  const tabs = last.tabs.filter((t) => t.workspaceId === last.pane.workspaceId);
+  const tab = tabs.find((t) => t.tabId === last.pane.tabId);
+  const tabClosed = tab !== undefined && !now.tabs.some((t) => t.tabId === tab.tabId);
+  const what = tabClosed ? `Tab ${tabName(tab.label, tabs.indexOf(tab) + 1)}` : displayName(last.pane, now.projects);
+  return `${what} closed · ${next ? `showing ${displayName(next, now.projects)}` : "back to Home"}`;
 }

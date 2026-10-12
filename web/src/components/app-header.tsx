@@ -11,10 +11,16 @@ import type { BridgeStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-/** Where a screen's back control leads: the parent's path and its name, read out as "Back to <label>". */
+/** Where a screen's back control leads: the parent and its name, read out as "Back to <label>". */
 export interface HeaderBack {
-  to: string;
   label: string;
+  /** The parent's path. */
+  to?: string;
+  /** Runs instead of following `to`: a parent the caller routes to itself, or one shown in place. */
+  onClick?: () => void;
+  /** The parent is shown in place (a subagent's Main): its name sits beside the chevron, and the back
+   *  stays on a desk, where the sidebar cannot reach it. */
+  inPlace?: boolean;
 }
 
 interface AppHeaderProps {
@@ -46,15 +52,16 @@ interface AppHeaderProps {
   override?: ReactNode;
 }
 
-/** The routes whose phone header leads with the mark, which opens navigation: Home, and a chat until its
- *  title opens the switcher; then the chat goes back like every other screen. */
+/** The routes whose phone header leads with the mark, which opens navigation, unless the caller gives
+ *  a back: Home, and a chat route. The chat itself passes its back (its title opens the navigation);
+ *  the chat route stays only for callers that draw a bare header there (workbench-shell's tests). */
 const HOME_ROUTE = "/";
 const CHAT_ROUTE = "/pane/:paneId";
 
 // A real 44 px box on a phone, its chevron at the leading edge so the stroke lines up with the 16 px page
 // gutter without a negative margin (which would push the focus ring off screen). On a desk the sidebar
-// is the way around, so the back steps aside.
-const BACK_CONTROL = "flex size-11 shrink-0 items-center rounded-md pl-1 text-foreground transition-opacity active:opacity-60 lg:hidden";
+// is the way around, so the back steps aside, unless its parent is shown in place.
+const BACK_CONTROL = "flex h-11 min-w-11 shrink-0 items-center rounded-md pl-1 text-foreground transition-opacity active:opacity-60";
 
 // Shared header and connection treatment for every route; its size and padding live in workbench.css.
 export function AppHeader({
@@ -76,8 +83,9 @@ export function AppHeader({
   const lost = useConnectionLost(isConnecting({ bridge, error }));
   // Home's bar is the brand: the page's headline sits right under it, so it carries no title of its own.
   const home = matchPath(HOME_ROUTE, pathname) !== null;
-  const mark = home || matchPath(CHAT_ROUTE, pathname) !== null;
-  const icon = <ChevronLeft aria-hidden className="size-6" strokeWidth={2.25} />;
+  const mark = !back && (home || matchPath(CHAT_ROUTE, pathname) !== null);
+  const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
+  const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : "lg:hidden");
   return (
     <header className="workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted">
       {override ?? (
@@ -92,10 +100,14 @@ export function AppHeader({
               lost={lost}
               className="workbench-chat-menu lg:hidden"
             />
+          ) : back?.onClick ? (
+            <button type="button" onClick={back.onClick} aria-label={`Back to ${back.label}`} className={backClass}>
+              {icon}{back.inPlace && <span className="text-body">{back.label}</span>}
+            </button>
           ) : onHome && !back ? (
-            <button type="button" onClick={onHome} aria-label="Back" className={BACK_CONTROL}>{icon}</button>
+            <button type="button" onClick={onHome} aria-label="Back" className={backClass}>{icon}</button>
           ) : (
-            <Link to={back?.to ?? homePath(session)} aria-label={`Back to ${back?.label ?? "Home"}`} className={BACK_CONTROL}>{icon}</Link>
+            <Link to={back?.to ?? homePath(session)} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>{icon}</Link>
           )}
           {/* Center region: the title, the route's own content, or on Home an empty flex-1 spacer that
               pushes the right cluster to the edge. min-w-0 so a long title truncates when tight. */}
