@@ -630,6 +630,21 @@ describe("LiveConversation — a step tapped while the turn runs", () => {
     expect(screen.queryByText("bun run build")).not.toBeInTheDocument();
   });
 
+  // A result that lands while an older page loads stays on its row once the page goes in above it.
+  it("keeps a result that landed while an older page was loading", async () => {
+    let resolvePage!: (value: PaneHistoryResponse) => void;
+    vi.mocked(fetchHistory).mockImplementation(() => new Promise((resolve) => { resolvePage = resolve; }));
+    const paged = (entries: TranscriptEntry[]) => <MemoryRouter><LiveConversation paneId="w1:p1" history={{ ...history(entries), hasMore: true }}
+      activityStatus="working" loading={false} error={false} /></MemoryRouter>;
+    const { rerender } = render(paged([ask, read, run()]));
+    fireEvent.click(screen.getByRole("button", { name: "Load older messages" }));
+    rerender(paged([ask, read, run("14 passed")]));
+    expect(screen.getByRole("button", { name: "Ran bun run test tab-strip" })).toBeInTheDocument();
+    await act(async () => { resolvePage(history([olderEntry])); });
+    expect(screen.getByText("An older request")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ran bun run test tab-strip" })).toBeInTheDocument();
+  });
+
   it("neither folds the held turn nor calls its calls unrecorded once the turn ends", () => {
     const { rerender } = render(view([ask, read, run()]));
     fireEvent.click(screen.getByRole("button", { name: /^Read / }));
