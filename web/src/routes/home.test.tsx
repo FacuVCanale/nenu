@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -9,6 +11,7 @@ import type { ActivityResponse } from "@/lib/activity";
 import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
+import { declarations } from "@/test/css-rules";
 import { server } from "@/test/setup";
 
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
@@ -161,6 +164,16 @@ it("calls the one action by one verb: describe a task, in a place, then Start", 
   expect(main.getByRole("button", { name: "Start" })).toBeEnabled();
   await user.selectOptions(main.getByRole("combobox", { name: "Send to" }), "workspace:w1");
   expect(chip()).toBe("In: Nenu");
+});
+
+it("sends with the thread composer's own button: one 32px circle with a 44px reach", async () => {
+  const { user, main } = await setup();
+  // The thread's Send (composer.tsx) wears these three; the shape and the reach live in their rules.
+  expect(main.getByRole("button", { name: "Start" })).toHaveClass("composer-action", "composer-send", "hit-area");
+  await user.selectOptions(main.getByRole("combobox", { name: "Send to" }), "workspace:w1");
+  expect(main.getByRole("button", { name: "Start" })).toHaveClass("composer-action", "composer-send", "hit-area");
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  expect(declarations(css, ".composer-action")).toMatchObject({ width: "32px", height: "32px", "border-radius": "9999px" });
 });
 
 it("starts a thread in a chosen workspace", async () => {
