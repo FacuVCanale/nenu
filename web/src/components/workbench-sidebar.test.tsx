@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView, ProjectView } from "@/lib/types";
-import { WorkbenchSidebar } from "./workbench-sidebar";
+import { WorkbenchSidebar, type SidebarRequest } from "./workbench-sidebar";
 
 function pane(paneId: string, paneLabel: string, lastActiveAt = 0): AgentView {
   return { paneId, paneLabel, lastActiveAt, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", agent: "claude", status: "idle", cwd: "/", focused: false };
@@ -272,6 +272,30 @@ describe("the sidebar", () => {
   it("leaves Home unmarked in a chat", () => {
     open("/pane/depo");
     expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
+  });
+
+  describe("in the phone's sheets", () => {
+    const sheet = (request?: SidebarRequest) => {
+      const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={herd} variant="sheet" request={request} /> }]);
+      render(<RouterProvider router={router} />);
+    };
+
+    it("lets the Needs you sheet's own title name its list, and leaves the host to Browse", () => {
+      sheet({ target: "needs-you", seq: 1 });
+      expect(screen.getByRole("region", { name: "Needs you" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Needs you" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+    });
+
+    it("keeps Search to its results", () => {
+      sheet({ target: "search", seq: 1 });
+      expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+    });
+
+    it("shows the host in Browse", () => {
+      sheet();
+      expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    });
   });
 
   it("names the host and what it holds in the footer, beside Settings", () => {
