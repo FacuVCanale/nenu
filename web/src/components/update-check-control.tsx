@@ -70,8 +70,8 @@ export function UpdateCheckControl() {
           )}
         </div>
         {status.action?.kind === "check" && (
+          // The badge shows the check running, so the button keeps its size and place meanwhile.
           <Button variant="outline" disabled={check === "checking"} aria-busy={check === "checking" || undefined} onClick={runCheck}>
-            {check === "checking" && <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
             Check now
           </Button>
         )}
@@ -148,7 +148,7 @@ function CommandRow({ command }: { command: string }) {
 
   return (
     <div className={cn(listRowClass, "items-start gap-2 pr-2")}>
-      <code className="min-w-0 flex-1 py-2 font-mono text-code break-words">{command}</code>
+      <code className="min-w-0 flex-1 py-2 font-mono text-code break-words coarse:py-3">{command}</code>
       <Button variant="ghost" size="icon" aria-label={copied ? "Copied" : "Copy command"} onClick={copy} className="shrink-0">
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       </Button>

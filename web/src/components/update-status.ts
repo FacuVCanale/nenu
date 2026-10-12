@@ -56,10 +56,11 @@ export function updateStatus(
     return { badge: `${update.majorAvailable} available`, tone: "new", detail: "A new major version. The routine update skips it; this command takes it.", command: MAJOR_COMMAND, action: notes(update.majorUrl) };
   }
   if (!update) return { ...checkBadge(check), detail: "Check whether a new version is available.", action: CHECK };
+  // A running or failed check takes the line on its own, so the row keeps its height meanwhile.
+  if (check !== "idle") return { ...checkBadge(check), action: CHECK };
   const meta = update.checkedAt ? `Checked ${timeAgo(update.checkedAt)}` : "Not checked yet";
   // A release flagged without a version to name is not "up to date" either.
-  const badge = check === "idle" && !update.releaseAvailable ? { badge: "Up to date", tone: "neutral" as const } : checkBadge(check);
-  return { ...badge, meta, action: CHECK };
+  return { badge: update.releaseAvailable ? null : "Up to date", tone: "neutral", meta, action: CHECK };
 }
 
 function checkBadge(check: UpdateCheck): Pick<UpdateStatus, "badge" | "tone"> {
