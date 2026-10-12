@@ -99,8 +99,9 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
       )}
       <QuestionHeading>{preview.question}</QuestionHeading>
 
-      {/* A row points at its option (its preview shows below); the pointed row is already shown. */}
-      <div className="flex flex-col gap-2">
+      {/* A row points at its option (its preview shows below); the pointed row is already shown. One
+          choice, so the rows are radios and the pointed one is checked. */}
+      <div role="radiogroup" aria-label={preview.question} className="flex flex-col gap-2">
         {preview.options.map((option, i) => {
           const id = `opt-${i}`;
           const busy = sending === id;
@@ -108,7 +109,8 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
             <button
               key={i}
               type="button"
-              aria-pressed={option.pointed}
+              role="radio"
+              aria-checked={option.pointed}
               disabled={locked}
               onClick={() => { if (!option.pointed) void press(id, { kind: "point", option }); }}
               className={optionSurface(busy ? "busy" : option.pointed ? "selected" : "default")}
