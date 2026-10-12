@@ -44,13 +44,12 @@ export const selectField = cn(inputField, "appearance-auto");
 /** A text area grows from its rows, not the input's height. */
 export const textField = cn(inputField, "h-auto resize-none py-2 coarse:h-auto");
 
-/** A labelled field of the New flow: the label over its control, and an optional line under it. */
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
+/** A labelled field of the New flow: the label over its control. */
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5 text-footnote font-medium text-muted-foreground">
       {label}
       {children}
-      {hint && <span className="font-normal">{hint}</span>}
     </label>
   );
 }
