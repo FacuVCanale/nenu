@@ -173,7 +173,7 @@ function describe(dialog: Dialog, agent: string): Described {
         kind: "wizard", family: agent, question: w.question, ...served,
         choices: [
           ...w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
-          ...stepNav(served.steps, true),
+          ...stepNav(served.steps),
         ],
       };
     }
@@ -181,16 +181,15 @@ function describe(dialog: Dialog, agent: string): Described {
       const m = dialog.model;
       if (m.phase === "review") return review(agent, "multi-select", m.incomplete, reviewAnswers(m.regionSignature));
       const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
-      const served = stepsOf(m.steps, true);
+      // No Back here: Left is measured on a wizard's questions and its review (WIZARD_NOTES), never on
+      // a checkbox step, and its own advance row is the step forward.
       return {
-        kind: "multi-select", family: agent, question: m.question, ...served,
+        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps, true),
         choices: [
           ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
           ...(textRow !== null ? [pick("Type something", { type: "typeSomething", n: textRow }, {}, true)] : []),
           pick(m.advanceLabel, { type: "advance" }, { role: "primary" }),
           ...(m.escape ? [pick(m.escape.label, keys([String(m.escape.n)]), { role: "deny" })] : []),
-          // Its own advance row is the step forward.
-          ...stepNav(served.steps, false),
         ],
       };
     }
@@ -221,12 +220,12 @@ function review(agent: string, kind: "wizard" | "multi-select", incomplete: bool
  * Back and Next across a wizard's questions: the Left/Right its footer advertises (ADR 0009), only
  * where they lead somewhere. Left clamps on the first question, so there is no Back there.
  */
-function stepNav(steps: InteractionStep[] | undefined, next: boolean): Draft[] {
+function stepNav(steps: InteractionStep[] | undefined): Draft[] {
   if (!steps || steps.length < 2) return [];
   const at = steps.findIndex((s) => s.current);
   return [
     ...(at > 0 ? [pick("Back", keys(WIZARD_BACK_KEYS), { role: "nav" })] : []),
-    ...(next ? [pick("Next", keys(WIZARD_NEXT_KEYS), { role: "nav" })] : []),
+    pick("Next", keys(WIZARD_NEXT_KEYS), { role: "nav" }),
   ];
 }
 
