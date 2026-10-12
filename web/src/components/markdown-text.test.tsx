@@ -142,3 +142,22 @@ describe("code blocks", () => {
     expect(container.querySelector("pre")).not.toHaveAttribute("data-clipped");
   });
 });
+
+describe("find hits", () => {
+  const TEXT = "El `workbench-composer` tapaba el composer.\n\n```css\n.workbench-composer { margin: 0 }\n```";
+
+  it("marks every hit, and names none of them current outside the current match", () => {
+    const { container } = render(<MarkdownText text={TEXT} query="composer" />);
+    const marks = [...container.querySelectorAll("mark")];
+    expect(marks).toHaveLength(3);
+    for (const mark of marks) expect(mark).not.toHaveAttribute("aria-current");
+  });
+
+  it("gives the current match's hits, prose, code and block alike, their own solid fill", () => {
+    const { container } = render(<><MarkdownText text={TEXT} query="composer" current /><MarkdownText text={TEXT} query="composer" /></>);
+    const [current, other] = [...container.children].map((root) => [...root.querySelectorAll("mark")]);
+    expect(current).toHaveLength(3);
+    for (const mark of current!) expect(mark).toHaveAttribute("aria-current", "true");
+    expect(current![0]!.className).not.toBe(other![0]!.className);
+  });
+});
