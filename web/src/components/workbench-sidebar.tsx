@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
+import { Bot, ChevronRight, House, Inbox, LayoutGrid, Plus, Search, Settings, Terminal } from "lucide-react";
 
 import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -16,7 +16,8 @@ import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, nodePath, panePath, projectPath, settingsPath } from "@/lib/nav";
+import { homePath, nodePath, panePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
+import type { Herd } from "@/lib/spaces";
 import { STATE_LABEL, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { chatRecency, isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
@@ -92,7 +93,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
   function openPicked() {
     const hit = hits[selected];
     if (!hit) return;
-    navigate(hitPath(hit, data.session));
+    navigate(hitPath(hit, data, data.session));
     closeSearch();
     onNavigate?.();
   }
@@ -138,7 +139,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 
       <div ref={scroller} className="nav-scroll" onScroll={(event) => { if (browsing) treeScroll.current = event.currentTarget.scrollTop; }}>
         {query.trim()
-          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} session={data.session} onPick={setPicked}
+          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
               onNavigate={() => { closeSearch(); onNavigate?.(); }} />
           : mode === "needs-you"
           ? <NeedsYouList data={data} panes={attention} labelled={!phone} onNavigate={onNavigate} />
@@ -160,18 +161,20 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 const optionId = (listId: string, index: number) => `${listId}-${index}`;
 
 /** Where a search result opens: a project's page, a node's chat (or its detail when it runs nowhere), a pane's chat. */
-function hitPath(hit: SearchHit, session?: string): string {
+function hitPath(hit: SearchHit, herd: Herd, session?: string): string {
   if (hit.kind === "project") return projectPath(hit.project.slug, session);
   if (hit.kind === "node") return hit.thread.paneId ? panePath(hit.thread.paneId, session) : nodePath(hit.project.slug, hit.thread.id, session);
+  if (hit.kind === "workspace") return workspacePath(hit.workspace.workspaceId, herd, session);
   return panePath(hit.pane.paneId, session);
 }
 
 /** The search's matches as one list: Projects, then Chats, each row named as everywhere else with the match in semibold. */
-function SearchResults({ groups, query, listId, selected, session, onPick, onNavigate }: {
+function SearchResults({ groups, query, listId, selected, herd, session, onPick, onNavigate }: {
   groups: SearchGroup[];
   query: string;
   listId: string;
   selected: number;
+  herd: Herd;
   session?: string;
   onPick: (index: number) => void;
   onNavigate: () => void;
@@ -192,7 +195,7 @@ function SearchResults({ groups, query, listId, selected, session, onPick, onNav
             const at = index++;
             return (
               <Link key={hit.key} id={optionId(listId, at)} role="option" aria-selected={at === selected} className="nav-pane nav-result"
-                to={hitPath(hit, session)} onClick={onNavigate} onMouseMove={() => { if (at !== selected) onPick(at); }}>
+                to={hitPath(hit, herd, session)} onClick={onNavigate} onMouseMove={() => { if (at !== selected) onPick(at); }}>
                 <RowBody mark={<HitMark hit={hit} />} title={<Highlight text={hit.title} query={query} />}
                   detail={<PlaceText place={hit.place} query={query} />} end={<span className="sr-only">, {hitState(hit)}</span>} />
               </Link>
@@ -207,12 +210,14 @@ function SearchResults({ groups, query, listId, selected, session, onPick, onNav
 function HitMark({ hit }: { hit: SearchHit }) {
   if (hit.kind === "project") return <span className="nav-avatar" aria-hidden>{hit.project.name.trim().charAt(0).toUpperCase() || "P"}</span>;
   if (hit.kind === "node") return <NodeDot state={hit.state} />;
+  if (hit.kind === "workspace") return <LayoutGrid aria-hidden size={14} />;
   return <PaneMark pane={hit.pane} />;
 }
 
 function hitState(hit: SearchHit): string {
   if (hit.kind === "project") return "project";
   if (hit.kind === "node") return STATE_LABEL[hit.state].toLowerCase();
+  if (hit.kind === "workspace") return "workspace";
   return hit.pane.kind === "shell" ? "shell" : STATUS_LABEL[hit.pane.status];
 }
 

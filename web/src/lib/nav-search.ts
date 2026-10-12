@@ -5,7 +5,8 @@
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
 import { nodeState, type NodeState } from "./org-tree";
 import { chatRecency, projectForPane, projectSummary } from "./projects";
-import type { AgentView, ProjectThreadView, ProjectView } from "./types";
+import { workspaceName } from "./spaces";
+import type { AgentView, ProjectThreadView, ProjectView, WorkspaceView } from "./types";
 
 /** How many rows a group shows before it only counts the rest. */
 export const SEARCH_LIMIT = 8;
@@ -21,10 +22,11 @@ interface HitBase {
 export type SearchHit =
   | HitBase & { kind: "project"; project: ProjectView }
   | HitBase & { kind: "node"; project: ProjectView; thread: ProjectThreadView; state: NodeState }
+  | HitBase & { kind: "workspace"; workspace: WorkspaceView }
   | HitBase & { kind: "pane"; pane: AgentView };
 
 export interface SearchGroup {
-  label: "Projects" | "Chats";
+  label: "Projects" | "Workspaces" | "Chats";
   hits: SearchHit[];
   /** Matches past the limit, counted rather than listed. */
   more: number;
@@ -54,12 +56,20 @@ function rank(query: string, title: string, ...elsewhere: Array<string | null | 
   return elsewhere.some((field) => field && matchRange(field, query)) ? 2 : null;
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 /**
- * The search's two groups, Projects then Chats, each ordered by how well the title matches, open
- * work before resolved, then the latest to move. A project's coordinator and threads are found under
- * Projects only; Chats holds every other pane, shells included.
+ * The search's groups in the sidebar's order, Projects, Workspaces, then Chats, each ordered by how
+ * well the title matches, open work before resolved, then the latest to move. A project's
+ * coordinator and threads are found under Projects only; Chats holds every other pane, shells
+ * included. A workspace is found by its own name and opens the pane the sidebar's row would.
  */
-export function navSearch(source: { agents: readonly AgentView[]; shellPanes?: readonly AgentView[]; projects?: readonly ProjectView[] }, query: string, limit = SEARCH_LIMIT): SearchGroup[] {
+export function navSearch(source: {
+  agents: readonly AgentView[];
+  shellPanes?: readonly AgentView[];
+  projects?: readonly ProjectView[];
+  workspaces?: readonly WorkspaceView[];
+}, query: string, limit = SEARCH_LIMIT): SearchGroup[] {
   if (!query.trim()) return [];
   const projects = source.projects ?? [];
   const panes = [...source.agents, ...(source.shellPanes ?? [])];
@@ -69,6 +79,7 @@ export function navSearch(source: { agents: readonly AgentView[]; shellPanes?: r
     return pane ? chatRecency(pane) : 0;
   };
   const owned: Ranked[] = [];
+  const containers: Ranked[] = [];
   const loose: Ranked[] = [];
 
   for (const project of projects) {
@@ -87,6 +98,16 @@ export function navSearch(source: { agents: readonly AgentView[]; shellPanes?: r
     });
   }
 
+  for (const workspace of source.workspaces ?? []) {
+    const title = workspaceName(workspace);
+    const workspaceRank = rank(query, title);
+    if (workspaceRank === null) continue;
+    const inside = panes.filter((pane) => pane.workspaceId === workspace.workspaceId);
+    const chats = inside.filter((pane) => pane.kind !== "shell").length;
+    containers.push({ hit: { kind: "workspace", key: `workspace:${workspace.workspaceId}`, workspace, title, place: { place: chats ? plural(chats, "chat") : plural(workspace.tabCount, "tab"), tab: null } },
+      rank: workspaceRank, resolved: false, at: Math.max(0, ...inside.map((pane) => pane.lastActiveAt ?? 0)) });
+  }
+
   for (const pane of panes) {
     const owner = projectForPane(projects, pane.paneId);
     if (owner?.thread) continue; // found as its node
@@ -103,5 +124,5 @@ export function navSearch(source: { agents: readonly AgentView[]; shellPanes?: r
     const sorted = [...list].sort(order);
     return [{ label, hits: sorted.slice(0, limit).map((item) => item.hit), more: Math.max(0, sorted.length - limit) }];
   };
-  return [...group("Projects", owned), ...group("Chats", loose)];
+  return [...group("Projects", owned), ...group("Workspaces", containers), ...group("Chats", loose)];
 }
