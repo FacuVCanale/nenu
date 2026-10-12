@@ -17,8 +17,8 @@ describe("the sidebar's workspaces, with no projects", () => {
   const herd = {
     agents: [
       { ...pane("d1", "", 50), paneLabel: undefined, workspaceId: "w2", workspaceLabel: "Design", tabId: "t-coord", terminalTitle: "Landing vs Max", status: "done" },
-      { ...pane("d2", "", 40), paneLabel: undefined, workspaceId: "w2", workspaceLabel: "Design", tabId: "t-panels", terminalTitle: "Panel prod", status: "working" },
-      { ...pane("d3", "", 30), paneLabel: undefined, workspaceId: "w2", workspaceLabel: "Design", tabId: "t-panels", terminalTitle: "Panel ventas", status: "blocked" },
+      { ...pane("d2", "", 40), paneLabel: undefined, workspaceId: "w2", workspaceLabel: "Design", tabId: "t-panels", tabLabel: "panels", terminalTitle: "Panel prod", status: "working" },
+      { ...pane("d3", "", 30), paneLabel: undefined, workspaceId: "w2", workspaceLabel: "Design", tabId: "t-panels", tabLabel: "panels", terminalTitle: "Panel ventas", status: "blocked" },
       { ...pane("n1", "", 90), paneLabel: undefined, workspaceId: "w1", workspaceLabel: "Nenu", tabId: "t-nenu", terminalTitle: "Workspaces brief", status: "working" },
     ],
     shellPanes: [],
@@ -34,8 +34,9 @@ describe("the sidebar's workspaces, with no projects", () => {
     projects: [], sessions: [], session: undefined,
   } as unknown as HomeData;
 
+  let router: ReturnType<typeof createMemoryRouter>;
   function open(path: string) {
-    const router = createMemoryRouter([
+    router = createMemoryRouter([
       { path: "/", element: <WorkbenchSidebar data={herd} /> },
       { path: "/pane/:paneId", element: <WorkbenchSidebar data={herd} /> },
     ], { initialEntries: [path] });
@@ -64,23 +65,42 @@ describe("the sidebar's workspaces, with no projects", () => {
     expect(screen.queryByText("Workspaces brief")).not.toBeInTheDocument();
   });
 
-  it("remembers a fold, and search opens and narrows every workspace", async () => {
+  it("remembers a fold", async () => {
     const user = open("/");
     // On Home nothing is on screen: the workspace holding a blocked agent opens, the rest wait.
     expect(screen.getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "Nenu panes" }));
     expect(screen.getByText("Workspaces brief")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w1: true } });
+  });
 
+  it("searches agents by name: the matches in a list, the first picked, arrows move the pick and Enter opens it", async () => {
+    const user = open("/");
     await user.click(screen.getByRole("button", { name: /^Search/ }));
-    await user.type(screen.getByRole("searchbox"), "ventas");
-    expect(workspaces().getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Design"]);
-    // Narrowed to one pane, the split tab reads like any other: the tab, then the session.
-    const design = within(screen.getByRole("region", { name: "Design" }));
-    expect(design.getAllByRole("link", { name: /^(?!Design)/ }).map((link) => link.textContent)).toEqual(["panelsPanel ventasneeds you"]);
-    await user.clear(screen.getByRole("searchbox"));
+    const box = screen.getByRole("searchbox");
+    await user.type(box, "panel");
+    const results = screen.getByRole("listbox", { name: "Search results" });
+    expect(within(results).queryByRole("region")).toBeNull();
+    const options = () => within(results).getAllByRole("option");
+    // Named as everywhere else, where it lives underneath, the newest to move first.
+    expect(options().map((option) => option.textContent)).toEqual(["Panel prodDesign · panels, working", "Panel ventasDesign · panels, needs you"]);
+    expect(options()[0]!.querySelector("mark")).toHaveTextContent("Panel");
+    expect(options()[0]).toHaveAttribute("aria-selected", "true");
+    expect(box).toHaveAttribute("aria-activedescendant", options()[0]!.id);
+
+    await user.keyboard("{ArrowDown}");
+    expect(options()[1]).toHaveAttribute("aria-selected", "true");
+    expect(options()[0]).toHaveAttribute("aria-selected", "false");
+    await user.keyboard("{Enter}");
+    expect(router.state.location.pathname).toBe("/pane/d3");
+  });
+
+  it("says when nothing matches", async () => {
+    const user = open("/");
+    await user.click(screen.getByRole("button", { name: /^Search/ }));
     await user.type(screen.getByRole("searchbox"), "nothing like it");
-    expect(screen.getByText("No matching projects or chats")).toBeInTheDocument();
+    expect(screen.getByText("No matches for “nothing like it”")).toBeInTheDocument();
+    expect(screen.queryByRole("option")).toBeNull();
   });
 });
 
@@ -150,13 +170,17 @@ describe("the sidebar", () => {
     expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!).expanded).toEqual({ "awam/t1": false });
   });
 
-  it("finds a project pane that runs no thread, under its project", async () => {
+  it("finds a project's nodes under Projects and any other pane under Chats", async () => {
     const user = open();
     await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.keyboard("panel");
+    const projects = screen.getByRole("group", { name: "Projects" });
+    expect(within(projects).getAllByRole("option").map((option) => option.getAttribute("href"))).toEqual(["/pane/depo", "/pane/merca"]);
+    await user.clear(screen.getByRole("searchbox"));
     await user.keyboard("stray");
-    const project = screen.getByRole("region", { name: "AWAM" });
-    expect(within(project).getByRole("link", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
-    expect(within(project).queryByRole("link", { name: /^Coordinator/ })).not.toBeInTheDocument();
+    const chats = screen.getByRole("group", { name: "Chats" });
+    expect(within(chats).getByRole("option", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
+    expect(screen.queryByRole("group", { name: "Projects" })).toBeNull();
   });
 
   it("shows a coordinator thread's own state beside its threads' dots", () => {
