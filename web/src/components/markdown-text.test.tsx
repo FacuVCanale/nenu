@@ -20,6 +20,11 @@ describe("prose size", () => {
     expect(container.firstElementChild).not.toHaveClass("text-body");
   });
 
+  it("sets a table one step below the prose, with figures that line up", () => {
+    const { container } = render(<MarkdownText text={"| Pantalla | Antes |\n| --- | ---: |\n| iPhone | 412 px |"} />);
+    expect(container.querySelector("table")).toHaveClass("text-footnote", "tabular-nums");
+  });
+
   it("keeps every heading level at or above the body step", () => {
     const { container } = render(<MarkdownText text={"# One\n\n## Two\n\n### Three\n\n#### Four"} />);
     const headings = [...container.querySelectorAll(".font-semibold")];
