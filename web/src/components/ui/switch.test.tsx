@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { Switch } from "./switch";
+import { Switch, switchSlot } from "./switch";
 
 describe("Switch", () => {
   it("toggles through its role and aria-checked", async () => {
@@ -14,6 +14,13 @@ describe("Switch", () => {
   it("is 51 by 31 on a coarse pointer and 40 by 24 on a fine one, with a 44px touch target", () => {
     render(<Switch checked onCheckedChange={vi.fn()} aria-label="Haptics" />);
     expect(screen.getByRole("switch")).toHaveClass("h-6", "w-10", "coarse:h-[31px]", "coarse:w-[51px]", "hit-area");
+  });
+
+  it("gives a slot that stands in for it (a spinner while loading) exactly its footprint", () => {
+    render(<Switch checked onCheckedChange={vi.fn()} aria-label="Haptics" />);
+    const size = [...screen.getByRole("switch").classList].filter((c) => /^(coarse:)?[hw]-/.test(c));
+    expect(size).toHaveLength(4);
+    expect(switchSlot.split(" ")).toEqual(expect.arrayContaining(size));
   });
 
   it("keeps a white thumb in both themes, on and off", () => {
