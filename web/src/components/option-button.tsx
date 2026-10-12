@@ -41,9 +41,9 @@ export function DialogCard({ label, children }: { label: string; children: React
   );
 }
 
-/** The card's question, the same headline on Home (clamped) and in the thread. */
-export function QuestionHeading({ clamp = false, children }: { clamp?: boolean; children: ReactNode }) {
-  return <p className={cn("text-headline text-pretty text-foreground", clamp && "line-clamp-3")}>{children}</p>;
+/** The card's question, the same headline on Home and in the thread, always whole. */
+export function QuestionHeading({ children }: { children: ReactNode }) {
+  return <p className="text-headline text-pretty text-foreground">{children}</p>;
 }
 
 /**

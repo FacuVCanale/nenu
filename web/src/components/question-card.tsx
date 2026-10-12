@@ -72,7 +72,7 @@ export interface QuestionCardProps {
   lockReason?: LockReason;
   /** Why the tap on the dialog this one replaced did nothing ("The question changed…"). */
   refused?: string;
-  /** Home's variant: titled by who asks, opened from its header, the question clamped. */
+  /** Home's variant: titled by who asks, opened from its header, its details clamped. */
   compact?: boolean;
   /** Who is asking (the pane's name), for a card shown away from its thread. */
   title?: ReactNode;
@@ -333,7 +333,6 @@ export function QuestionCard({
             {progress}
           </div>
         )}
-        <QuestionHeading clamp>{i.question}</QuestionHeading>
       </> : <>
         <div className="flex min-w-0 items-center gap-2 text-footnote">
           <WaitingOnYou />
@@ -342,8 +341,9 @@ export function QuestionCard({
           {progress}
         </div>
         {steps.length > 1 && <Stepper steps={steps} />}
-        <QuestionHeading>{i.question}</QuestionHeading>
       </>}
+      {/* Whole on Home too: its answers are on the card, and they reply to all of it. */}
+      <QuestionHeading>{i.question}</QuestionHeading>
       <div ref={detail} tabIndex={-1} className="flex min-w-0 flex-col gap-[inherit] outline-none empty:hidden">
         {i.answers || i.incomplete ? <ReviewAnswers answers={i.answers ?? []} incomplete={Boolean(i.incomplete)} />
           : i.subject ? <Subject subject={i.subject} folded={codeFolded} onOpenAll={() => setOpened(true)} />
