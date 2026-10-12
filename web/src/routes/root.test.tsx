@@ -178,6 +178,18 @@ describe("which 'last seen' the connection bar shows", () => {
     );
   });
 
+  it("dates a herd that came live from the bridge by the last live read, once the link drops", () => {
+    // Herdr down: the bridge still answers, so the snapshot is not a stale cache and carries no stamp.
+    const herdrDown = { ...home(undefined), error: false, bridge: "disconnected" as const };
+    expect(shownLastSeenAt(herdrDown, undefined, NOON)).toBe(NOON);
+    // A live herd needs no date, and a page that never saw one live has nothing to date it by.
+    expect(shownLastSeenAt({ ...herdrDown, bridge: "connected" }, undefined, NOON)).toBeUndefined();
+    expect(shownLastSeenAt(herdrDown, undefined, undefined)).toBeUndefined();
+    // The cached herd's own stamp still wins, and an undatable mirror still borrows nothing.
+    expect(shownLastSeenAt(home(AFTERNOON), undefined, NOON)).toBe(AFTERNOON);
+    expect(shownLastSeenAt(herdrDown, pane({ lastSeenAt: undefined }), NOON)).toBeUndefined();
+  });
+
   it("falls back to the snapshot when the pane itself is live", () => {
     expect(shownLastSeenAt(home(AFTERNOON), pane({ error: false, lastSeenAt: NOON }))).toBe(
       AFTERNOON,

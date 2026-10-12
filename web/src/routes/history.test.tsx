@@ -107,7 +107,7 @@ describe("history with nothing to read", () => {
     const { router, user } = setup("w1:idle", { unavailable: "error" }, [], { bridge: undefined, error: true });
     expect(await screen.findByRole("heading", { name: "Couldn't read the transcript" })).toBeInTheDocument();
     expect(screen.queryByText(/closed/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Nenu can't reach its bridge/)).toBeInTheDocument();
+    expect(screen.getByText(/^Can’t reach Nenu\./)).toBeInTheDocument();
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to the pane" }));
     expect(router.state.location.pathname).toBe("/pane/w1%3Aidle");
   });
@@ -116,7 +116,7 @@ describe("history with nothing to read", () => {
     setup("w1:idle", { unavailable: "error" }, [], { bridge: "disconnected" });
     expect(await screen.findByRole("heading", { name: "Couldn't read the transcript" })).toBeInTheDocument();
     expect(screen.queryByText(/closed/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Herdr is unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/^Herdr isn’t responding\./)).toBeInTheDocument();
   });
 
   it("explains a transcript it could not read", async () => {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { __resetConnectionHealth, markLive, CONNECTION_LOST_MS } from "@/lib/connection-health";
-import { ConnectionBanner, RECOVERY_QUIET_MS } from "./connection-banner";
+import { ConnectionBanner, linkPhrase, linkProblemOf, RECOVERY_QUIET_MS } from "./connection-banner";
 
 type Props = Parameters<typeof ConnectionBanner>[0];
 function renderBanner(initial: Partial<Props> = {}) {
@@ -86,7 +86,7 @@ it("says which host it cannot reach when nothing ever loaded, and promises no sn
 it("names Herdr only when the snapshot reports Herdr unavailable", () => {
   const h = renderBanner({ bridge: "disconnected" });
   act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
-  expect(screen.getByRole("status")).toHaveTextContent("Herdr is unavailable. Retrying…");
+  expect(screen.getByRole("status")).toHaveTextContent("Herdr isn’t responding. Retrying…");
   expect(screen.getByRole("status")).not.toHaveTextContent(/Can.t reach Nenu/);
   h.close();
 });
@@ -113,4 +113,27 @@ it("shows access refusal immediately with the real sign-in escape", () => {
   expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   h.close();
+});
+
+it("names each problem with one phrase, the one Home, History, the boot splash and the cards quote", () => {
+  expect(linkProblemOf({ bridge: "connected", error: false, authError: false })).toBeNull();
+  expect(linkProblemOf({ bridge: "connected", error: true, authError: true })).toBe("refused");
+  expect(linkProblemOf({ bridge: "connected", error: true, authError: false })).toBe("nenu");
+  expect(linkProblemOf({ bridge: undefined, error: true, authError: false })).toBe("nenu");
+  expect(linkProblemOf({ bridge: "disconnected", error: false, authError: false })).toBe("herdr");
+  // The words the question card and the thread composer already use for Herdr ("Herdr isn't responding.").
+  expect(linkPhrase("herdr")).toBe("Herdr isn’t responding");
+  expect(linkPhrase("nenu")).toBe("Can’t reach Nenu");
+  expect(linkPhrase("nenu", "nenu.tail.ts.net")).toBe("Can’t reach Nenu at nenu.tail.ts.net");
+  expect(linkPhrase("refused")).toBe("Access refused");
+  for (const [props, problem] of [[{ bridge: "disconnected" as const }, "herdr"], [{ error: true }, "nenu"]] as const) {
+    const h = renderBanner(props);
+    act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+    expect(screen.getByRole("status")).toHaveTextContent(`${linkPhrase(problem)}. Retrying…`);
+    h.close();
+    __resetConnectionHealth();
+  }
+  const refused = renderBanner({ authError: true });
+  expect(screen.getByRole("alert")).toHaveTextContent(`${linkPhrase("refused")}.`);
+  refused.close();
 });
