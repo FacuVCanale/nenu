@@ -504,7 +504,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     // Freeze the mirror (opening find pins the tail — the same `following=false` state a scroll-up
     // freeze produces).
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" }));
+    await user.click(screen.getByRole("button", { name: "Find in terminal" }));
 
     // The pane advances while frozen: new output below the menu + a bumped revision.
     act(() => advance({ text: `${MENU_TEXT}\n● proceeding…\n`, revision: 2 }));
@@ -535,7 +535,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     const advance = renderWithLivePane({ text: MENU_TEXT, revision: 1 });
     expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" }));
+    await user.click(screen.getByRole("button", { name: "Find in terminal" }));
     act(() => advance({ text: STATUS_TEXT, revision: 2 }));
     expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
     const input = screen.getByRole("textbox", { name: "" });
@@ -559,7 +559,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     await screen.findByRole("button", { name: /Parser/ });
 
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    await user.click(screen.getByRole("button", { name: "Find in output" })); // freeze the tail
+    await user.click(screen.getByRole("button", { name: "Find in terminal" })); // freeze the tail
     act(() => advance({ text: `${WIZARD_TEXT}\n● advancing…\n`, revision: 2 }));
 
     await user.click(screen.getByRole("button", { name: /Parser/ }));
@@ -738,7 +738,7 @@ describe("AgentChat — history affordance", () => {
     await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     const menu = screen.getByRole("dialog", { name: "Conversation actions" });
     expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
-      expect.arrayContaining(["Find in output", "Conversation history", "Artifacts and files", "Terminal mirror", "Display"]));
+      expect.arrayContaining(["Find in chat", "Conversation history", "Artifacts and files", "Terminal mirror", "Display"]));
     for (const heading of ["Terminal", "Shortcuts", "View"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
     // Message tools stay under the composer's chevron, background work behind the processes chip.
     for (const name of ["Keys", "Type into terminal", "Quick replies", "Background activity", "Subagents", "Context and usage"]) {
@@ -1052,6 +1052,22 @@ it("says the terminal is on its way, not that it printed nothing, while the pane
   renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "", pending: true });
   expect(screen.getByRole("status", { name: "Reading the terminal" })).toBeInTheDocument();
   expect(screen.queryByText("(no recent output)")).toBeNull();
+});
+
+// Find names what it searches, in the menu and in the bar (T31).
+describe("AgentChat — find says what it searches", () => {
+  it("finds in the chat while the conversation shows", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+    renderChat({ agent, agents: [agent] });
+    await openMenuItem(userEvent.setup(), "Find in chat");
+    expect(screen.getByRole("textbox", { name: "Find in chat" })).toHaveAttribute("placeholder", "Find in chat…");
+  });
+
+  it("finds in the terminal while the mirror shows", async () => {
+    renderChat();
+    await openMenuItem(userEvent.setup(), "Find in terminal");
+    expect(screen.getByRole("textbox", { name: "Find in terminal" })).toBeInTheDocument();
+  });
 });
 
 // The composer names why it is locked, the same reason the question card gives: a refused sign-in is
