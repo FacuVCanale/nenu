@@ -270,6 +270,8 @@ interface SendFailure {
   hint?: string;
   /** The pre-flight refused it, so Send's slot offers Type anyway for as long as that stays armed. */
   overridable?: boolean;
+  /** The message, when it was not the draft under the notice (a quick reply). */
+  quote?: string;
   /** What Try again sends: the message, when it is still where it was (the box, or a quick reply). */
   retry: { text: string; isDraft: boolean } | null;
 }
@@ -513,7 +515,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [sending, setSending] = useState(false);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
   // "Sending…" for the terminal view, which has no bubble to say it.
-  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | null>(null);
+  const [delivering, setDelivering] = useState(false);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -814,7 +816,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       ? previous
       : { paneId, text: t, id: crypto.randomUUID(), keep: false };
     pendingDeliveryRef.current = delivery;
-    if (!action) setDeliveryPhase("queued");
+    if (!action) setDelivering(true);
     // Set once the write is on the wire: from then on a lost answer may hide a message already typed.
     let posted = false;
     try {
@@ -834,7 +836,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const res: ReplyOutcome = replyOutcomeFrom(outcome, () => detectNoEchoPrompt(splitLines(parseAnsi(text))));
       if (res.status === "sent") {
         pendingDeliveryRef.current = null;
-        setDeliveryPhase(null);
+        setDelivering(false);
         // A draft send cleared the composer when it started; a retry from a bubble clears the same
         // message if it had been put back.
         if (draftMessage() === t) clearComposer();
@@ -883,7 +885,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // ONLY; the type-then-verify guard still runs, so Enter is never fired blind either way.
         // Armed, never toggled: a Try again refused the same way offers it again.
         forceConfirm.arm("force");
-        setDeliveryPhase(null);
+        setDelivering(false);
         // A password prompt gets the notice AND keeps the override: the notice explains the screen and
         // offers the control that works, the override stays for the case where the detection is wrong.
         noticeNoEcho(res.noEcho !== undefined ? { prompt: res.noEcho, typed: false } : null);
@@ -904,7 +906,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         noticeNoEcho(secret ? { prompt, typed: true } : null);
         const delivered = res.status === "stalled" || res.textDelivered === true;
         failSend(started, res.error, secret, delivered);
-        setDeliveryPhase(null);
+        setDelivering(false);
         // A toolbar action is not a message: its failure is a toast, with nothing to "try again".
         if (action) setStatus(res.error, "error");
         else if (!secret) refused(res.error, delivered, t, isDraft);
@@ -918,7 +920,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (unknown) delivery.keep = true;
       const error = unknown ? "No answer from Nenu, so the message may already be sent. Check Terminal before sending again." : e instanceof Error ? e.message : String(e);
       failSend(started, error, false, unknown);
-      setDeliveryPhase(null);
+      setDelivering(false);
       if (action) setStatus(error, "error");
       else refused(error, unknown, t, isDraft);
       return false;
@@ -936,6 +938,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       delivered,
       hint: delivered ? "Check the terminal before sending again." : undefined,
       overridable,
+      quote: isDraft ? undefined : text,
       retry: !delivered && inPlace ? { text, isDraft } : null,
     });
   }
@@ -1205,7 +1208,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     <>
       <div {...dropHandlers} className={cn("composer-surface", dragging && "composer-dragging")}>
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
-        {deliveryPhase === "queued" && !lastSent && !nativeWorkbench && (
+        {delivering && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
             <Loader2 className="size-3 shrink-0 animate-spin" />
             <span>Sending…</span>
@@ -1341,11 +1344,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             icon={CircleAlert}
             tone="error"
             title={failure.delivered ? "Not confirmed" : "Not sent"}
+            onDismiss={() => setFailure(null)}
             actions={(failure.retry || nativeWorkbench) && <>
               {failure.retry && <Button variant="secondary" size="sm" className="hit-area h-8 coarse:h-9" onClick={retryFailed} disabled={locked || sending}>Try again</Button>}
               {nativeWorkbench && <Button variant="ghost" size="sm" className="hit-area h-8 coarse:h-9" onClick={() => setRawTerminal(true)}>Open terminal</Button>}
             </>}
           >
+            {failure.quote && <p className="truncate text-foreground">{failure.quote}</p>}
             <p>{failure.error}</p>
             {failure.hint && <p className="mt-1">{failure.hint}</p>}
             {/* Said only while the override is there to tap: it lapses long before the notice does. */}
