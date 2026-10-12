@@ -35,7 +35,10 @@ describe("strips on a touch screen", () => {
     expect(declarations(css, ".strip", [LAYER, COARSE]).height).toBe("32px");
   });
 
-  it("give every chip a 44px reach that hangs below its band, from the chip's outer edge", () => {
+  // What these declarations promise is a 44px reach where nothing covers it: a pane pill, and a tab
+  // with no pane row under it. With the pane row showing, that row covers a tab's reach and the tab
+  // keeps about 30px (the bench measures the real hit boxes with elementFromPoint).
+  it("hang a chip's touch target below its band, to 44px from the pill's top edge", () => {
     const chip = px(declarations(css, ".strip-chip", [LAYER]).height);
     // Two open chips stacked keep a gap between them.
     expect(chip).toBeLessThan(32);
@@ -44,7 +47,7 @@ describe("strips on a touch screen", () => {
     expect(chipReach()).toMatchObject({ inset: "-1px", bottom: "calc(-1px - var(--reach))" });
   });
 
-  it("never reach over another control: up into the header, or over a pane pill from the tab row", () => {
+  it("let the pane row cover a tab's reach, and never reach up into the header", () => {
     // Reaching up would gain nothing anyway: the header paints over its own bottom edge.
     expect(chipReach().top).toBeUndefined();
     // The tab row's reach goes under the pane row, never over its pills.
