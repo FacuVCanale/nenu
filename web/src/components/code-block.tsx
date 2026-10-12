@@ -4,6 +4,7 @@ import { Check, Copy, WrapText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CONFIRM_MS = 2000;
+const COPY_LABEL = { idle: "Copy", copied: "Copied", failed: "Copy failed" } as const;
 
 const HEADER_BUTTON = "hit-area inline-flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-caption text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:bg-accent aria-pressed:bg-accent aria-pressed:text-foreground [&_svg]:size-3.5";
 
@@ -17,7 +18,7 @@ export function CodeBlock({ lang, text, children }: { lang: string; text: string
   const pre = useRef<HTMLPreElement>(null);
   const [wrap, setWrap] = useState(false);
   const [clipped, setClipped] = useState(false);
-  const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
+  const [copy, setCopy] = useState<keyof typeof COPY_LABEL>("idle");
 
   // One pixel of slack: a fractional scroll position can stop just short of the end.
   const measure = useCallback(() => {
@@ -61,7 +62,11 @@ export function CodeBlock({ lang, text, children }: { lang: string; text: string
           </button>
           <button type="button" onClick={onCopy} className={HEADER_BUTTON}>
             {copy === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            <span aria-live="polite">{copy === "copied" ? "Copied" : copy === "failed" ? "Copy failed" : "Copy"}</span>
+            {/* As wide as "Copied" from the start, so the confirmation does not move Wrap under the finger. */}
+            <span className="grid justify-items-center">
+              <span aria-live="polite" className="col-start-1 row-start-1">{COPY_LABEL[copy]}</span>
+              <span aria-hidden="true" className="invisible col-start-1 row-start-1">{COPY_LABEL.copied}</span>
+            </span>
           </button>
         </div>
       </div>
