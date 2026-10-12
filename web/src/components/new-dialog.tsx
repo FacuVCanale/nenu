@@ -41,7 +41,7 @@ export interface NewPreset {
   role?: NodeRole;
   /** A first message already written, as Home's composer hands it over. */
   message?: string;
-  /** Called instead of opening the project once a thread starts: the page that asked refreshes itself. */
+  /** Called instead of opening `project` once a thread starts in it: the page that asked refreshes itself. */
   onStarted?: () => void;
 }
 
@@ -132,7 +132,8 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
     if (bound) setProject(bound.slug);
   }
   function threadStarted(slug: string) {
-    if (preset.onStarted) preset.onStarted();
+    // The page that asked refreshes itself; a thread started in another project opens that one.
+    if (preset.onStarted && slug === preset.project) preset.onStarted();
     else {
       void revalidator.revalidate();
       navigate(projectPath(slug, data?.session));
