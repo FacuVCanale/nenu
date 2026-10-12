@@ -1185,13 +1185,16 @@ describe("Composer — password prompt", () => {
     expect(screen.getByTestId("status")).toHaveTextContent("");
     // The prompt is quoted off the mirror, so the claim is checkable against the screen.
     expect(within(notice).getByText("[sudo] password for altan:")).toBeInTheDocument();
-    // Type is the remedy, so it is the notice's primary control at full touch height…
-    expect(within(notice).getByRole("button", { name: "Use Type" })).toHaveClass("h-11");
+    // Type is the remedy, so it is the notice's primary control, at the Button's own height: 44 on a
+    // touch screen, 36 on a desk…
+    expect(within(notice).getByRole("button", { name: "Use Type" })).toHaveClass("ui-button-default");
+    expect(within(notice).getByRole("button", { name: "Use Type" })).not.toHaveClass("h-11");
     expect(within(notice).getByRole("button", { name: /dismiss password-prompt notice/i })).toHaveClass("hit-area");
     // …and the pre-existing override is untouched and named in one clause — a false positive costs a
     // dismissal, not an action.
     expect(notice).toHaveTextContent(/Type anyway/);
-    expect(screen.getByRole("button", { name: /type anyway/i })).toBeInTheDocument();
+    // Same place, same words, but outline: one primary on the surface, and it is Use Type.
+    expect(screen.getByRole("button", { name: /type anyway/i })).not.toHaveClass("bg-destructive");
     expect(calls).toEqual([]);
   });
 

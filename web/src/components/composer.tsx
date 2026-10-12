@@ -1457,9 +1457,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
-              // submit key is still conditional on the verify step behind it.
+              // submit key is still conditional on the verify step behind it. Beside the password
+              // notice it stays put but steps back to outline: that notice's Use Type is the primary.
               <Button
-                variant="destructive"
+                variant={noEcho !== null ? "outline" : "destructive"}
                 className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
                 onClick={onSendClick}
                 disabled={locked || !hasDraft || sending}

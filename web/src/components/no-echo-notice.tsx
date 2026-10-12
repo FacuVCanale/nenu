@@ -46,7 +46,7 @@ export function NoEchoNotice({ prompt, typed, onUseType, onDismiss, overrideOffe
       onDismiss={onDismiss}
       dismissLabel="Dismiss password-prompt notice"
       actions={onUseType && (
-        <Button className="h-11 px-5" onClick={onUseType}>
+        <Button className="px-5" onClick={onUseType}>
           Use Type
         </Button>
       )}
