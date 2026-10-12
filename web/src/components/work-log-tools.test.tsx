@@ -218,7 +218,14 @@ describe("dialog calls", () => {
 
   it("names a plan Plan, with its title and no heading marks", () => {
     render(<Steps calls={[{ ...plan, result: { text: "User approved" } }]} />);
-    expect(screen.getByRole("button", { name: /^Plan Plan: Add haiku\.txt/ })).not.toHaveTextContent("ExitPlanMode");
+    expect(screen.getByRole("button", { name: /^Plan Add haiku\.txt/ })).not.toHaveTextContent("ExitPlanMode");
+  });
+
+  // Claude titles most plans "Plan: …"; the line already says Plan once.
+  it("does not say Plan twice when the plan's title starts with it", () => {
+    render(<Steps calls={[{ ...plan, summary: "# Plan: Add haiku.txt", result: { text: "User approved" } }, { ...plan, summary: "# Planning the parser", result: { text: "ok" } }]} />);
+    expect(screen.getByRole("button", { name: "Plan Add haiku.txt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Plan Planning the parser" })).toBeInTheDocument();
   });
 
   it("says a pending question waits on you", () => {
