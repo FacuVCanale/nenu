@@ -44,6 +44,16 @@ export function OpeningSpinner({ className }: { className?: string }) {
   return <Loader2 aria-hidden className={cn("size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none", className)} />;
 }
 
+/** A button's label that a spinner covers while its action runs, so the button keeps its width. */
+export function BusyLabel({ busy, children }: { busy: boolean; children: ReactNode }) {
+  return (
+    <span className="relative inline-flex items-center justify-center">
+      <span className={cn(busy && "opacity-0")}>{children}</span>
+      {busy && <OpeningSpinner className="absolute text-current" />}
+    </span>
+  );
+}
+
 /** A Home section's heading: its name, how many, and an optional note at the far end. */
 export function HomeHeading({ id, label, count, note }: { id: string; label: string; count?: number; note?: ReactNode }) {
   return (
@@ -251,6 +261,9 @@ export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean
  */
 export function HomeUnreachable({ refused, lost }: { refused: boolean; lost: boolean }) {
   const revalidator = useRevalidator();
+  // Only the operator's own retry marks the button: the poll is loading most of an outage, waiting on
+  // reads to a host that does not answer, and Retry has to stay in reach through it.
+  const [retrying, setRetrying] = useState(false);
   const host = window.location.host;
   if (refused) {
     return (
@@ -261,10 +274,15 @@ export function HomeUnreachable({ refused, lost }: { refused: boolean; lost: boo
     );
   }
   if (!lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {host}.</EmptyState>;
-  const retrying = revalidator.state === "loading";
+  async function retry() {
+    setRetrying(true);
+    try { await revalidator.revalidate(); } finally { setRetrying(false); }
+  }
   return (
     <EmptyState icon={WifiOff} title={`Can't reach Nenu at ${host}`}
-      action={<Button variant="secondary" onClick={() => void revalidator.revalidate()} aria-busy={retrying || undefined} disabled={retrying}>Retry</Button>}>
+      action={<Button variant="secondary" onClick={() => void retry()} aria-busy={retrying || undefined} disabled={retrying}>
+        <BusyLabel busy={retrying}>Retry</BusyLabel>
+      </Button>}>
       Nenu keeps trying. Check Tailscale on this device.
     </EmptyState>
   );
