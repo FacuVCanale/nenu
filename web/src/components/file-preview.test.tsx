@@ -217,7 +217,7 @@ it("steps through a gallery of journal images with previous, next and the arrow 
 // T07: the agent's own folder is where the operator thinks from, so the header reads from there and
 // the file's name is never the part that gets cut.
 it("shows where a file is from the agent's folder, never cutting its name", async () => {
-  fetchFile.mockResolvedValue(new Response("export {}", { headers: { "content-type": "text/plain" } }));
+  fetchFile.mockImplementation(async () => new Response("export {}", { headers: { "content-type": "text/plain" } }));
   const panes = [{ paneId: "w1:p1", cwd: "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-s76Uzr", label: "coordinator" }];
   const { unmount } = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
   expect(screen.getByRole("heading", { name: "use-app-viewport.ts" })).toBeInTheDocument();
@@ -225,10 +225,29 @@ it("shows where a file is from the agent's folder, never cutting its name", asyn
   expect(screen.queryByText(/\/var\/folders/)).not.toBeInTheDocument();
   await screen.findByText("export {}");
   unmount();
+  // A phone's bar holds about 28 characters: the folders give way from the front, the name never.
+  const original = Object.getOwnPropertyDescriptor(window, "matchMedia");
+  Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: (query: string) => ({
+    matches: query === "(max-width: 639px)", media: query, onchange: null,
+    addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+  }) });
+  const narrow = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
+  expect(screen.getByText("…/hooks/use-app-viewport.ts")).toBeInTheDocument();
+  await screen.findByText("export {}");
+  narrow.unmount();
+  // A name longer than the line on its own: the line names the folder, the heading keeps the name.
+  const long = "informe-de-auditoria-de-la-interfaz-movil-completo.md";
+  const longer = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/components/${long}`} panes={panes} onClose={() => {}} />);
+  expect(screen.getByText("web/src/components/")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: long })).toHaveTextContent(/^informe-de-audito…\.md$/);
+  await screen.findByText("export {}");
+  longer.unmount();
+  if (original) Object.defineProperty(window, "matchMedia", original);
+  else Reflect.deleteProperty(window, "matchMedia");
   // At the top of the folder the path is the name, which the heading already says.
   render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/reporte-auditoria.md`} panes={panes} onClose={() => {}} />);
   expect(screen.getByRole("heading", { name: "reporte-auditoria.md" })).toBeInTheDocument();
-  expect(screen.queryByText("reporte-auditoria.md")).not.toBeInTheDocument();
+  expect(screen.getAllByText("reporte-auditoria.md")).toEqual([screen.getByRole("heading", { name: "reporte-auditoria.md" })]);
   await screen.findByText("export {}");
 });
 

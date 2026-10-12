@@ -1,22 +1,70 @@
-.file-preview-backdrop { position: fixed; inset: 0; top: var(--app-viewport-top, 0px); height: var(--app-viewport-height, 100dvh); z-index: 100; display: flex; align-items: center; justify-content: center; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: #0009; }
-.file-preview-panel { display: flex; flex-direction: column; width: min(100%, 960px); height: min(90dvh, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--background); box-shadow: 0 20px 80px #0006; outline: none; }
-.file-preview-header { display: flex; flex-shrink: 0; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+/* The file preview. From 640px it floats over the chat as a sheet; below that it is a screen of its
+   own, with a nav bar that holds Done, the name and the actions. Pictures open in the black viewer
+   at the end of this file. Every colour comes from the tokens in index.css. */
+.file-preview-backdrop { position: fixed; inset: 0; top: var(--app-viewport-top, 0px); height: var(--app-viewport-height, 100dvh); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / 40%); }
+.file-preview-backdrop[data-leaving] { pointer-events: none; }
+.file-preview-panel { position: relative; display: flex; flex-direction: column; width: min(100%, 960px); height: min(90dvh, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); outline: none; }
+.file-preview-panel--full { width: min(100%, 1440px); height: 100%; }
+
+.file-preview-header { position: relative; display: flex; flex-shrink: 0; align-items: center; gap: 12px; min-height: 52px; padding: 4px 8px 4px 16px; border-bottom: 1px solid var(--border); }
+.file-preview-heading { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.file-preview-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); font-weight: 500; }
+.file-preview-subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); color: var(--muted-foreground); }
+.file-preview-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+.file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); transition: background-color 120ms ease-out, color 120ms ease-out, scale 120ms ease-out; }
+@media (hover: hover) and (pointer: fine) { .file-preview-action:hover { background: var(--accent); color: var(--foreground); } }
+.file-preview-action:active { scale: 0.96; }
+@media (pointer: coarse) { .file-preview-action { width: 44px; height: 44px; } }
+
+/* Done leaves on a phone, the ✕ on a desk: one of the two is on screen at a time. */
+.preview-done { display: none; align-items: center; min-height: 44px; padding: 0 12px 0 2px; border-radius: var(--radius-md); font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; -webkit-user-select: none; user-select: none; transition: opacity 120ms ease-out; }
+.preview-done:active { opacity: 0.6; }
+
 .file-preview-tabs { display: flex; flex-shrink: 0; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: color-mix(in oklab, var(--muted) 35%, transparent); }
-.file-preview-tab { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border-radius: 8px; padding: 0 12px; color: var(--muted-foreground); font-size: 13px; font-weight: 500; transition: background-color 120ms ease-out, color 120ms ease-out; }
+.file-preview-tab { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border-radius: var(--radius-md); padding: 0 12px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; transition: background-color 120ms ease-out, color 120ms ease-out; }
 .file-preview-tab[aria-selected="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
-.file-preview-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; transition: background-color 120ms ease-out; }
-.file-preview-action:hover { background: var(--muted); }
 .file-preview-content { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; }
 .file-preview-html { display: block; width: 100%; height: 100%; min-height: 480px; border: 0; background: white; touch-action: pan-x pan-y; }
-.pdf-preview-toolbar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--background); font-size: 13px; font-variant-numeric: tabular-nums; }
-@media (max-width: 640px) { .file-preview-panel { height: 100%; border-radius: 12px; } }
-@media (prefers-reduced-motion: no-preference) { @starting-style { .file-preview-panel { opacity: 0; transform: translateY(8px); } } .file-preview-panel { transition: opacity 160ms ease-out, transform 160ms ease-out; } }
-.file-preview-panel--full { width: min(100%, 1440px); height: 100%; }
+.pdf-preview-toolbar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--background); font-size: var(--text-footnote); font-variant-numeric: tabular-nums; }
 .file-preview-gallery { display: flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 4px; padding: 4px 12px; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 .html-viewer-bar { align-items: center; justify-content: space-between; }
 .html-viewer-widths { display: flex; gap: 4px; }
 .html-viewer-widths .file-preview-tab[aria-pressed="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
-.html-viewer-note { display: flex; flex-shrink: 0; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
+.html-viewer-note { display: flex; flex-shrink: 0; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: var(--text-caption); }
 .html-viewer-stage--phone { display: flex; justify-content: center; padding: 16px; background: color-mix(in oklab, var(--muted) 60%, transparent); }
-.html-viewer-stage--phone .file-preview-html { width: 390px; max-width: 100%; height: auto; border-radius: 20px; box-shadow: 0 0 0 1px var(--border), 0 12px 40px #0004; }
+.html-viewer-stage--phone .file-preview-html { width: 390px; max-width: 100%; height: auto; border-radius: var(--radius-2xl); box-shadow: 0 0 0 1px var(--border), var(--shadow-float); }
+
+/* A phone: the preview is the whole screen. The nav bar owns the status bar's band, the name sits in
+   the middle of it, and the page is already phone-sized, so the width toggles go (Full screen stays:
+   it hands the page a tab of its own, where a pinch zooms the page and not Nenu). */
+@media (max-width: 639px) {
+  .file-preview-backdrop { padding: 0; }
+  .file-preview-panel { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--background); color: var(--foreground); }
+  .file-preview-header { justify-content: space-between; gap: 0; min-height: calc(48px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(4px, env(safe-area-inset-right)) 0 max(4px, env(safe-area-inset-left)); background: var(--chrome); }
+  .file-preview-kind, .preview-close { display: none; }
+  .preview-done { display: inline-flex; }
+  .file-preview-heading { position: absolute; inset-inline: 96px; bottom: 0; height: 48px; flex: none; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+  .file-preview-title { max-width: 100%; font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; }
+  .file-preview-subtitle { max-width: 100%; }
+  .file-preview-content:not(.html-viewer-stage) { padding-bottom: env(safe-area-inset-bottom); }
+  .html-viewer-widths > button { display: none; }
+  .html-viewer-stage--phone { padding: 0; background: none; }
+  .html-viewer-stage--phone .file-preview-html { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
+}
+
+/* Entry rises 8px into place; exit goes back the same way while the layer is still mounted. */
+@media (prefers-reduced-motion: no-preference) {
+  .file-preview-backdrop { transition: background-color 200ms ease-out; }
+  .file-preview-panel { transition: opacity 200ms ease-out, translate 200ms ease-out; }
+  @starting-style {
+    .file-preview-backdrop { background-color: transparent; }
+    .file-preview-panel { opacity: 0; translate: 0 8px; }
+  }
+  .file-preview-backdrop[data-leaving] { background-color: transparent; transition-duration: 150ms; }
+  .file-preview-backdrop[data-leaving] .file-preview-panel { opacity: 0; translate: 0 8px; transition-duration: 150ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .file-preview-panel { transition: opacity 120ms ease-out; }
+  @starting-style { .file-preview-panel { opacity: 0; } }
+  .file-preview-backdrop[data-leaving] .file-preview-panel { opacity: 0; }
+}
