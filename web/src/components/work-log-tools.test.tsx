@@ -157,3 +157,25 @@ describe("LiveStepRow", () => {
     expect(container.querySelector("[data-live-step]")).toHaveTextContent("ThinkingAhora ajusto el chip.");
   });
 });
+
+// The dialogs a call opens on the operator read by what they are, not by the CLI's tool name.
+describe("dialog calls", () => {
+  const asked: Call = { kind: "tool", name: "AskUserQuestion", summary: "", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] };
+  const plan: Call = { kind: "tool", name: "ExitPlanMode", summary: "# Plan: Add haiku.txt ## Context The user wants a haiku." };
+
+  it("names a question Question, with the question it asks", () => {
+    render(<Steps calls={[{ ...asked, result: { text: "User answered: Web" } }]} />);
+    const row = screen.getByRole("button", { name: "Question Which source?" });
+    expect(row).not.toHaveTextContent("AskUserQuestion");
+  });
+
+  it("names Codex's question tool Question too", () => {
+    render(<Steps calls={[{ kind: "tool", name: "functions.request_user_input", summary: "", questions: [{ title: "Pick a fruit?", options: ["Apple"] }], result: { text: "Apple" } }]} />);
+    expect(screen.getByRole("button", { name: "Question Pick a fruit?" })).toBeInTheDocument();
+  });
+
+  it("names a plan Plan, with its title and no heading marks", () => {
+    render(<Steps calls={[{ ...plan, result: { text: "User approved" } }]} />);
+    expect(screen.getByRole("button", { name: /^Plan Plan: Add haiku\.txt/ })).not.toHaveTextContent("ExitPlanMode");
+  });
+});
