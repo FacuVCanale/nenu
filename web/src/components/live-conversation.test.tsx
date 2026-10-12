@@ -300,6 +300,17 @@ describe("LiveConversation", () => {
     expect(screen.queryByText(/connect an existing session/)).not.toBeInTheDocument();
   });
 
+  // QA 14: the link card's ink button sat stacked above the question card. While a question waits in
+  // the thread, the card is one quiet line and the question is the only card.
+  it("folds the link card to one line while a question waits under it", () => {
+    render(<MemoryRouter><LiveConversation paneId="w2:codex" history={{ paneId: "w2:codex", available: false, reason: "no-session" }} loading={false} error={false}
+      recovery={<button type="button">Find Codex conversations</button>} waiting footer={<section aria-label="Agent question">Pick a fruit?</section>} /></MemoryRouter>);
+    expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Find Codex conversations" })).not.toBeInTheDocument();
+    expect(screen.getByText("No conversation linked")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Agent question" })).toBeInTheDocument();
+  });
+
   it("does not offer to connect a session where nothing can be connected", () => {
     render(<MemoryRouter><LiveConversation paneId="w1:p1" history={{ paneId: "w1:p1", available: false, reason: "no-session" }} loading={false} error={false} /></MemoryRouter>);
     expect(screen.getByText("Send the first message to start the conversation.")).toBeInTheDocument();
