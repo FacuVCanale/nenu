@@ -467,6 +467,13 @@ describe("an outage", () => {
     expect(document.querySelector("[data-stale]")).not.toBeNull();
   });
 
+  it("says access was refused at once, without waiting for an outage, and asks to sign in", async () => {
+    await setup({ ...data, error: true, authError: true });
+    expect(headline()).toBe("Access refused");
+    expect(document.querySelector("[data-stale]")).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Sign in again to start an agent");
+  });
+
   it("tells each Needs you card the real reason answers are paused", async () => {
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
     const { update, main } = await setup();
