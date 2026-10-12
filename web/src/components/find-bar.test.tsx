@@ -10,8 +10,8 @@ describe("thirdScrollTop", () => {
   });
 
   it("measures the third from below chrome drawn over the list", () => {
-    // The chrome covers the list's top 80 px, so the reader sees 180 to 700.
-    expect(thirdScrollTop({ scrollTop: 0, viewTop: 100, viewBottom: 700, hitTop: 600, inset: 80 })).toBe(240);
+    // The chrome covers the list's top 80 px, so the reader sees 180 to 700: a third down is 353.
+    expect(thirdScrollTop({ scrollTop: 0, viewTop: 100, viewBottom: 700, hitTop: 600, inset: 80 })).toBe(247);
   });
 
   it("never asks for a scroll above the top", () => {

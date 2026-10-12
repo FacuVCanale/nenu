@@ -37,7 +37,7 @@ import { splitLines } from "@/lib/blocks";
 import { adapterFor } from "@/lib/harness";
 import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { terminalWait } from "@/lib/terminal-wait";
-import { FindBar } from "@/components/find-bar";
+import { FindBar, thirdScrollTop } from "@/components/find-bar";
 import { PaneGone } from "@/components/pane-gone";
 import { Composer, type ComposerControl, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
@@ -477,6 +477,23 @@ export function AgentChat({
     setFindOpen(false);
     setFindQuery("");
   }
+  // Find searches what is on screen: the conversation, or the terminal mirror.
+  const findSubject = showConversation ? "chat" : "terminal";
+  // The list centres the current hit when it moves to it; this runs after that (a parent's effect
+  // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
+  const chatRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = chatRef.current;
+    if (!findOpen || matchCount === 0 || !root) return;
+    const hit = root.querySelector<HTMLElement>('mark[aria-current="true"], [data-find-match="current"]');
+    let scroller = hit?.parentElement ?? null;
+    while (scroller && scroller !== root && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
+    if (!hit || !scroller || scroller === root) return;
+    const view = scroller.getBoundingClientRect();
+    const chrome = root.querySelector("[data-chat-chrome]")?.getBoundingClientRect();
+    const inset = chrome ? Math.max(0, chrome.bottom - view.top) : 0;
+    scroller.scrollTop = thirdScrollTop({ scrollTop: scroller.scrollTop, viewTop: view.top, viewBottom: view.bottom, hitTop: hit.getBoundingClientRect().top, inset });
+  }, [findOpen, findQuery, currentMatch, matchCount]);
 
   // What the top of the buffer can offer — see the JSX for why these are mutually exclusive.
   // `historyAvailable`: the pane reported an agent session, so a transcript exists to open.
@@ -870,7 +887,7 @@ export function AgentChat({
   // The ⋯ menu holds only the pane's views. Message tools live under the composer's chevron, the
   // context and usage in the composer row, and background work behind the processes chip.
   const viewActions: ConversationAction[] = [
-    ...(display ? [{ id: "find", label: "Find in output", icon: Search, run: openFind }] : []),
+    ...(display ? [{ id: "find", label: `Find in ${findSubject}`, icon: Search, run: openFind }] : []),
     ...(hasConversation ? [{ id: "history", label: "Conversation history", icon: ScrollText,
       run: () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) }] : []),
     ...(conversationCapable ? [{ id: "files", label: "Artifacts and files", icon: Paperclip, run: () => setFilesOpen(true) }] : []),
@@ -910,7 +927,7 @@ export function AgentChat({
   const place = agent && displayPlace(agent, projects);
 
   const findBar = findOpen ? (
-    <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch}
+    <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch} subject={findSubject}
       onPrev={() => gotoMatch(-1)} onNext={() => gotoMatch(1)} onClose={closeFind} />
   ) : undefined;
   const sessionTools = agent && conversationCapable
@@ -953,6 +970,7 @@ export function AgentChat({
 
   return (
     <div
+      ref={chatRef}
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
       data-keyboard-open={keyboardOpen || undefined}
     >
