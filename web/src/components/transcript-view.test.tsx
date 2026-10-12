@@ -639,6 +639,19 @@ describe("TranscriptView — the work timeline", () => {
     expect(container.querySelector("[data-live-step]")).not.toHaveTextContent("*");
   });
 
+  it("keeps the agent that still runs on the bottom row when a parallel one finishes first", () => {
+    const running = { turn: { status: "running" as const, startedAt: at("09:05") } };
+    const { container } = render(<TranscriptView activityStatus="working" entries={[
+      ask,
+      step("a", "09:06", [{ kind: "tool", name: "Task", summary: "Audit the tab strip" }], running),
+      step("b", "09:06", [{ kind: "tool", name: "Task", summary: "Audit the composer", result: { text: "fine" } }], running),
+    ]} />);
+    const live = container.querySelector("[data-live-step]")!;
+    expect(live).toHaveTextContent("Running agent");
+    expect(live).toHaveTextContent("Audit the tab strip");
+    expect(screen.getAllByText("Audit the tab strip")).toHaveLength(1);
+  });
+
   it("draws compaction as a divider that carries its time and opens onto the summary", async () => {
     render(<TranscriptView entries={[turn({ uuid: "s", ts: at("13:40"), role: "summary", parts: [{ kind: "text", text: "The operator asked for X." }] })]} />);
     const divider = screen.getByRole("button", { name: `Context compacted · ${clock("13:40")}`, expanded: false });

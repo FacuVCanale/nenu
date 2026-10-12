@@ -239,6 +239,16 @@ describe("liveStep", () => {
     expect(liveStep(running([tool]))).toEqual({ kind: "working", verb: "Working", target: "", format: "text" });
   });
 
+  // Claude writes each parallel call as its own entry, and the results come back in any order.
+  it("names the call still running when one started after it has already finished", () => {
+    const at = (uuid: string, ts: string, part: TranscriptPart) => entry(uuid, { ts, parts: [part], turn: { status: "running", startedAt: "2026-09-08T12:00:00Z" } });
+    const turn = work([user(),
+      at("a", "2026-09-08T12:00:30Z", { kind: "tool", name: "Task", summary: "Audit the tab strip" }),
+      at("b", "2026-09-08T12:00:31Z", { kind: "tool", name: "Task", summary: "Audit the composer", result: { text: "fine" } }),
+    ], "working");
+    expect(liveStep(turn)).toMatchObject({ entry: "a", index: 0, since: "2026-09-08T12:00:30Z" });
+  });
+
   it("has nothing to say about a turn that is not running", () => {
     expect(liveStep(work([user(), entry("done", { parts: [tool], turn: { status: "completed" } })], "done"))).toBeNull();
   });
