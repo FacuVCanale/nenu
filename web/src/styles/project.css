@@ -3,6 +3,17 @@
 .project-frame { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .project-panel { display: flex; flex-direction: column; width: 360px; flex-shrink: 0; min-height: 0; overflow-y: auto; padding: 20px 20px 32px; border-left: 1px solid var(--border); }
 .project-overlay { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px calc(env(safe-area-inset-bottom) + 24px); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+/* A coordinator's Chat · Threads · PRs below a desk's panel width: a 36px control in the band a strip
+   would take, on the strips' chrome. A segment is 28px to the eye; on a coarse pointer its target
+   spans the whole band, 44px. The open one takes the neutral selection fill the chips use. */
+.project-segmented-band { flex-shrink: 0; padding: 4px calc(var(--page-gutter) - 4px); background: var(--chrome); }
+.project-segmented { display: grid; grid-template-columns: repeat(3, 1fr); height: 36px; padding: 4px; border-radius: var(--radius-lg); background: var(--muted); }
+.project-segment { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 150ms ease-out, color 150ms ease-out; }
+.project-segment[aria-selected="true"] { background: var(--workbench-row-selected); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
+@media (hover: hover) { .project-segment[aria-selected="false"]:hover { color: var(--foreground); } }
+.project-segment-count { color: var(--subtle-foreground); font-variant-numeric: tabular-nums; }
+.project-segment[aria-selected="true"] .project-segment-count { color: var(--muted-foreground); }
+@media (pointer: coarse) { .project-segment::after { content: ""; position: absolute; inset: -8px 0; } }
 .quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
 .quiet-action:hover, .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 
@@ -35,7 +46,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-fold > svg, .task-history-toggle > svg, .task-actions, .task-action { transition: none; }
+  .task-fold > svg, .task-history-toggle > svg, .task-actions, .task-action, .project-segment { transition: none; }
 }
 
 /* Touch: every target reaches 44px. */

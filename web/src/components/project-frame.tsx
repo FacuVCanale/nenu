@@ -12,7 +12,6 @@ import type { HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 /** What a project gives the chat it wraps. */
@@ -142,13 +141,14 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   ) : undefined;
 
   const phoneTabs = !wide && scope.coordinating ? (
-    <div role="tablist" aria-label="Project" className="mx-3 my-2 grid shrink-0 grid-cols-3 rounded-xl bg-muted/50 p-1">
-      {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
-        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
-          className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-lg text-[13px]", view === key ? "bg-background font-medium text-foreground ring-1 ring-border" : "text-muted-foreground")}>
-          {label}{count !== null && count > 0 && <span className="tabular-nums text-muted-foreground">{count}</span>}
-        </button>
-      ))}
+    <div className="project-segmented-band">
+      <div role="tablist" aria-label="Project" className="project-segmented">
+        {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className="project-segment">
+            {label}{count !== null && count > 0 && <span className="project-segment-count">{count}</span>}
+          </button>
+        ))}
+      </div>
     </div>
   ) : undefined;
 
