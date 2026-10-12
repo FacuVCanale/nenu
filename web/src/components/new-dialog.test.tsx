@@ -71,7 +71,10 @@ function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", host = false }:
 
 function desktop() {
   const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query }) as MediaQueryList;
+  window.matchMedia = (query) => ({
+    matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query,
+    addEventListener: () => {}, removeEventListener: () => {},
+  }) as unknown as MediaQueryList;
   onTestFinished(() => { window.matchMedia = matchMedia; });
 }
 
