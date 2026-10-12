@@ -282,13 +282,13 @@ describe("LiveConversation", () => {
   it("draws the thread's shape while the first load is slow, then the turns", () => {
     const view = (history: PaneHistoryResponse | null, loading: boolean) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={loading} error={false} /></MemoryRouter>;
     const { container, rerender } = render(view(null, true));
-    const skeleton = screen.getByRole("status", { name: "Loading conversation…" });
+    const skeleton = screen.getByText("Loading conversation…").closest("[role='status']")!;
     expect(skeleton.querySelectorAll("[data-skeleton-turn]")).toHaveLength(3);
     expect(container.querySelector(".animate-spin")).toBeNull();
 
     // The bridge names the session with its first page, which remounts the scoped list.
     rerender(view({ paneId: "w1:p1", available: true, sessionKey: "codex:work", entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false }, false));
-    expect(screen.queryByRole("status", { name: "Loading conversation…" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading conversation…")).not.toBeInTheDocument();
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
   });
 

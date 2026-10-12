@@ -1,4 +1,4 @@
-import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -77,7 +77,7 @@ function spoken(entry: TranscriptEntry): boolean {
 /** The operator is typing in a box inside the question (a reply, a note). */
 function typingIn(el: HTMLElement): boolean {
   const active = document.activeElement;
-  return (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) && Boolean(active.closest("[data-follow-stop]")) && el.contains(active);
+  return isTextField(active) && Boolean(active.closest("[data-follow-stop]")) && el.contains(active);
 }
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
@@ -96,7 +96,8 @@ function TranscriptSkeleton() {
     </div>
   );
   return (
-    <div role="status" aria-label="Loading conversation…" data-slot="transcript-skeleton" className="flex flex-col gap-6 animate-pulse motion-reduce:animate-none">
+    <div role="status" data-slot="transcript-skeleton" className="flex flex-col gap-6 animate-pulse motion-reduce:animate-none">
+      <span className="sr-only">Loading conversation…</span>
       {lines(["92%", "64%"])}
       <div data-skeleton-turn className="flex justify-end"><div className="h-16 w-3/5 rounded-xl rounded-br-md bg-muted" /></div>
       {lines(["96%", "88%", "52%"])}
@@ -131,6 +132,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
   const anchorHeight = useRef<number | null>(null);
   const editShift = useEditShift(scrollRef);
+  const cardTitle = useId();
   const shown = frozen ?? history;
   const entries = shown?.available ? shown.entries : [];
   const latest = history?.available ? history.entries.at(-1) : undefined;
@@ -442,9 +444,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
               {footer}
             </> : linkable ? <>
-              <section aria-label="No conversation linked" className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
+              <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
                 <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
-                <h2 className="text-headline text-balance">No conversation linked</h2>
+                <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
                 <div className="mt-5 w-full">{recovery}</div>
                 {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
