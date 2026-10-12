@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { useState } from "react";
 import type { ComponentProps } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -11,6 +13,7 @@ import { loadDraft, saveDraft } from "@/lib/drafts";
 import { listLocalSends, localSendScope } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
+import { declarations } from "@/test/css-rules";
 import type { SendOutcome, SendRequest, SendStage } from "@/lib/types";
 import { Composer, type ComposerControl } from "./composer";
 import { pendingStatus } from "./pending-turns";
@@ -1104,16 +1107,38 @@ describe("Composer — password prompt", () => {
     await user.type(box, "hunter2hunter2");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    // The refusal names the mechanism, not "a menu or dialog is probably up".
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent(/password prompt/i),
-    );
+    // The refusal names the mechanism, not "a menu or dialog is probably up", and says it once: in
+    // the notice beside the draft, not again in a toast pointing at a different control.
+    const notice = await screen.findByRole("status", { name: "Password prompt" });
+    expect(screen.getByTestId("status")).toHaveTextContent("");
     // The prompt is quoted off the mirror, so the claim is checkable against the screen.
-    expect(screen.getByText("[sudo] password for altan:")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /use type/i })).toBeInTheDocument();
-    // The pre-existing override is untouched — a false positive costs a dismissal, not an action.
+    expect(within(notice).getByText("[sudo] password for altan:")).toBeInTheDocument();
+    // Type is the remedy, so it is the notice's primary control at full touch height…
+    expect(within(notice).getByRole("button", { name: "Use Type" })).toHaveClass("h-11");
+    expect(within(notice).getByRole("button", { name: /dismiss password-prompt notice/i })).toHaveClass("hit-area");
+    // …and the pre-existing override is untouched and named in one clause — a false positive costs a
+    // dismissal, not an action.
+    expect(notice).toHaveTextContent(/Type anyway/);
     expect(screen.getByRole("button", { name: /type anyway/i })).toBeInTheDocument();
     expect(calls).toEqual([]);
+  });
+
+  it("masks what was typed while the prompt is recognised, and shows it again once dismissed", async () => {
+    const user = userEvent.setup();
+    serveSudo([]);
+    renderComposerWithStatus({ text: SUDO });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    expect(box).not.toHaveClass("composer-input-secret");
+    await user.type(box, "hunter2hunter2");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByRole("status", { name: "Password prompt" });
+    expect(box).toHaveClass("composer-input-secret");
+    const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+    expect(declarations(css, ".composer-input-secret")).toMatchObject({ "-webkit-text-security": "disc" });
+    // A dismissal says the detection was wrong, so the text is the operator's to read again.
+    await user.click(screen.getByRole("button", { name: /dismiss password-prompt notice/i }));
+    expect(box).not.toHaveClass("composer-input-secret");
+    expect(box).toHaveValue("hunter2hunter2");
   });
 
   it("the handoff clears the draft before arming Type", async () => {
