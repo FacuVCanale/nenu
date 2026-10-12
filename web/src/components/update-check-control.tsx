@@ -1,37 +1,33 @@
-import { useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowUpRight, Check, Copy, Loader2 } from "lucide-react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { checkForUpdates } from "@/lib/api";
-import { timeAgo } from "@/lib/format";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { ListSection, listRowClass } from "@/components/ui/list-group";
+import { checkForUpdates, fetchConfig } from "@/lib/api";
+import { BUILD, isStaleBuild } from "@/lib/build";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import type { UpdateInfo } from "@/lib/types";
+import { checkForUpdate } from "@/lib/pwa";
+import { getServerBuild, observeServerBuild, useServerBuild } from "@/lib/server-build";
+import { cn } from "@/lib/utils";
+import { updateStatus, type UpdateCheck, type UpdateStatus } from "./update-status";
 
-// "Check for updates" — a manual, on-demand upstream check. The bridge only polls upstream every few
-// hours, so this forces a fresh look (which can take ~10s). It reads the current version + last-checked
-// time from the snapshot's `update` (via the root loader), then after a check revalidates so the footer
-// UpdateBanner reflects the new state. The actionable "available"/"restart needed" lines live in that
-// banner; here we only confirm an up-to-date result or surface a check failure.
-
-function describe(update: UpdateInfo | undefined): string {
-  if (!update) return "Check whether a new version is available.";
-  if (update.releaseChannel === "local") return "Updates are managed on your Mac. Your browser refreshes when the interface is ready and your work is safe.";
-  const checked = update.checkedAt ? ` · checked ${timeAgo(update.checkedAt)}` : "";
-  return `Running v${update.current}${checked}`;
-}
+// The Updates card: the one place an update speaks (ADR 0027 keeps it out of every other screen).
+// It reads the running version and pending upgrades from the snapshot's `update` (root loader), and
+// whether this bundle is stale from the build the bridge serves (lib/server-build.ts, fed live by
+// every poll's header). A manual check forces a fresh upstream look, which can take ~10s.
 
 export function UpdateCheckControl() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const update = data?.update;
   const revalidator = useRevalidator();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const staleInterface = useStaleInterface();
+  const [check, setCheck] = useState<UpdateCheck>("idle");
+  const [reload, setReload] = useState<"idle" | "busy" | "failed">("idle");
+  const status = updateStatus(update, { staleInterface, check });
 
-  async function check() {
-    setBusy(true);
-    setError(false);
+  async function runCheck() {
+    setCheck("checking");
     const priorCheckedAt = update?.checkedAt ?? null;
     try {
       const result = await checkForUpdates();
@@ -39,52 +35,123 @@ export function UpdateCheckControl() {
       // `checkedAt` didn't advance (or never ran), the check silently failed — surface that rather
       // than let the stale state read as an authoritative "Up to date".
       if (result.checkedAt === null || result.checkedAt === priorCheckedAt) {
-        setError(true);
+        setCheck("failed");
         return;
       }
-      revalidator.revalidate(); // pull the fresh snapshot so the footer UpdateBanner updates
+      setCheck("idle");
+      revalidator.revalidate();
     } catch {
-      setError(true);
-    } finally {
-      setBusy(false);
+      setCheck("failed");
     }
   }
 
-  // A pending MAJOR is not "up to date" either — it is the one thing the routine update won't take
-  // (ADR 0020), so the banner's consent line must not be contradicted three inches above it.
-  const upToDate = Boolean(
-    update && !update.releaseAvailable && !update.bridgeStale && !update.majorAvailable,
+  // Waits for the new worker before navigating; a failed download leaves this page as it was.
+  async function reloadInterface() {
+    setReload("busy");
+    if (!(await checkForUpdate())) setReload("failed");
+  }
+
+  const failedReload = reload === "failed" && (
+    <span role="status">Update could not finish. Your session is unchanged. Try again when the connection improves.</span>
   );
 
+  // The row reads like an app in an update list: the version and its state, the one action at the
+  // end. What the state needs explained goes under the card.
   return (
-    <Card className="gap-0 py-0">
-      <div className="flex items-center justify-between gap-4 p-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <RefreshCw className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-          <div className="min-w-0">
-            <div className="font-medium">Updates</div>
-            <p className="text-sm text-muted-foreground">{describe(update)}</p>
-          </div>
-        </div>
-      </div>
-
-      {update?.releaseChannel !== "local" && <div className="flex items-center gap-3 border-t border-border/60 p-3">
-        <Button variant="outline" size="sm" disabled={busy} onClick={check}>
-          {busy ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Checking…
-            </>
-          ) : (
-            "Check for updates"
+    <ListSection title="Updates" footer={failedReload || status.detail}>
+      <div className={listRowClass}>
+        <div className="min-w-0 flex-1">
+          <div className="text-body">{update ? `Nenu ${update.current}` : "Nenu"}</div>
+          {(status.badge || status.meta) && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {status.badge && <Badge status={status} />}
+              {status.meta && <span className="text-footnote text-muted-foreground">{status.meta}</span>}
+            </div>
           )}
-        </Button>
-        {/* Lightweight result — the actionable "available"/"restart" case is left to the UpdateBanner. */}
-        {!busy && error && <span className="text-xs text-status-blocked">Couldn't check.</span>}
-        {!busy && !error && upToDate && (
-          <span className="text-xs text-muted-foreground">Up to date</span>
+        </div>
+        {status.action?.kind === "check" && (
+          <Button variant="outline" disabled={check === "checking"} aria-busy={check === "checking" || undefined} onClick={runCheck}>
+            {check === "checking" && <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
+            Check now
+          </Button>
         )}
-      </div>}
-    </Card>
+        {status.action?.kind === "reload" && (
+          <Button disabled={reload === "busy"} aria-busy={reload === "busy" || undefined} onClick={reloadInterface}>
+            {reload === "busy" && <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
+            Reload interface
+          </Button>
+        )}
+        {status.action?.kind === "notes" && (
+          // The release page carries the update commands. External: a new tab.
+          <a href={status.action.href} target="_blank" rel="noopener noreferrer" className={buttonVariants()}>
+            Release notes
+            <ArrowUpRight aria-hidden="true" />
+          </a>
+        )}
+      </div>
+      {status.command && <CommandRow command={status.command} />}
+    </ListSection>
+  );
+}
+
+/** True while this page runs another build than the one the bridge serves. */
+function useStaleInterface(): boolean {
+  const serverBuild = useServerBuild();
+  useEffect(() => {
+    let alive = true;
+    // Polls seed the store from a response header; an older bridge reports `build` only in its
+    // config, so read that once when nothing has been observed yet.
+    fetchConfig()
+      .then((c) => {
+        if (alive && getServerBuild() === undefined) observeServerBuild(c.build);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return isStaleBuild(BUILD.id, serverBuild);
+}
+
+function Badge({ status }: { status: UpdateStatus }) {
+  const working = status.badge === "Checking…";
+  return (
+    <span
+      data-slot="badge"
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-muted px-2 py-0.5 text-caption font-medium",
+        status.tone === "neutral" ? "text-muted-foreground" : "text-foreground",
+      )}
+    >
+      {/* The colour rides a dot, so the words keep full contrast on the tint in both themes. */}
+      {working && <Loader2 aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />}
+      {status.tone !== "neutral" && (
+        <span aria-hidden="true" className={cn("size-1.5 rounded-full", status.tone === "error" ? "bg-destructive" : "bg-primary")} />
+      )}
+      {status.badge}
+    </span>
+  );
+}
+
+function CommandRow({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard?.writeText(command);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked (insecure context / denied): the command stays readable and selectable.
+    }
+  }
+
+  return (
+    <div className={cn(listRowClass, "items-start gap-2 pr-2")}>
+      <code className="min-w-0 flex-1 py-2 font-mono text-code break-words">{command}</code>
+      <Button variant="ghost" size="icon" aria-label={copied ? "Copied" : "Copy command"} onClick={copy} className="shrink-0">
+        {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      </Button>
+    </div>
   );
 }

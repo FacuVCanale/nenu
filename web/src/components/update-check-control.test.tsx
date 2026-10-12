@@ -76,7 +76,7 @@ describe("UpdateCheckControl", () => {
   it("explains local updates without offering an unrelated release check", async () => {
     renderControl({ ...upToDate, releaseChannel: "local", checkedAt: null });
     expect(await screen.findByText(/updates are managed on your mac/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /check for updates/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /check now/i })).toBeNull();
     expect(screen.queryByText(/up to date/i)).toBeNull();
   });
   it("shows the running version and 'Up to date' when nothing is pending", async () => {
@@ -99,7 +99,7 @@ describe("UpdateCheckControl", () => {
     renderControl(upToDate, () => {
       loads += 1;
     });
-    const btn = await screen.findByRole("button", { name: /check for updates/i });
+    const btn = await screen.findByRole("button", { name: /check now/i });
     const before = loads; // loader ran once for the initial render
 
     await user.click(btn);
@@ -113,7 +113,7 @@ describe("UpdateCheckControl", () => {
     server.use(http.post("/api/update/check", () => new HttpResponse(null, { status: 500 })));
     const user = userEvent.setup();
     renderControl(upToDate);
-    const btn = await screen.findByRole("button", { name: /check for updates/i });
+    const btn = await screen.findByRole("button", { name: /check now/i });
 
     await user.click(btn);
 
@@ -130,7 +130,7 @@ describe("UpdateCheckControl", () => {
     renderControl(upToDate, () => {
       loads += 1;
     });
-    const btn = await screen.findByRole("button", { name: /check for updates/i });
+    const btn = await screen.findByRole("button", { name: /check now/i });
     const before = loads;
 
     await user.click(btn);
@@ -158,7 +158,7 @@ describe("UpdateCheckControl — the card owns every update state", () => {
     const updates = await card();
     expect(within(updates).getByText("0.12.0 available")).toBeInTheDocument();
     expect(within(updates).getByRole("link", { name: /release notes/i })).toHaveAttribute("href", url);
-    expect(within(updates).queryByRole("button", { name: /check for updates/i })).toBeNull();
+    expect(within(updates).queryByRole("button", { name: /check now/i })).toBeNull();
   });
 
   it("asks for a restart with the command to copy", async () => {
@@ -205,10 +205,10 @@ describe("UpdateCheckControl — the card owns every update state", () => {
     renderControl(upToDate);
     const updates = await card();
 
-    await user.click(within(updates).getByRole("button", { name: /check for updates/i }));
+    await user.click(within(updates).getByRole("button", { name: /check now/i }));
 
     expect(within(updates).getByText("Checking…")).toBeInTheDocument();
-    expect(within(updates).getByRole("button", { name: /check for updates/i })).toHaveAttribute("aria-busy", "true");
+    expect(within(updates).getByRole("button", { name: /check now/i })).toHaveAttribute("aria-busy", "true");
     finish();
     await waitFor(() => expect(within(updates).queryByText("Checking…")).toBeNull());
   });
