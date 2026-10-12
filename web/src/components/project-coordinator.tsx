@@ -24,12 +24,13 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   const coordinator = project.coordinator;
   if (!coordinator) return <CoordinatorStart project={project} session={session} readOnly={readOnly} onStarted={onChanged} />;
   const doing = panes.find((pane) => pane.paneId === coordinator.paneId)?.terminalTitle ?? STATUS_LABEL[coordinator.liveStatus];
+  const here = current === coordinator.paneId;
   // Upstream herdr-projects has no `coordinator replace`.
   const replaceable = !readOnly && project.nodeActions !== false;
   return <>
     <ul className="task-list mb-2">
-      <TaskRow state={liveState(coordinator.liveStatus) ?? "idle"} title="Coordinator" detail={`${coordinator.agent} · ${doing}`}
-        current={current === coordinator.paneId} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat"
+      <TaskRow state={liveState(coordinator.liveStatus) ?? "idle"} title="Coordinator" detail={[here && "You're here", coordinator.agent, doing].filter(Boolean).join(" · ")}
+        current={here} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat"
         actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined} />
     </ul>
     {replacing && <ReplaceCoordinatorDialog project={project} agent={coordinator.agent} session={session}
