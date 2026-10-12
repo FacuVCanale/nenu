@@ -201,6 +201,63 @@ describe("LiveConversation", () => {
     vi.restoreAllMocks();
   });
 
+  // Measured on the e2e bench (T09): replacing an eight-line draft empties the composer for one
+  // layout. The list grows, the browser clamps scrollTop 148 px up, and the composer grows back
+  // before the frame, so no size changed and no ResizeObserver ran. The scroll event the clamp
+  // queued then read as the reader leaving the tail, and attaching an image after that left 50 px.
+  it("stays at the latest turn when an edit beside the list moves it for one layout", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3145, client: 439 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    expect(box.top).toBe(2706);
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Draft" }), { target: { value: "Línea 1" } });
+    box.client = 587;
+    scroller.scrollTop = box.top;
+    box.client = 439;
+    fireEvent.scroll(scroller);
+
+    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    expect(box.top).toBe(2706);
+  });
+
+  it("still lets the reader scroll away while a draft is being edited", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3145, client: 439 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Draft" }), { target: { value: "Línea 1" } });
+    fireEvent.touchStart(scroller, { touches: [{ clientX: 100, clientY: 200 }] });
+    box.top = 2400;
+    fireEvent.scroll(scroller);
+
+    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    expect(box.top).toBe(2400);
+  });
+
+  // A screen reader or the browser's own find moves the list without touching it: long after an edit,
+  // a move up is the reader's.
+  it("lets a move up long after an edit leave the tail", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3145, client: 439 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Draft" }), { target: { value: "Línea 1" } });
+    now.mockReturnValue(3000);
+    box.top = 2400;
+    fireEvent.scroll(scroller);
+
+    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+    now.mockRestore();
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
