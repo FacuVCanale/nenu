@@ -153,6 +153,29 @@ it("points a thread at a new project when there is none", async () => {
   expect(screen.getByRole("heading", { name: "New project" })).toBeInTheDocument();
 });
 
+it("marks a create in flight as busy, not as unavailable", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  server.use(
+    http.post("/api/org/project/create", async () => { await held; return HttpResponse.json({ ok: true, project: { slug: "p", name: "P" } }); }),
+    http.post("/api/workspace", async () => { await held; return HttpResponse.json({ ok: false, error: "held" }); }),
+  );
+  const project = setup();
+  await project.user.click(await screen.findByRole("button", { name: /^Project/ }));
+  await project.user.type(await screen.findByLabelText("Name"), "P");
+  expect(screen.getByRole("button", { name: "Create project" })).not.toHaveAttribute("aria-busy");
+  await project.user.click(screen.getByRole("button", { name: "Create project" }));
+  expect(await screen.findByRole("button", { name: "Creating…" })).toHaveAttribute("aria-busy", "true");
+  project.router.dispose();
+  document.body.innerHTML = "";
+
+  const chat = setup();
+  await chat.user.click(await screen.findByRole("button", { name: /^Quick chat/ }));
+  await chat.user.click(await screen.findByRole("button", { name: "Start chat" }));
+  expect(await screen.findByRole("button", { name: "Starting…" })).toHaveAttribute("aria-busy", "true");
+  release();
+});
+
 it("creates nothing from a read-only device", async () => {
   const { user } = setup({ data: { ...base, device: { enforced: true, authorized: false } as HomeData["device"] } });
   await user.click(await screen.findByRole("button", { name: /^Project/ }));

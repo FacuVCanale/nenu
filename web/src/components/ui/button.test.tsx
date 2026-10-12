@@ -24,13 +24,20 @@ describe("Button", () => {
     expect(indexCss).toMatch(/@layer components \{[^@]*\.ui-button-default \{ height: 2\.25rem; \}/);
   });
 
-  it("draws disabled from its own tokens, never as opacity over a fill", () => {
+  it("draws unavailable from its own tokens, never as opacity over a fill", () => {
     for (const variant of variants) {
-      const classes = buttonVariants({ variant });
-      expect(classes, variant).not.toMatch(/disabled:opacity/);
-      expect(classes, variant).toContain("disabled:text-disabled-foreground");
+      const classes = buttonVariants({ variant }).split(" ");
+      expect(classes.join(" "), variant).not.toMatch(/disabled:opacity/);
+      expect(classes, variant).toContain("disabled:not-aria-busy:text-disabled-foreground");
     }
-    for (const variant of ["default", "destructive", "secondary"] as const) expect(buttonVariants({ variant })).toContain("disabled:bg-disabled");
+    for (const variant of ["default", "destructive", "secondary"] as const) expect(buttonVariants({ variant }).split(" ")).toContain("disabled:not-aria-busy:bg-disabled");
+  });
+
+  it("leaves a busy button its own look: disabled while it works, but not greyed out", () => {
+    // A tapped quick reply or a "Creating…" submit is disabled so it cannot fire twice. Marked
+    // aria-busy, it keeps its fill instead of reading as the faintest control on the screen.
+    for (const variant of variants) expect(buttonVariants({ variant }).split(" "), variant).not.toContain("disabled:text-disabled-foreground");
+    for (const variant of ["default", "destructive", "secondary"] as const) expect(buttonVariants({ variant }).split(" ")).not.toContain("disabled:bg-disabled");
   });
 
   it("leaves focus to the one app-wide ring", () => {
