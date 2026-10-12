@@ -283,11 +283,15 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith(multi.options[0], {});
   });
 
-  it("says the menu changed when the bridge refuses a stale card", async () => {
+  it("says the menu changed when the bridge refuses a stale card, and brings that line into view", async () => {
+    const seen: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { seen.push(this); });
     const onAnswer = vi.fn((): Promise<AnswerOutcome> => Promise.resolve({ ok: false, error: "changed", code: "interaction_changed" }));
     const { user } = setup({ onAnswer });
     await user.click(screen.getByRole("button", { name: /Apple/ }));
-    expect(await screen.findByText("Menu changed. Refreshing.")).toBeVisible();
+    const line = await screen.findByText("Menu changed. Refreshing.");
+    expect(line).toBeVisible();
+    expect(seen).toContain(line);
   });
 
   it("respects a read-only device", () => {
