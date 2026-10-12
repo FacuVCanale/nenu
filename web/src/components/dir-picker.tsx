@@ -79,6 +79,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
         className="h-10 w-full rounded-lg border border-border bg-background px-3 font-mono text-code outline-none focus-visible:ring-2 focus-visible:ring-ring coarse:h-11"
       />
 
+      {/* The row scrolls sideways, which clips a .hit-area outside it; on touch each crumb is 44 px itself. */}
       <nav aria-label="Breadcrumb" className="-mx-1 flex items-center overflow-x-auto px-1 text-subhead [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {crumbs(shown).map((c, i, all) => (
           <span key={c.query} className="flex shrink-0 items-center">
@@ -87,7 +88,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
               type="button"
               onClick={() => setQuery(c.query)}
               aria-current={i === all.length - 1 ? "location" : undefined}
-              className={cn("hit-area h-8 rounded-md px-1.5", i === all.length - 1 ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("h-8 rounded-md px-1.5 coarse:h-11", i === all.length - 1 ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
               {c.label === "~" ? "Home" : c.label}
             </button>
