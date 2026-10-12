@@ -12,9 +12,10 @@ export function finePointer(): boolean {
 
 // Minimal modal focus handling (no deps, no full trap): on open move focus into the panel so
 // keyboard / screen-reader users land inside the dialog; on close restore focus to whatever was
-// focused before it opened. The panel must carry tabIndex={-1} to be a focus target. Where focusing
-// a field raises no on-screen keyboard, the field the sheet marks `data-autofocus` takes focus
-// instead, so a search starts on the first keystroke; on a touch screen the keyboard stays down.
+// focused before it opened. The panel must carry tabIndex={-1} to be a focus target, and draws no
+// ring: it is where focus waits, not a control. Where focusing a field raises no on-screen keyboard,
+// the field the sheet marks `data-autofocus` takes focus instead, so a search starts on the first
+// keystroke; on a touch screen the keyboard stays down.
 function useDialogFocus(open: boolean, panelRef: React.RefObject<HTMLElement | null>) {
   React.useEffect(() => {
     if (!open) return;
@@ -196,7 +197,7 @@ export function BottomSheet({ open, onClose, title, children, className, desktop
           transition: drag.current.engaged ? "none" : undefined,
         }}
         className={cn(
-          "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl border-t border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
+          "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl outline-none border-t border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
           "pb-[calc(env(safe-area-inset-bottom)_+_1rem)]",
           "lg:rounded-2xl lg:border lg:pb-1 lg:shadow-[var(--shadow-float)] lg:duration-150",
           // A released drag closes from where the finger left it: the exit runs from the panel's
@@ -361,7 +362,7 @@ export function SideSheet({
           transition: dragging.current ? "none" : undefined,
         }}
         className={cn(
-          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col border-r border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
+          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col outline-none border-r border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
           // A released swipe closes from where the finger left it, out past the left edge.
           closing ? "animate-out slide-out-to-left fill-mode-forwards" : "animate-in slide-in-from-left-4",
           className,
