@@ -25,9 +25,7 @@ export function HapticsControl() {
             </p>
           </div>
         </div>
-        <div className="flex h-6 w-11 shrink-0 items-center justify-center">
-          <Switch checked={enabled} onCheckedChange={setHapticsEnabled} aria-label="Haptics" />
-        </div>
+        <Switch checked={enabled} onCheckedChange={setHapticsEnabled} aria-label="Haptics" />
       </div>
     </Card>
   );

@@ -12,7 +12,7 @@ import { SnoozeControl } from "@/components/snooze-control";
 import { ThemeControl } from "@/components/theme-control";
 import { HapticsControl } from "@/components/haptics-control";
 import { UpdateCheckControl } from "@/components/update-check-control";
-import { Switch } from "@/components/ui/switch";
+import { Switch, switchSlot } from "@/components/ui/switch";
 import { fetchConfig } from "@/lib/api";
 import { usePushControl } from "@/hooks/use-push";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
@@ -83,9 +83,9 @@ export function SettingsRoute() {
                   </p>
                 </div>
               </div>
-              {/* Fixed slot the size of the Switch (h-6 w-11): the spinner is smaller, so without it
-                  the row — and the whole page under it — resized when state landed. */}
-              <div className="flex h-6 w-11 shrink-0 items-center justify-center">
+              {/* Fixed slot the size of the Switch: the spinner is smaller, so without it the row (and
+                  the whole page under it) resized when state landed. */}
+              <div className={switchSlot}>
                 {state ? (
                   <Switch
                     checked={on}
