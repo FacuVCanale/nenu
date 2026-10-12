@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
 
 import { NodeDot } from "@/components/node-row";
@@ -53,8 +53,12 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
   const [picked, setPicked] = useState(0);
   const [mode, setMode] = useState<SidebarMode>("browse");
   const searchBox = useRef<HTMLInputElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // Where the tree was scrolled, so leaving the Needs you filter lands back on the same rows.
+  const treeScroll = useRef(0);
   const listId = useId();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const attention = needsYou(data);
   const phone = variant !== "sidebar";
   const results = searching ? navSearch(data, query) : [];
@@ -73,6 +77,11 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
     searchBox.current?.focus();
     searchBox.current?.select();
   }, [target, request?.seq]);
+
+  const browsing = mode === "browse" && !query.trim();
+  useLayoutEffect(() => {
+    if (browsing && scroller.current) scroller.current.scrollTop = treeScroll.current;
+  }, [browsing]);
 
   function closeSearch() {
     setQuery("");
@@ -122,10 +131,12 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
           <Inbox aria-hidden size={16} /><span className="nav-row-text">Needs you</span>
           {attention.length > 0 && <span className="nav-badge" aria-hidden>{attention.length}</span>}
         </button>}
-        {!phone && <Link className="nav-row" to={homePath(data.session)} onClick={onNavigate}><House aria-hidden size={16} />Home</Link>}
+        {!phone && <Link className="nav-row" to={homePath(data.session)} onClick={onNavigate} aria-current={pathname === "/" ? "page" : undefined}>
+          <House aria-hidden size={16} />Home
+        </Link>}
       </div>}
 
-      <div className="nav-scroll">
+      <div ref={scroller} className="nav-scroll" onScroll={(event) => { if (browsing) treeScroll.current = event.currentTarget.scrollTop; }}>
         {query.trim()
           ? <SearchResults groups={results} query={query} listId={listId} selected={selected} session={data.session} onPick={setPicked}
               onNavigate={() => { closeSearch(); onNavigate?.(); }} />
