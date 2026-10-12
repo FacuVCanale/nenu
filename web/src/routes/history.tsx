@@ -16,6 +16,7 @@ import { homePath, panePath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
 import { matchingEntries, step, userTurnIndices } from "@/lib/transcript-search";
 import type { TranscriptEntry } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // Pane history route — the agent's own transcript, which is the ONLY conversation history a Claude
 // pane can have. Its terminal runs on the alternate screen, so Herdr retains no scrollback ring at
@@ -254,7 +255,7 @@ export function HistoryRoute() {
             title={empty.title}
             className="h-full justify-center"
             action={
-              <Link to={back.to} className={buttonVariants({ size: "lg", className: "max-w-[min(20rem,80vw)]" })}>
+              <Link to={back.to} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
                 <span className="truncate">Back to {back.label}</span>
               </Link>
             }

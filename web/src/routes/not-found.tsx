@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath } from "@/lib/nav";
 import { useSession } from "@/lib/session";
+import { cn } from "@/lib/utils";
 
 /**
  * What an unknown URL shows, and what a 404 thrown from a loader shows: what is missing, the path so
@@ -17,7 +18,7 @@ export function NotFound() {
   const { pathname } = useLocation();
   return (
     <EmptyState icon={Unlink} title="Page not found"
-      action={<Link to={homePath(session)} className={buttonVariants({ size: "lg" })}>Go to Home</Link>}>
+      action={<Link to={homePath(session)} className={cn(buttonVariants({ size: "lg" }))}>Go to Home</Link>}>
       This link doesn&rsquo;t match anything in Nenu.
       <code className="mt-2 block font-mono text-footnote break-all text-subtle-foreground">{pathname}</code>
     </EmptyState>
