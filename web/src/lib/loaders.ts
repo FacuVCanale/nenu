@@ -423,9 +423,11 @@ function sharedRead(paneId: string, session: string | undefined, lines: number):
   if (running) return running.read;
   // Not the request's signal: the navigation that starts it may stop waiting, and the read must still
   // land. Its own stops it once the reader moves on; fetchPane bounds it with its own timeout, and
-  // loadPane turns a failure into the stale pane.
+  // loadPane turns a failure into the stale pane. Without AbortSignal.any (iOS before 17.4) fetchPane
+  // can't join the stop to that timeout, so there the read keeps the timeout and goes without the stop.
   const stop = new AbortController();
-  const read = loadPane(paneId, session, lines, stop.signal).then((data) => {
+  const signal = typeof AbortSignal.any === "function" ? stop.signal : undefined;
+  const read = loadPane(paneId, session, lines, signal).then((data) => {
     rememberPaneData(pane, data);
     return data;
   }).finally(() => {
