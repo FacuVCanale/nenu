@@ -2,7 +2,7 @@
 /* The home indicator's inset IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
 .workbench-composer { width: calc(100% - 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
-/* The composer: one rounded box (draft + a single round action), then a thin row of quiet controls. */
+/* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
 .composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
 .composer-box { display: flex; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color 150ms ease-out; }
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
