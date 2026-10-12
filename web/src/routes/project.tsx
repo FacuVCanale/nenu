@@ -4,8 +4,8 @@ import { ColumnPage } from "@/components/column-page";
 import { ProjectTasks } from "@/components/project-tasks";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
-import { liveCoordinator } from "@/lib/projects";
 import { isReadOnly } from "@/lib/types";
+import { liveCoordinator } from "@/lib/projects";
 
 // A project opens on its coordinator's conversation; the pane route frames it with the task list.
 // Without a live coordinator there is no conversation to show, so the project is its organization:
