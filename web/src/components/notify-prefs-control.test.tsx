@@ -72,4 +72,27 @@ describe("NotifyPrefsControl", () => {
 
     await waitFor(() => expect(needs).toBeChecked());
   });
+
+  test("describes each event as a sentence", async () => {
+    render(<NotifyPrefsControl />);
+    await screen.findByRole("switch", { name: /needs input/i });
+    expect(screen.getByText("When an agent is waiting on you.")).toBeInTheDocument();
+    expect(screen.getByText("When an agent completes its task.")).toBeInTheDocument();
+    expect(screen.getByText("When a new Nenu version is out.")).toBeInTheDocument();
+  });
+
+  test("says the choices reach every device with push on, and where this one stands", async () => {
+    const { rerender } = render(<NotifyPrefsControl thisDevice="blocked" />);
+    const section = screen.getByRole("region", { name: "Notify when" });
+    expect(section).toHaveTextContent("Applies to every device with push on. This device: blocked.");
+
+    rerender(<NotifyPrefsControl thisDevice="on" />);
+    expect(section).toHaveTextContent("Applies to every device with push on. This device: on.");
+
+    // Push state still loading: say what is known and nothing about this device.
+    rerender(<NotifyPrefsControl />);
+    expect(section).toHaveTextContent("Applies to every device with push on.");
+    expect(section).not.toHaveTextContent("This device");
+  });
 });
+
