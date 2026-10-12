@@ -539,6 +539,14 @@ describe("an outage", () => {
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeEnabled();
   });
 
+  // Until that gap closes, the box at least stays quiet: a brief failure is the quiet retry, so it
+  // keeps its own words and only a sustained outage tells the operator to reconnect.
+  it("keeps the composer's own words through a brief failure", async () => {
+    const { update, main } = await setup();
+    await update({ ...data, error: true });
+    expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Describe a task…");
+  });
+
   // The connection banner (root.tsx) is the one place that names the problem and dates the herd;
   // Home keeps saying what the work is, greyed, and its composer says what it is waiting for.
   it("keeps its work headline through a sustained Herdr outage, and leaves naming it to the banner", async () => {
@@ -559,9 +567,10 @@ describe("an outage", () => {
 
   it("keeps its work headline when Nenu stops answering, without dating the herd a second time", async () => {
     sustained();
-    await setup({ ...data, error: true, lastSeenAt: Date.now() - 3 * 60_000 });
+    const { main } = await setup({ ...data, error: true, lastSeenAt: Date.now() - 3 * 60_000 });
     expect(headline()).toBe("1 thread needs you");
     expect(screen.queryByText(/Can.t reach|Last synced/)).not.toBeInTheDocument();
+    expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
   });
 
   it("keeps its work headline when access is refused, and its composer asks to sign in", async () => {
