@@ -582,6 +582,19 @@ describe("QuestionCard", () => {
     expect(within(screen.getByRole("list", { name: "Options" })).getByText("Apple")).toBeVisible();
   });
 
+  // The device that can never answer must not look more answerable than one that is only paused.
+  it("draws the read-only list as unavailable: titles as muted as a paused row's, rows sized to read, not to tap", () => {
+    const { unmount } = render(<QuestionCard interaction={question} lockReason="offline" onAnswer={ok} />);
+    const paused = screen.getByRole("button", { name: /Apple/ }).querySelector("[data-option-title]")!;
+    expect(paused).toHaveClass("text-muted-foreground");
+    unmount();
+    setup({ lockReason: "read-only" });
+    const list = screen.getByRole("list", { name: "Options" });
+    expect(within(list).getByText("Apple")).toHaveClass(...paused.classList);
+    expect(within(list).getByText("Apple")).not.toHaveClass("text-foreground");
+    for (const row of within(list).getAllByRole("listitem")) expect(row).not.toHaveClass("coarse:min-h-11");
+  });
+
   it("keeps Home's read-only list as short as its buttons: labels only, without the escape", () => {
     setup({ compact: true, lockReason: "read-only", interaction: { ...question, options: [
       { index: 0, label: "Apple", role: "neutral", description: "Crisp and red." }, ...question.options.slice(1),
