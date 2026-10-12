@@ -48,6 +48,10 @@ describe("Button", () => {
     for (const variant of ["default", "destructive", "secondary"] as const) expect(buttonVariants({ variant }).split(" ")).not.toContain("disabled:bg-disabled");
   });
 
+  it("sits flat on its surface: shadows belong to floating layers", () => {
+    for (const variant of variants) expect(buttonVariants({ variant }), variant).not.toMatch(/(^|\s)shadow-/);
+  });
+
   it("leaves focus to the one app-wide ring", () => {
     for (const variant of variants) expect(buttonVariants({ variant })).not.toMatch(/ring-\[3px\]|outline-none/);
   });
