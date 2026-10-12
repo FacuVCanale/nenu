@@ -196,7 +196,7 @@ describe("Recent", () => {
     expect(recent.getAllByRole("link").map((link) => link.getAttribute("href")))
       .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work", "/pane/w1%3Ap1?s=work"]);
     // Each row reads as one sentence: title, "New", state, place, tab, how long ago.
-    for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Coordinator", "Idle", "Hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
+    for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Hub coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
       expect(recent.getByRole("link", { name: new RegExp(`^${parts.join(",\\s*")}$`) })).toBeInTheDocument();
     }
     expect(recent.getByText("1 working now")).toBeInTheDocument();
