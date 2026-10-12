@@ -26,10 +26,9 @@ describe("prose size", () => {
   });
 
   it("keeps every heading level at or above the body step", () => {
-    const { container } = render(<MarkdownText text={"# One\n\n## Two\n\n### Three\n\n#### Four"} />);
-    const headings = [...container.querySelectorAll(".font-semibold")];
-    expect(headings).toHaveLength(4);
-    for (const heading of headings) expect(heading.className).toMatch(/\btext-(body|headline)\b/);
+    render(<MarkdownText text={"# One\n\n## Two\n\n### Three\n\n#### Four"} />);
+    for (const name of ["One", "Two"]) expect(screen.getByText(name)).toHaveClass("text-headline");
+    for (const name of ["Three", "Four"]) expect(screen.getByText(name)).toHaveClass("text-body", "font-semibold");
   });
 });
 

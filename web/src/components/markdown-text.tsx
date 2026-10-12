@@ -130,11 +130,6 @@ const Spans = ({ spans }: { spans: MdSpan[] }) => (
   </>
 );
 
-const HEADING_CLASS: Record<number, string> = {
-  1: "text-headline font-semibold",
-  2: "text-headline font-semibold",
-};
-
 const ALIGN_CLASS: Record<string, string> = {
   left: "text-left",
   center: "text-center",
@@ -144,9 +139,10 @@ const ALIGN_CLASS: Record<string, string> = {
 function Block({ block }: { block: MdBlock }) {
   switch (block.kind) {
     case "heading": {
-      // Levels 3-6 keep the body size and stand out by weight: another size step costs a phone
-      // a line for a heading agents rarely nest that deep.
-      const cls = HEADING_CLASS[block.level] ?? "text-body font-semibold";
+      // Levels 1 and 2 take the headline step (its weight comes with it). Levels 3-6 keep the body
+      // size and stand out by weight: another size step costs a phone a line for a heading agents
+      // rarely nest that deep.
+      const cls = block.level <= 2 ? "text-headline" : "text-body font-semibold";
       return (
         <div className={`${cls} mt-1`}>
           <Spans spans={block.spans} />
