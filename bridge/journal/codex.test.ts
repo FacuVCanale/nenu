@@ -312,6 +312,11 @@ describe("parseCodexTranscript", () => {
     ]);
   });
 
+  test("a message whose stamp names no kinds is still read as the operator's", () => {
+    const entries = parseCodexTranscript(stamped([], "hello there"));
+    expect(entries.map((e) => [e.role, e.parts[0]])).toEqual([["user", { kind: "text", text: "hello there" }]]);
+  });
+
   test("removes Codex memory metadata from a final answer but preserves its visible text", () => {
     const final = item({
       type: "message",

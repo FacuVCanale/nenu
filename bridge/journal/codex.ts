@@ -163,7 +163,8 @@ function userStamp(p: Record<string, unknown>): { kinds: string[]; turn?: string
   const stamp = p.internal_chat_message_metadata_passthrough;
   if (stamp === null || typeof stamp !== "object") return undefined;
   const { content_item_kinds: kinds, turn_id: turn } = stamp as Record<string, unknown>;
-  if (!Array.isArray(kinds) || !kinds.every((kind) => typeof kind === "string")) return undefined;
+  // An empty list says nothing, and nothing the operator typed may be hidden on its silence.
+  if (!Array.isArray(kinds) || kinds.length === 0 || !kinds.every((kind) => typeof kind === "string")) return undefined;
   return { kinds, ...(typeof turn === "string" ? { turn } : {}) };
 }
 

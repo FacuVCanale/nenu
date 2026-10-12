@@ -88,8 +88,8 @@ const INTERRUPTED = new Set(["[Request interrupted by user]", "[Request interrup
  * Claude Code reuses the user role as the carrier for injected plumbing, and stamps each row with
  * who put it there: `origin.kind` (`human`, `task-notification`, `peer`, `auto-continuation`) and
  * `isMeta` for text written for the model. Measured on 160 logs from one week (2026-10-12): 1075
- * human rows against 795 task notifications, 50 messages from other sessions, 37 meta notices and 36
- * interruption markers. Those marks decide; the text is read only to caption the line:
+ * typed rows against 799 task notifications, 50 messages from other sessions, 39 other meta notices
+ * and 36 interruption markers. Those marks decide; the text is read only to caption the line:
  *
  *  - `system-reminder` / `local-command-caveat` → DROPPED. Both are addressed to the model, never
  *    shown to the operator in the TUI (the caveat literally says "DO NOT respond to these").
@@ -152,16 +152,9 @@ function spoken(text: string): ClassifiedText | null {
   return text.trim() === "" ? null : { role: "user", text };
 }
 
-/** A content list's text blocks as one string (images and tool results have their own paths). */
-function listText(content: unknown[]): string {
-  return content
-    .flatMap((b) => (b && typeof b === "object" && (b as { type?: unknown }).type === "text" && typeof (b as { text?: unknown }).text === "string"
-      ? [(b as { text: string }).text] : []))
-    .join("\n");
-}
 
-/** Flatten a `tool_result.content`, which is either a plain string or a list of text blocks. */
-function toolResultText(content: unknown): string {
+/** Flatten a message's or a `tool_result`'s content: a plain string, or a list of text blocks. */
+function blockText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
@@ -352,7 +345,7 @@ export class ClaudeParser implements JournalParser {
     // human-turn test excludes it. Text that drives the agent (another session's message, a
     // scheduled prompt, hook feedback) explains its next step, so it is a note (see classifyUserText).
     const meta = type === "user" && row.isMeta === true;
-    const words = typeof content === "string" ? content : Array.isArray(content) ? listText(content) : "";
+    const words = blockText(content);
     const said = type === "user" ? classifyUserText(words, row) : undefined;
     const human = type === "user" && !meta && row.isCompactSummary !== true && said?.role === "user";
     this.turns.observe(row, human);
@@ -405,7 +398,7 @@ export class ClaudeParser implements JournalParser {
           this.pendingQuestions.delete(id);
           // Tool output routinely carries colour codes (any command run through a shell) — strip
           // them, since this view renders text nodes rather than interpreting escapes.
-          const resultText = stripAnsi(toolResultText(b.content));
+          const resultText = stripAnsi(blockText(b.content));
           const owner = target?.entry ?? uuid;
           const attachments: ToolAttachment[] = [];
           for (const inner of Array.isArray(b.content) ? b.content : []) {

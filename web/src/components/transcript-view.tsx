@@ -58,9 +58,9 @@ function Fold({ label, text, truncated = false, query, focused = false }: { labe
   </div>;
 }
 
-/** Injected text as one line: a fold when it has a body, else just its caption. */
+/** Injected text as one line: a fold when it has more to show than its caption, else the caption. */
 function ContextLine({ label, text, truncated, query, focused }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
-  if (text.trim() !== "") return <div data-notice><Fold label={label} text={text} truncated={truncated} query={query} focused={focused} /></div>;
+  if (text.trim() !== "" && text.trim() !== label) return <div data-notice><Fold label={label} text={text} truncated={truncated} query={query} focused={focused} /></div>;
   return <div data-notice className="flex min-h-7 max-w-full items-center gap-1.5 text-xs text-muted-foreground">
     <span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
     <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>
@@ -75,7 +75,7 @@ function NoteLine({ part, query, focused }: { part: TranscriptPart; query: strin
   if (part.kind === "context") return <ContextLine {...part} query={query} focused={focused} />;
   if (part.kind !== "text") return null;
   const [first = ""] = part.text.trim().split("\n", 1);
-  return <ContextLine label={first} text={part.text.trim() === first ? "" : part.text} truncated={part.truncated} query={query} focused={focused} />;
+  return <ContextLine label={first} text={part.text} truncated={part.truncated} query={query} focused={focused} />;
 }
 
 function Part({ part, entryId, query, focused = false, active = false, compactMedia = false, uploads = true, delivers = true }: {
@@ -140,7 +140,7 @@ function Turn({
     return (
       <div title={time || undefined}>
         {entry.role === "summary"
-          ? <ContextLine label="Context compacted" text={recap === "Context compacted" ? "" : recap}
+          ? <ContextLine label="Context compacted" text={recap}
               truncated={entry.parts.some((part) => part.kind === "text" && part.truncated)} query={query} focused={focused} />
           : entry.parts.map((part, i) => <NoteLine key={i} part={part} query={query} focused={focused} />)}
         <EntryImages entry={entry} />

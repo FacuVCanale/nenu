@@ -41,7 +41,8 @@ export function oneLine(value: string): string {
  */
 export function contextPart(label: string | null, text = ""): Extract<TranscriptPart, { kind: "context" }> {
   const caption = oneLine(label ?? text.trimStart().split("\n", 1)[0] ?? "");
-  const body = oneLine(text) === caption ? "" : text;
+  // Against the whole text, not its clipped line: a long one-liner keeps its words behind the caption.
+  const body = text.replace(/\s+/g, " ").trim() === caption ? "" : text;
   return { kind: "context", label: caption, ...clamp(body, MAX_TEXT_CHARS) };
 }
 
