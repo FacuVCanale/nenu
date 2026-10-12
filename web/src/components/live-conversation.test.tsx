@@ -162,6 +162,45 @@ describe("LiveConversation", () => {
     vi.restoreAllMocks();
   });
 
+  // Review of the first cut: scrolling up inside a tall question paused following, and the pill then
+  // sat over the answers and a tap on it moved nothing.
+  it("counts reading inside a tall question as the tail and re-lands on its first line when content above shrinks", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const question = <section data-follow-stop aria-label="Which plan?"><button type="button">Yes</button></section>;
+    const view = (h: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={h} loading={false} error={false} footer={question} waiting /></MemoryRouter>;
+    const more = (uuid: string) => ({ ...history, entries: [...history.entries, { uuid, ts: "", role: "assistant" as const, parts: [{ kind: "text" as const, text: uuid }] }] });
+    const { container, rerender } = render(view(history));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1700, client: 400 });
+    let stopAt = 1000;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { top: this.hasAttribute("data-follow-stop") ? stopAt - box.top : 0 } as DOMRect;
+    });
+    rerender(view(more("asked")));
+    expect(box.top).toBe(988);
+    // "Working…" leaves above the card: the card's first line moves up 44 px and the view follows it.
+    stopAt = 956;
+    box.height = 1656;
+    rerender(view(more("settled")));
+    expect(box.top).toBe(944);
+    // A tapped answer keeps focus on desktop; that is not typing, so following keeps the first line.
+    act(() => { screen.getByRole("button", { name: "Yes" }).focus(); });
+    rerender(view(more("focused")));
+    expect(box.top).toBe(944);
+    // Up and down inside the question is still the tail: no pill over the answers.
+    box.top = 1150;
+    fireEvent.scroll(scroller);
+    box.top = 1000;
+    fireEvent.scroll(scroller);
+    expect(screen.queryByRole("button", { name: "Scroll to latest" })).not.toBeInTheDocument();
+    // Above the question the reader has left; the way back lands on its first line.
+    box.top = 500;
+    fireEvent.scroll(scroller);
+    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest" }));
+    expect(box.top).toBe(944);
+    vi.restoreAllMocks();
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };

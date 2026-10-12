@@ -500,10 +500,18 @@ it("treats an AskUserQuestion that already has its answer as closed", () => {
   expect(screen.getByRole("button", { name: "Instagram" })).toBeDisabled();
 });
 
-it("leaves a live question to the card under it", () => {
-  const asked = [turn({ role: "assistant", turn: { status: "running" }, parts: [{ kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] }] })];
-  const { rerender } = render(<QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider>);
-  expect(screen.getByRole("region", { name: "Agent question" })).toBeInTheDocument();
-  rerender(<QuestionLiveContext.Provider value><QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>);
-  expect(screen.queryByRole("region", { name: "Agent question" })).not.toBeInTheDocument();
+it("leaves a live question to the card under it, and only that one", () => {
+  const asked = [turn({ role: "assistant", turn: { status: "running" }, parts: [
+    { kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }], result: { text: "User answered: Web" } },
+    { kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which format?", options: ["CSV", "JSON"] }] },
+  ] })];
+  const view = (live: "card" | "dialog" | null) => <QuestionLiveContext.Provider value={live}><QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>;
+  const { rerender } = render(view(null));
+  expect(screen.getAllByRole("region", { name: "Agent question" })).toHaveLength(2);
+  rerender(view("card"));
+  expect(screen.getByRole("region", { name: "Agent question" })).toHaveTextContent("Which source?");
+  // A dialog the card does not draw (a preview, a menu) leaves the question in the transcript, without prepare buttons.
+  rerender(view("dialog"));
+  expect(screen.getAllByRole("region", { name: "Agent question" })).toHaveLength(2);
+  expect(screen.queryByText(/prepare your reply/)).not.toBeInTheDocument();
 });

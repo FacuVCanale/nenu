@@ -163,22 +163,30 @@ describe("QuestionCard", () => {
     expect(within(steps).getByText("Focus area").closest("li")).toHaveAccessibleName(/answered/);
   });
 
-  it("counts from the first unanswered question when the screen carried no highlight", () => {
+  it("says Review when no question is on screen", () => {
     setup({ interaction: { ...question, kind: "wizard", steps: [
-      { label: "Focus area", answered: true, current: false },
+      { label: "Focus area", answered: false, current: false },
       { label: "Scope", answered: false, current: false },
     ] } });
-    expect(screen.getByText("2 of 2")).toBeVisible();
+    expect(screen.getByText("Review")).toBeVisible();
+    expect(screen.queryByText(/of 2/)).not.toBeInTheDocument();
+  });
+
+  it("keeps Codex's Recommended marker on Home's one-line options", () => {
+    setup({ compact: true, interaction: { ...question, options: [{ index: 0, label: "Tabs (Recommended)", role: "neutral" }, question.options[3]!] } });
+    expect(screen.getByRole("button", { name: /Tabs/ })).toHaveTextContent(/Recommended/);
   });
 
   it("lists a review's answers instead of echoing them as code", () => {
     setup({ interaction: { ...base, kind: "wizard", family: "claude", question: "Review your answers",
       context: "Which focus area? → UI\nWhat scope? → Medium",
+      answers: [{ question: "Which focus area?", answer: "UI" }, { question: "What scope?", answer: "v1 → v2" }],
       options: [{ index: 0, label: "Submit answers", role: "primary" }, { index: 1, label: "Cancel", role: "deny" }] } });
     expect(screen.queryByLabelText("Request details")).not.toBeInTheDocument();
     const answers = screen.getByRole("list", { name: "Your answers" });
     expect(within(answers).getByText("Which focus area?")).toBeVisible();
     expect(within(answers).getByText("UI")).toBeVisible();
+    expect(within(answers).getByText("v1 → v2")).toBeVisible();
     expect(screen.getByRole("button", { name: "Submit answers" })).toBeVisible();
   });
 
