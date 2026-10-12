@@ -102,3 +102,72 @@ describe("useDisplayPrefs", () => {
     expect(result.current.prefs).toEqual({ wrap: true, fontSize: 12, rawTerminal: false, tapToFocus: true });
   });
 });
+
+// Chat text drives the type scale's body step, so the prose (and anything else set in text-body)
+// follows it; the terminal mirror keeps its own Text size.
+describe("useChatText", () => {
+  const CHAT_TEXT_KEY = "collie:chat-text:v1";
+  const root = document.documentElement;
+  const token = (name: string) => root.style.getPropertyValue(name);
+
+  beforeEach(async () => {
+    localStorage.clear();
+    const { useChatText } = await import("./use-display-prefs");
+    const { result } = renderHook(() => useChatText());
+    act(() => result.current[1]("default"));
+    localStorage.clear();
+  });
+
+  it("starts at Default and leaves --text-body to the stylesheet", async () => {
+    const { useChatText } = await import("./use-display-prefs");
+    const { result } = renderHook(() => useChatText());
+    expect(result.current[0]).toBe("default");
+    expect(token("--text-body")).toBe("");
+    expect(token("--text-body--line-height")).toBe("");
+  });
+
+  it("Large sets body two px over the pointer's own size, Small one under, Default clears it", async () => {
+    const { useChatText } = await import("./use-display-prefs");
+    const { result } = renderHook(() => useChatText());
+    // jsdom reports a fine pointer, whose body step is 15px.
+    act(() => result.current[1]("large"));
+    expect(result.current[0]).toBe("large");
+    expect(token("--text-body")).toBe("1.0625rem");
+    expect(token("--text-body--line-height")).toBe("1.625rem");
+    act(() => result.current[1]("small"));
+    expect(token("--text-body")).toBe("0.875rem");
+    expect(token("--text-body--line-height")).toBe("1.375rem");
+    act(() => result.current[1]("default"));
+    expect(token("--text-body")).toBe("");
+    expect(token("--text-body--line-height")).toBe("");
+  });
+
+  it("is saved, and applied again as soon as the app loads", async () => {
+    const { useChatText } = await import("./use-display-prefs");
+    const { result } = renderHook(() => useChatText());
+    act(() => result.current[1]("large"));
+    expect(localStorage.getItem(CHAT_TEXT_KEY)).toBe("large");
+
+    root.style.removeProperty("--text-body");
+    vi.resetModules();
+    await import("./use-display-prefs");
+    expect(token("--text-body")).toBe("1.0625rem");
+  });
+
+  it("ignores a stored value it does not know", async () => {
+    localStorage.setItem(CHAT_TEXT_KEY, "huge");
+    vi.resetModules();
+    const { useChatText } = await import("./use-display-prefs");
+    const { result } = renderHook(() => useChatText());
+    expect(result.current[0]).toBe("default");
+    expect(token("--text-body")).toBe("");
+  });
+
+  it("keeps every mounted reader in step", async () => {
+    const { useChatText } = await import("./use-display-prefs");
+    const a = renderHook(() => useChatText());
+    const b = renderHook(() => useChatText());
+    act(() => a.result.current[1]("small"));
+    expect(b.result.current[0]).toBe("small");
+  });
+});
