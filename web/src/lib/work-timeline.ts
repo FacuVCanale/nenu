@@ -1,5 +1,5 @@
 import { parseInline, type MdSpan } from "./markdown";
-import type { AgentStatus, TranscriptEntry } from "./types";
+import type { AgentStatus, TranscriptEntry, TranscriptPart } from "./types";
 
 export interface WorkTurn {
   kind: "work";
@@ -142,35 +142,29 @@ export function firstLine(text: string): string {
 }
 
 /**
- * What a running turn is doing now: the call that has no result yet, or the thought being written.
- * `entry` and `index` name that part, so the timeline draws it once, as this live row; between
- * steps there is no part to name and the row only says Working.
+ * What a running turn is doing now: a call still waiting for its result, or the thought being
+ * written. `entry` and `index` name that part, so the timeline draws it once, as the turn's live row.
  */
 export interface LiveStep {
-  kind: StepKind | "thinking" | "working";
-  verb: string;
-  target: string;
-  format: ToolStepDescription["target"] | "thought";
+  part: Extract<TranscriptPart, { kind: "tool" | "thinking" }>;
+  entry: string;
+  index: number;
   since?: string;
-  entry?: string;
-  index?: number;
 }
 
 export function liveStep(turn: WorkTurn): LiveStep | null {
   if (!turn.active) return null;
-  const at = (entry: TranscriptEntry, index: number) => ({ ...(validTime(entry.ts) ? { since: entry.ts } : {}), entry: entry.uuid, index });
+  const at = (entry: TranscriptEntry, index: number) => ({ entry: entry.uuid, index, ...(validTime(entry.ts) ? { since: entry.ts } : {}) });
   // Parallel calls finish in any order, so the latest call still waiting for its result is the one
   // in progress, wherever it sits; only with none does the turn's last part say what happens now.
   for (const entry of turn.activity.toReversed()) {
     const index = entry.parts.findLastIndex((part) => part.kind === "tool" && !part.result);
     const part = entry.parts[index];
-    if (part?.kind !== "tool") continue;
-    const step = describeTool(part.name);
-    return { kind: step.kind, verb: step.doing, target: part.summary, format: step.target, ...at(entry, index) };
+    if (part?.kind === "tool") return { part, ...at(entry, index) };
   }
+  // Between steps there is nothing to name, and the turn's own line already says it is working.
   const last = turn.activity.at(-1);
   const index = last ? last.parts.findLastIndex((part) => part.kind !== "image") : -1;
   const part = last?.parts[index];
-  if (last && part?.kind === "thinking") return { kind: "thinking", verb: "Thinking", target: firstLine(part.text), format: "thought", ...at(last, index) };
-  return { kind: "working", verb: "Working", target: "", format: "text" };
+  return last && part?.kind === "thinking" ? { part, ...at(last, index) } : null;
 }

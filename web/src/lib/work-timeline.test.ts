@@ -226,13 +226,14 @@ describe("liveStep", () => {
   const running = (parts: TranscriptPart[], ts = "2026-09-08T12:00:30Z") =>
     work([user(), entry("step", { ts, parts, turn: { status: "running", startedAt: "2026-09-08T12:00:00Z" } })], "working");
 
-  it("names the call that has no result yet, in the present tense, from when it started", () => {
+  it("names the call that has no result yet, from when it started", () => {
     const call: TranscriptPart = { kind: "tool", name: "Bash", summary: "bun run test tab-strip" };
-    expect(liveStep(running([thought, call]))).toEqual({ kind: "terminal", verb: "Running", target: "bun run test tab-strip", format: "code", since: "2026-09-08T12:00:30Z", entry: "step", index: 1 });
+    expect(liveStep(running([thought, call]))).toEqual({ part: call, entry: "step", index: 1, since: "2026-09-08T12:00:30Z" });
   });
 
-  it("says Thinking with the thought's first line while the agent thinks", () => {
-    expect(liveStep(running([tool, { kind: "thinking", text: "Ahora ajusto el chip.\nDespués el test." }]))).toMatchObject({ kind: "thinking", verb: "Thinking", target: "Ahora ajusto el chip.", format: "thought", entry: "step", index: 1 });
+  it("names the thought being written while the agent thinks", () => {
+    const thinking: TranscriptPart = { kind: "thinking", text: "Ahora ajusto el chip.\nDespués el test." };
+    expect(liveStep(running([tool, thinking]))).toEqual({ part: thinking, entry: "step", index: 1, since: "2026-09-08T12:00:30Z" });
   });
 
   it("names no step between steps: the turn's own line says it is working", () => {

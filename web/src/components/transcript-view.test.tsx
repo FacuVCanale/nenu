@@ -630,7 +630,8 @@ describe("TranscriptView — the work timeline", () => {
     const { container } = render(<TranscriptView entries={working([{ kind: "thinking", text: "Now the chip height.\nThen the e2e." }])} activityStatus="working" />);
     expect(screen.getByRole("button", { name: /^Working/ })).not.toHaveTextContent("Thinking");
     expect(container.querySelector("[data-live-step]")).toHaveTextContent("ThinkingNow the chip height.");
-    expect(screen.queryByRole("button", { name: "Thinking" })).not.toBeInTheDocument();
+    // Drawn once: the thought is the bottom row, not also a step above it.
+    expect(screen.getAllByText("Now the chip height.")).toHaveLength(1);
   });
 
   it("previews a thought's bold title on the bottom row without its asterisks", () => {

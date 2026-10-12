@@ -254,7 +254,7 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
     {/* The rail under the turn's line ties its steps to it; a running turn keeps its live row under it, open or folded. */}
     {(open || live) && <div className="ml-[7px] min-w-0 border-l pl-3">
       {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} live={live} />}
-      {live && <LiveStepRow step={live} marker={liveMarker} />}
+      {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} />}
     </div>}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>

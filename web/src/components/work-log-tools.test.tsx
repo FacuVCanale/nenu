@@ -135,7 +135,7 @@ describe("LiveStepRow", () => {
   it("says what runs now and for how long, ticking in place", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
-    const { container } = render(<LiveStepRow step={{ kind: "terminal", verb: "Running", target: "bun run test tab-strip", format: "code", since: "2026-09-08T12:00:30Z" }} />);
+    const { container } = render(<LiveStepRow step={{ part: { kind: "tool", name: "Bash", summary: "bun run test tab-strip" }, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} />);
     const row = container.querySelector("[data-live-step]")!;
     expect(row).toHaveTextContent("Running");
     expect(row).toHaveTextContent("bun run test tab-strip");
@@ -146,7 +146,7 @@ describe("LiveStepRow", () => {
   });
 
   it("shows the thought's first line while the agent thinks", () => {
-    const { container } = render(<LiveStepRow step={{ kind: "thinking", verb: "Thinking", target: "Ahora ajusto el chip.", format: "thought" }} />);
+    const { container } = render(<LiveStepRow step={{ part: { kind: "thinking", text: "Ahora ajusto el chip.\nDespués el test." }, entry: "e", index: 0 }} query="" focused={false} />);
     expect(container.querySelector("[data-live-step]")).toHaveTextContent("ThinkingAhora ajusto el chip.");
   });
 });

@@ -7,7 +7,7 @@ import { IMAGE_EXTENSION, imageLabel } from "@/lib/message-images";
 import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { describeTool, firstLine, type LiveStep, type StepKind } from "@/lib/work-timeline";
+import { describeTool, firstLine, type LiveStep, type StepKind, type ToolStepDescription } from "@/lib/work-timeline";
 import { MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
@@ -73,19 +73,28 @@ const STEP_ICONS: Record<StepKind | "thinking", LucideIcon> = {
 // 36px on a mouse, 44px under a finger, both from padding around one 20px line.
 const LINE = "flex w-full min-w-0 items-center gap-2 py-2 text-left text-subhead min-h-9 coarse:min-h-11";
 
-/** A step's line. With `onToggle` it is the button that opens the step's body. */
-function StepLine({ icon, label, expanded, controls, onToggle, children }: {
+/** A step in progress: its line carries the live glyph for its icon, and how long it has run. */
+type Live = Pick<LiveStep, "since">;
+
+/**
+ * A step's line. With `onToggle` it is the button that opens the step's body; without, it keeps the
+ * chevron's place, so whatever ends a line sits in one column down the timeline.
+ */
+function StepLine({ icon, live, label, expanded, controls, onToggle, children }: {
   icon: ReactNode;
+  live?: Live;
   label?: string;
   expanded?: boolean;
   controls?: string;
   onToggle?: () => void;
   children: ReactNode;
 }) {
-  if (!onToggle) return <div className={LINE}>{icon}{children}</div>;
+  const lead = live ? <LiveGlyph /> : icon;
+  const time = live?.since && <Elapsed since={live.since} className="shrink-0 text-footnote text-muted-foreground" />;
+  if (!onToggle) return <div className={LINE}>{lead}{children}{time}<span aria-hidden="true" className="size-3.5 shrink-0" /></div>;
   return <button type="button" data-work-toggle aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
     className={cn(LINE, "group")}>
-    {icon}{children}
+    {lead}{children}{time}
     <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} />
   </button>;
 }
@@ -100,7 +109,7 @@ function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
  * The folders give up whole leading segments first, then lose characters from their start (the rtl
  * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay.
  */
-function StepTarget({ text, format, query }: { text: string; format: LiveStep["format"]; query: string }) {
+function StepTarget({ text, format, query }: { text: string; format: ToolStepDescription["target"] | "thought"; query: string }) {
   if (!text) return <span className="flex-1" />;
   if (format === "path") {
     const { dir, base } = displayPath(text, "", 32);
@@ -124,7 +133,7 @@ function FailedChip() {
 const OUTPUT = "min-w-0 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]";
 
 /** A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). */
-export function ToolStep({ id, part, owner, query, active, focused }: { id: string; part: ToolPart; owner?: string; query: string; active: boolean; focused: boolean }) {
+export function ToolStep({ id, part, owner, query, active, focused, live }: { id: string; part: ToolPart; owner?: string; query: string; active: boolean; focused: boolean; live?: Live }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   const images = useToolImages();
@@ -137,7 +146,7 @@ export function ToolStep({ id, part, owner, query, active, focused }: { id: stri
   const truncated = !!part.result?.truncated;
   return (
     <div data-tool={id} data-step={step.kind} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} />} label={[verb, part.summary, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+      <StepLine icon={<StepIcon kind={step.kind} />} live={live} label={[verb, part.summary, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
         <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
@@ -157,16 +166,19 @@ export function ToolStep({ id, part, owner, query, active, focused }: { id: stri
 }
 
 /** A thought as one italic line of its opening words; the whole of it opens beneath. */
-export function ThinkingStep({ text, truncated = false, query, focused = false }: { text: string; truncated?: boolean; query: string; focused?: boolean }) {
+export function ThinkingStep({ text, truncated = false, query, focused = false, live }: { text: string; truncated?: boolean; query: string; focused?: boolean; live?: Live }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   const open = expanded || focused || holds(text, query);
   const preview = firstLine(text);
+  // Open, the thought is below in full, so its line names it instead of repeating its start. One
+  // being written names itself ahead of its opening words.
+  const shown = open ? "" : preview;
   return <div data-step="thinking" className="min-w-0">
-    <StepLine icon={<StepIcon kind="thinking" />} label={truncated ? "Thinking · truncated" : "Thinking"} expanded={open} controls={contentId}
+    <StepLine icon={<StepIcon kind="thinking" />} live={live} label={truncated ? "Thinking · truncated" : "Thinking"} expanded={open} controls={contentId}
       onToggle={preview ? () => setExpanded((value) => !value) : undefined}>
-      {/* Open, the thought is below in full: the line names it instead of repeating its start. */}
-      {open && preview ? <span className="flex-1 text-muted-foreground">Thinking</span> : <StepTarget text={preview || "Thinking"} format="thought" query={query} />}
+      {(live || !shown) && <span className={cn("shrink-0", live ? "text-foreground" : "text-muted-foreground")}>Thinking</span>}
+      <StepTarget text={shown} format="thought" query={query} />
     </StepLine>
     {open && preview && <div id={contentId} className="min-w-0 pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]">
       <MarkdownText text={text} query={query} />
@@ -175,12 +187,14 @@ export function ThinkingStep({ text, truncated = false, query, focused = false }
   </div>;
 }
 
-/** The bottom line of a running turn: what the agent is doing now, and for how long. */
-export function LiveStepRow({ step, marker }: { step: LiveStep; marker?: string }) {
-  return <div data-live-step data-turn={marker} className={LINE}>
-    <LiveGlyph />
-    <span className="shrink-0 text-foreground">{step.verb}</span>
-    <StepTarget text={step.target} format={step.format} query="" />
-    {step.since && <Elapsed since={step.since} className="shrink-0 text-footnote text-muted-foreground" />}
+/**
+ * The bottom line of a running turn: the step in progress, marked live. It opens like any step, so a
+ * command or a thought cut short on a phone can be read whole while it runs.
+ */
+export function LiveStepRow({ step, query, focused, marker }: { step: LiveStep; query: string; focused: boolean; marker?: string }) {
+  return <div data-live-step data-turn={marker} className={focused && marker ? "rounded ring-2 ring-primary/60" : undefined}>
+    {step.part.kind === "tool"
+      ? <ToolStep id={`${step.entry}:${step.index}`} part={step.part} owner={step.entry} query={query} active focused={focused} live={step} />
+      : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} live={step} />}
   </div>;
 }
