@@ -1,4 +1,5 @@
-type Questions = Array<{ title: string; options: string[] }>;
+/** `descriptions` runs beside `options`, one per option ("" for none), only when any option has one. */
+type Questions = Array<{ title: string; options: string[]; descriptions?: string[] }>;
 
 /** Only named user-input tools expose question payloads, never arbitrary tool arguments. */
 export function toolQuestions(name: unknown, args: unknown): Questions | undefined {
@@ -20,11 +21,13 @@ function questionList(value: unknown): Questions | undefined {
     const title = "title" in row ? row.title : "question" in row ? row.question : null;
     if (typeof title !== "string" || !title.trim()) return [];
     const values = "options" in row && Array.isArray(row.options) ? row.options : [];
-    const options = values.slice(0, 10).flatMap((option: unknown) => {
+    const rows = values.slice(0, 10).flatMap((option: unknown) => {
       const label = typeof option === "string" ? option : option && typeof option === "object" && "label" in option ? option.label : null;
-      return typeof label === "string" ? [label.slice(0, 300)] : [];
+      const description = option && typeof option === "object" && "description" in option && typeof option.description === "string" ? option.description : "";
+      return typeof label === "string" ? [{ label: label.slice(0, 300), description: description.slice(0, 500) }] : [];
     });
-    return [{ title: title.slice(0, 2000), options }];
+    const options = rows.map((r) => r.label);
+    return [{ title: title.slice(0, 2000), options, ...(rows.some((r) => r.description) ? { descriptions: rows.map((r) => r.description) } : {}) }];
   });
   return questions.length ? questions : undefined;
 }
