@@ -54,7 +54,10 @@ export function HomeRoute() {
   const outage: Outage | null = data.authError ? "refused" : !lost ? null : data.error ? "nenu" : "herdr";
   // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
   if (data.bridge === undefined) {
-    return <ColumnPage data={data} title="Home"><HomeUnreachable refused={outage === "refused"} lost={lost} /></ColumnPage>;
+    return <ColumnPage data={data} title="Home">
+      <h1 className="sr-only">Home</h1>
+      <HomeUnreachable refused={outage === "refused"} lost={lost} />
+    </ColumnPage>;
   }
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));

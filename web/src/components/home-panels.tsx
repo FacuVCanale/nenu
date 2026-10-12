@@ -302,7 +302,7 @@ export function HomeUnreachable({ refused, lost }: { refused: boolean; lost: boo
       action={<Button variant="secondary" onClick={() => void retry()} aria-busy={retrying || undefined} disabled={retrying}>
         <BusyLabel busy={retrying}>Retry</BusyLabel>
       </Button>}>
-      Nenu keeps trying. Check Tailscale on this device.
+      Nenu keeps trying. Check this device's network or VPN.
     </EmptyState>
   );
 }
