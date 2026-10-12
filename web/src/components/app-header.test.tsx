@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactElement } from "react";
@@ -41,18 +41,17 @@ describe("AppHeader — the one shared header shell", () => {
     expect(screen.queryByText("Nenu")).toBeNull(); // no wordmark in a pane
   });
 
-  it("is calm in the DASHBOARD variant while live — wordmark + settings gear, resting mark", () => {
+  it("is calm in the DASHBOARD variant while live — settings gear, resting mark", () => {
     const { container } = renderHeader(
-      <AppHeader bridge="connected" error={false} wordmark rightTrail={<SettingsGear />} />,
+      <AppHeader bridge="connected" error={false} rightTrail={<SettingsGear />} />,
     );
-    expect(screen.getByText("Nenu")).toBeInTheDocument(); // wordmark
     expect(container.querySelector(".dog-gallop")).toBeNull(); // mark at rest while live
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("returns to the dashboard via onHome when the Nenu mark is tapped", async () => {
     const onHome = vi.fn();
-    renderHeader(<AppHeader bridge="connected" error={false} onHome={onHome} wordmark />);
+    renderHeader(<AppHeader bridge="connected" error={false} onHome={onHome} />);
     await userEvent.click(screen.getByRole("button", { name: "Nenu home" }));
     expect(onHome).toHaveBeenCalledOnce();
   });
@@ -103,6 +102,72 @@ describe("AppHeader — the one shared header shell", () => {
     expect(screen.getByText("FINDBAR")).toBeInTheDocument();
     expect(screen.queryByText("webapp › main")).toBeNull();
     expect(screen.queryByRole("button", { name: "Nenu home" })).toBeNull();
+  });
+});
+
+// A phone has no browser back in an installed PWA, so every screen but Home leads with one, and Home
+// keeps the mark. The chat keeps the mark too until its title opens the switcher.
+describe("AppHeader — the phone's leading control", () => {
+  function renderAt(path: string, ui: ReactElement) {
+    const onOpen = vi.fn();
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <WorkbenchNavigationContext value={{ open: false, onOpen }}>{ui}</WorkbenchNavigationContext>
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    return { onOpen };
+  }
+
+  it("leads a sub-page with a back to Home that keeps the session", async () => {
+    renderAt("/settings?s=work", <AppHeader bridge="connected" error={false} title="Settings" />);
+    const back = screen.getByRole("link", { name: "Back to Home" });
+    expect(back).toHaveAttribute("href", "/?s=work");
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+    await userEvent.click(back);
+    expect(screen.getByTestId("loc").textContent).toBe("/?s=work");
+  });
+
+  it("takes an explicit back with its destination and name", () => {
+    renderAt("/project/awam/node/t-1", <AppHeader bridge="connected" error={false} title="Rediseño" back={{ to: "/project/awam", label: "AWAM" }} />);
+    expect(screen.getByRole("link", { name: "Back to AWAM" })).toHaveAttribute("href", "/project/awam");
+  });
+
+  it("goes back through an older caller's onHome, which names its own destination", async () => {
+    const onHome = vi.fn();
+    renderAt("/pane/p1/history", <AppHeader bridge="connected" error={false} onHome={onHome}><span>History</span></AppHeader>);
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onHome).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the mark on Home, opening navigation, and leaves the bar without a title", async () => {
+    const { onOpen } = renderAt("/", <AppHeader bridge="connected" error={false} title="Home" />);
+    await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /^Back/ })).toBeNull();
+    expect(within(screen.getByRole("banner")).queryByText("Home")).toBeNull();
+  });
+
+  it("keeps the mark in a chat until the chat's title opens the switcher", () => {
+    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} onHome={() => {}}><span>Working Claude</span></AppHeader>);
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+});
+
+describe("AppHeader — the bar title", () => {
+  it("draws the title as the bar's headline, with an optional footnote under it", () => {
+    render(<MemoryRouter initialEntries={["/settings"]}><AppHeader bridge="connected" error={false} title="Settings" subtitle="nenu › review" /></MemoryRouter>);
+    expect(screen.getByText("Settings")).toHaveClass("text-headline");
+    expect(screen.getByText("nenu › review")).toHaveClass("text-footnote");
+  });
+
+  it("hides a title the page is showing as its own heading", () => {
+    const visible = { ignore: '[aria-hidden="true"], [aria-hidden="true"] *' };
+    const { rerender } = render(<MemoryRouter initialEntries={["/project/awam"]}><AppHeader bridge="connected" error={false} title="AWAM" titleHidden /></MemoryRouter>);
+    expect(screen.queryByText("AWAM", visible)).toBeNull();
+    rerender(<MemoryRouter initialEntries={["/project/awam"]}><AppHeader bridge="connected" error={false} title="AWAM" /></MemoryRouter>);
+    expect(screen.getByText("AWAM", visible)).toBeInTheDocument();
   });
 });
 
