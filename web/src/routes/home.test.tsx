@@ -64,7 +64,7 @@ function Shell() {
 }
 
 async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<unknown> } = {}) {
-  let current = value;
+  let current: HomeData | Promise<HomeData> = value;
   const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell />, children: [
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
@@ -78,7 +78,12 @@ async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<
     current = next;
     await act(() => router.revalidate());
   };
-  return { router, update, user: userEvent.setup(), main: within(document.querySelector("main")!) };
+  /** The next poll hangs, as a read to a host that drops packets does until its timeout. */
+  const stall = () => {
+    current = new Promise<HomeData>(() => {});
+    void router.revalidate();
+  };
+  return { router, update, stall, user: userEvent.setup(), main: within(document.querySelector("main")!) };
 }
 
 /** The connection has not been live for longer than the sustained-outage threshold. */
@@ -539,6 +544,18 @@ describe("a first load that never reached Nenu", () => {
     expect(main.getByRole("heading", { name: `Can't reach Nenu at ${location.host}` })).toBeInTheDocument();
     expect(main.getByText("Nenu keeps trying. Check Tailscale on this device.")).toBeVisible();
     expect(main.getByRole("button", { name: "Retry" })).toBeEnabled();
+  });
+
+  it("keeps Retry in reach while a poll hangs, and marks only the retry it started", async () => {
+    sustained();
+    const { stall, user, main } = await setup(never);
+    stall();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    const retry = main.getByRole("button", { name: "Retry" });
+    expect(retry).toBeEnabled();
+    expect(retry).not.toHaveAttribute("aria-busy");
+    await user.click(retry);
+    expect(retry).toHaveAttribute("aria-busy", "true");
   });
 
   it("says access was refused rather than blaming the connection", async () => {
