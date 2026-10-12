@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
 
+import { LONG_PRESS_MS, MOVE_CANCEL_PX } from "@/hooks/use-long-press";
 import { buzz } from "@/lib/haptics";
 
 // Dragging a chip along its strip to put it somewhere else. A finger holds the chip first: before the
@@ -9,11 +10,9 @@ import { buzz } from "@/lib/haptics";
 // and the DOM keeps its order until the drop: React moving the dragged node would release its
 // pointer capture mid-drag. A hold released in place, and a right-click, open the chip's actions.
 
-// The long-press hold (use-long-press.ts), so a hold means the same thing on every chip.
-const HOLD_MS = 450;
-// A finger that travels this far before the hold is scrolling the strip.
-const TOUCH_SLOP = 16;
-// After the hold, this far from where the press began starts the drag; less is a held finger's jitter.
+// A hold and a finger's slop are the long-press's own (use-long-press.ts), so a hold means the same
+// thing on every chip: past the slop before the hold, the finger is scrolling the strip.
+// After the hold, this far from where the chip lifted starts the drag; less is a held finger's jitter.
 const LIFTED_SLOP = 8;
 // A mouse that travels this far with its button down is dragging.
 const MOUSE_SLOP = 5;
@@ -62,8 +61,10 @@ interface Gesture {
   x0: number;
   y0: number;
   x: number;
+  y: number;
   timer: ReturnType<typeof setTimeout>;
-  lifted: boolean;
+  /** Where the pointer was when the chip lifted; null until the hold completes. */
+  lifted: { x: number; y: number } | null;
   /** Set once the chip moves: the order it started from and the slots measured then. */
   drag: { keys: string[]; slots: ReorderSlot[]; chips: HTMLElement[]; from: number; to: number; x0: number; scroll0: number } | null;
 }
@@ -91,17 +92,18 @@ export interface StripReorder {
 
 export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Options): StripReorder {
   const [lifted, setLifted] = useState<string | null>(null);
-  const [pending, setPending] = useState<string[] | null>(null);
+  // A move on its way to Herdr, drawn over the order it was made on. Any other order from the data
+  // (Herdr's answer, or a move made somewhere else meanwhile) ends it: Herdr's order is the truth.
+  const [pending, setPending] = useState<{ base: string; order: string[] } | null>(null);
   const keyText = keys.join("\n");
-  // A pending order stands only until the data agrees with it, or stops holding the same chips.
-  const order = pending && pending.join("\n") !== keyText && [...pending].sort().join("\n") === [...keys].sort().join("\n") ? pending : keys;
+  const order = pending?.base === keyText ? pending.order : keys;
   useEffect(() => {
-    if (pending && pending !== order) setPending(null);
-  }, [pending, order]);
+    if (pending && pending.base !== keyText) setPending(null);
+  }, [pending, keyText]);
 
-  const latest = useRef({ order, onMove, onHold });
+  const latest = useRef({ keyText, order, onMove, onHold });
   useEffect(() => {
-    latest.current = { order, onMove, onHold };
+    latest.current = { keyText, order, onMove, onHold };
   });
 
   const commit = useCallback((next: string[], key: string) => {
@@ -114,7 +116,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
     const from = current.indexOf(key);
     if (from < 0 || to < 0 || to >= current.length || to === from) return;
     const next = moveKey(current, from, to);
-    setPending(next);
+    setPending({ base: latest.current.keyText, order: next });
     commit(next, key);
   }, [commit]);
 
@@ -171,7 +173,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
       const from = slots.findIndex((slot) => slot.key === gesture.key);
       gesture.drag = { keys: slots.map((slot) => slot.key), slots, chips, from, to: from, x0: gesture.x0, scroll0: el.scrollLeft };
       if (!gesture.lifted) {
-        gesture.lifted = true;
+        gesture.lifted = { x: gesture.x, y: gesture.y };
         setLifted(gesture.key);
       }
       el.dataset.reordering = "";
@@ -185,7 +187,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
 
     const lift = () => {
       if (!g || g.lifted) return;
-      g.lifted = true;
+      g.lifted = { x: g.x, y: g.y };
       buzz();
       setLifted(g.key);
     };
@@ -197,7 +199,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
       swallowClicksUntil = 0;
       g = {
         key: chip.dataset.reorderKey!, chip, pointerId: e.pointerId, mouse: e.pointerType === "mouse",
-        x0: e.clientX, y0: e.clientY, x: e.clientX, timer: setTimeout(lift, HOLD_MS), lifted: false, drag: null,
+        x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, timer: setTimeout(lift, LONG_PRESS_MS), lifted: null, drag: null,
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -207,12 +209,15 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
     const move = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.pointerId) return;
       g.x = e.clientX;
+      g.y = e.clientY;
       if (g.drag) return;
-      const far = Math.max(Math.abs(e.clientX - g.x0), Math.abs(e.clientY - g.y0));
-      if (g.mouse ? far > MOUSE_SLOP : g.lifted && far > LIFTED_SLOP) {
+      const origin = g.lifted ?? { x: g.x0, y: g.y0 };
+      const far = Math.max(Math.abs(e.clientX - origin.x), Math.abs(e.clientY - origin.y));
+      if (far <= (g.mouse ? MOUSE_SLOP : g.lifted ? LIFTED_SLOP : MOVE_CANCEL_PX)) return;
+      if (g.mouse || g.lifted) {
         clearTimeout(g.timer);
         startDrag(g);
-      } else if (!g.mouse && !g.lifted && far > TOUCH_SLOP) {
+      } else {
         finish();
       }
     };
@@ -225,7 +230,7 @@ export function useStripReorder({ scroller, keys, enabled, onMove, onHold }: Opt
         swallowClicksUntil = performance.now() + CLICK_AFTER_MS;
         const next = moveKey(drag.keys, drag.from, drag.to);
         // The new order is in the DOM before the transforms come off, so nothing jumps back a frame.
-        if (drag.to !== drag.from) flushSync(() => setPending(next));
+        if (drag.to !== drag.from) flushSync(() => setPending({ base: latest.current.keyText, order: next }));
         finish();
         if (drag.to !== drag.from) commit(next, key);
       } else if (held) {
