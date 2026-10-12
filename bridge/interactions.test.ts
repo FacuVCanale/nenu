@@ -33,7 +33,7 @@ const EXPECTED: Record<string, string> = {
   "claude--menu-model-picker-wrapped.txt": "menu: Set as default=persistent | Use this session only=persistent | Cancel=deny",
   "claude--menu-model-picker.txt": "menu: Set as default=persistent | Use this session only=persistent | Cancel=deny",
   "claude--permission-bash.txt": "permission: Yes=primary | Yes, and don’t ask again for: mkfifo fixture-fifo *=persistent | No=deny",
-  "claude--permission-edit.txt": "permission: Yes=primary | Yes, allow all edits during this session (shift+tab)=persistent | No=deny",
+  "claude--permission-edit.txt": "permission: Yes=primary | Yes, allow all edits during this session=persistent | No=deny",
   "claude--plan-approval--feedback-focused.txt": "plan: Yes, clear context (5% used) and use auto mode=persistent | Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval--feedback-typed.txt": "plan: Yes, clear context (4% used) and use auto mode=persistent | Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval--feedback-wrapped.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
@@ -194,6 +194,84 @@ describe("where a question sits in its set", () => {
     const i = detect("claude--permission-bash.txt");
     expect(i.steps).toBeUndefined();
     expect(i.context).toContain("mkfifo fixture-fifo");
+  });
+});
+
+describe("what a permission asks for, as the dialog draws it", () => {
+  const CLAUDE_P0 = join(ROOT, "web/src/lib/harness/claude/fixtures");
+  const at = (file: string, dir: string, agent: string, hints: InteractionHint[] = []) =>
+    toInteraction({ paneId: "p", agent }, dialogOnScreen(agent, fixture(file, dir))!, 0, hints, 0).interaction;
+
+  test("Claude 2.1.296: tool, description and command apart, without the Tip row", () => {
+    const i = at("permission-bash-v2296.txt", CLAUDE_P0, "claude");
+    expect(i.subject).toEqual({ tool: "Bash", description: "Write hi into hello.txt in the project directory", command: "echo hi > hello.txt" });
+    expect(i.context).not.toContain("Tip:");
+  });
+
+  test("an older Claude: the command above its description, without 'This command requires approval'", () => {
+    const i = detect("claude--permission-bash.txt");
+    expect(i.subject).toEqual({ tool: "Bash", command: "mkfifo fixture-fifo", description: "Create a named pipe (FIFO)" });
+    expect(i.context).not.toContain("requires approval");
+  });
+
+  test("a narrow pane: the wrapped Tip is dropped and the command's wrapped rows join up", () => {
+    const i = detect("claude-lab--permission-bash--w40.txt", [], "claude");
+    expect(i.subject).toEqual({ tool: "Bash", command: "touch /tmp/claude-lab/project/scratch-one.txt", description: "Create empty file scratch-one.txt" });
+    expect(i.context).not.toMatch(/Tip:|below/);
+  });
+
+  test("a file the call writes, with its preview lines and their numbers", () => {
+    expect(detect("claude--permission-edit.txt").subject).toEqual({ tool: "Create file", file: "hello.txt", preview: "1 hello" });
+    expect(detect("claude-lab--permission-write--w82.txt", [], "claude").subject).toEqual({
+      tool: "Create file", file: "docs/lab-notes.md",
+      preview: "1 # Lab Notes\n2\n3 This is a throwaway project used for screen captures.\n4 It has no real application code, only sample files.\n5 Changes here are safe to discard at any time.",
+    });
+  });
+
+  test("an agreeing hook hint gives the exact command", () => {
+    const command = "touch /tmp/claude-lab/project/scratch-one.txt";
+    const i = detect("claude-lab--permission-bash--w40.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], "claude");
+    expect(i.subject?.command).toBe(command);
+    expect(i.detailComplete).toBe(true);
+  });
+
+  test("Codex: the reason as the description, the $ row as the command, the environment as a fact", () => {
+    expect(detect("codex--approval-exec.txt").subject).toEqual({
+      description: "Do you want to allow creating /tmp/collie-codex-probe.txt outside the sandbox?",
+      command: "touch /tmp/collie-codex-probe.txt",
+      meta: ["Environment: local"],
+    });
+    expect(detect("codex--v0156-approval-patch.txt").subject).toEqual({ description: "Apply proposed file edits", file: "/tmp/collie-codex-debug/hello.py" });
+  });
+
+  test("Codex: a word-wrapped command and reason join with a space, a heredoc keeps its lines", () => {
+    expect(detect("codex--v0156-approval-exec-wrapped.txt").subject?.command).toBe(
+      'echo "this is a very long line of text that should be long enough to wrap across the terminal width when codex prints the dollar-sign command preview row in the approval dialog box" > longline.txt');
+    expect(detect("codex--v0156-approval-exec-wrapped-50.txt").subject?.description).toBe("May I run `touch narrow-approval-test.txt` to create the requested file?");
+    expect(detect("codex--v0156-approval-exec-2opt.txt").subject?.command).toBe("cat <<'EOF' > multi.txt\nline one\nline two\nEOF");
+  });
+
+  test("Grok: the subject stops at the first option row, so a row that is never a button stays out", () => {
+    const i = detect("grok--permission-rm.txt");
+    expect(i.context).toBe("rm hello.txt");
+    expect(i.subject).toBeUndefined();
+  });
+
+  test("the persistent rows Codex and Grok keep to the keyboard are named, never served as options", () => {
+    expect(detect("codex--approval-exec.txt").terminalOnly).toEqual(["Yes, and don't ask again for commands that start with `touch /tmp/collie-codex-probe.txt`"]);
+    expect(detect("codex--v0156-approval-patch.txt").terminalOnly).toEqual(["Yes, and don't ask again for these files"]);
+    expect(detect("codex--v0156-approval-exec-wrapped.txt").terminalOnly).toEqual([
+      'Yes, and don\'t ask again for commands that start with `echo "this is a very long line of text that should be long enough to wrap across the terminal width when codex prints the dollar-sign command preview row in the approval dialog box" > longline.txt`',
+    ]);
+    expect(detect("grok--permission-rm.txt").terminalOnly).toEqual(["Yes, and don't ask again for anything (always-approve mode)"]);
+    expect(detect("grok--permission-edit.txt").terminalOnly).toEqual(["Yes, and don't ask again for anything (always-approve mode)", "Yes, allow all edits during this session"]);
+    expect(detect("codex--v0156-approval-exec-2opt.txt").terminalOnly).toBeUndefined();
+    expect(at("permission-bash-v2296.txt", CLAUDE_P0, "claude").terminalOnly).toBeUndefined();
+  });
+
+  test("terminal key hints never reach a label or a description", () => {
+    expect(detect("claude--permission-edit.txt").options[1]!.label).toBe("Yes, allow all edits during this session");
+    expect(detect("codex--ask-fruit.txt").options[2]!.description).toBe("Optionally, add details in notes.");
   });
 });
 
