@@ -513,6 +513,16 @@ describe("QuestionCard", () => {
     expect(within(screen.getByRole("list", { name: "Options" })).getByText("Apple")).toBeVisible();
   });
 
+  it("keeps Home's read-only list as short as its buttons: labels only, without the escape", () => {
+    setup({ compact: true, lockReason: "read-only", interaction: { ...question, options: [
+      { index: 0, label: "Apple", role: "neutral", description: "Crisp and red." }, ...question.options.slice(1),
+    ] } });
+    const list = screen.getByRole("list", { name: "Options" });
+    expect(within(list).getByText("Apple")).toBeVisible();
+    expect(within(list).queryByText("Crisp and red.")).not.toBeInTheDocument();
+    expect(within(list).queryByText("Chat about this")).not.toBeInTheDocument();
+  });
+
   it.each([
     [{ readOnly: true, error: false, authError: false, bridge: "connected" }, "read-only"],
     [{ readOnly: false, error: true, authError: true, bridge: "connected" }, "refused"],
