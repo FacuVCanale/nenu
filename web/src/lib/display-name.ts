@@ -6,8 +6,13 @@ import { projectForPane } from "./projects";
 import { workspaceName } from "./spaces";
 import { paneDisplayName, type AgentView, type ProjectView } from "./types";
 
-/** Between a workspace and its tab on the line under a name. */
-export const PLACE_SEP = " › ";
+/** Where an agent lives, unjoined. Render `place`, then TITLE_SEP (lib/pane-name.ts) and `tab` as
+ *  separate spans, so a narrow row gives up the place first and keeps the tab that tells rows apart. */
+export interface DisplayPlace {
+  place: string;
+  /** The tab, only when its label says something; null for a project's worker. */
+  tab: string | null;
+}
 
 /**
  * The agent's one name: a project thread's title, "<Project> coordinator" for the coordinator, else
@@ -23,12 +28,11 @@ export function displayName(pane: AgentView, projects: readonly ProjectView[] | 
 }
 
 /**
- * The line under the name: a worker's project, else "workspace › tab" (the tab only when its label
- * says something). The coordinator gets its workspace, since its name already carries the project.
+ * The line under the name: a worker's project, else its workspace and tab (the tab only when its
+ * label says something). The coordinator gets its workspace, since its name already carries the project.
  */
-export function displayPlace(pane: AgentView, projects: readonly ProjectView[] | undefined): string {
+export function displayPlace(pane: AgentView, projects: readonly ProjectView[] | undefined): DisplayPlace {
   const owner = projectForPane(projects, pane.paneId);
-  if (owner?.thread) return owner.project.name;
-  const workspace = workspaceName({ label: pane.workspaceLabel, number: pane.workspaceNumber });
-  return pane.tabLabel ? `${workspace}${PLACE_SEP}${pane.tabLabel}` : workspace;
+  if (owner?.thread) return { place: owner.project.name, tab: null };
+  return { place: workspaceName({ label: pane.workspaceLabel, number: pane.workspaceNumber }), tab: pane.tabLabel || null };
 }

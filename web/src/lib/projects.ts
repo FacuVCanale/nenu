@@ -89,7 +89,11 @@ export function chatMatches(pane: AgentView, query: string): boolean {
   return matches(query, paneDisplayName(pane), pane.agent, pane.cwd, pane.workspaceLabel, pane.terminalTitle);
 }
 
-/** A project pane goes by its task (or "Coordinator"); any other pane by its own name. */
+/**
+ * A project pane goes by its task (or "Coordinator"); any other pane by its own name.
+ * @deprecated Use displayName (lib/display-name.ts): one name per agent in every view. This goes
+ * once the sidebar and Home have moved to it.
+ */
 export function paneTitle(pane: AgentView, owner: PaneProject | undefined): string {
   if (!owner) return paneDisplayName(pane);
   return owner.thread?.title ?? "Coordinator";
@@ -103,6 +107,11 @@ export interface PaneIdentity {
   tab: string | null;
 }
 
+/**
+ * @deprecated Use displayName and displayPlace (lib/display-name.ts), which name the coordinator
+ * "<Project> coordinator" and an unlabelled workspace "Workspace N" the same way in every view. This
+ * goes once Needs you, Recent and the sidebar have moved to them.
+ */
 export function paneIdentity(pane: AgentView, projects: readonly ProjectView[] | undefined): PaneIdentity {
   const owner = projectForPane(projects, pane.paneId);
   const parts = paneParts(pane);
