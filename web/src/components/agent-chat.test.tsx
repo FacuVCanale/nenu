@@ -1051,6 +1051,37 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(await screen.findByText("Approved · mkfifo fixture-fifo")).toBeVisible();
   });
 
+  it.each([
+    [{ device: { enforced: true, device: "spare-phone", authorized: false } }, "Read-only on this device. Answer from an authorised one."],
+    [{ error: true, authError: true }, "Sign in again to answer."],
+    [{ bridge: "disconnected" as const }, "Herdr isn't responding. Answers are paused."],
+  ])("says why the card cannot answer: %j", async (snapshot, line) => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" },
+      signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PERMISSION, ...snapshot });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText(line)).toBeVisible();
+    expect(within(card).queryByText("Answers are paused right now.")).not.toBeInTheDocument();
+  });
+
+  it("shows a read-only device the options as a list it cannot press", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PERMISSION, device: { enforced: true, device: "spare-phone", authorized: false } });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
+    expect(within(within(card).getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
+  });
+
   it("keeps the popover while the bridge has no card for the pane", async () => {
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: PERMISSION });
