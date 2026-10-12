@@ -1,0 +1,133 @@
+/* The navigation: the desktop sidebar and the phone's Browse sheet draw the same rows.
+   Adapted from T3 Code apps/web/src/index.css at 191a4ef (MIT, see THIRD_PARTY_NOTICES.md). */
+.workbench-sidebar { display: none; }
+
+/* New surfaces live in the components layer so Tailwind utilities on the same element still win. */
+@layer components {
+/* Navigation: quiet rows, muted section labels, a subtle fill for the current row. */
+.workbench-navigation { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; color: var(--foreground); }
+.nav-top { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 6px; }
+.nav-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 16px; scrollbar-width: thin; }
+.nav-footer { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding: 8px; }
+.nav-footer > button { align-self: flex-start; }
+.nav-label { display: flex; align-items: center; gap: 6px; padding: 16px 10px 4px; color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
+.nav-row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 32px; padding: 5px 10px; border-radius: 8px; color: var(--foreground); font-size: 13px; text-align: left; text-decoration: none; cursor: pointer; }
+.nav-row > svg { flex-shrink: 0; color: var(--muted-foreground); }
+.nav-row:hover { background: var(--workbench-row-hover); }
+.nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
+.nav-row:disabled { cursor: default; opacity: 0.5; background: none; }
+.nav-row-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-search { cursor: text; background: var(--workbench-row-hover); }
+.nav-search:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
+.nav-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: inherit; }
+.nav-empty { padding: 12px 10px; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
+/* Group by: a 28px segmented switch at the head of the list. */
+/* A project: the chevron sits in the row's padding, so the whole row stays one hover target. */
+.nav-project { position: relative; margin-top: 10px; }
+.nav-project > .nav-disclosure:first-child + .nav-row { padding-left: 32px; }
+.nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 32px; }
+.nav-disclosure { position: absolute; z-index: 1; inset-block: 0; left: 4px; display: inline-flex; align-items: center; justify-content: center; width: 26px; color: var(--muted-foreground); cursor: pointer; }
+.nav-disclosure-end { left: auto; right: 4px; }
+.nav-disclosure:disabled { cursor: default; }
+.nav-disclosure > svg, .nav-history > svg { transition: transform 150ms ease-out; }
+.nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.nav-row-nested { padding-left: 32px; }
+.nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 12px; }
+.nav-count { margin-left: auto; color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* History: everything resolved, grey, behind one row that starts closed. */
+.nav-history { gap: 6px; padding-left: 29px; color: var(--muted-foreground); font-size: 12px; }
+.nav-history > .nav-count { margin-left: 0; }
+
+/* Workspace → tab → pane. A workspace is a heading with its tally; rows carry title, session and state. */
+.nav-ws { margin-top: 6px; }
+.nav-ws + .nav-ws { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); padding-top: 6px; }
+.nav-ws-head { display: flex; align-items: center; gap: 2px; }
+.nav-ws-toggle { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px 6px 4px; border-radius: 8px; text-align: left; cursor: pointer; }
+.nav-ws-toggle:hover { background: var(--workbench-row-hover); }
+.nav-ws-toggle:disabled { cursor: default; background: none; }
+.nav-ws-toggle:focus-visible, .nav-ws-open:focus-visible, .nav-pane:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.nav-ws-chevron { flex-shrink: 0; color: var(--muted-foreground); transition: transform 150ms ease-out; }
+.nav-ws-toggle[aria-expanded="true"] > .nav-ws-chevron { transform: rotate(90deg); }
+.nav-ws-title { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.nav-ws-name { overflow: hidden; color: var(--foreground); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.nav-ws-meta { overflow: hidden; color: var(--muted-foreground); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.nav-ws-open { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; color: var(--muted-foreground); }
+.nav-ws-open:hover { background: var(--workbench-row-hover); color: var(--foreground); }
+.nav-ws-body { padding: 0 0 4px 12px; }
+/* The sidebar's workspaces: one 30px row each, like the projects above them. */
+.nav-ws.nav-ws-compact { margin-top: 0; border-top: 0; padding-top: 0; }
+.nav-ws-compact > .nav-project { margin-top: 0; }
+.nav-ws-compact > .nav-ws-body { padding-left: 14px; }
+.nav-ws-compact .nav-pane { min-height: 28px; padding-block: 3px; }
+.nav-ws-compact .nav-pane-detail { display: none; }
+.nav-ws-compact .nav-tab-label { padding-top: 4px; }
+
+/* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */
+.nav-group { padding-top: 14px; }
+.nav-group > .nav-label { padding: 0 10px 6px; color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-size: 11.5px; font-weight: 500; }
+.nav-group > .nav-project-section:first-of-type > .nav-project { margin-top: 0; }
+.nav-kbd { margin-left: auto; color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
+.nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: auto; padding: 0 5px; border-radius: 9px; background: color-mix(in oklch, var(--status-blocked) 22%, transparent); color: var(--status-blocked); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
+.nav-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; background: var(--primary); color: var(--primary-foreground); font-size: 10px; font-weight: 700; }
+.nav-project-section > .nav-project > .nav-row { font-weight: 500; }
+/* Depth 1 sits just inside the project; each level adds 20px, and a fold head keeps 20px for its chevron. */
+.nav-thread { position: relative; }
+.nav-tree-row { min-height: 28px; padding-left: calc(var(--nav-depth, 1) * 20px - 6px); color: var(--muted-foreground); }
+.nav-tree-row[aria-current="page"] { color: var(--foreground); }
+.nav-tree-row.nav-tree-head { padding-left: calc(var(--nav-depth, 1) * 20px + 14px); color: var(--foreground); }
+.nav-tree-row.nav-tree-resolved:not([aria-current="page"]) { color: var(--muted-foreground); }
+.nav-thread > .nav-disclosure { left: calc(var(--nav-depth, 1) * 20px - 8px); width: 20px; }
+.nav-dots { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; }
+.nav-row-word { flex-shrink: 0; font-size: 11px; }
+.nav-host { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 4px -8px -8px; padding: 0 6px 0 14px; border-top: 1px solid var(--border); }
+.nav-host-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
+.nav-host-name, .nav-host-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-host-name { font-size: 12.5px; }
+.nav-host-meta { color: color-mix(in oklab, var(--muted-foreground) 72%, transparent); font-size: 11px; }
+
+.nav-tab-label { display: flex; align-items: center; gap: 8px; padding: 8px 10px 2px 12px; color: var(--muted-foreground); font-size: 12px; }
+.nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px 10px; border-radius: 8px; color: var(--foreground); text-decoration: none; }
+.nav-pane:hover { background: var(--workbench-row-hover); }
+.nav-pane[aria-current="page"] { background: var(--workbench-row-selected); }
+.nav-pane-nested { padding-left: 22px; }
+.nav-pane-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 14px; color: var(--muted-foreground); }
+.nav-pane-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.nav-pane-title, .nav-pane-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-pane-title { font-size: 13px; }
+.nav-pane-detail { color: var(--muted-foreground); font-size: 11.5px; }
+.nav-pane-status { flex-shrink: 0; font-size: 11.5px; font-weight: 500; }
+.workbench-sidebar .nav-label:first-child { padding-top: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-disclosure > svg, .nav-history > svg, .nav-ws-chevron { transition: none; }
+}
+
+@media (min-width: 1024px) {
+  .workbench-sidebar { display: flex; flex-direction: column; width: 272px; flex-shrink: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--workbench-sidebar); }
+  .workbench-shell[data-sidebar-collapsed="true"] > .workbench-sidebar { display: none; }
+}
+
+/* Touch: every row reaches 44px. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .nav-row { min-height: 44px; font-size: 15px; }
+  .nav-disclosure { width: 36px; left: 0; }
+  .nav-disclosure-end { left: auto; right: 0; }
+  .nav-project > .nav-disclosure:first-child + .nav-row, .nav-row-nested { padding-left: 36px; }
+  .nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 36px; }
+  .nav-tree-row { padding-left: calc(var(--nav-depth, 1) * 22px - 6px); }
+  .nav-tree-row.nav-tree-head { padding-left: calc(var(--nav-depth, 1) * 22px + 26px); }
+  .nav-thread > .nav-disclosure { left: calc(var(--nav-depth, 1) * 22px - 10px); width: 36px; }
+  .nav-kbd { display: none; }
+  .nav-history { padding-left: 33px; font-size: 13px; }
+  .nav-ws-toggle { min-height: 52px; }
+  .nav-ws-name { font-size: 16px; }
+  .nav-ws-meta { font-size: 13px; }
+  .nav-ws-open { width: 44px; height: 44px; }
+  .nav-pane, .nav-ws-compact .nav-pane { min-height: 52px; padding-block: 6px; }
+  .nav-ws-compact .nav-pane { min-height: 44px; }
+  .nav-pane-title { font-size: 15px; }
+  .nav-pane-detail, .nav-pane-status { font-size: 13px; }
+  .nav-tab-label { font-size: 13px; }
+}

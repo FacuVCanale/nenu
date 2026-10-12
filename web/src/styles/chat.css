@@ -1,0 +1,18 @@
+/* A chat's own chrome: its header, the header's menu and the context meter. */
+.workbench-context-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px; border-radius: 7px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); cursor: pointer; }
+.workbench-context-trigger:hover { background: var(--accent); }
+.workbench-context-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.workbench-chat > header { background: var(--background); }
+.workbench-chat-menu { width: 44px; height: 44px; flex-shrink: 0; justify-content: center; margin-inline: 0; padding: 0; }
+.workbench-chat-menu > span { width: 28px; height: 28px; background: transparent; box-shadow: none; }
+.workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
+
+/* Touch: every target reaches 44px. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .workbench-context-trigger { min-height: 44px; }
+}
+
+@media (pointer: coarse) {
+  .workbench-menu-item { min-height: 44px; }
+}
