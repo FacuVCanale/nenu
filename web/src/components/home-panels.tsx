@@ -28,7 +28,8 @@ export function useOpeningPath(): string | null {
   const loading = navigation.state === "loading" ? navigation.location.pathname : null;
   const [late, setLate] = useState<string | null>(null);
   useEffect(() => {
-    if (!loading) return;
+    // Forget a finished load, so tapping the same row again waits its own 120ms.
+    if (!loading) return setLate(null);
     const timer = setTimeout(() => setLate(loading), OPENING_MS);
     return () => clearTimeout(timer);
   }, [loading]);
