@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
@@ -109,21 +109,37 @@ export function QuestionCard({
   const [opened, setOpened] = useState(false);
   /** Whether this plan text is taller than its fold; unknown until measured, and unknown counts as folded. */
   const [planMeasure, setPlanMeasure] = useState<{ text: string; overflows: boolean } | null>(null);
-  /** Whether Home's card cuts any answer's description short, measured once per dialog. */
-  const [cut, setCut] = useState<{ signature: string; cut: boolean } | null>(null);
+  /**
+   * Whether Home's card cuts any answer's description short, per dialog and card width. Only the answer
+   * rows decide it (`on: "answers"`); the read-only list only says when they are worth trying again.
+   */
+  const [cut, setCut] = useState<{ signature: string; width: number; on: "answers" | "list"; cut: boolean } | null>(null);
+  const [frame, setFrame] = useState<HTMLElement | null>(null);
+  const [answerList, setAnswerList] = useState<HTMLElement | null>(null);
+  // Kept only so a resize renders the card again and the measure below runs.
+  const [, setFrameWidth] = useState(0);
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
   const noticeLine = useRef<HTMLParagraphElement>(null);
   const detail = useRef<HTMLDivElement>(null);
-  const answerList = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!compact || !frame || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setFrameWidth(frame.clientWidth));
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [compact, frame]);
 
   // An answer is never chosen on Home without what it means: if the card clamps a description, the
-  // answers move to the thread, where the whole text is (DLG-10).
+  // answers move to the thread, where the whole text is (DLG-10). A new width (a rotation, a narrower
+  // window) measures again, so a card that fits answers again and one that no longer fits stops.
   useLayoutEffect(() => {
-    const list = answerList.current;
-    if (!compact || !i || !list || cut?.signature === i.signature) return;
-    const clamped = [...list.querySelectorAll<HTMLElement>("[data-description]")].some((el) => el.scrollHeight > el.clientHeight + 1);
-    setCut({ signature: i.signature, cut: clamped });
+    if (!compact || !i || !answerList || !frame) return;
+    const on = answerList.hasAttribute("data-answers") ? "answers" : "list";
+    const width = frame.clientWidth;
+    if (cut?.signature === i.signature && cut.width === width && (cut.on === "answers" || on === "list")) return;
+    const clamped = [...answerList.querySelectorAll<HTMLElement>("[data-description]")].some((el) => el.scrollHeight > el.clientHeight + 1);
+    setCut({ signature: i.signature, width, on, cut: clamped });
   });
 
   useEffect(() => {
@@ -290,7 +306,7 @@ export function QuestionCard({
   );
 
   return (
-    <Frame compact={compact} label={i.question}>
+    <Frame ref={setFrame} compact={compact} label={i.question}>
       {compact ? <>
         <CompactHeader title={title} onOpen={onOpen} />
         {/* The question's header chip, or where a wizard stands, as a quiet line over the question. */}
@@ -344,14 +360,14 @@ export function QuestionCard({
           onOpen && <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Open to answer</button>
         ) : !answerable ? <>
           {/* Read-only: what the agent offers, nothing to press. Cut short on Home: answered in the thread. */}
-          <StaticOptions options={clamped ? listed : compact ? choices.filter((o) => !escapes.includes(o)) : choices} labelsOnly={compact && !clamped} clamp={clamped} />
+          <StaticOptions ref={clamped ? setAnswerList : undefined} options={clamped ? listed : compact ? choices.filter((o) => !escapes.includes(o)) : choices} labelsOnly={compact && !clamped} clamp={clamped} />
           {clamped && <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Answer in thread</button>}
         </> : <>
           {compact && approvalHidden && onOpen && (
             <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Review in thread</button>
           )}
           {(listed.length > 0 || (answers && replies.length > 0 && !reply)) && (
-            <div ref={answerList} role="group" aria-label="Answers" className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border">
+            <div ref={setAnswerList} data-answers role="group" aria-label="Answers" className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border">
               {listed.map((option) => <AnswerRow key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} clamp={compact} />)}
               {answers && !reply && replies.map((option) => replyButton(option, cn(LIST_ROW, "text-muted-foreground disabled:text-muted-foreground/70")))}
             </div>
@@ -429,9 +445,9 @@ export function QuestionCard({
   );
 }
 
-function Frame({ compact, answered, label, children }: { compact: boolean; answered?: boolean; label?: string; children: ReactNode }) {
+function Frame({ ref, compact, answered, label, children }: { ref?: Ref<HTMLElement>; compact: boolean; answered?: boolean; label?: string; children: ReactNode }) {
   return (
-    <section aria-label={label ?? "Answered"} data-question-card={compact ? "compact" : "full"}
+    <section ref={ref} aria-label={label ?? "Answered"} data-question-card={compact ? "compact" : "full"}
       className={cn(
         "flex min-w-0 flex-col",
         answered
@@ -617,9 +633,9 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
 }
 
 /** A read-only device's options: what the agent offers, with nothing to press. Home's keeps the labels. */
-function StaticOptions({ options, labelsOnly, clamp = false }: { options: InteractionOption[]; labelsOnly: boolean; clamp?: boolean }) {
+function StaticOptions({ ref, options, labelsOnly, clamp = false }: { ref?: Ref<HTMLUListElement>; options: InteractionOption[]; labelsOnly: boolean; clamp?: boolean }) {
   return (
-    <ul aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
+    <ul ref={ref} aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
       {options.map((option) => {
         const { text, recommended } = recommendedLabel(option.label);
         return (
@@ -627,7 +643,7 @@ function StaticOptions({ options, labelsOnly, clamp = false }: { options: Intera
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] leading-5 text-foreground">
               {text}{recommended && <RecommendedBadge />}
             </span>
-            {option.description && !labelsOnly && <span className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>}
+            {option.description && !labelsOnly && <span data-description className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>}
           </li>
         );
       })}
