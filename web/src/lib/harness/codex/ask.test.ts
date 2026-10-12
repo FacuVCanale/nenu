@@ -54,10 +54,12 @@ describe("wrapped Codex questions", () => {
     expect(detectAskRegion(linesOf(screen))).toBeNull();
   });
 
-  it("refuses notes mode with a wrapped footer", () => {
+  it("reads notes mode with a wrapped footer as the same question, its box holding the keyboard", () => {
     const notes = readFileSync(join(import.meta.dirname, "../../../fixtures/panes/codex--ask-notes-focused.txt"), "utf8")
       .replace(" | esc to interrupt", "\n  esc to interrupt");
-    expect(detectAskRegion(linesOf(notes))).toBeNull();
+    const lines = linesOf(notes);
+    expect(detectAskRegion(lines)?.model).toMatchObject({ question: "Tabs or spaces?", feedback: { focused: true, text: "", purpose: "free-text", row: 1 } });
+    expect(codexAdapter.composerReady!(lines)).toBe(false);
   });
 });
 
@@ -81,9 +83,12 @@ describe("the notes box", () => {
   it.each([
     ["ask-notes-open-v0160.txt", ""],
     ["ask-notes-typed-v0160.txt", "Mango please"],
-  ])("%s: the open box is read back, and the buttons view still refuses it", (name, text) => {
+  ])("%s: the open box is read back, and the question stays with its box focused so no digit is offered", (name, text) => {
     expect(detectAskNotes(p0(name))).toEqual({ question: "Which fruit do you prefer?", row: 3, text });
-    expect(detectAskRegion(p0(name))).toBeNull();
+    const ask = detectAskRegion(p0(name))!;
+    expect(ask.model.question).toBe("Which fruit do you prefer?");
+    expect(ask.model.feedback).toEqual({ key: "Tab", focused: true, text, purpose: "free-text", row: 3 });
+    expect(ask.model.signature).not.toBe(detectAskRegion(p0("ask-notes-row-pointed-v0160.txt"))!.model.signature);
   });
 
   it("reads the box on the earlier notes capture and nothing on a closed card", () => {

@@ -8,9 +8,10 @@ import { multiSelectIdentity, type MultiSelectModel } from "../web/src/lib/harne
 import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { previewStructureEqual, type PreviewSelectModel } from "../web/src/lib/harness/preview-model.ts";
 import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/prompt-model.ts";
-import { WIZARD_CANCEL_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
+import { WIZARD_BACK_KEYS, WIZARD_CANCEL_KEYS, WIZARD_NEXT_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
 import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "../web/src/lib/typed-text.ts";
 import type { PaneRead } from "./herdr-client.ts";
+import { PERSISTENT, permissionSubject, promptSubjectText, questionRow, stripKeyHint, terminalOnly } from "./interaction-subject.ts";
 import type {
   AgentView,
   AnswerOutcome,
@@ -18,8 +19,10 @@ import type {
   Interaction,
   InteractionHint,
   InteractionKind,
+  InteractionAnswer,
   InteractionOption,
   InteractionStep,
+  InteractionSubject,
   LivePublisher,
   LiveTopic,
 } from "./types.ts";
@@ -73,6 +76,10 @@ interface Described {
   question: string;
   context?: string;
   steps?: InteractionStep[];
+  answers?: InteractionAnswer[];
+  subject?: InteractionSubject;
+  terminalOnly?: string[];
+  incomplete?: true;
   choices: Draft[];
 }
 
@@ -98,7 +105,6 @@ const HEAD_ROWS = 12;
 const PLAN_TAIL_ROWS = 3;
 
 const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip)/i;
-const PERSISTENT = /\b(always|don['’]?t ask again|do not ask again|this session|auto mode|switch to|from this project|remember|as default)\b/i;
 const TYPE_SOMETHING = /^type something\b/i;
 /** A select question's escape row; Claude's prompt model carries no flag for it (wizard and multi-select do). */
 const QUESTION_ESCAPE = /^chat about this$/i;
@@ -146,8 +152,9 @@ const keys = (k: string[]): Recipe => ({ type: "keys", keys: k });
 /** The recipes that type the answer's `text`; an option carrying one is served with `acceptsText`. */
 const TEXT_RECIPES = new Set<Recipe["type"]>(["feedback", "amend", "typeSomething"]);
 /** A "Type something" row is typed into in the terminal; a digit would only focus or tick it. */
-const pick = (label: string, recipe: Recipe, extra: Partial<Option> = {}, answers = false): Draft => {
-  const option = { label, role: role(label, answers), ...extra };
+const pick = (raw: string, recipe: Recipe, extra: Partial<Option> = {}, answers = false): Draft => {
+  const label = stripKeyHint(raw);
+  const option = { label, role: role(label, answers), ...extra, ...(extra.description ? { description: stripKeyHint(extra.description) } : {}) };
   return { option, recipe: option.role === "freeText" && !TEXT_RECIPES.has(recipe.type) ? { type: "unsupported" } : recipe };
 };
 
@@ -157,18 +164,27 @@ function describe(dialog: Dialog, agent: string): Described {
     case "prompt-select": return describePrompt(dialog.model, agent);
     case "wizard": {
       const w = dialog.model;
-      if (w.phase === "review") return { ...review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps) };
+      if (w.phase === "review") {
+        const answers = w.answers.map(({ question, answer }) => ({ question, answer }));
+        return { ...review(agent, "wizard", w.incomplete, answers, w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps) };
+      }
+      const served = stepsOf(w.steps, true);
       return {
-        kind: "wizard", family: agent, question: w.question, ...stepsOf(w.steps),
-        choices: w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
+        kind: "wizard", family: agent, question: w.question, ...served,
+        choices: [
+          ...w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
+          ...stepNav(served.steps),
+        ],
       };
     }
     case "multi-select": {
       const m = dialog.model;
-      if (m.phase === "review") return review(agent, "multi-select");
+      if (m.phase === "review") return review(agent, "multi-select", m.incomplete, reviewAnswers(m.regionSignature));
       const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
+      // No Back here: Left is measured on a wizard's questions and its review (WIZARD_NOTES), never on
+      // a checkbox step, and its own advance row is the step forward.
       return {
-        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps),
+        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps, true),
         choices: [
           ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
           ...(textRow !== null ? [pick("Type something", { type: "typeSomething", n: textRow }, {}, true)] : []),
@@ -178,7 +194,7 @@ function describe(dialog: Dialog, agent: string): Described {
       };
     }
     case "preview-select":
-      return { kind: "question", family: agent, question: dialog.model.question, ...stepsOf(dialog.model.steps), choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
+      return { kind: "question", family: agent, question: dialog.model.question, ...stepsOf(dialog.model.steps, true), choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
     case "menu":
       return {
         kind: "menu", family: agent, question: dialog.model.title,
@@ -187,19 +203,55 @@ function describe(dialog: Dialog, agent: string): Described {
   }
 }
 
-function review(agent: string, kind: "wizard" | "multi-select", context?: string): Described {
+function review(agent: string, kind: "wizard" | "multi-select", incomplete: boolean, answers: InteractionAnswer[], context?: string): Described {
   return {
     kind, family: agent, question: "Review your answers", ...(context ? { context } : {}),
-    choices: [pick("Submit answers", keys(WIZARD_SUBMIT_KEYS), { role: "primary" }), pick("Cancel", keys(WIZARD_CANCEL_KEYS), { role: "deny" })],
+    ...(answers.length ? { answers } : {}), ...(incomplete ? { incomplete: true as const } : {}),
+    choices: [
+      pick("Submit answers", keys(WIZARD_SUBMIT_KEYS), { role: "primary" }),
+      pick("Cancel", keys(WIZARD_CANCEL_KEYS), { role: "deny" }),
+      // A wizard's review sits after its last question; a lone multi-select's review has no Back measured.
+      ...(kind === "wizard" ? [pick("Back", keys(WIZARD_BACK_KEYS), { role: "nav" })] : []),
+    ],
   };
+}
+
+/**
+ * Back and Next across a wizard's questions: the Left/Right its footer advertises (ADR 0009), only
+ * where they lead somewhere. Left clamps on the first question, so there is no Back there.
+ */
+function stepNav(steps: InteractionStep[] | undefined): Draft[] {
+  if (!steps || steps.length < 2) return [];
+  const at = steps.findIndex((s) => s.current);
+  return [
+    ...(at > 0 ? [pick("Back", keys(WIZARD_BACK_KEYS), { role: "nav" })] : []),
+    pick("Next", keys(WIZARD_NEXT_KEYS), { role: "nav" }),
+  ];
+}
+
+/** A multi-select review's echo: `● <question>` over `→ <answer>`, wrapped rows joined. */
+function reviewAnswers(region: string): InteractionAnswer[] {
+  const answers: InteractionAnswer[] = [];
+  let open: InteractionAnswer | null = null;
+  for (const row of region.split("\n").map((r) => r.trim())) {
+    if (row.startsWith("●")) open = { question: row.replace(/^●\s*/, ""), answer: "" };
+    else if (open && row.startsWith("→")) {
+      open.answer = row.replace(/^→\s*/, "");
+      answers.push(open);
+    } else if (open && row && !/^ready to submit/i.test(row) && !/^(?:❯\s*)?\d+\./.test(row)) {
+      if (open.answer) open.answer += ` ${row}`;
+      else open.question += ` ${row}`;
+    }
+  }
+  return answers;
 }
 
 function describePrompt(p: PromptModel, agent: string): Described {
   const kind: InteractionKind = p.family === "plan" ? "plan" : p.family === "select" ? "question" : "permission";
   const choices = p.options.map((o) => {
     const recipe: Recipe = o.amend && AMEND_FIELD[agent] ? { type: "amend", n: Number(o.keys[0]), keys: o.keys } : keys(o.keys);
-    const choice = pick(o.label, recipe, { role: role(o.label, kind === "question", p.family === "trust") });
-    if (o.description) choice.option.description = o.description;
+    const choice = pick(o.label, recipe, { role: role(stripKeyHint(o.label), kind === "question", p.family === "trust") });
+    if (o.description) choice.option.description = stripKeyHint(o.description);
     // Claude 2.1.296: a bare "No" rejects AND ends the turn; only Tab-amend keeps it going (PROBES_2026_10).
     else if (agent === "claude" && p.family === "permission" && o.label === "No") choice.option.description = "Stops Claude's turn";
     return choice;
@@ -214,12 +266,31 @@ function describePrompt(p: PromptModel, agent: string): Described {
   }
   // AskUserQuestion's single-choice "Type something." has no measured recipe: shown, answered in the terminal.
   if (p.textRow) choices.push(pick(p.textRow.label, { type: "unsupported" }, { role: "freeText" }));
+  if (kind === "permission") {
+    // The rows as plain text stay the context (a push body reads it); the card reads the parts.
+    const context = promptSubjectText(p).join("\n");
+    const subject = permissionSubject(agent, p);
+    const terminal = terminalOnly(p);
+    return {
+      kind, family: p.family, question: p.question, choices,
+      ...(context ? { context } : {}), ...(subject ? { subject } : {}), ...(terminal.length ? { terminalOnly: terminal } : {}),
+    };
+  }
   const { context, steps } = promptContext(p);
   return { kind, family: p.family, question: p.question, ...(context ? { context } : {}), ...stepsOf(steps), choices };
 }
 
-const stepsOf = (steps: readonly InteractionStep[] | null | undefined): { steps?: InteractionStep[] } =>
-  steps?.length ? { steps: steps.map(({ label, answered, current }) => ({ label, answered, current })) } : {};
+/**
+ * The chips as served. On a question step one of them is on screen; a read without colours loses
+ * the highlight, so `asking` falls back to the first unanswered one. A review marks none.
+ */
+function stepsOf(steps: readonly InteractionStep[] | null | undefined, asking = false): { steps?: InteractionStep[] } {
+  if (!steps?.length) return {};
+  const served = steps.map(({ label, answered, current }) => ({ label, answered, current }));
+  const fallback = served.find((s) => !s.answered);
+  if (asking && fallback && !served.some((s) => s.current)) fallback.current = true;
+  return { steps: served };
+}
 
 /** Header chips as Claude draws them above a question: `☐ Fruit`, `☒` once answered. */
 const CHIP = /([☐☒☑])\s+([^☐☒☑✔←→]+)/g;
@@ -233,13 +304,25 @@ function headerChips(row: string): InteractionStep[] | null {
 }
 
 /**
- * The subject of a prompt from its literal region: the rows under the dialog's top rule and above the
- * question (Claude's command or file), plus the rows between the question and the first option
- * (Codex's `$ command`). Bounded, so a long plan shows its tail here and its whole text via a hint.
+ * Codex's `Question 2/3 (1 unanswered)` as steps; it names no question, so each is "Question n". It
+ * counts the unanswered ones without saying which, so a question is marked answered only once none is left.
+ */
+function codexProgress(row: string): InteractionStep[] | null {
+  const m = /^Question (\d+)\/(\d+) \((\d+) unanswered\)$/.exec(row);
+  if (!m) return null;
+  const [at, of, open] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return Array.from({ length: of }, (_, k) => ({ label: `Question ${k + 1}`, answered: open === 0, current: k + 1 === at }));
+}
+
+/**
+ * The detail of a question or plan from its literal region: the rows under the dialog's top rule and
+ * above the question, plus the rows between the question and the first option. Bounded, so a long plan
+ * shows its tail here and its whole text via a hint. A permission's subject is read in parts instead
+ * (interaction-subject.ts).
  */
 function promptContext(p: PromptModel): { context?: string; steps?: InteractionStep[] } {
   const lines = p.signature.split("\n");
-  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const q = questionRow(lines, p.question);
   if (q < 0) return {};
   const first = p.options[0] ? lines.findIndex((l, i) => i > q && l.includes(p.options[0]!.label)) : -1;
   let top = q;
@@ -247,12 +330,15 @@ function promptContext(p: PromptModel): { context?: string; steps?: InteractionS
   const rows = [...lines.slice(top, q), ...(first > q ? lines.slice(q + 1, first) : [])]
     .map((l) => l.replace(/^[\s│┃]+|[\s│┃]+$/g, ""))
     .filter((l) => l && !/^[─━▔═╌]+$/.test(l));
-  // A select question's header chip names it; it is not part of what the operator decides on.
+  // A select question's header chip (or Codex's "Question 1/2") names it, and a repeat of the
+  // question is not the subject. One Codex question is no progress to show.
   let steps: InteractionStep[] | undefined;
   const subject = rows.filter((l) => {
     const chips = p.family === "select" ? headerChips(l) : null;
+    const progress = p.family === "select" && !chips ? codexProgress(l) : null;
     if (chips) steps = chips;
-    return !chips && compact(l) !== compact(p.question);
+    else if (progress && progress.length > 1) steps = progress;
+    return !chips && !progress && compact(l) !== compact(p.question);
   });
   return { ...(subject.length ? { context: subject.join("\n") } : {}), ...(steps ? { steps } : {}) };
 }
@@ -263,7 +349,7 @@ function promptContext(p: PromptModel): { context?: string; steps?: InteractionS
  */
 function planTail(p: PromptModel): string {
   const lines = p.signature.split("\n");
-  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const q = questionRow(lines, p.question);
   const rows = lines.slice(0, Math.max(q, 0)).map((l) => l.trim()).filter((l) => l && !/^[─━▔═╌]+$/.test(l));
   return rows.slice(-PLAN_TAIL_ROWS).join("\n");
 }
@@ -324,6 +410,13 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   // A permission hint only agrees when its command is whole rows of the screen's subject, so that
   // subject (tool header, command, description) already shows it in full. A plan hint is longer.
   const context = base.kind === "permission" ? base.context : (detail ?? base.context);
+  // An agreeing hint says which rows are the command, and its text is exact where the screen's had to
+  // be unwrapped. It completes the card only when it is the command or file the card shows: a hint
+  // that matches the description's row instead completes nothing.
+  const subject = base.kind === "permission" && detail !== undefined && dialog.kind === "prompt-select"
+    ? permissionSubject(pane.agent, dialog.model, detail) : base.subject;
+  const shown = subject?.command ?? subject?.file;
+  const whole = detail !== undefined && (shown === undefined || compact(shown) === compact(detail));
   const interaction: Interaction = {
     paneId: pane.paneId,
     agent: pane.agent,
@@ -332,12 +425,16 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     question: asked?.question && asked.question.length > base.question.length ? asked.question : base.question,
     ...(context ? { context } : {}),
     ...(base.steps ? { steps: base.steps } : {}),
+    ...(base.answers ? { answers: base.answers } : {}),
+    ...(base.incomplete ? { incomplete: true as const } : {}),
+    ...(subject ? { subject } : {}),
+    ...(base.terminalOnly ? { terminalOnly: base.terminalOnly } : {}),
     options: choices.map((c) => c.option),
     signature: dialogSignature(dialog),
     revision,
     ...(kept.length ? { hints: kept } : {}),
     detectedAt: now,
-    detailComplete: base.kind === "permission" && detail !== undefined,
+    detailComplete: base.kind === "permission" ? whole : base.kind === "plan" && detail !== undefined,
     ...(typing(dialog) ? { typing: true as const } : {}),
   };
   return { interaction, dialog, choices };
@@ -556,7 +653,7 @@ export class Interactions {
       return { status: 502, outcome: { ok: false, error: `herdr read failed: ${(err as Error).message}` } };
     }
     const detection = this.store(session, pane, read, this.panes.get(paneKey(session, pane.paneId))?.detection?.interaction.hints ?? []);
-    if (!detection || detection.interaction.signature !== body.signature) return changed("The dialog changed. Look again before answering.");
+    if (!detection || detection.interaction.signature !== body.signature) return changed("The question changed in the terminal. Nothing was sent.");
     const choice = detection.choices[body.optionIndex];
     if (!choice) return { status: 400, outcome: { ok: false, error: "unknown option" } };
     if (choice.option.role === "persistent" && body.confirm !== true) {
@@ -566,7 +663,7 @@ export class Interactions {
       return { status: 400, outcome: { ok: false, error: "This option takes no text." } };
     }
     const { dialog } = detection;
-    if (detection.interaction.typing) return changed("Someone is typing in this dialog.");
+    if (detection.interaction.typing) return changed(TEXT_BOX_IN_USE);
     let result: AnswerResult;
     try {
       result = await this.run(io, pane, dialog, choice.recipe, body.text);
@@ -631,7 +728,7 @@ export class Interactions {
       sentKeys.push(key);
       if (key === "Enter") return sent(sentKeys);
     }
-    return changed();
+    return { status: 409, outcome: { ok: false, error: `Couldn't reach ${tapped.advanceLabel} in the terminal. Nothing was submitted.`, code: "not_reached" } };
   }
 
   /** Preview question: the digit moves the pointer; Enter only once the pointer is verified there. */
@@ -648,7 +745,7 @@ export class Interactions {
    */
   private async feedback(io: PaneIO, pane: AgentView, tapped: PromptModel, key: string, raw: string): Promise<AnswerResult> {
     const row = tapped.feedback;
-    if (!row || row.focused || row.text !== "") return changed("Someone is typing in this dialog.");
+    if (!row || row.focused || row.text !== "") return changed(TEXT_BOX_IN_USE);
     const text = typedText(raw);
     if (typeof text !== "string") return text;
     await io.sendPaneKeys(pane.paneId, [key]);
@@ -791,7 +888,7 @@ const AMEND_FIELD: Record<string, AmendField | undefined> = {
 /** The rows straight above a prompt's question, which move with it when a growing field re-flows the screen. */
 function promptHead(p: PromptModel): string {
   const lines = p.signature.split("\n");
-  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const q = questionRow(lines, p.question);
   return q < 0 ? "" : lines.slice(Math.max(0, q - HEAD_ROWS), q + 1).join("\n");
 }
 
@@ -819,7 +916,10 @@ function sameQuestionRows(a: MultiSelectModel, b: MultiSelectModel, rows: number
 }
 
 const sent = (keys: string[]): AnswerResult => ({ status: 200, outcome: { ok: true }, keys });
-const changed = (error = "The dialog changed. Look again before answering."): AnswerResult =>
+/** Before any key: the card itself says the box has focus, so the refusal names the same box. */
+const TEXT_BOX_IN_USE = "The terminal's text box is in use. Nothing was sent.";
+/** A walk that already moved the pointer sent arrows, so its default says nothing was submitted. */
+const changed = (error = "The question changed in the terminal. Nothing was submitted."): AnswerResult =>
   ({ status: 409, outcome: { ok: false, error, code: "interaction_changed" } });
 const failed = (error: string): AnswerResult => ({ status: 409, outcome: { ok: false, error } });
 const unsupported = (): AnswerResult =>

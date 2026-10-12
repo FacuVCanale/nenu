@@ -32,9 +32,11 @@ What the adapter emits: one button per option row, `keys: ["N"]` — a digit ans
 question, which on the last unanswered question submits the set, so multi-question calls step
 through as consecutive lifted cards with no extra choreography. The complete captured layout is
 required: `Question X/Y (N unanswered)` header, a non-empty question line, consecutive `1..n`
-pointer rows, and the notes footer. The NOTES-FOCUSED state refuses to raw (footer
-`tab or esc to clear notes`, or a `› Add notes` row): a digit there would type into the box.
-Typing notes from the phone is deliberately not offered — it has no probed recipe.
+pointer rows, and the notes footer. In the NOTES-FOCUSED state (footer `tab or esc to clear
+notes` over a `› Add notes` row) a digit would type into the box, so the card lifts with the box as
+a focused `free-text` feedback row: every button is locked and the composer stays refused, the same
+posture as Grok's focused `z` row. Until 2026-10-12 this state refused to raw, which left the pane
+with no card at all (audit DLG-40). A `› Add notes` row anywhere else still refuses.
 
 ## Wrapped cards (2026-09-10, Codex 0.153.4)
 
@@ -46,7 +48,7 @@ A read-only inspection found cards with wrapped questions and descriptions. One 
 The parser joins question and description rows, keeps the original rows in its signature,
 and accepts the standalone interrupt hint only directly below the submit footer.
 A continuation must belong to an existing description and start at or beyond its column.
-Wrapped labels, incomplete options, notes mode, and output after the footer stay raw.
+Wrapped labels, incomplete options and output after the footer stay raw.
 
 The digit recipe above is unchanged. No keys were sent to the observed work session.
 Maintainer live-verification on a wrapped card is still needed before merge.

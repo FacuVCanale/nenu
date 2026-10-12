@@ -27,7 +27,7 @@ const data: HomeData = {
 
 const permission: Interaction = {
   paneId: "w1:p2", agent: "claude", signature: "sig-1", revision: 1, detectedAt: 1,
-  kind: "permission", family: "permission", question: "Do you want to proceed?", context: "Bash command\nbun run test",
+  kind: "permission", family: "permission", question: "Do you want to proceed?", context: "Bash command\nbun run test", subject: { tool: "Bash", command: "bun run test" },
   options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
   detailComplete: true,
 };
@@ -86,7 +86,7 @@ it("answers a dialog in place from Needs you", async () => {
   expect(headline()).toBe("1 thread needs you");
   await user.click(needs.getByRole("button", { name: "Yes" }));
   expect(answers).toEqual([{ pane: "w1:p2", body: { signature: "sig-1", optionIndex: 0 } }]);
-  expect(await needs.findByText("Answered: Yes")).toBeInTheDocument();
+  expect(await needs.findByText("Approved · bun run test")).toBeInTheDocument();
 });
 
 it("offers a blocked pane with no readable dialog as a row into its thread", async () => {
@@ -330,7 +330,10 @@ it("keeps existing threads navigable while answering and creating are read-only"
   const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
   expect(main.getByRole("button", { name: "New chat" })).toBeDisabled();
   const needs = within(main.getByRole("region", { name: /^Needs you/ }));
-  expect(await needs.findByRole("button", { name: "Yes" })).toBeDisabled();
+  // The card says why, and lists what the agent offers with nothing to press.
+  expect(await needs.findByText("Read-only on this device. Answer from an authorised one.")).toBeVisible();
+  expect(needs.queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
+  expect(within(needs.getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
   expect(needs.getByRole("button", { name: "Open" })).toBeEnabled();
   const recent = within(main.getByRole("region", { name: /^Recent/ }));
   expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");

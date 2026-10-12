@@ -183,7 +183,7 @@ describe("Composer — send", () => {
     const user = userEvent.setup();
     const wire = watchWrites();
     const props = renderComposerWithStatus({ dialogPresent: true, rawTerminalDraft: "leftover" });
-    const box = screen.getByPlaceholderText(/type a reply/i);
+    const box = screen.getByPlaceholderText("Answer the agent first…");
 
     await user.type(box, "please do not approve anything");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -1981,6 +1981,8 @@ describe("conversation composer", () => {
       }),
     );
     renderComposer({nativeWorkbench:true,dialogPresent:true,modelControl:<button>Choose model</button>,usageControls:<button>Usage</button>});
+    // What Send does now is said in the box: the message waits for the answer.
+    expect(await screen.findByPlaceholderText("Message for after you answer…")).toBeInTheDocument();
     // The model chip sits in the toolbar under the draft; usage stays behind the ⋯ menu.
     const row = screen.getByRole("group",{name:"Message tools"});
     expect(within(row).getByRole("button",{name:"Choose model"})).toBeInTheDocument();

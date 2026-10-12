@@ -33,7 +33,7 @@ const EXPECTED: Record<string, string> = {
   "claude--menu-model-picker-wrapped.txt": "menu: Set as default=persistent | Use this session only=persistent | Cancel=deny",
   "claude--menu-model-picker.txt": "menu: Set as default=persistent | Use this session only=persistent | Cancel=deny",
   "claude--permission-bash.txt": "permission: Yes=primary | Yes, and don’t ask again for: mkfifo fixture-fifo *=persistent | No=deny",
-  "claude--permission-edit.txt": "permission: Yes=primary | Yes, allow all edits during this session (shift+tab)=persistent | No=deny",
+  "claude--permission-edit.txt": "permission: Yes=primary | Yes, allow all edits during this session=persistent | No=deny",
   "claude--plan-approval--feedback-focused.txt": "plan: Yes, clear context (5% used) and use auto mode=persistent | Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval--feedback-typed.txt": "plan: Yes, clear context (4% used) and use auto mode=persistent | Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval--feedback-wrapped.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
@@ -43,7 +43,7 @@ const EXPECTED: Record<string, string> = {
   "claude--plan-approval--three-row.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | No, refine with Ultraplan on Claude Code on the web=deny | Tell Claude what to change=freeText",
   "claude--select-menu.txt": "question: Red=neutral | Green=neutral | Blue=neutral | Chat about this=deny | Type something.=freeText",
-  "claude--select-multi.txt": "wizard: Plan first=neutral | Just build it=neutral | Build + verify=neutral | Chat about this=deny",
+  "claude--select-multi.txt": "wizard: Plan first=neutral | Just build it=neutral | Build + verify=neutral | Chat about this=deny | Back=nav | Next=nav",
   "claude--select-multiselect-checked.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "claude--select-multiselect-review.txt": "multi-select: Submit answers=primary | Cancel=deny",
   "claude--select-multiselect-single.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
@@ -53,7 +53,7 @@ const EXPECTED: Record<string, string> = {
   "claude--trust-prompt.txt": "permission: Yes, I trust this folder=persistent | No, exit=deny",
   "claude--v2285-ask-multi.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "claude--v2285-ask-question.txt": "question: Apple=neutral | Banana=neutral | Chat about this=deny | Type something.=freeText",
-  "claude--v2285-ask-wizard.txt": "wizard: Apple=neutral | Banana=neutral | Chat about this=deny",
+  "claude--v2285-ask-wizard.txt": "wizard: Apple=neutral | Banana=neutral | Chat about this=deny | Next=nav",
   "claude--wizard-multiselect-checked.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
   "claude--wizard-multiselect-final.txt": "multi-select: Garlic knots=neutral | Caesar salad=neutral | Dipping sauces=neutral | Submit=primary | Chat about this=deny",
   "claude--wizard-multiselect-pointer-next.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
@@ -61,11 +61,11 @@ const EXPECTED: Record<string, string> = {
   "claude--wizard-preview-note-attached.txt": "question: Grid=neutral | List=neutral",
   "claude--wizard-preview-q1.txt": "question: Grid=neutral | List=neutral",
   "claude--wizard-preview-wrapped-label.txt": "question: Grid of equal-width cards with a fixed gutter (Recommended)=neutral | List=neutral",
-  "claude--wizard-q1-revisit.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny",
-  "claude--wizard-q1.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny",
-  "claude--wizard-q2.txt": "wizard: Small=neutral | Medium=neutral | Large=neutral | Chat about this=deny",
-  "claude--wizard-submit-unanswered.txt": "wizard: Submit answers=primary | Cancel=deny",
-  "claude--wizard-submit.txt": "wizard: Submit answers=primary | Cancel=deny",
+  "claude--wizard-q1-revisit.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny | Next=nav",
+  "claude--wizard-q1.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny | Next=nav",
+  "claude--wizard-q2.txt": "wizard: Small=neutral | Medium=neutral | Large=neutral | Chat about this=deny | Back=nav | Next=nav",
+  "claude--wizard-submit-unanswered.txt": "wizard: Submit answers=primary | Cancel=deny | Back=nav",
+  "claude--wizard-submit.txt": "wizard: Submit answers=primary | Cancel=deny | Back=nav",
   "claude-lab--menu-config-panel--w82.txt": "menu: Tabs=neutral | Clear=deny",
   "claude-lab--menu-effort-slider--w82.txt": "menu: Confirm=neutral | This session only=persistent | Cancel=deny",
   "claude-lab--menu-model-picker--w82.txt": "menu: Set as default=persistent | Use this session only=persistent | Cancel=deny",
@@ -77,6 +77,7 @@ const EXPECTED: Record<string, string> = {
   "claude-lab--tasks-panel--w82.txt": "menu: View=neutral | Close=deny",
   "codex--approval-exec.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
   "codex--ask-fruit.txt": "question: Apple (Recommended)=neutral | Pear=neutral | None of the above=neutral",
+  "codex--ask-notes-focused.txt": "question: Tabs (Recommended)=neutral | Spaces=neutral | None of the above=neutral",
   "codex--ask-wizard-q1.txt": "question: Tabs (Recommended)=neutral | Spaces=neutral | None of the above=neutral",
   "codex--ask-wizard-q2.txt": "question: Yes (Recommended)=neutral | No=neutral | None of the above=neutral",
   "codex--trust-prompt.txt": "permission: Yes, continue=persistent | No, quit=deny",
@@ -118,7 +119,9 @@ const EXPECTED: Record<string, string> = {
   "plan-approval-v2296.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   // web/src/lib/harness/codex/fixtures
   "approval-exec-v0160.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
+  "ask-notes-open-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-notes-row-pointed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
+  "ask-notes-typed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-plan-mode-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "model-picker.txt": "menu: Confirm=neutral | Go back=deny",
   "model-reasoning.txt": "menu: Confirm=neutral | Go back=deny",
@@ -171,10 +174,167 @@ describe("where a question sits in its set", () => {
     ]);
   });
 
+  test("a wizard read without its colours marks the first unanswered question as the one on screen", () => {
+    const i = detect("claude--wizard-q2.txt");
+    const plain = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", fixture("claude--wizard-q2.txt").replace(/\x1b\[[0-9;]*m/g, ""))!, 0, [], 0).interaction;
+    expect(plain.steps?.find((s) => s.current)?.label).toBe("Scope");
+    expect(i.steps?.find((s) => s.current)?.label).toBe("Scope");
+  });
+
+  test("a wizard's review serves its answers and marks no question as on screen", () => {
+    const i = detect("claude--wizard-submit.txt");
+    expect(i.answers).toEqual([
+      { question: "Which focus area should we work on?", answer: "UI" },
+      { question: "What scope should this work have?", answer: "Medium" },
+      { question: "How should we approach the work?", answer: "Plan first" },
+    ]);
+    expect(i.steps?.some((s) => s.current)).toBe(false);
+    const unanswered = detect("claude--wizard-submit-unanswered.txt");
+    expect(unanswered.steps?.some((s) => s.current)).toBe(false);
+  });
+
+  test("a review with a question left unanswered says so", () => {
+    expect(detect("claude--wizard-submit-unanswered.txt").incomplete).toBe(true);
+    expect(detect("claude--select-multiselect-review.txt").incomplete).toBe(true);
+    expect(detect("claude--wizard-submit.txt").incomplete).toBeUndefined();
+  });
+
+  test("a multi-select review serves what Submit sends", () => {
+    const screen = fixture("ask-review-v2296.txt", join(ROOT, "web/src/lib/harness/claude/fixtures"));
+    const i = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [], 0).interaction;
+    expect(i.answers).toEqual([{ question: "Which fruits do you like?", answer: "Apple, Mango" }]);
+  });
+
+  test("Codex's 'Question 1/2' header becomes the steps, never the detail", () => {
+    const q1 = detect("codex--ask-wizard-q1.txt");
+    expect(q1.steps).toEqual([{ label: "Question 1", answered: false, current: true }, { label: "Question 2", answered: false, current: false }]);
+    expect(q1.context).toBeUndefined();
+    // "Question 2/2 (1 unanswered)" says how many, not which: question 1 may be the one skipped.
+    expect(detect("codex--ask-wizard-q2.txt").steps).toEqual([{ label: "Question 1", answered: false, current: false }, { label: "Question 2", answered: false, current: true }]);
+    const single = detect("codex--ask-fruit.txt");
+    expect(single.steps).toBeUndefined();
+    expect(single.context).toBeUndefined();
+  });
+
   test("a permission keeps its subject and has no steps", () => {
     const i = detect("claude--permission-bash.txt");
     expect(i.steps).toBeUndefined();
     expect(i.context).toContain("mkfifo fixture-fifo");
+  });
+});
+
+describe("what a permission asks for, as the dialog draws it", () => {
+  const CLAUDE_P0 = join(ROOT, "web/src/lib/harness/claude/fixtures");
+  const at = (file: string, dir: string, agent: string, hints: InteractionHint[] = []) =>
+    toInteraction({ paneId: "p", agent }, dialogOnScreen(agent, fixture(file, dir))!, 0, hints, 0).interaction;
+
+  test("Claude 2.1.296: tool, description and command apart, without the Tip row", () => {
+    const i = at("permission-bash-v2296.txt", CLAUDE_P0, "claude");
+    expect(i.subject).toEqual({ tool: "Bash", description: "Write hi into hello.txt in the project directory", command: "echo hi > hello.txt" });
+    expect(i.context).not.toContain("Tip:");
+  });
+
+  test("an older Claude: the command above its description, without 'This command requires approval'", () => {
+    const i = detect("claude--permission-bash.txt");
+    expect(i.subject).toEqual({ tool: "Bash", command: "mkfifo fixture-fifo", description: "Create a named pipe (FIFO)" });
+    expect(i.context).not.toContain("requires approval");
+  });
+
+  test("a narrow pane: the wrapped Tip is dropped and the command's wrapped rows join up", () => {
+    const i = detect("claude-lab--permission-bash--w40.txt", [], "claude");
+    expect(i.subject).toEqual({ tool: "Bash", command: "touch /tmp/claude-lab/project/scratch-one.txt", description: "Create empty file scratch-one.txt" });
+    expect(i.context).not.toMatch(/Tip:|below/);
+  });
+
+  test("a file the call writes, with its preview lines and their numbers", () => {
+    expect(detect("claude--permission-edit.txt").subject).toEqual({ tool: "Create file", file: "hello.txt", preview: "1 hello" });
+    expect(detect("claude-lab--permission-write--w82.txt", [], "claude").subject).toEqual({
+      tool: "Create file", file: "docs/lab-notes.md",
+      preview: "1 # Lab Notes\n2\n3 This is a throwaway project used for screen captures.\n4 It has no real application code, only sample files.\n5 Changes here are safe to discard at any time.",
+    });
+  });
+
+  test("a command taller than the old twelve-row window keeps its tool, description and every row", () => {
+    const rows = ["cat > notes.md <<'EOF'", ...Array.from({ length: 10 }, (_, n) => `- note ${n + 1}`), "EOF"];
+    const plain = fixture("permission-bash-v2296.txt", CLAUDE_P0).replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
+    const screen = plain.replace(/^ echo hi > hello\.txt *$/m, rows.map((r) => ` ${r}`).join("\n"));
+    expect(screen).toContain(" - note 10\n");
+    const hint: InteractionHint = { source: "claude-hook", observedAt: 1, question: "Bash", detail: rows.join("\n") };
+    const i = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [hint], 0).interaction;
+    expect(i.subject).toEqual({ tool: "Bash", description: "Write hi into hello.txt in the project directory", command: rows.join("\n") });
+    expect(i.detailComplete).toBe(true);
+  });
+
+  test("an agreeing hook hint gives the exact command", () => {
+    const command = "touch /tmp/claude-lab/project/scratch-one.txt";
+    const i = detect("claude-lab--permission-bash--w40.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], "claude");
+    expect(i.subject?.command).toBe(command);
+    expect(i.detailComplete).toBe(true);
+  });
+
+  test("an indented command wrapped onto its last row keeps that row: a full row above it is no description's", () => {
+    const command = "touch /tmp/claude-lab/project/scratch-one.txt";
+    const screen = fixture("claude-lab--permission-bash--w40.txt").replace(/^[^\n]*Create empty file scratch-one\.txt[^\n]*\n/m, "");
+    const plain = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [], 0).interaction;
+    expect(plain.subject).toEqual({ tool: "Bash", command });
+    const hinted = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], 0).interaction;
+    expect(hinted.subject).toEqual({ tool: "Bash", command });
+    expect(hinted.detailComplete).toBe(true);
+  });
+
+  test("an agreeing hint says where an indented command ends, so its second line is never read as the description", () => {
+    const command = "mkfifo fixture-fifo\nls -la fixture-fifo";
+    const screen = fixture("claude--permission-bash.txt").replace("Create a named pipe (FIFO)", "ls -la fixture-fifo");
+    const i = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: command }], 0).interaction;
+    expect(i.subject).toEqual({ tool: "Bash", command });
+    expect(i.detailComplete).toBe(true);
+  });
+
+  test("a hint the card's command does not spell never makes the card whole", () => {
+    // The hint is a row of the dialog, but the description's row, not the command's.
+    const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "Create a named pipe (FIFO)" }]);
+    expect(i.subject).toEqual({ tool: "Bash", command: "mkfifo fixture-fifo", description: "Create a named pipe (FIFO)" });
+    expect(i.detailComplete).toBe(false);
+    expect(pushActions(i)).toEqual([]);
+  });
+
+  test("Codex: the reason as the description, the $ row as the command, the environment as a fact", () => {
+    expect(detect("codex--approval-exec.txt").subject).toEqual({
+      description: "Do you want to allow creating /tmp/collie-codex-probe.txt outside the sandbox?",
+      command: "touch /tmp/collie-codex-probe.txt",
+      meta: ["Environment: local"],
+    });
+    expect(detect("codex--v0156-approval-patch.txt").subject).toEqual({ description: "Apply proposed file edits", file: "/tmp/collie-codex-debug/hello.py" });
+  });
+
+  test("Codex: a word-wrapped command and reason join with a space, a heredoc keeps its lines", () => {
+    expect(detect("codex--v0156-approval-exec-wrapped.txt").subject?.command).toBe(
+      'echo "this is a very long line of text that should be long enough to wrap across the terminal width when codex prints the dollar-sign command preview row in the approval dialog box" > longline.txt');
+    expect(detect("codex--v0156-approval-exec-wrapped-50.txt").subject?.description).toBe("May I run `touch narrow-approval-test.txt` to create the requested file?");
+    expect(detect("codex--v0156-approval-exec-2opt.txt").subject?.command).toBe("cat <<'EOF' > multi.txt\nline one\nline two\nEOF");
+  });
+
+  test("Grok: the subject stops at the first option row, so a row that is never a button stays out", () => {
+    const i = detect("grok--permission-rm.txt");
+    expect(i.context).toBe("rm hello.txt");
+    expect(i.subject).toBeUndefined();
+  });
+
+  test("the persistent rows Codex and Grok keep to the keyboard are named, never served as options", () => {
+    expect(detect("codex--approval-exec.txt").terminalOnly).toEqual(["Yes, and don't ask again for commands that start with `touch /tmp/collie-codex-probe.txt`"]);
+    expect(detect("codex--v0156-approval-patch.txt").terminalOnly).toEqual(["Yes, and don't ask again for these files"]);
+    expect(detect("codex--v0156-approval-exec-wrapped.txt").terminalOnly).toEqual([
+      'Yes, and don\'t ask again for commands that start with `echo "this is a very long line of text that should be long enough to wrap across the terminal width when codex prints the dollar-sign command preview row in the approval dialog box" > longline.txt`',
+    ]);
+    expect(detect("grok--permission-rm.txt").terminalOnly).toEqual(["Yes, and don't ask again for anything (always-approve mode)"]);
+    expect(detect("grok--permission-edit.txt").terminalOnly).toEqual(["Yes, and don't ask again for anything (always-approve mode)", "Yes, allow all edits during this session"]);
+    expect(detect("codex--v0156-approval-exec-2opt.txt").terminalOnly).toBeUndefined();
+    expect(at("permission-bash-v2296.txt", CLAUDE_P0, "claude").terminalOnly).toBeUndefined();
+  });
+
+  test("terminal key hints never reach a label or a description", () => {
+    expect(detect("claude--permission-edit.txt").options[1]!.label).toBe("Yes, allow all edits during this session");
+    expect(detect("codex--ask-fruit.txt").options[2]!.description).toBe("Optionally, add details in notes.");
   });
 });
 
@@ -234,6 +394,12 @@ describe("hints enrich, the screen decides", () => {
     expect(i.context).toBe(plan);
   });
 
+  test("a plan is whole on the card only when its hint agreed with the screen", () => {
+    const plan = "## Change\n\nCreate haiku.txt\n\n## Verification\n\n- Confirm the file exists and contains exactly three lines.\n- Read it back to confirm the 5–7–5 structure and dog theme.";
+    expect(detect("claude--plan-approval.txt", [{ source: "claude-journal", observedAt: 1, detail: plan }]).detailComplete).toBe(true);
+    expect(detect("claude--plan-approval.txt").detailComplete).toBe(false);
+  });
+
   test("a plan hint for another plan is dropped", () => {
     const i = detect("claude--plan-approval.txt", [{ source: "claude-hook", observedAt: 1, detail: "# Plan\n1. Write haiku.txt" }]);
     expect(i.context).toBeUndefined();
@@ -264,6 +430,14 @@ describe("push actions", () => {
   test("a question's No is an answer, not a deny the notification leaves out", () => {
     expect(pushActions(detect("grok--ask-wizard-q2.txt"))).toEqual([{ optionIndex: 0, title: "Yes" }, { optionIndex: 1, title: "No" }]);
     expect(pushActions(detect("codex--ask-wizard-q2.txt"))).toEqual([]);
+  });
+
+  test("Codex's notes box with the keyboard is the same question, typing, and answers nothing", () => {
+    const i = detect("codex--ask-notes-focused.txt");
+    expect(i.kind).toBe("question");
+    expect(i.question).toBe("Tabs or spaces?");
+    expect(i.typing).toBe(true);
+    expect(pushActions(i)).toEqual([]);
   });
 
   test("nothing while a preview question's note is being typed", () => {
@@ -471,7 +645,7 @@ describe("Interactions.answer", () => {
     pane.show(fixture("claude--permission-bash.txt"));
     const result = await answer({ signature: card.signature, optionIndex: 0 });
     expect(result.status).toBe(409);
-    expect(result.outcome).toMatchObject({ ok: false, code: "interaction_changed" });
+    expect(result.outcome).toEqual({ ok: false, code: "interaction_changed", error: "The question changed in the terminal. Nothing was sent." });
     expect(pane.log.keys).toEqual([]);
   });
 
@@ -494,6 +668,30 @@ describe("Interactions.answer", () => {
     const result = await answer({ signature: card.signature, optionIndex: next.index });
     expect(result.outcome).toEqual({ ok: true });
     expect(pane.log.keys).toEqual([["Down"], ["Enter"]]);
+  });
+
+  test("a Submit walk that never reaches its row sends no Enter and says what happened", async () => {
+    const { pane, card, answer } = await ready("claude--wizard-multiselect-checked.txt");
+    const next = card.options.find((o) => o.label === "Next")!;
+    const result = await answer({ signature: card.signature, optionIndex: next.index });
+    expect(result.status).toBe(409);
+    expect(result.outcome).toEqual({ ok: false, code: "not_reached", error: "Couldn't reach Next in the terminal. Nothing was submitted." });
+    expect(pane.log.keys.flat()).not.toContain("Enter");
+  });
+
+  test("a wizard's Back and Next press the arrows its footer names, and only where they lead somewhere", async () => {
+    const first = detect("claude--wizard-q1.txt").options.filter((o) => o.role === "nav").map((o) => o.label);
+    expect(first).toEqual(["Next"]);
+    const { pane, card, answer } = await ready("claude--wizard-q2.txt");
+    const back = card.options.find((o) => o.label === "Back")!;
+    expect(back.role).toBe("nav");
+    expect((await answer({ signature: card.signature, optionIndex: back.index })).keys).toEqual(["Left"]);
+    expect(pane.log.keys).toEqual([["Left"]]);
+    expect(pushActions(card)).not.toContainEqual(expect.objectContaining({ title: "Back" }));
+  });
+
+  test("a checkbox step in a wizard serves no Back: Left is measured on a question and the review, never there", () => {
+    expect(detect("claude--wizard-multiselect-final.txt").options.filter((o) => o.role === "nav")).toEqual([]);
   });
 
   test("multi-select toggles carry the checkbox state", async () => {
@@ -768,7 +966,10 @@ describe("free-text answers (Tab-amend, Type something, Codex notes)", () => {
     const pane = sequencePane(claude("permission-bash-amend-typed-v2296.txt"), []);
     const { card: c, answer } = await card(pane.io);
     expect(c.typing).toBe(true);
-    expect((await answer({ signature: c.signature, optionIndex: 0, confirm: true })).status).toBe(409);
+    const refused = await answer({ signature: c.signature, optionIndex: 0, confirm: true });
+    expect(refused.status).toBe(409);
+    // In the card's own words about the box, and what it did: nothing.
+    expect(refused.outcome).toMatchObject({ ok: false, error: "The terminal's text box is in use. Nothing was sent." });
     expect(pane.log).toEqual({ keys: [], text: [] });
   });
 

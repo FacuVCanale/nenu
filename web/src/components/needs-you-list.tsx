@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router";
 import { ChevronRight } from "lucide-react";
 
 import { HomeHeading } from "@/components/home-panels";
-import { QuestionCard } from "@/components/question-card";
+import { QuestionCard, type LockReason } from "@/components/question-card";
 import { StatusDot } from "@/components/status-badge";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
 import type { NeedsYouItem } from "@/lib/home-stats";
@@ -24,14 +24,15 @@ const WAITING = "waiting in the terminal";
  * blocked pane with no dialog the bridge could read is a row into its thread. Answers just sent stay
  * as receipts until the pane's next dialog.
  */
-export function NeedsYouList({ agents, projects, session, items, receipts, interactions, readOnly }: {
+export function NeedsYouList({ agents, projects, session, items, receipts, interactions, lockReason }: {
   agents: readonly AgentView[];
   projects?: readonly ProjectView[];
   session?: string;
   items: readonly NeedsYouItem<Interaction>[];
   receipts: readonly Receipt[];
   interactions: InteractionsState;
-  readOnly: boolean;
+  /** Why answers are paused, if they are. */
+  lockReason: LockReason | undefined;
 }) {
   const navigate = useNavigate();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
@@ -45,7 +46,8 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
         const title = who.where ? `${who.name} · ${who.where}` : who.name;
         if (interaction) {
           return (
-            <QuestionCard key={`${paneId}:${interaction.signature}`} compact interaction={interaction} title={title} readOnly={readOnly}
+            <QuestionCard key={`${paneId}:${interaction.signature}`} compact interaction={interaction} title={title} lockReason={lockReason}
+              refused={interactions.refusalFor(interaction)}
               onOpen={() => navigate(panePath(paneId, session))} onAnswer={(option, extra) => interactions.answer(interaction, option, extra)} />
           );
         }

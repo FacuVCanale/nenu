@@ -77,12 +77,12 @@ const PINNED = [
   "codex--working.txt",
 ];
 
-// The dialog captures — screens that lift an interactive block. The notes-focused ask is NOT
-// here: it is a live modal the adapter deliberately REFUSES (a digit would type into the notes
-// box), so it belongs to the neutral (raw-only) cohort with composerReady false.
+// The dialog captures — screens that lift an interactive block. The notes-focused ask lifts its
+// question with the box as a focused row, so every button is locked (a digit would type into it).
 const DIALOG = [
   "codex--approval-exec.txt",
   "codex--ask-fruit.txt",
+  "codex--ask-notes-focused.txt",
   "codex--ask-wizard-q1.txt",
   "codex--ask-wizard-q2.txt",
   "codex--trust-prompt.txt",
@@ -128,7 +128,7 @@ describe("composerReady — the gate the reply path pre-flights on", () => {
     },
   );
 
-  it.each([...DIALOG, "codex--ask-notes-focused.txt"])("%s: a modal owns the screen ⇒ false", (name) => {
+  it.each(DIALOG)("%s: a modal owns the screen ⇒ false", (name) => {
     expect(codexAdapter.composerReady!(fixtureLines(name))).toBe(false);
   });
 });
@@ -676,10 +676,11 @@ describe("codexBuildBlocks", () => {
     }
   });
 
-  it("the notes-focused ask refuses to raw — a digit would type into the notes box", () => {
+  it("the notes-focused ask keeps its question with the box focused — a digit would type into the notes box", () => {
     const lines = fixtureLines("codex--ask-notes-focused.txt");
-    expect(detectAskRegion(lines)).toBeNull();
-    expect(codexAdapter.buildBlocks(lines).every((b) => b.kind === "raw")).toBe(true);
+    expect(detectAskRegion(lines)?.model.feedback).toMatchObject({ focused: true, purpose: "free-text" });
+    const prompt = codexAdapter.buildBlocks(lines).find((b) => b.kind === "prompt-select");
+    expect(prompt?.kind === "prompt-select" && prompt.prompt.feedback?.focused).toBe(true);
   });
 
   it("approval refuses an unclassified middle row — no partial lift", () => {

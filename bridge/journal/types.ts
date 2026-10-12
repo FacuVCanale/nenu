@@ -46,7 +46,8 @@ export type TranscriptPart =
       name: string;
       /** One-line gist of the call's input (the file read, the command run) — never the whole input. */
       summary: string;
-      questions?: Array<{ title: string; options: string[] }>;
+      /** `descriptions` runs beside `options` ("" for none), only when any option has one. */
+      questions?: Array<{ title: string; options: string[]; descriptions?: string[] }>;
       result?: { text: string; truncated?: boolean; isError?: boolean; attachments?: ToolAttachment[] };
     }
   | TranscriptImagePart;

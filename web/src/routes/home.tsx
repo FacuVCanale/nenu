@@ -5,6 +5,7 @@ import { ArrowUp, Check, ChevronDown, Folder, LayoutGrid, Plus } from "lucide-re
 import { ColumnPage } from "@/components/column-page";
 import { HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
 import { NeedsYouList } from "@/components/needs-you-list";
+import { lockReasonOf } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useInteractions } from "@/hooks/use-interactions";
@@ -68,7 +69,7 @@ export function HomeRoute() {
       {calm
         ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
         : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
-          interactions={interactions} readOnly={readOnly || !live} />}
+          interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} />}
       <RecentChats chats={recent} working={counts.working} session={data.session} now={now} />
       <ReadyToReviewList entries={reviews} session={data.session} />
       {running.length > 0 && (

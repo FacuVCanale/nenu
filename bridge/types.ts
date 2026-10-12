@@ -569,9 +569,10 @@ export interface LivePublisher {
 /**
  * What an option does, which decides how it is drawn and whether a one-tap answer is allowed:
  * `persistent` changes a setting beyond this turn ("don't ask again"), so it always asks to confirm;
- * `freeText` opens a text reply instead of pressing a key.
+ * `freeText` opens a text reply instead of pressing a key; `nav` moves between a wizard's questions
+ * (the arrows its footer names) and answers nothing.
  */
-export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
+export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText" | "nav";
 
 export interface InteractionOption {
   /** Position in the dialog's own order; what {@link AnswerRequest.optionIndex} names. */
@@ -608,6 +609,27 @@ export interface InteractionStep {
   current: boolean;
 }
 
+export interface InteractionAnswer {
+  question: string;
+  answer: string;
+}
+
+/** What a permission asks to run or change, read from the dialog's own rows. Display only. */
+export interface InteractionSubject {
+  /** The tool the dialog names: "Bash", "Create file". */
+  tool?: string;
+  /** What the agent says the call is for (Claude's description row, Codex's Reason). */
+  description?: string;
+  /** The command, with the terminal's wrapping undone; exact when a hint agreed with the screen. */
+  command?: string;
+  /** The file the call creates or edits. */
+  file?: string;
+  /** The dialog's preview of the file's lines, its own line numbers kept. */
+  preview?: string;
+  /** Short facts about where it runs ("Environment: local"). */
+  meta?: string[];
+}
+
 export interface Interaction {
   paneId: string;
   agent: string;
@@ -619,6 +641,14 @@ export interface Interaction {
   context?: string;
   /** The question's header chips: one names a lone AskUserQuestion, several are a wizard's steps. */
   steps?: InteractionStep[];
+  /** A wizard's review: what Submit sends, one pair per question. */
+  answers?: InteractionAnswer[];
+  /** A permission's subject in parts; `context` keeps the same rows as plain text. */
+  subject?: InteractionSubject;
+  /** Options the screen shows that no answer here can press (Codex's and Grok's "don't ask again"). */
+  terminalOnly?: string[];
+  /** A review with a question left unanswered: Submit sends what `answers` holds and nothing more. */
+  incomplete?: true;
   options: InteractionOption[];
   /** Identity of the exact dialog on screen; an answer carrying another signature is refused (409). */
   signature: string;
@@ -643,7 +673,7 @@ export interface AnswerRequest {
 
 export type AnswerOutcome =
   | { ok: true }
-  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" };
+  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" | "not_reached" };
 
 // ── Guarded send: one POST that types, verifies and submits ────────────────────────────────────────
 

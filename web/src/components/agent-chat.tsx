@@ -1,5 +1,5 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
-import { QuestionCard } from "@/components/question-card";
+import { lockReasonOf, QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
 import { agentBusy, turnNote, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
@@ -405,6 +405,8 @@ export function AgentChat({
   const cardCovers = interaction !== undefined && interaction.kind !== "menu" && !liveBlocks.some((b) => b.kind === "preview-select");
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   const cardReadOnly = readOnly || gone || connecting;
+  const cardLock = lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
+  const refused = interaction && interactions.refusalFor(interaction);
   const { answer } = interactions;
   const { revalidate } = revalidator;
   const refreshConversation = conversation.refresh;
@@ -414,7 +416,7 @@ export function AgentChat({
     {conversationFooter}
     <div data-follow-stop className="mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
-        readOnly={cardReadOnly} onOpen={() => setRawTerminal(true)}
+        readOnly={cardReadOnly} lockReason={cardLock} refused={refused} onOpen={() => setRawTerminal(true)}
         onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
         onAnswer={async (option, extra) => {
           const outcome = await answer(interaction!, option, extra);
@@ -426,7 +428,7 @@ export function AgentChat({
           return outcome;
         }} />
     </div>
-  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, setRawTerminal, answer, revalidate, refreshConversation]);
+  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, cardLock, refused, setRawTerminal, answer, revalidate, refreshConversation]);
   // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
   // (lib/live-events.ts). Leaving the pane restores the default.
   const mirrorShown = !showConversation || dialogPresent;
@@ -1024,7 +1026,7 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <QuestionLiveContext.Provider value={interaction !== undefined}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
+            <QuestionLiveContext.Provider value={interaction === undefined ? null : showCard && cardCovers ? "card" : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
