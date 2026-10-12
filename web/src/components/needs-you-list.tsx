@@ -45,6 +45,7 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
         if (interaction) {
           return (
             <QuestionCard key={`${paneId}:${interaction.signature}`} compact interaction={interaction} title={title} lockReason={lockReason}
+              refused={interactions.refusalFor(interaction)}
               onOpen={() => navigate(panePath(paneId, session))} onAnswer={(option, extra) => interactions.answer(interaction, option, extra)} />
           );
         }

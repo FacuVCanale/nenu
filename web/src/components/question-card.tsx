@@ -59,6 +59,8 @@ export interface QuestionCardProps {
   readOnly?: boolean;
   /** Why answers are paused; the card says it and keeps every answer from firing. */
   lockReason?: LockReason;
+  /** Why the tap on the dialog this one replaced did nothing ("The question changed…"). */
+  refused?: string;
   /** Home's variant: one line of options and the question clamped. */
   compact?: boolean;
   /** Who is asking (the pane's name), for a card shown away from its thread. */
@@ -82,7 +84,7 @@ type Notice = { tone: "warn" | "error"; text: string; retry?: InteractionOption;
 type Writing = { to: "reply"; option: InteractionOption } | { to: "note" } | null;
 
 export function QuestionCard({
-  interaction: i, receipt, onAnswer, readOnly = false, lockReason, compact = false, title, onOpen,
+  interaction: i, receipt, onAnswer, readOnly = false, lockReason, refused, compact = false, title, onOpen,
   openLabel = compact ? "Open" : "Terminal", onKeys, approveNeedsDetail = compact,
 }: QuestionCardProps) {
   const [busy, setBusy] = useState<number | null>(null);
@@ -90,6 +92,10 @@ export function QuestionCard({
   const [writing, setWriting] = useState<Writing>(null);
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  // The card that replaced a refused one says why nothing was sent, until the next tap.
+  useEffect(() => {
+    if (refused) setNotice({ tone: "warn", text: refused, at: "options" });
+  }, [refused]);
   const [failed, setFailed] = useState<number | null>(null);
   /** The operator unfolded the command or plan. */
   const [opened, setOpened] = useState(false);

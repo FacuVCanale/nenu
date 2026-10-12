@@ -405,6 +405,8 @@ export function AgentChat({
   const cardCovers = interaction !== undefined && interaction.kind !== "menu" && !liveBlocks.some((b) => b.kind === "preview-select");
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   const cardReadOnly = readOnly || gone || connecting;
+  const cardLock = lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
+  const refused = interaction && interactions.refusalFor(interaction);
   const { answer } = interactions;
   const { revalidate } = revalidator;
   const refreshConversation = conversation.refresh;
@@ -414,7 +416,7 @@ export function AgentChat({
     {conversationFooter}
     <div data-follow-stop className="mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
-        readOnly={cardReadOnly} lockReason={lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge })} onOpen={() => setRawTerminal(true)}
+        readOnly={cardReadOnly} lockReason={cardLock} refused={refused} onOpen={() => setRawTerminal(true)}
         onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
         onAnswer={async (option, extra) => {
           const outcome = await answer(interaction!, option, extra);
@@ -426,7 +428,7 @@ export function AgentChat({
           return outcome;
         }} />
     </div>
-  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, setRawTerminal, answer, revalidate, refreshConversation]);
+  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, cardLock, refused, setRawTerminal, answer, revalidate, refreshConversation]);
   // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
   // (lib/live-events.ts). Leaving the pane restores the default.
   const mirrorShown = !showConversation || dialogPresent;

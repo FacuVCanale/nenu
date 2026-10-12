@@ -50,6 +50,31 @@ export function receiptSummary(i: Interaction, option: InteractionOption, text?:
   return `Answered · ${text ?? label}`;
 }
 
+/**
+ * A tap the bridge refused because the dialog had moved on. The card it was on is replaced by the
+ * pane's next one, so the refusal is said there: on the first dialog after `from`, and no later one.
+ */
+interface Refusal {
+  paneId: string;
+  /** The dialog the refused tap was on. */
+  from: string;
+  /** The dialog that replaced it, once a read has seen one. */
+  to?: string;
+  text: string;
+}
+
+/** Each refusal bound to the dialog that replaced its own, and dropped once that one is gone too. */
+function settle(refusals: Refusal[], list: Interaction[]): Refusal[] {
+  if (!refusals.length) return refusals;
+  const now = new Map(list.map((i) => [i.paneId, i.signature]));
+  const next = refusals.flatMap((r): Refusal[] => {
+    const shown = now.get(r.paneId);
+    if (shown === r.from || (r.to !== undefined && shown === r.to)) return [r];
+    return r.to === undefined && shown !== undefined ? [{ ...r, to: shown }] : [];
+  });
+  return next.length === refusals.length && next.every((r, n) => r === refusals[n]) ? refusals : next;
+}
+
 /** The new list, reusing each dialog object a read repeated unchanged, so a poll re-renders nothing. */
 function sameDialogs(prev: Interaction[], next: Interaction[]): Interaction[] {
   const kept = new Map(prev.map((i) => [i.paneId, i]));
@@ -72,6 +97,8 @@ export interface InteractionsState {
   loaded: boolean;
   refresh: () => void;
   answer: (i: Interaction, option: InteractionOption, extra?: AnswerExtra) => Promise<AnswerOutcome>;
+  /** Why the pane's last tap did nothing, when `i` is the dialog that replaced the one it hit. */
+  refusalFor: (i: Interaction) => string | undefined;
 }
 
 /**
@@ -82,11 +109,13 @@ export interface InteractionsState {
 export function useInteractions(session?: string, enabled = true): InteractionsState {
   const [list, setList] = useState<Interaction[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [refusals, setRefusals] = useState<Refusal[]>([]);
   const [stale, setStale] = useState(false);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     setList([]);
     setReceipts([]);
+    setRefusals([]);
     setLoaded(false);
   }, [session]);
 
@@ -94,7 +123,12 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     enabled,
     deps: [session],
     read: (signal) => fetchInteractions(session, signal),
-    onRead: (next) => { setList((prev) => sameDialogs(prev, next.interactions)); setStale(false); setLoaded(true); },
+    onRead: (next) => {
+      setList((prev) => sameDialogs(prev, next.interactions));
+      setRefusals((rs) => settle(rs, next.interactions));
+      setStale(false);
+      setLoaded(true);
+    },
     onFail: () => setStale(true),
     delay: () => isLiveHealthy() ? INTERACTIONS_POLL_MS.live : INTERACTIONS_POLL_MS.fallback,
     wakes: (event) => event.topic === "interaction" || event.topic === "resync",
@@ -123,6 +157,11 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
         ? { ok: false, error: "Answer this one in the terminal.", code: "unsupported" }
         : { ok: false, error: (err as Error).message || "Answer failed" };
     }
+    // A new tap on the pane supersedes what its last one met.
+    setRefusals((rs) => [
+      ...rs.filter((r) => r.paneId !== i.paneId),
+      ...(!outcome.ok && outcome.code === "interaction_changed" ? [{ paneId: i.paneId, from: i.signature, text: outcome.error }] : []),
+    ]);
     // A tick or a step between questions leaves the dialog up: nothing to receipt.
     if (outcome.ok && !isToggle(i, option) && option.role !== "nav") {
       const summary = receiptSummary(i, option, extra.text);
@@ -143,5 +182,6 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     loaded,
     refresh: poke,
     answer,
+    refusalFor: (i) => refusals.find((r) => r.paneId === i.paneId && r.to === i.signature)?.text,
   };
 }
