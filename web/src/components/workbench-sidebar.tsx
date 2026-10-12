@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEv
 import { Link, useNavigate, useParams } from "react-router";
 import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
 
-import { NavRow } from "@/components/chat-groups";
 import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { StatusDot } from "@/components/status-badge";
@@ -11,7 +10,7 @@ import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
 import { workspaceTree } from "@/lib/workspace-tree";
-import { displayName } from "@/lib/display-name";
+import { displayName, displayPlace } from "@/lib/display-name";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
@@ -19,7 +18,7 @@ import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import { STATE_LABEL, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { isOpenThread, paneTitle, projectForPane } from "@/lib/projects";
+import { chatRecency, isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 /** What the sidebar lists: the whole tree, or only what is waiting on the operator. */
@@ -213,14 +212,12 @@ export function needsYou(data: Pick<HomeData, "agents">): AgentView[] {
 function NeedsYouList({ data, panes, onNavigate }: { data: HomeData; panes: AgentView[]; onNavigate?: () => void }) {
   const { paneId } = useParams();
   if (panes.length === 0) return <p className="nav-empty">Nothing needs you right now.</p>;
+  const now = Date.now();
   return (
     <section aria-label="Needs you">
       <h3 className="nav-label">Needs you</h3>
-      {panes.map((pane) => {
-        const owner = projectForPane(data.projects, pane.paneId);
-        return <NavRow key={pane.paneId} to={panePath(pane.paneId, data.session)} status={pane.status} title={paneTitle(pane, owner)}
-          note={owner?.project.name ?? pane.workspaceLabel} current={pane.paneId === paneId} onNavigate={onNavigate} />;
-      })}
+      {panes.map((pane) => <ChatRow key={pane.paneId} pane={pane} projects={data.projects} current={pane.paneId === paneId} now={now}
+        session={data.session} onNavigate={onNavigate} />)}
     </section>
   );
 }
@@ -230,34 +227,40 @@ function DrawerSections({ data, onNavigate }: { data: HomeData; onNavigate?: () 
   const { paneId } = useParams();
   const { needsYou: needs, recent } = drawerSections(data, paneId);
   const now = Date.now();
+  const row = (chat: DrawerChat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} projects={data.projects} current={chat.current} now={now}
+    session={data.session} onNavigate={onNavigate} />;
   return <>
     {needs.length > 0 && (
       <section aria-label="Needs you" className="nav-group">
         <h3 className="nav-label">Needs you <span className="nav-count">{needs.length}</span></h3>
-        {needs.map((chat) => <ChatRow key={chat.pane.paneId} chat={chat} now={now} session={data.session} onNavigate={onNavigate} />)}
+        {needs.map(row)}
       </section>
     )}
     {recent.length > 0 && (
       <section aria-label="Recent" className="nav-group">
         <h3 className="nav-label">Recent</h3>
-        {recent.map((chat) => <ChatRow key={chat.pane.paneId} chat={chat} now={now} session={data.session} onNavigate={onNavigate} />)}
+        {recent.map(row)}
       </section>
     )}
   </>;
 }
 
-/** A chat: its state, its name, where it lives and how long ago it last moved. */
-function ChatRow({ chat, now, session, onNavigate }: { chat: DrawerChat; now: number; session?: string; onNavigate?: () => void }) {
-  const { pane } = chat;
+/** A chat: its state, its one name, where it lives and how long ago it last moved. */
+function ChatRow({ pane, projects, current, now, session, onNavigate }: {
+  pane: AgentView;
+  projects?: readonly ProjectView[];
+  current: boolean;
+  now: number;
+  session?: string;
+  onNavigate?: () => void;
+}) {
+  const at = chatRecency(pane);
   return (
-    <Link className="nav-pane nav-chat" to={panePath(pane.paneId, session)} onClick={onNavigate} aria-current={chat.current ? "page" : undefined}>
-      <span className="nav-pane-mark"><StatusDot status={pane.status} surface="bg-transparent" className="size-2" /></span>
-      <span className="nav-pane-text">
-        <span className="nav-pane-title">{chat.title}</span>
-        <span className="nav-pane-detail">{chat.place}</span>
-      </span>
-      <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>
-      {chat.at > 0 && <span className="nav-chat-time">{timeAgoShort(chat.at, now)}</span>}
+    <Link className="nav-pane nav-chat" to={panePath(pane.paneId, session)} onClick={onNavigate} aria-current={current ? "page" : undefined}>
+      <RowBody mark={<PaneMark pane={pane} />} title={displayName(pane, projects)} detail={<PlaceText place={displayPlace(pane, projects)} />} end={<>
+        {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
+        {at > 0 && <span className="nav-chat-time">{timeAgoShort(at, now)}</span>}
+      </>} />
     </Link>
   );
 }

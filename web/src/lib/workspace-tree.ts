@@ -1,5 +1,5 @@
 import { groupPanesByTab, tabName, workspaceName, type Herd } from "@/lib/spaces";
-import { paneDisplayName, type AgentView, type WorkspaceView } from "@/lib/types";
+import type { AgentView, WorkspaceView } from "@/lib/types";
 
 /** A tab in the navigation tree; `panes` is never empty. */
 export interface TabBranch {
@@ -51,11 +51,6 @@ export function workspaceTree(source: Herd, currentPaneId?: string): WorkspaceBr
     .filter((branch) => branch.tabs.length > 0 || branch.counts.agents === 0)
     .sort((a, b) => (moved.get(b.workspace.workspaceId) ?? 0) - (moved.get(a.workspace.workspaceId) ?? 0)
       || a.workspace.number - b.workspace.number);
-}
-
-/** What a pane is about: its own name, else the session title, else the agent; never the tab label again. */
-export function paneSubject(pane: AgentView): string {
-  return pane.paneLabel || pane.sessionName || pane.terminalTitle || paneDisplayName(pane);
 }
 
 /** An untouched workspace opens when it holds the pane on screen, something that needs you, or is the only one. */

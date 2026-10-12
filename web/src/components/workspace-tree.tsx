@@ -1,13 +1,15 @@
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
-import { ChevronRight, LayoutGrid, Terminal } from "lucide-react";
+import { ChevronRight, LayoutGrid } from "lucide-react";
 
+import { PaneMark, RowBody } from "@/components/nav-rows";
 import { StatusDot } from "@/components/status-badge";
+import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
-import { defaultOpen, paneSubject, workspaceTree, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
-import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
+import { defaultOpen, workspaceTree, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
+import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 
 /** Only states worth reading at a glance get a word; a resting pane keeps its hollow dot. */
 const STATUS_WORD: Partial<Record<AgentStatus, string>> = { blocked: "needs you", working: "working", done: "done" };
@@ -15,7 +17,8 @@ const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-statu
 
 /** The herd as Herdr holds it: each workspace, its tabs, and a tab's panes when it has several. */
 export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false, startFolded = false }: {
-  source: Herd;
+  /** With the projects, so a pane is called what every other view calls it (lib/display-name.ts). */
+  source: Herd & { projects?: readonly ProjectView[] };
   session?: string;
   currentPaneId?: string;
   /** Explicit fold per workspace id; an untouched one follows {@link defaultOpen}. */
@@ -33,14 +36,15 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
   if (branches.length === 0) return empty;
   return branches.map((branch) => (
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
-      session={session} currentPaneId={currentPaneId}
+      session={session} currentPaneId={currentPaneId} projects={source.projects}
       open={expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length))}
       onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} compact={compact} />
   ));
 }
 
-function WorkspaceSection({ branch, href, session, currentPaneId, open, onToggle, onNavigate, compact }: {
+function WorkspaceSection({ branch, href, session, currentPaneId, projects, open, onToggle, onNavigate, compact }: {
   branch: WorkspaceBranch;
+  projects?: readonly ProjectView[];
   /** Where the workspace's name opens (see workspacePath). */
   href: string;
   session?: string;
@@ -84,7 +88,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, open, onToggle
       </div>}
       {open && (
         <div id={bodyId} className="nav-ws-body">
-          {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} session={session} currentPaneId={currentPaneId} onNavigate={onNavigate} />)}
+          {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} projects={projects} session={session} currentPaneId={currentPaneId} onNavigate={onNavigate} />)}
           {branch.tabs.length === 0 && <p className="nav-empty">No panes yet</p>}
         </div>
       )}
@@ -111,29 +115,39 @@ function WorkspaceSummary({ counts, tabs }: { counts: WorkspaceBranch["counts"];
   </>;
 }
 
-/** A one-pane tab is a single row named after the tab; a tab with several panes lists each. */
-function TabRows({ tab, session, currentPaneId, onNavigate }: { tab: TabBranch; session?: string; currentPaneId?: string; onNavigate?: () => void }) {
+/**
+ * A tab's panes, each named after its agent as the chat it opens is. A one-pane tab is that pane's
+ * row, the tab named at its end while nothing more urgent sits there; a split tab heads its rows.
+ */
+function TabRows({ tab, projects, session, currentPaneId, onNavigate }: {
+  tab: TabBranch;
+  projects?: readonly ProjectView[];
+  session?: string;
+  currentPaneId?: string;
+  onNavigate?: () => void;
+}) {
   if (tab.panes.length === 1) {
-    const pane = tab.panes[0];
-    const subject = paneSubject(pane);
-    return <PaneRow pane={pane} title={tab.label} detail={subject === tab.label ? pane.agent : subject} session={session}
+    const pane = tab.panes[0]!;
+    const name = displayName(pane, projects);
+    return <PaneRow pane={pane} title={name} note={tab.label === name ? undefined : tab.label} session={session}
       current={pane.paneId === currentPaneId} onNavigate={onNavigate} />;
   }
   return (
     <div role="group" aria-label={tab.label}>
       <div className="nav-tab-label"><span className="nav-row-text">{tab.label}</span><span className="nav-count">{tab.panes.length} panes</span></div>
       {tab.panes.map((pane) => (
-        <PaneRow key={pane.paneId} nested pane={pane} title={paneSubject(pane)} detail={pane.kind === "shell" ? "shell" : pane.agent}
-          session={session} current={pane.paneId === currentPaneId} onNavigate={onNavigate} />
+        <PaneRow key={pane.paneId} nested pane={pane} title={displayName(pane, projects)} session={session}
+          current={pane.paneId === currentPaneId} onNavigate={onNavigate} />
       ))}
     </div>
   );
 }
 
-function PaneRow({ pane, title, detail, session, current, nested, onNavigate }: {
+function PaneRow({ pane, title, note, session, current, nested, onNavigate }: {
   pane: AgentView;
   title: string;
-  detail: string;
+  /** Said at the end when no state word is. */
+  note?: string;
   session?: string;
   current: boolean;
   nested?: boolean;
@@ -143,15 +157,11 @@ function PaneRow({ pane, title, detail, session, current, nested, onNavigate }: 
   return (
     <Link className={cn("nav-pane", nested && "nav-pane-nested")} to={panePath(pane.paneId, session)} onClick={onNavigate}
       aria-current={current ? "page" : undefined}>
-      <span className="nav-pane-mark">
-        {pane.kind === "shell" ? <Terminal aria-hidden size={14} /> : <StatusDot status={pane.status} surface="bg-transparent" className="size-2" />}
-      </span>
-      <span className="nav-pane-text">
-        <span className="nav-pane-title">{title}</span>
-        {detail && <span className="nav-pane-detail">{detail}</span>}
-      </span>
-      {word && <span className={cn("nav-pane-status", STATUS_TEXT[pane.status])}>{word}</span>}
-      {pane.kind !== "shell" && !word && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
+      <RowBody mark={<PaneMark pane={pane} />} title={title} end={<>
+        {word ? <span className={cn("nav-pane-status", STATUS_TEXT[pane.status])}>{word}</span>
+          : note && <span className="nav-row-note"><span className="sr-only">, </span>{note}</span>}
+        {pane.kind !== "shell" && !word && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
+      </>} />
     </Link>
   );
 }
