@@ -217,7 +217,10 @@ describe("a coordinator under the project", () => {
     expect(own.closest("li")).toHaveAttribute("aria-current", "true");
 
     // A thread it runs lists the same coordinator above its siblings, one tap from its chat.
-    // The stub draws the strip beside the overlay, so the segmented control shows twice here.
+    // The app remounts the frame per pane (root.tsx keys the route's provider by pane and session);
+    // this harness has no such key, so the frame would carry the Threads view over to the next pane.
+    // Back to Chat first, as the app would start there. (The stub draws the strip beside the overlay,
+    // which is why the segmented control shows twice.)
     await user.click(screen.getAllByRole("tab", { name: "Chat" })[0]!);
     await router.navigate("/pane/worker");
     await user.click(await screen.findByRole("button", { name: "Threads, 1 open" }));
