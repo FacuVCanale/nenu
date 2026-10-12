@@ -214,6 +214,20 @@ it("gives every small composer control a 44px touch target", () => {
   expect(declarations(css, ".hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ width: "max(100%, 44px)", height: "max(100%, 44px)" });
 });
 
+it("gives a draft the + column's width while the phone keyboard is up, so it wraps no sooner than before", async () => {
+  // Measured on the bench: with the + inside the box a four-line draft wrapped to six lines and the
+  // thread lost 48px; folding the + while typing under the keyboard keeps it at four.
+  const { user } = setup();
+  const box = screen.getByRole("textbox").parentElement!;
+  expect(box).not.toHaveClass("composer-box-typing");
+  await user.type(screen.getByRole("textbox"), "a");
+  expect(box).toHaveClass("composer-box-typing");
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ width: "0", visibility: "hidden" });
+  // Off the keyboard, and on a desk, the + stays: the menu is one tap away while a draft waits.
+  expect(screen.getByRole("button", { name: "Message shortcuts" })).toBeVisible();
+});
+
 it("gives the thread the meta row's height while the phone keyboard is up", () => {
   const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
   expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
