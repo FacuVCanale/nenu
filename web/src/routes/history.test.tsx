@@ -91,6 +91,8 @@ describe("history with nothing to read", () => {
   it("says a closed pane is closed and sends its reader Home", async () => {
     const { router, user } = setup("w9:ghost", { unavailable: "no-session" });
     expect(await screen.findByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
+    // The one action style every empty and error page shares: the large ink button.
+    expect(within(screen.getByRole("main")).getByRole("button", { name: "Back to Home" })).toHaveClass("ui-button-lg", "bg-foreground");
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to Home" }));
     expect(router.state.location.pathname).toBe("/");
   });

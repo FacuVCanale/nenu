@@ -47,7 +47,7 @@ describe("BootSplash", () => {
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
     expect(screen.queryByText(/Connecting to/)).not.toBeInTheDocument();
     expect(screen.getByText(`Can’t reach Nenu at ${window.location.host}`)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toHaveClass("ui-button-lg", "bg-foreground");
     // The frame stays, so the screen does not jump when Retry or the network brings the app back.
     expect(container.querySelector(".workbench-app-header")).not.toBeNull();
   });
@@ -69,6 +69,12 @@ describe("RootError", () => {
     const router = crash({ element: <Boom /> });
     expect(await screen.findByRole("heading", { name: "Nenu hit a problem" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    // The shared empty state: its title size, and its one action style (the large ink button).
+    const page = screen.getByRole("heading", { name: "Nenu hit a problem" }).closest("[data-slot=empty-state]");
+    expect(page).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Nenu hit a problem" })).toHaveClass("text-headline");
+    expect(screen.getByRole("button", { name: "Reload" })).toHaveClass("ui-button-lg", "bg-foreground");
+    expect(screen.getByRole("button", { name: "Copy details" })).toHaveClass("ui-button-lg");
     const raw = screen.getByText(/reading 'charAt'/);
     expect(raw).not.toBeVisible();
     fireEvent.click(screen.getByText("Technical details"));

@@ -27,6 +27,7 @@ describe("routes", () => {
     expect(screen.getByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("/this/does/not/exist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/?s=qa");
+    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveClass("ui-button-lg", "bg-foreground");
     expect(screen.queryByText(/Nenu hit a problem|Something went wrong/)).not.toBeInTheDocument();
     router.dispose();
   });
