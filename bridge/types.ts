@@ -601,6 +601,13 @@ export interface InteractionHint {
   detail?: string;
 }
 
+/** One header chip above a question, as the dialog draws it (`☒` answered, highlight current). */
+export interface InteractionStep {
+  label: string;
+  answered: boolean;
+  current: boolean;
+}
+
 export interface Interaction {
   paneId: string;
   agent: string;
@@ -610,6 +617,8 @@ export interface Interaction {
   question: string;
   /** The text around the question the operator needs to decide (the command, the diff path…). */
   context?: string;
+  /** The question's header chips: one names a lone AskUserQuestion, several are a wizard's steps. */
+  steps?: InteractionStep[];
   options: InteractionOption[];
   /** Identity of the exact dialog on screen; an answer carrying another signature is refused (409). */
   signature: string;

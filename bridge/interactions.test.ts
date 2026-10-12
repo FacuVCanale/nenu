@@ -155,6 +155,29 @@ function detect(file: string, hints: InteractionHint[] = [], agent = agentOf(fil
   return toInteraction({ paneId: "p", agent }, dialogOnScreen(agent, text)!, 0, hints, 0).interaction;
 }
 
+describe("where a question sits in its set", () => {
+  test("a single AskUserQuestion's header chip names it instead of filling the detail", () => {
+    const i = detect("claude--v2285-ask-question.txt");
+    expect(i.steps).toEqual([{ label: "Fruit", answered: false, current: true }]);
+    expect(i.context).toBeUndefined();
+  });
+
+  test("a multi-question wizard carries its stepper, the current step marked", () => {
+    const i = detect("claude--wizard-q2.txt");
+    expect(i.steps).toEqual([
+      { label: "Focus area", answered: true, current: false },
+      { label: "Scope", answered: false, current: true },
+      { label: "Workflow", answered: false, current: false },
+    ]);
+  });
+
+  test("a permission keeps its subject and has no steps", () => {
+    const i = detect("claude--permission-bash.txt");
+    expect(i.steps).toBeUndefined();
+    expect(i.context).toContain("mkfifo fixture-fifo");
+  });
+});
+
 describe("hints enrich, the screen decides", () => {
   test("a permission hint whose command is on screen completes the card", () => {
     const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "mkfifo fixture-fifo" }]);

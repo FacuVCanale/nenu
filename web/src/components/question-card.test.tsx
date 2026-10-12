@@ -88,15 +88,85 @@ describe("QuestionCard", () => {
     expect(screen.getByRole("button", { name: /Chat about this/ })).toHaveAttribute("data-role", "deny");
   });
 
-  it("says a text row without a recipe is answered in the terminal and links to the keys", async () => {
+  it("sends a text row without a recipe to the terminal's keys, as a secondary action", async () => {
     const onKeys = vi.fn();
     const { onAnswer, onOpen, user } = setup({ onKeys });
     expect(screen.queryByRole("button", { name: /Type something/ })).not.toBeInTheDocument();
-    expect(document.querySelector("[data-in-terminal]")).toHaveTextContent("Type something. Answer in the terminal.");
-    await user.click(screen.getByRole("button", { name: "Open keys" }));
+    const own = screen.getByRole("button", { name: "Type your own answer in the terminal" });
+    expect(own.closest("[data-secondary-actions]")).not.toBeNull();
+    await user.click(own);
     expect(onKeys).toHaveBeenCalled();
     expect(onOpen).not.toHaveBeenCalled();
     expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it("keeps a question's escape out of the answers, next to the terminal", () => {
+    setup();
+    const answers = screen.getByRole("group", { name: "Answers" });
+    expect(within(answers).getByRole("button", { name: /Apple/ })).toBeVisible();
+    expect(within(answers).queryByRole("button", { name: /Chat about this/ })).not.toBeInTheDocument();
+    const secondary = document.querySelector<HTMLElement>("[data-secondary-actions]")!;
+    expect(within(secondary).getByRole("button", { name: "Chat about this" })).toHaveAttribute("data-role", "deny");
+    expect(within(secondary).getByRole("button", { name: "Terminal" })).toBeVisible();
+  });
+
+  it("keeps a permission's No among the answers", () => {
+    setup({ interaction: permission });
+    const no = screen.getByRole("button", { name: /^No/ });
+    expect(no.closest("[data-secondary-actions]")).toBeNull();
+  });
+
+  it("marks the recommended answer with a quiet badge instead of its label suffix", () => {
+    setup({ interaction: { ...question, options: [
+      { index: 0, label: "Acá en la terminal (Recommended)", role: "neutral", description: "Te muestro de a 4 casos." },
+      ...question.options.slice(1),
+    ] } });
+    const row = screen.getByRole("button", { name: /Acá en la terminal/ });
+    expect(row).not.toHaveTextContent("(Recommended)");
+    expect(within(row).getByText("Recommended")).toBeVisible();
+    expect(within(row).getByText("Te muestro de a 4 casos.")).toBeVisible();
+  });
+
+  it("names a lone question by its header chip", () => {
+    setup({ interaction: { ...question, steps: [{ label: "Fruit", answered: false, current: true }] } });
+    expect(screen.getByText("Fruit")).toBeVisible();
+    expect(screen.queryByRole("list", { name: "Questions" })).not.toBeInTheDocument();
+  });
+
+  it("shows where a wizard stands: its questions and which one is on screen", () => {
+    setup({ interaction: { ...question, kind: "wizard", steps: [
+      { label: "Focus area", answered: true, current: false },
+      { label: "Scope", answered: false, current: true },
+      { label: "Workflow", answered: false, current: false },
+    ] } });
+    expect(screen.getByText("2 of 3")).toBeVisible();
+    const steps = screen.getByRole("list", { name: "Questions" });
+    expect(within(steps).getByText("Scope").closest("li")).toHaveAttribute("aria-current", "step");
+    expect(within(steps).getByText("Focus area").closest("li")).toHaveAccessibleName(/answered/);
+  });
+
+  it("counts from the first unanswered question when the screen carried no highlight", () => {
+    setup({ interaction: { ...question, kind: "wizard", steps: [
+      { label: "Focus area", answered: true, current: false },
+      { label: "Scope", answered: false, current: false },
+    ] } });
+    expect(screen.getByText("2 of 2")).toBeVisible();
+  });
+
+  it("lists a review's answers instead of echoing them as code", () => {
+    setup({ interaction: { ...base, kind: "wizard", family: "claude", question: "Review your answers",
+      context: "Which focus area? → UI\nWhat scope? → Medium",
+      options: [{ index: 0, label: "Submit answers", role: "primary" }, { index: 1, label: "Cancel", role: "deny" }] } });
+    expect(screen.queryByLabelText("Request details")).not.toBeInTheDocument();
+    const answers = screen.getByRole("list", { name: "Your answers" });
+    expect(within(answers).getByText("Which focus area?")).toBeVisible();
+    expect(within(answers).getByText("UI")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Submit answers" })).toBeVisible();
+  });
+
+  it("shows a question's own detail as text and only a command in mono", () => {
+    setup({ interaction: { ...question, context: "Question 1/2 (2 unanswered)" } });
+    expect(screen.getByText("Question 1/2 (2 unanswered)").tagName).not.toBe("PRE");
   });
 
   it("names the terminal for a text row on Home, where the card's own Open leads there", () => {
@@ -189,6 +259,14 @@ describe("QuestionCard", () => {
       await user.click(screen.getByRole("button", { name: /don’t ask again/ }));
       await user.click(screen.getByRole("button", { name: /Tap again to confirm/ }));
       expect(onAnswer).toHaveBeenCalledWith(persistent.options[1], { text: "only here", confirm: true });
+    });
+
+    it("never drops a typed note into a question's escape", async () => {
+      const noted: Interaction = { ...question, options: [{ ...question.options[0]!, acceptsText: true }, question.options[3]!] };
+      const { user } = setup({ interaction: noted });
+      await user.click(screen.getByRole("button", { name: "Add a note…" }));
+      await user.type(screen.getByRole("textbox"), "why");
+      expect(screen.getByRole("button", { name: "Chat about this" })).toBeDisabled();
     });
 
     it("offers no note where no answer accepts text", () => {

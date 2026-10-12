@@ -1042,6 +1042,9 @@ describe("AgentChat — bridge-detected dialog", () => {
     renderChat({ agent, agents: [agent], text: PERMISSION });
     const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
     expect(within(card).getByText("Waiting on you")).toBeVisible();
+    // Inside the thread's own scroller: a swipe over the card scrolls the conversation.
+    expect(screen.getByRole("region", { name: "Live conversation" })).toContainElement(card);
+    expect(card.closest("[data-follow-stop]")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));

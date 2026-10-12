@@ -27,12 +27,18 @@ interface LiveConversationProps {
   query?: string;
   currentMatch?: number;
   onMatchCount?: (count: number) => void;
-  /** Rendered after the newest turn, inside the scroller (a coordinator's thread cards). */
+  /** Rendered after the newest turn, inside the scroller (a coordinator's thread cards, the question card). */
   footer?: ReactNode;
+  /** A question waits at the tail: the way back to it says so. */
+  waiting?: boolean;
 }
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 const OLDER_PAGE_SIZE = 120;
+/** How close to the top, in px, a reader moving up gets before the next older page starts loading. */
+const OLDER_PAGE_MARGIN = 800;
+/** Room kept above a `[data-follow-stop]` element when following lands on it. */
+const STOP_MARGIN = 12;
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
   "no-session": "Send the first message to start the conversation, or connect an existing session.",
@@ -45,7 +51,7 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -60,7 +66,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const lastTop = useRef(0);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
-  const anchor = useRef<{ height: number; top: number } | null>(null);
+  // The list's height just before an older page goes in above the reader. Restoring adds only the
+  // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
+  const anchorHeight = useRef<number | null>(null);
   const shown = frozen ?? history;
   const entries = shown?.available ? shown.entries : [];
   const latest = history?.available ? history.entries.at(-1) : undefined;
@@ -130,14 +138,21 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     request.current = null;
   }, []);
 
+  // Following lands on the newest line, except that a question at the tail taller than the list is
+  // read from its first line: the view never passes that line, and a reader already further down
+  // inside the question stays where they are. While the operator types in the question (its reply
+  // box sits at its foot) the bottom wins again, so the phone keyboard never hides the box.
   const pin = useCallback((el: HTMLElement) => {
-    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    const bottom = el.scrollHeight - el.clientHeight;
+    const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
+    const cap = stop && !stop.contains(document.activeElement) ? el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN : bottom;
+    el.scrollTo({ top: cap < bottom ? Math.max(cap, Math.min(el.scrollTop, bottom)) : bottom, behavior: "auto" });
     lastTop.current = el.scrollTop;
   }, []);
 
   const followLatest = useCallback(() => {
     cancelOlder();
-    anchor.current = null;
+    anchorHeight.current = null;
     following.current = true;
     setPaused(false);
     setFrozen(null);
@@ -176,11 +191,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (anchor.current) {
-      const saved = anchor.current;
-      anchor.current = null;
+    if (anchorHeight.current !== null) {
+      const before = anchorHeight.current;
+      anchorHeight.current = null;
       restoring.current = true;
-      el.scrollTop = saved.top + (el.scrollHeight - saved.height);
+      el.scrollTop += el.scrollHeight - before;
       if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
       restoreFrame.current = requestAnimationFrame(() => { restoring.current = false; });
     } else if (following.current) {
@@ -229,6 +244,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);
+      // Heading for the top: fetch the next page before the reader gets there. Not after a failure
+      // (Retry asks again) nor during find (a page landing would shift its matches).
+      if (el.scrollTop < OLDER_PAGE_MARGIN && !olderError && !searching) void loadOlder();
     } else if (following.current) {
       pin(el);
     }
@@ -266,7 +284,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         return;
       }
       const el = scrollRef.current;
-      anchor.current = el ? { height: el.scrollHeight, top: el.scrollTop } : null;
+      anchorHeight.current = el ? el.scrollHeight : null;
       setFrozen({
         ...base,
         entries: [...older, ...base.entries],
@@ -326,7 +344,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
           </div>
         </div>
         {paused && <button type="button" onClick={followLatest} aria-label="Scroll to latest" className="absolute bottom-3 left-1/2 z-10 flex min-h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs shadow-md hover:bg-muted">
-          <ArrowDown aria-hidden="true" className="size-4" />{hasNew ? "New messages" : "Latest"}
+          {waiting
+            ? <><span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />Waiting on you<ArrowDown aria-hidden="true" className="size-4" /></>
+            : <><ArrowDown aria-hidden="true" className="size-4" />{hasNew ? "New messages" : "Latest"}</>}
         </button>}
       </div>
     </section>
