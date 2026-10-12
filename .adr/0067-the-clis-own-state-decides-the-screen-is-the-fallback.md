@@ -82,10 +82,10 @@ disposable Herdr 0.9.3 with Claude 2.1.296: Enter typed in that state starts a n
 already reads as idle (`shell` in the session file, `idle` in Herdr).
 
 **Every send decision reads `turnRunning` (`web/src/lib/turn.ts`)**, the entry Stop reads: the
-composer's choice, the Home coordinator's choice, `bridge/queue-readiness.ts`, and the queue's
-turn-start mark (ADR 0056 rule 5), which also counts a running turn as started because Herdr's state
-counter does not move while it stays at `working`. Herdr's status remains the fallback only for a
-pane without structured state. The conversation's "Working…" still follows `agentBusy`: it describes
+composer's choice, the Home coordinator's choice and `bridge/queue-readiness.ts`. Herdr's status
+remains the fallback only for a pane without structured state. The queue's turn-start mark (ADR 0056
+rule 5) also counts a running `turn` as started, because Herdr's state counter does not move while it
+stays at `working` (measured: the second queued row waited the whole 20 s cap). The conversation's "Working…" still follows `agentBusy`: it describes
 the agent, not a send.
 
 The same probe found Claude 2.1.296 adding "↓ to manage" to the hint row while a background agent
