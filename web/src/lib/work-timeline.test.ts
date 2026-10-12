@@ -208,6 +208,18 @@ describe("firstLine", () => {
     expect(firstLine("\n  Compare the two.  \nThen pick one.")).toBe("Compare the two.");
     expect(firstLine("   ")).toBe("");
   });
+
+  // Codex and pi open a thought with a bold title. The preview reads like the rendered thought,
+  // so it drops what the Markdown renderer would draw as formatting, and only that.
+  it("drops the Markdown the thought would render as formatting", () => {
+    expect(firstLine("**Inspecting TypeScript errors**\n\nThe build fails on…")).toBe("Inspecting TypeScript errors");
+    expect(firstLine("## Plan\n1. Read")).toBe("Plan");
+    expect(firstLine("> Check `tab-strip.tsx` *first*")).toBe("Check tab-strip.tsx first");
+  });
+
+  it("leaves identifiers and globs alone", () => {
+    expect(firstLine("rename use_app_viewport and *.ts to *.tsx")).toBe("rename use_app_viewport and *.ts to *.tsx");
+  });
 });
 
 describe("liveStep", () => {

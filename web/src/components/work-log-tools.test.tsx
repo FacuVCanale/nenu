@@ -117,6 +117,13 @@ describe("ThinkingStep", () => {
     expect(screen.getByText(/Then keep the smaller one\./)).toBeInTheDocument();
   });
 
+  it("previews a bold title without its asterisks", () => {
+    render(<ThinkingStep text={"**Inspecting TypeScript errors**\n\nThe build fails on the worker config."} query="" />);
+    const row = screen.getAllByRole("button")[0]!;
+    expect(row).toHaveTextContent("Inspecting TypeScript errors");
+    expect(row).not.toHaveTextContent("*");
+  });
+
   it("says Thinking when the thought carries no words, and offers nothing to open", () => {
     render(<ThinkingStep text="" query="" />);
     expect(screen.getByText("Thinking")).toBeInTheDocument();

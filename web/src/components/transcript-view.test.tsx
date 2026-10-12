@@ -633,6 +633,12 @@ describe("TranscriptView — the work timeline", () => {
     expect(screen.queryByRole("button", { name: "Thinking" })).not.toBeInTheDocument();
   });
 
+  it("previews a thought's bold title on the bottom row without its asterisks", () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "thinking", text: "**Inspecting the inset**\n\nThe composer adds it twice." }])} activityStatus="working" />);
+    expect(container.querySelector("[data-live-step]")).toHaveTextContent("Inspecting the inset");
+    expect(container.querySelector("[data-live-step]")).not.toHaveTextContent("*");
+  });
+
   it("draws compaction as a divider that carries its time and opens onto the summary", async () => {
     render(<TranscriptView entries={[turn({ uuid: "s", ts: at("13:40"), role: "summary", parts: [{ kind: "text", text: "The operator asked for X." }] })]} />);
     const divider = screen.getByRole("button", { name: `Context compacted · ${clock("13:40")}`, expanded: false });
