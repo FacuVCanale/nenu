@@ -255,7 +255,7 @@ export function ProcessesChip({ processes, published = 0, desktop, open, onOpenC
     {label && <button ref={trigger} type="button" aria-label={aria} aria-haspopup="dialog" aria-expanded={open} onClick={() => onOpenChange(!open)}
       className={cn("composer-quiet hit-area gap-1.5 tabular-nums", waiting && "text-status-blocked")}>
       {live && <Dot state={waiting ? "waiting" : "running"} className={cn("size-2", !waiting && "motion-safe:animate-pulse")} />}
-      <span className="truncate">{label}</span>
+      <span className="truncate">Background · {label}</span>
     </button>}
     {desktop
       ? <WorkbenchPopover open={open} onDismiss={() => onOpenChange(false)} anchorRef={trigger} label="Processes" className="w-[min(26rem,calc(100vw-2rem))] [&>div:last-child]:p-1.5">

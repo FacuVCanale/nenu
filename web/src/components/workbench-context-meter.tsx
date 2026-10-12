@@ -12,7 +12,7 @@ export function formatContextTokens(value: number | null): string {
 }
 
 export function WorkbenchContextMeter({ compact = false, reportedPercent, usedTokens, maxTokens, totalProcessedTokens = null, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
-  /** Ring only, for the composer's quiet row; the label stays on the button for screen readers. */
+  /** The composer's quiet row: a 16px ring and its number, and nothing at all while unreported. */
   compact?: boolean;
   reportedPercent?: number;
   usedTokens: number | null;
@@ -38,14 +38,16 @@ export function WorkbenchContextMeter({ compact = false, reportedPercent, usedTo
   const dashOffset = circumference - ((percentage ?? 0) / 100) * circumference;
   const label = percentage === null ? `Context usage: ${formatContextTokens(used)}` : `Context window ${Math.round(percentage)}% used`;
   const usageColor = percentage !== null && percentage > 90 ? "var(--destructive)" : compact ? "var(--primary)" : "var(--muted-foreground)";
+  // A ring with no value says nothing in a row this small; Compact stays one Commands row away.
+  if (compact && percentage === null) return null;
 
   return <div className="relative">
-    <button ref={anchorRef} type="button" className={compact ? "composer-quiet hit-area" : "workbench-context-trigger"} aria-label={label} title={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
+    <button ref={anchorRef} type="button" className={compact ? "composer-quiet hit-area gap-1.5" : "workbench-context-trigger"} aria-label={label} title={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
       <svg viewBox="0 0 24 24" width={compact ? 16 : 22} height={compact ? 16 : 22} className="-rotate-90" aria-hidden="true">
         <circle cx="12" cy="12" r={radius} fill="none" stroke="color-mix(in oklab, var(--muted-foreground) 24%, transparent)" strokeWidth="3" />
         {percentage !== null && <circle cx="12" cy="12" r={radius} fill="none" stroke={usageColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} />}
       </svg>
-      {!compact && <span>{percentage === null ? "Context" : `${Math.round(percentage)}%`}</span>}
+      <span className="tabular-nums">{percentage === null ? "Context" : `${Math.round(percentage)}%`}</span>
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window">
       <div className="space-y-3 text-sm">
