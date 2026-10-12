@@ -1,16 +1,18 @@
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router";
-import { AlertCircle, ChevronRight, FolderPlus, Sparkles, Workflow, type LucideIcon } from "lucide-react";
+import { Link, useRevalidator } from "react-router";
+import { AlertCircle, ChevronRight, FolderPlus, LockKeyhole, Sparkles, Wifi, WifiOff, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { BottomSheet } from "@/components/ui/sheet";
 import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
+import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -203,5 +205,30 @@ export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean
       </div>
       <p className="px-1 text-footnote text-muted-foreground">Agents you start in Herdr show up here too.</p>
     </section>
+  );
+}
+
+/**
+ * Home before any snapshot ever arrived: no herd to show, so the page says what is happening. Quiet
+ * while the first failures retry, then the host it cannot reach and a Retry; a refusal says so at once.
+ */
+export function HomeUnreachable({ refused, lost }: { refused: boolean; lost: boolean }) {
+  const revalidator = useRevalidator();
+  const host = window.location.host;
+  if (refused) {
+    return (
+      <EmptyState icon={LockKeyhole} title="Access refused"
+        action={<a href={PROXY_AUTH_PATH} className={buttonVariants({ variant: "secondary" })}>Sign in</a>}>
+        Nenu answered and turned this device away. Sign in again to see your herd.
+      </EmptyState>
+    );
+  }
+  if (!lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {host}.</EmptyState>;
+  const retrying = revalidator.state === "loading";
+  return (
+    <EmptyState icon={WifiOff} title={`Can't reach Nenu at ${host}`}
+      action={<Button variant="secondary" onClick={() => void revalidator.revalidate()} aria-busy={retrying || undefined} disabled={retrying}>Retry</Button>}>
+      Nenu keeps trying. Check Tailscale on this device.
+    </EmptyState>
   );
 }

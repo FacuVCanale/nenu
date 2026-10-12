@@ -1,30 +1,48 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
 import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, HomeStarters, RecentChats, RunningWorkCard, SendNotice } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, RunningWorkCard, SendNotice } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
+import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue } from "@/lib/api";
+import { isConnecting } from "@/lib/connection";
+import { useConnectionHealth } from "@/lib/connection-health";
+import { clockTime } from "@/lib/format";
 import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
 import { turnRunning } from "@/lib/turn";
 import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
+
+/** Why Home cannot vouch for the herd on screen, once that is worth saying. */
+type Outage = "nenu" | "herdr" | "refused";
+const OUTAGE_TITLE: Record<Outage, string> = { nenu: "Can't reach Nenu", herdr: "Can't reach Herdr", refused: "Access refused" };
+
+// Whether Home has drawn a live herd since the page opened. Until then the shared connection anchor
+// (lib/connection-health.ts) only marks when the page loaded, so it cannot date the herd on screen.
+let sawLive = false;
 
 // Home answers "what needs me now", top to bottom: one sentence, a composer that reaches a
 // coordinator or starts a thread, what needs you (answered in place), the chats that moved last, what
 // is ready to review and the workflows still running. Projects and workspaces live in the sidebar
 // (Browse on a phone), so Home never repeats them. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
+//
+// When the link fails, a brief failure changes nothing on screen (the quiet retry). A sustained one
+// names what is unreachable, Nenu or Herdr, dates the herd it last saw and greys those lists out; a
+// refusal says so at once. A first load that never reached Nenu has no herd to show, so the whole
+// body says that instead.
 export function HomeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const navigation = useContext(WorkbenchNavigationContext);
@@ -33,6 +51,15 @@ export function HomeRoute() {
   const readOnly = isReadOnly(data.device);
   const interactions = useInteractions(data.session, live);
   const activity = useHomeActivity(live ? data.agents : [], data.session);
+  const lost = useConnectionLost(isConnecting(data));
+  const anchor = useConnectionHealth();
+  useEffect(() => { if (live) sawLive = true; }, [live]);
+
+  const outage: Outage | null = data.authError ? "refused" : !lost ? null : data.error ? "nenu" : "herdr";
+  // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
+  if (data.bridge === undefined) {
+    return <ColumnPage data={data} title="Home"><HomeUnreachable refused={outage === "refused"} lost={lost} /></ColumnPage>;
+  }
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const needs = needsYouItems(data.agents, interactions.interactions);
@@ -45,9 +72,10 @@ export function HomeRoute() {
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
   const headline = homeHeadline(counts, data.agents.length);
-  const notice = data.error ? "Showing your last workspace snapshot. Reconnect to see current activity."
-    : data.bridge !== "connected" ? "Waiting for your workspaces to connect."
-    : null;
+  // The cached herd carries its own date; Herdr's outage is dated by the last live read, once there was one.
+  const syncedAt = data.lastSeenAt ?? (sawLive ? anchor : undefined);
+  const title = outage ? OUTAGE_TITLE[outage] : headline.title;
+  const detail = outage ? (syncedAt === undefined ? "Showing the last herd Nenu saw" : `Last synced ${clockTime(syncedAt)}`) : headline.detail;
 
   // On a phone the date sits right under the header, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
@@ -57,26 +85,28 @@ export function HomeRoute() {
           {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
           <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
         </p>
-        <h1 className="text-large-title text-balance">{live ? headline.title : "What should we work on?"}</h1>
-        {live && headline.detail && <p className="text-subhead text-muted-foreground tabular-nums">{headline.detail}</p>}
-        {notice && <p className="mt-1 text-subhead text-pretty text-muted-foreground">{notice}</p>}
+        <h1 className="text-large-title text-balance">{title}</h1>
+        {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
-      <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
+      <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} offline={outage !== null} />
       {live && !data.agents.length && <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />}
-      {calm
-        ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
-        : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
-          interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} />}
-      <RecentChats chats={recent} working={counts.working} session={data.session} now={now} />
-      <ReadyToReviewList entries={reviews} session={data.session} />
-      {running.length > 0 && (
-        <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
-          <HomeHeading id="home-running" label="Running in background" count={running.length} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} />)}
-          </div>
-        </section>
-      )}
+      {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
+      <div data-stale={outage ? "" : undefined} className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
+        {calm
+          ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
+          : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
+            interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} />}
+        <RecentChats chats={recent} working={outage ? 0 : counts.working} session={data.session} now={now} />
+        <ReadyToReviewList entries={reviews} session={data.session} />
+        {running.length > 0 && (
+          <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
+            <HomeHeading id="home-running" label="Running in background" count={running.length} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} />)}
+            </div>
+          </section>
+        )}
+      </div>
     </div>
   </ColumnPage>;
 }
@@ -115,7 +145,7 @@ class Unavailable extends Error {}
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
-function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean }) {
+function HomeComposer({ data, projects, disabled, offline }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; offline: boolean }) {
   const [message, setMessage] = useState("");
   const [choice, setChoice] = useState<string | null>(readTarget);
   const [asking, setAsking] = useState(false);
@@ -133,7 +163,8 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
   ];
   const target = targets.find((candidate) => valueOf(candidate) === choice) ?? targets[0]!;
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
-  const placeholder = target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
+  const placeholder = offline ? (target.kind === "project" ? `Reconnect to reach ${target.project.name}'s coordinator` : "Reconnect to start an agent")
+    : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
   async function send(mode: DeliveryMode) {
     if (target.kind !== "project") return;
