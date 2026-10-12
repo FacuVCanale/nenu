@@ -14,7 +14,7 @@ const STATUS_WORD: Partial<Record<AgentStatus, string>> = { blocked: "needs you"
 const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-status-blocked", working: "text-status-working", done: "text-status-done" };
 
 /** The herd as Herdr holds it: each workspace, its tabs, and a tab's panes when it has several. */
-export function WorkspaceTree({ source, query, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false }: {
+export function WorkspaceTree({ source, query, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false, startFolded = false }: {
   source: Herd;
   query: string;
   session?: string;
@@ -27,6 +27,8 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   empty?: ReactNode;
   /** The sidebar's one-line workspace rows: the name opens the workspace's pane, the chevron folds its panes. */
   compact?: boolean;
+  /** An untouched workspace starts folded instead of following {@link defaultOpen}. */
+  startFolded?: boolean;
 }) {
   const searching = query.trim() !== "";
   const branches = workspaceTree(source, query, currentPaneId);
@@ -34,7 +36,7 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   return branches.map((branch) => (
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
       session={session} currentPaneId={currentPaneId}
-      open={searching || (expanded[branch.workspace.workspaceId] ?? defaultOpen(branch, branches.length))} searching={searching}
+      open={searching || (expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length)))} searching={searching}
       onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} compact={compact} />
   ));
 }

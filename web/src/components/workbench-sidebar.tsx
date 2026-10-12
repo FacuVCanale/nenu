@@ -10,7 +10,9 @@ import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
 import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
-import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
+import { useSidebarPrefs, type SidebarPrefs } from "@/hooks/use-sidebar-prefs";
+import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
+import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import { STATE_LABEL, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
@@ -26,12 +28,15 @@ export interface SidebarRequest {
 
 /**
  * The workbench navigation: New, Search, Needs you and Home, then projects (coordinators and their
- * threads) and the workspaces no project holds, and the host it all runs on.
+ * threads) and the workspaces no project holds, and the host it all runs on. On a phone it leads with
+ * what needs you and the chats that moved last, and its projects and workspaces start folded.
  */
-export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions = true }: {
+export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions = true, phone = false }: {
   data: HomeData;
-  /** False under the phone's tab bar, which already offers New, Search, Needs you and Home. */
+  /** False where New, Search, Needs you and Home are already one tap away (the tab bar, the drawer's header). */
   actions?: boolean;
+  /** The phone's navigation: Needs you and Recent first, every project and workspace folded. */
+  phone?: boolean;
   onNavigate?: () => void;
   onNewChat?: () => void;
   /** Each new `seq` opens search or the Needs you list (⌘K, the rail, the tab bar). */
@@ -103,7 +108,10 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions
       <div className="nav-scroll">
         {mode === "needs-you"
           ? <NeedsYouList data={data} panes={attention} onNavigate={onNavigate} />
-          : <SidebarTree data={data} query={query} onNavigate={onNavigate} />}
+          : <>
+            {phone && !query.trim() && <PhoneSections data={data} onNavigate={onNavigate} />}
+            <SidebarTree data={data} query={query} onNavigate={onNavigate} folded={phone} />
+          </>}
       </div>
 
       <div className="nav-footer">
@@ -134,17 +142,64 @@ function NeedsYouList({ data, panes, onNavigate }: { data: HomeData; panes: Agen
   );
 }
 
-/** Projects first, then the workspaces no project holds a pane in. */
-function SidebarTree({ data, query, onNavigate }: { data: HomeData; query: string; onNavigate?: () => void }) {
+/** What the phone's navigation leads with: the chats waiting on you, then the ones that moved last. */
+function PhoneSections({ data, onNavigate }: { data: HomeData; onNavigate?: () => void }) {
+  const { paneId } = useParams();
+  const { needsYou: needs, recent } = drawerSections(data, paneId);
+  const now = Date.now();
+  return <>
+    {needs.length > 0 && (
+      <section aria-label="Needs you" className="nav-group">
+        <h3 className="nav-label">Needs you <span className="nav-count">{needs.length}</span></h3>
+        {needs.map((chat) => <ChatRow key={chat.pane.paneId} chat={chat} now={now} session={data.session} onNavigate={onNavigate} />)}
+      </section>
+    )}
+    {recent.length > 0 && (
+      <section aria-label="Recent" className="nav-group">
+        <h3 className="nav-label">Recent</h3>
+        {recent.map((chat) => <ChatRow key={chat.pane.paneId} chat={chat} now={now} session={data.session} onNavigate={onNavigate} />)}
+      </section>
+    )}
+  </>;
+}
+
+/** A chat: its state, its name, where it lives and how long ago it last moved. */
+function ChatRow({ chat, now, session, onNavigate }: { chat: DrawerChat; now: number; session?: string; onNavigate?: () => void }) {
+  const { pane } = chat;
+  return (
+    <Link className="nav-pane nav-chat" to={panePath(pane.paneId, session)} onClick={onNavigate} aria-current={chat.current ? "page" : undefined}>
+      <span className="nav-pane-mark"><StatusDot status={pane.status} surface="bg-transparent" className="size-2" /></span>
+      <span className="nav-pane-text">
+        <span className="nav-pane-title">{chat.title}</span>
+        <span className="nav-pane-detail">{chat.place}</span>
+      </span>
+      <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>
+      {chat.at > 0 && <span className="nav-chat-time">{timeAgoShort(chat.at, now)}</span>}
+    </Link>
+  );
+}
+
+/**
+ * Projects first, then the workspaces no project holds a pane in. `folded` is the phone's: every
+ * project and workspace starts closed, and what the operator opens there lasts while the sheet does,
+ * so the next open is compact again and the desk's remembered folds stay the desk's.
+ */
+function SidebarTree({ data, query, onNavigate, folded = false }: { data: HomeData; query: string; onNavigate?: () => void; folded?: boolean }) {
   const { paneId, projectSlug } = useParams();
-  const { prefs, setExpanded, setWorkspaceOpen } = useSidebarPrefs();
+  const stored = useSidebarPrefs();
+  const [sheetFolds, setSheetFolds] = useState<SidebarPrefs>({ expanded: {}, workspaces: {} });
+  const { prefs, setExpanded, setWorkspaceOpen } = folded ? {
+    prefs: sheetFolds,
+    setExpanded: (slug: string, open: boolean) => setSheetFolds((last) => ({ ...last, expanded: { ...last.expanded, [slug]: open } })),
+    setWorkspaceOpen: (id: string, open: boolean) => setSheetFolds((last) => ({ ...last, workspaces: { ...last.workspaces, [id]: open } })),
+  } : stored;
   const searching = query.trim() !== "";
   const groups = sidebarProjects(data, query);
   const loose = looseWorkspaces(data);
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-  useRevealProject(currentProject, setExpanded);
+  useRevealProject(folded ? undefined : currentProject, stored.setExpanded);
   const workspaces = <WorkspaceTree compact source={{ ...data, ...loose }} query={query} session={data.session} currentPaneId={paneId}
-    expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} />;
+    expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} startFolded={folded} />;
   const hasWorkspaces = workspaceTree({ ...data, ...loose }, query, paneId).length > 0;
 
   return <>
@@ -152,7 +207,7 @@ function SidebarTree({ data, query, onNavigate }: { data: HomeData; query: strin
       <section aria-label="Projects" className="nav-group">
         <h3 className="nav-label">Projects</h3>
         {groups.map((group) => (
-          <ProjectSection key={group.project.slug} group={group} data={data} open={searching || (prefs.expanded[group.project.slug] ?? true)}
+          <ProjectSection key={group.project.slug} group={group} data={data} open={searching || (prefs.expanded[group.project.slug] ?? !folded)}
             searching={searching} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} panes={group.panes} />
         ))}
       </section>
