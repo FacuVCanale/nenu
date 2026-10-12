@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import FilePreview from "./file-preview";
 import { HTML_VERSION_POLL_MS } from "./html-viewer";
@@ -309,11 +309,23 @@ describe("image viewer", () => {
   const stage = () => document.querySelector<HTMLElement>("[data-image-stage]")!;
   const zoom = () => Number(/scale\(([\d.]+)\)/.exec(document.querySelector<HTMLElement>("[data-image-zoom]")!.style.transform)?.[1] ?? 1);
   const point = (id: number, x: number, y: number, type = "touch") => ({ pointerId: id, pointerType: type, clientX: x, clientY: y, isPrimary: id === 1, button: 0 });
-  function drag(points: [number, number][], type = "touch") {
+  // The viewer reads a release's speed from the events' timeStamps. Synchronous dispatch gives them
+  // whatever the machine's clock says, so a slow runner turned a short pull into a flick. Each step of
+  // a drag is stamped `stepMs` after the last (a 60 Hz finger by default), and real waits between
+  // gestures still count.
+  let clock = 0;
+  function fire(kind: "pointerDown" | "pointerMove" | "pointerUp", init: ReturnType<typeof point>) {
+    const event = createEvent[kind](stage(), init);
+    Object.defineProperty(event, "timeStamp", { value: clock });
+    fireEvent(stage(), event);
+  }
+  function drag(points: [number, number][], type = "touch", stepMs = 16) {
     const [first, ...rest] = points;
-    fireEvent.pointerDown(stage(), point(1, ...first!, type));
-    for (const [x, y] of rest) fireEvent.pointerMove(stage(), point(1, x, y, type));
-    fireEvent.pointerUp(stage(), point(1, ...points.at(-1)!, type));
+    clock = Math.max(Date.now(), clock + 1);
+    fire("pointerDown", point(1, ...first!, type));
+    for (const [x, y] of rest) { clock += stepMs; fire("pointerMove", point(1, x, y, type)); }
+    clock += stepMs;
+    fire("pointerUp", point(1, ...points.at(-1)!, type));
   }
   const tap = (x: number, y: number, type = "touch") => drag([[x, y]], type);
 
@@ -368,7 +380,7 @@ describe("image viewer", () => {
   it("closes on a long pull down and settles back after a short one", async () => {
     const close = vi.fn();
     render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
-    drag([[500, 300], [502, 320], [505, 340]]);
+    drag([[500, 300], [502, 320], [505, 340]], "touch", 50);
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(close).not.toHaveBeenCalled();
     drag([[500, 300], [502, 400], [510, 550], [515, 700]]);
