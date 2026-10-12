@@ -411,6 +411,29 @@ export function AgentChat({
   const receipt = interactions.receipts.find((r) => r.paneId === paneId);
   const cardCovers = interaction !== undefined && interaction.kind !== "menu" && !liveBlocks.some((b) => b.kind === "preview-select");
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
+  const cardReadOnly = readOnly || gone || connecting;
+  const { answer } = interactions;
+  const { revalidate } = revalidator;
+  const refreshConversation = conversation.refresh;
+  // The question is the thread's newest line, so it lives inside the conversation's scroller: a swipe
+  // over it scrolls the thread, and following lands on its first line (`data-follow-stop`).
+  const threadFooter = useMemo(() => !showCard ? conversationFooter : <>
+    {conversationFooter}
+    <div data-follow-stop className="mt-5">
+      <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
+        readOnly={cardReadOnly} onOpen={() => setRawTerminal(true)}
+        onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
+        onAnswer={async (option, extra) => {
+          const outcome = await answer(interaction!, option, extra);
+          if (outcome.ok) {
+            setFollowing(true);
+            revalidate();
+            refreshConversation();
+          }
+          return outcome;
+        }} />
+    </div>
+  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, setRawTerminal, answer, revalidate, refreshConversation]);
   // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
   // (lib/live-events.ts). Leaving the pane restores the default.
   const mirrorShown = !showConversation || dialogPresent;
@@ -1016,7 +1039,7 @@ export function AgentChat({
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
               onMatchCount={findOpen ? handleMatchCount : undefined}
-              footer={conversationFooter} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
+              footer={threadFooter} waiting={showCard && cardCovers} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -1098,22 +1121,6 @@ export function AgentChat({
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
           {!showConversation && conversationFooter && <div className="max-h-[40dvh] overflow-y-auto px-3 pb-1">{conversationFooter}</div>}
-          {showCard && (
-            <div className="mx-3 mb-2 max-h-[min(36rem,60dvh)] overflow-y-auto">
-              <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
-                readOnly={readOnly || gone || connecting} onOpen={() => setRawTerminal(true)}
-                onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
-                onAnswer={async (option, extra) => {
-                  const outcome = await interactions.answer(interaction!, option, extra);
-                  if (outcome.ok) {
-                    setFollowing(true);
-                    revalidator.revalidate();
-                    conversation.refresh();
-                  }
-                  return outcome;
-                }} />
-            </div>
-          )}
           {!subagent && showConversation && dialogPresent && !modelPresent && !unknownInteraction && !showCard && !receipt && (
             <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
               <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
@@ -1206,8 +1213,7 @@ export function AgentChat({
             agent={agent?.agent}
             isShell={isShell}
             placeholder={project && COMPOSER_PLACEHOLDER[project.role]}
-            working={agentBusy(agent, modelSource.text)}
-            turnRunning={turnRunning(agent, modelSource.text)}
+            working={turnRunning(agent, modelSource.text)}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}

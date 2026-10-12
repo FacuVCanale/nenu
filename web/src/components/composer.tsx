@@ -94,11 +94,9 @@ interface ComposerProps {
   isShell: boolean;
   /** Idle copy for an agent pane in place of "Type a reply…"; lock and shell states still win. */
   placeholder?: string;
-  /** The agent is working. Send then offers "now" or "after this turn" where the CLI has both
-   *  (ADR 0056); for Codex with an empty draft the primary action becomes an interrupt control. */
+  /** A turn runs (lib/turn.ts): Stop shows, and Send offers "now" or "after this turn" where the CLI
+   *  has both (ADR 0056). Background work alone is no turn, so Send goes directly. */
   working?: boolean;
-  /** A turn the interrupt key reaches (lib/turn.ts); shows Stop. Defaults to `working`. */
-  turnRunning?: boolean;
   /** Pane is gone (no agent) — locks the composer with a distinct placeholder. */
   gone: boolean;
   /** This device isn't authorised to type — locks the composer with a distinct placeholder. */
@@ -233,7 +231,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, turnRunning, gone, readOnly, disconnected = false, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -566,7 +564,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // draft helpers below stay harness-free: they take the capability, never the grammar. Undefined for
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
-  const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working: turnRunning ?? working, locked });
+  const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
 
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview

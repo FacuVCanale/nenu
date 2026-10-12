@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -108,6 +109,59 @@ describe("LiveConversation", () => {
     expect(screen.getByText("Looking.")).toBeInTheDocument();
   });
 
+  // A question taller than the thread on a phone (measured: 579 px card, 48 px of thread left when
+  // it sat outside the scroller). Following lands on its first line, never past it.
+  it("follows to the top of a tall question at the tail and leaves the reader inside it", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const question = <section data-follow-stop aria-label="Which fruit?">Which fruit?</section>;
+    const view = (h: PaneHistoryResponse, footer?: ReactNode, waiting = false) => <MemoryRouter><LiveConversation paneId="w1:p1" history={h} loading={false} error={false} footer={footer} waiting={waiting} /></MemoryRouter>;
+    const { container, rerender } = render(view(history));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 400 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    expect(box.top).toBe(600);
+    // The card starts where the thread ended (1000) and is 700 px tall.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { top: this.hasAttribute("data-follow-stop") ? 1000 - box.top : 0 } as DOMRect;
+    });
+    box.height = 1700;
+    const more = (uuid: string) => ({ ...history, entries: [...history.entries, { uuid, ts: "", role: "assistant" as const, parts: [{ kind: "text" as const, text: uuid }] }] });
+    rerender(view(more("asked"), question, true));
+    expect(box.top).toBe(988);
+    // Reading down through the options is not leaving the tail: a refresh does not pull the view back up.
+    box.top = 1200;
+    fireEvent.scroll(scroller);
+    rerender(view(more("refreshed"), question, true));
+    expect(box.top).toBe(1200);
+    // Scrolled away, the way back names the question and lands on its first line.
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    const back = screen.getByRole("button", { name: "Scroll to latest" });
+    expect(back).toHaveTextContent("Waiting on you");
+    fireEvent.click(back);
+    expect(box.top).toBe(988);
+    vi.restoreAllMocks();
+  });
+
+  // The phone keyboard shrinks the list while the operator types a reply on the card: the box they
+  // type in sits at the card's foot, so following goes to the bottom, not the question's first line.
+  it("follows to the bottom while the operator types inside the question", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const question = <section data-follow-stop aria-label="Which plan?"><textarea aria-label="Reply" /></section>;
+    const view = (h: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={h} loading={false} error={false} footer={question} /></MemoryRouter>;
+    const { container, rerender } = render(view(history));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1700, client: 400 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { top: this.hasAttribute("data-follow-stop") ? 1000 - box.top : 0 } as DOMRect;
+    });
+    act(() => { screen.getByRole("textbox", { name: "Reply" }).focus(); });
+    box.client = 250;
+    rerender(view({ ...history, entries: [...history.entries, { uuid: "more", ts: "", role: "assistant", parts: [{ kind: "text", text: "more" }] }] }));
+    expect(box.top).toBe(1450);
+    vi.restoreAllMocks();
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
@@ -159,6 +213,54 @@ describe("inline history pagination", () => {
     expect(scroller.scrollTop).toBe(650);
     expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load older messages" })).not.toBeInTheDocument();
+  });
+
+  it("fetches the next older page on its own as the reader scrolls up near the top, keeping their place", async () => {
+    vi.mocked(fetchHistory).mockResolvedValue({ ...initialHistory, available: true, entries: [olderEntry], hasMore: true });
+    const { container } = render(<LiveConversation paneId="w1:p1" session="work" history={initialHistory} loading={false} error={false} />);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => screen.queryByText("An older request") ? 3400 : 3000 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    box.top = 1500;
+    fireEvent.scroll(scroller);
+    expect(fetchHistory).not.toHaveBeenCalled();
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    box.top = 200;
+    fireEvent.scroll(scroller);
+
+    await screen.findByText("An older request");
+    expect(fetchHistory).toHaveBeenCalledOnce();
+    expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 120, before: fixtureTranscript[0]!.uuid }, "work", expect.any(AbortSignal));
+    // The page landed 400 px above the turn being read, so the list moved down by exactly that much.
+    expect(box.top).toBe(600);
+    expect(screen.getByRole("button", { name: "Scroll to latest" })).toBeInTheDocument();
+  });
+
+  it("leaves a failed older page for the reader to retry and pages nothing while searching", async () => {
+    vi.mocked(fetchHistory).mockRejectedValue(new Error("offline"));
+    const view = (searching: boolean) => <LiveConversation paneId="w1:p1" history={initialHistory} loading={false} error={false} searching={searching} query={searching ? "changed" : ""} />;
+    const { container, rerender } = render(view(false));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry older messages" })).toBeEnabled());
+    box.top = 100;
+    fireEvent.scroll(scroller);
+    expect(fetchHistory).toHaveBeenCalledOnce();
+
+    vi.mocked(fetchHistory).mockClear();
+    Element.prototype.scrollIntoView = vi.fn();
+    rerender(view(true));
+    box.top = 2400;
+    fireEvent.scroll(scroller);
+    box.top = 200;
+    fireEvent.scroll(scroller);
+    expect(fetchHistory).not.toHaveBeenCalled();
   });
 
   it("stops paging when a capped log returns no new entries", async () => {

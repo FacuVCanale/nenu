@@ -34,6 +34,12 @@ export type TranscriptPart =
    * reasoning summaries. The branch is universal; only the harnesses that fill it differ.
    */
   | { kind: "thinking"; text: string; truncated?: boolean }
+  /**
+   * Text a harness injected rather than anyone said: a loaded skill, a task notification, another
+   * session's message. Drawn as one quiet line: `label` always shows, `text` only when expanded, and
+   * `text` is empty when the label is all there is.
+   */
+  | { kind: "context"; label: string; text: string; truncated?: boolean }
   /** A tool call. `result` is filled in from the result row that answers it, when one exists. */
   | {
       kind: "tool";
@@ -123,7 +129,7 @@ export interface JournalParser {
  * `user`/`assistant` are speech. The other two are NOT, and are rendered set apart so they can't be
  * mistaken for it: `summary` is a compaction summary the agent wrote about its own history, and
  * `note` is machine-injected content that still belongs on screen (a background task finishing, a
- * local command's output).
+ * local command's output), as context parts: one quiet line each.
  */
 export interface TranscriptEntry {
   /**

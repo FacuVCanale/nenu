@@ -1042,6 +1042,9 @@ describe("AgentChat — bridge-detected dialog", () => {
     renderChat({ agent, agents: [agent], text: PERMISSION });
     const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
     expect(within(card).getByText("Waiting on you")).toBeVisible();
+    // Inside the thread's own scroller: a swipe over the card scrolls the conversation.
+    expect(screen.getByRole("region", { name: "Live conversation" })).toContainElement(card);
+    expect(card.closest("[data-follow-stop]")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));
@@ -1069,5 +1072,53 @@ describe("AgentChat — project composer copy", () => {
   it("keeps the reply copy outside a project", () => {
     renderChat();
     expect(screen.getByPlaceholderText("Type a reply…")).toBeInTheDocument();
+  });
+});
+
+// Measured 2026-10-12 in a disposable Herdr 0.9.3 with Claude 2.1.296: a background agent launched in
+// a turn that has ended keeps Herdr at working and Claude's session file at busy, and Enter typed then
+// starts a new turn at once (answer 1.1 s later, no queue-operation row). Only a running turn is busy.
+describe("AgentChat — Send while only background work runs", () => {
+  function serveQueue() {
+    const posts: Array<Record<string, unknown>> = [];
+    const sends: string[] = [];
+    server.use(
+      http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ available: true, scope: "scope", messages: [], delivered: [] })),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        posts.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ available: true, scope: "scope", messages: [], delivered: [] });
+      }),
+      http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+        const body = (await request.json()) as { text: string; requestId: string };
+        sends.push(body.text);
+        return HttpResponse.json({ ok: true, requestId: body.requestId, ack: "submitted" });
+      }),
+    );
+    return { posts, sends };
+  }
+  const claude = (turn: { running: boolean; background?: boolean }) =>
+    ({ ...fixtureAgents[0]!, paneId: "background-send", agent: "claude", status: "working" as const, hasSession: true, turn: { ...turn, source: "claude-session" as const } });
+
+  it("sends directly when the main turn is over, without asking now or later", async () => {
+    const wire = serveQueue();
+    const agent = claude({ running: false, background: true });
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: "" });
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox"), "status?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(wire.sends).toEqual(["status?"]));
+    expect(screen.queryByRole("group", { name: /is working/i })).not.toBeInTheDocument();
+    expect(wire.posts).toEqual([]);
+  });
+
+  it("still asks while the main turn runs", async () => {
+    const wire = serveQueue();
+    const agent = claude({ running: true });
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: "" });
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox"), "status?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByRole("group", { name: /is working/i })).toBeInTheDocument();
+    expect(wire.sends).toEqual([]);
   });
 });

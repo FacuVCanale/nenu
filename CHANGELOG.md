@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.64.4] - 2026-10-12
+
+### Fixed
+- With only background work (subagent, workflow, monitor, goal) and no main turn, a message goes straight to the agent: no now/queue choice, "↓ to manage" no longer reads as a dialog, and queued rows no longer wait for the background work. (#66)
+- Scrolling up in a chat loads older messages on its own and keeps your place. (#67)
+
+## [0.64.3] - 2026-10-12
+
+### Fixed
+- A question from the agent is the chat's last item, inside its scroll: the conversation scrolls over it, options are compact (Recommended as a small tag) and the secondary actions are a quiet row. (#63)
+- System notices, other sessions' messages, hook feedback, interruptions and compaction summaries read as one grey expandable line, and a loaded skill as "Skill · name" under your message, never as your bubble or a big System block (Claude and Codex). (#64)
+
 ## [0.64.2] - 2026-10-11
 
 ### Fixed

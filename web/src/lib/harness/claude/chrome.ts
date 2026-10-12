@@ -513,7 +513,15 @@ function steppedMarksAreStatusline(
  *  walk (its footer split off by a blank, like the background-agents footer), and only these rows
  *  tell it apart. A popup tail is exempt, because its grammar named every row. */
 function tailNamesAMenu(text: string): boolean {
-  return NUMBERED_OPTION_ROW.test(text) || text.split(/\s+·\s+/).some((segment) => !RUNNING_TURN_HINT.test(segment.trim()) && namesAMenuKey(segment));
+  return NUMBERED_OPTION_ROW.test(text) || text.split(/\s+·\s+/).some(namesAModalKey);
+}
+
+/** A hint segment naming a key that is not one of Claude's own. Claude right-aligns indicators such
+ *  as "/rc" two or more spaces after the row's last hint, so after its own hint those are fields of
+ *  their own, each still checked. Any other segment is read whole, as before. */
+function namesAModalKey(segment: string): boolean {
+  const [hint = "", ...aligned] = segment.trim().split(/\s{2,}/);
+  return isOwnKeyHint(hint) ? aligned.some(namesAMenuKey) : namesAMenuKey(segment);
 }
 
 // Claude 2.1.296 moved "esc to interrupt" from the spinner into the statusline under the box for as
@@ -521,6 +529,16 @@ function tailNamesAMenu(text: string): boolean {
 // turn's key, not a modal's, and refusing it refused every send to a working Claude: its native queue
 // takes typing then, and a second queued message could never reach it.
 const RUNNING_TURN_HINT = /^esc to interrupt$/i;
+
+// The same Claude adds "↓ to manage" there while a background agent runs (background-agent-v2296):
+// the arrow opens its agent list, the box takes typing, and Enter starts a new turn (measured
+// 2026-10-12). Refusing it refused every send until the background agent finished.
+const BACKGROUND_AGENTS_HINT = /^↓ to manage$/i;
+
+/** A hint under a live box that names one of Claude's own keys, never a modal's. */
+function isOwnKeyHint(segment: string): boolean {
+  return RUNNING_TURN_HINT.test(segment) || BACKGROUND_AGENTS_HINT.test(segment);
+}
 
 /**
  * Whether a row of an `unknown` tail carries something else a modal paints: a pointer glyph anywhere,

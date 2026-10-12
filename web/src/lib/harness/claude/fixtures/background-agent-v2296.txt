@@ -1,0 +1,39 @@
+[0m[38;2;153;153;153m  ⎿  [0mBackgrounded agent[0m[38;2;153;153;153m (↓ to manage · ctrl+o to expand)[0m
+
+[0m[38;2;255;255;255m⏺ [0mlaunched
+
+[0m[38;2;153;153;153m✻ Waiting for [0m[1m[38;2;153;153;153m1[0m[38;2;153;153;153m background agent to finish[0m
+
+[0m[38;2;153;153;153m› Message from @general-purpose (ctrl+o to expand)[0m
+
+[0m[38;2;255;255;255m⏺ [0mThe subagent reports that its [0m[38;2;177;185;249msleep 240 [0mwas blocked by the harness before it ran, so it did not finish and
+  "agent-done" was not produced. It did not retry or work around the block. I haven't re-run it. Say the word if you
+  want a background wait instead.
+
+[0m[38;2;78;186;101m⏺ [0mAgent "Run 240s sleep" finished[0m[38;2;153;153;153m · 5s[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mLaunch one background subagent with the Agent tool (run_in_background true, subagent_type general-purpose). Its [0m[48;2;55;55;55m     [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55mtask: use the Bash tool to run exactly "python3 wait.py 900" in the foreground with timeout 600000 ms, then reply [0m[48;2;55;55;55m   [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55magent-done. Do not wait for it and do not check on it. After launching it, reply with just the word launched and end[0m[48;2;55;55;55m [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55myour turn.[0m[48;2;55;55;55m                                                                                                           [0m
+
+[0m[38;2;78;186;101m⏺[0m [0m[1mAgent[0m(Run 900s wait.py)
+[0m[38;2;153;153;153m  ⎿  [0mBackgrounded agent[0m[38;2;153;153;153m (↓ to manage · ctrl+o to expand)[0m
+
+[0m[38;2;255;255;255m⏺[0m launched
+
+[0m[38;2;153;153;153m✻ Waiting for [0m[1m[38;2;153;153;153m1[0m[38;2;153;153;153m background agent to finish[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mReply with just the word pong-cli.[0m[48;2;55;55;55m                                                                                   [0m
+
+[0m[38;2;255;255;255m⏺[0m pong-cli
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mWaiting for [0m[1m[38;2;153;153;153m1[0m[38;2;153;153;153m background agent to finish[0m
+
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+❯ 
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[38;2;255;193;7m⏵⏵ auto mode on[0m[38;2;153;153;153m (shift+tab to cycle) · ← for agents · ↓ to manage                                               [0m[38;2;78;186;101m/rc[0m
+
+[0m[1m  ⏺ main[0m
+[0m[38;2;153;153;153m  ◯ general-purpose  Run 900s wait.py                                                         [0m [0m[38;2;153;153;153m5m 3s · ↓ 24.9k tokens[0m

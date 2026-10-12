@@ -18,6 +18,9 @@ export function searchableText(entry: TranscriptEntry): string {
     if (part.kind === "image") continue;
     if (part.kind === "tool") {
       parts.push(part.name, part.summary);
+    } else if (part.kind === "context") {
+      // Its body is folded, but a hit there opens the line (like Thinking), so the hit is seen.
+      parts.push(part.label, part.text);
     } else {
       parts.push(part.text);
     }
