@@ -1,10 +1,12 @@
 // The preview-variant action recipes — the generic race guard (lib/dialog-guard.ts) plus the extra
 // verified steps this dialog's MULTI-step choreography needs (grammar/NOTES_NOTES.md):
 //
-//   - Selecting an option is digit → verify pointer → Enter. A `[digit, Enter]` pair in ONE
-//     send_keys call picks the WRONG row (the TUI processes both keys in one input chunk and the
-//     Enter still sees the pre-digit pointer — observed live), so the Enter is only sent after a
-//     fresh read shows the pointer on the tapped row.
+//   - Selecting an option is two taps: pointing at it (digit → verify pointer; in this dialog a digit
+//     only moves the pointer and its preview, so nothing is chosen yet) and choosing the pointed row
+//     (one guarded Enter). The operator sees each preview before committing to one. They could never
+//     share a call anyway: a `[digit, Enter]` pair in ONE send_keys call picks the WRONG row (the TUI
+//     processes both keys in one input chunk and the Enter still sees the pre-digit pointer —
+//     observed live).
 //   - Adding/editing a note is n → verify the input focused → clear → type → Escape. Focus is not
 //     instantaneous, keystrokes sent early are misrouted, and Enter inside the input would submit
 //     the dialog — so every step that types is gated on a verified pane state, and Enter is never
@@ -20,7 +22,7 @@
 
 import { sendKeys, sendReply } from "./api";
 import { type PreviewOption, type PreviewSelectModel } from "./blocks";
-import { guardDialog, pollDialog, type DialogTarget } from "./dialog-guard";
+import { guardDialog, pollDialog, sendGuardedKeys, type DialogTarget } from "./dialog-guard";
 import { previewCoreEqual, previewStructureEqual } from "./harness/preview-model";
 import { sanitizeTypedText, type ActionResult } from "./harness/guard";
 import { type Sleep } from "./harness/poll";
@@ -57,18 +59,17 @@ interface GuardArgs {
 }
 
 /**
- * Select an option: entry guard → digit (pointer move) → poll until the pointer verifiably sits on
- * the tapped row → Enter. If the pointer never converges nothing has been submitted — the digit's
- * pointer move is the only side effect — so the caller just refreshes.
+ * Point at an option: entry guard → digit (pointer move) → poll until the pointer verifiably sits on
+ * the tapped row. Commits nothing; the preview it shows is the next screen's.
  */
-export async function submitPreviewOption(
+export async function submitPreviewPoint(
   args: GuardArgs & { option: PreviewOption },
 ): Promise<ActionResult> {
   const guarded = await guardDialog(target(args));
   if (!guarded.ok) return guarded.result;
 
   try {
-    // Bind only this first write. It changes the dialog, so later steps must not reuse this region.
+    // Bind only this write: it changes the dialog, so the poll below re-derives on its own.
     const digit = await sendKeys(
       args.paneId,
       [String(args.option.n)],
@@ -87,15 +88,20 @@ export async function submitPreviewOption(
       previewStructureEqual(m, args.preview) && // same dialog, note untouched (an open input eats keys)
       (m.options.find((o) => o.n === args.option.n)?.pointed ?? false),
   );
-  if (pointed !== "ok") return { status: "changed" };
+  return pointed === "ok" ? { status: "sent" } : { status: "changed" };
+}
 
-  try {
-    const enter = await sendKeys(args.paneId, ["Enter"], args.session);
-    if (!enter.ok) return { status: "error", error: enter.error };
-    return { status: "sent" };
-  } catch (e) {
-    return { status: "error", error: e instanceof Error ? e.message : String(e) };
-  }
+/**
+ * Choose the pointed option: Enter, sent only while a fresh read equals the card it was tapped on,
+ * pointer included, and bound to that dialog. A row the pointer is not on, or a note input with
+ * focus (Enter there submits without the row), sends nothing.
+ */
+export async function submitPreviewChoice(
+  args: GuardArgs & { option: PreviewOption },
+): Promise<ActionResult> {
+  const pointed = args.preview.options.find((o) => o.n === args.option.n)?.pointed ?? false;
+  if (!pointed || args.preview.note.state === "editing") return { status: "changed" };
+  return sendGuardedKeys(target(args), ["Enter"]);
 }
 
 /**

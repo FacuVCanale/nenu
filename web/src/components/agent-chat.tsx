@@ -61,7 +61,7 @@ import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { StatusDot } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
-import { submitPreviewKeys, submitPreviewNote, submitPreviewOption } from "@/lib/preview-action";
+import { submitPreviewChoice, submitPreviewKeys, submitPreviewNote, submitPreviewPoint } from "@/lib/preview-action";
 import { submitMultiSelectIntent, type MultiSelectIntent } from "@/lib/multi-select-action";
 import { submitMenuKeys } from "@/lib/menu-action";
 import type { PromptBlockAction } from "@/components/prompt-select-block";
@@ -627,10 +627,10 @@ export function AgentChat({
     [readOnly, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
   );
 
-  // Tap a preview-dialog control (an option, the note add/edit/remove, or the wizard step nav).
-  // Same guard-first shape as the two handlers above, but the choreography behind an intent is
-  // MULTI-step (digit→verify→Enter; n→verify→type→Escape — see lib/preview-action.ts and
-  // grammar/NOTES_NOTES.md), so the handler dispatches on the intent kind.
+  // Tap a preview-dialog control (point at an option, choose the pointed one, the note add/edit/remove,
+  // or the wizard step nav). Same guard-first shape as the two handlers above, but the choreography
+  // behind an intent can be MULTI-step (digit→verify; n→verify→type→Escape — see lib/preview-action.ts
+  // and grammar/NOTES_NOTES.md), so the handler dispatches on the intent kind.
   // gate: Claude's adapter is the only one that emits `preview-select` — no other registered adapter
   // lifts this kind, so this handler cannot fire for another agent.
   const handlePreviewAction = useCallback(
@@ -648,12 +648,16 @@ export function AgentChat({
         preview,
       };
       const result =
-        action.kind === "option"
-          ? await submitPreviewOption({ ...base, option: action.option })
-          : action.kind === "note"
-            ? await submitPreviewNote({ ...base, text: action.text })
-            : await submitPreviewKeys({ ...base, keys: action.keys });
-      if (result.status === "sent") {
+        action.kind === "point"
+          ? await submitPreviewPoint({ ...base, option: action.option })
+          : action.kind === "choose"
+            ? await submitPreviewChoice({ ...base, option: action.option })
+            : action.kind === "note"
+              ? await submitPreviewNote({ ...base, text: action.text })
+              : await submitPreviewKeys({ ...base, keys: action.keys });
+      // Pointing only moves the pointer: the refreshed card shows its preview, nothing was answered.
+      if (result.status === "sent" && action.kind === "point") revalidator.revalidate();
+      else if (result.status === "sent") {
         setStatus(
           action.kind === "note" ? (action.text ? "Note saved" : "Note removed") : "Sent",
           "success",

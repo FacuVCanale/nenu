@@ -2,15 +2,46 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-// The one shared visual language for an up-levelled dialog option, used by all three block
-// renderers (prompt-select / wizard / preview-select) so they can't drift into three different flat
-// styles again. The rows must read as OBVIOUSLY tappable controls sitting apart from the raw
-// terminal mirror above them: a solid, elevated surface (secondary fill + full-opacity border +
-// shadow) with generous corners and tap padding, a leading key badge mirroring the terminal menu's
-// digit, and calm accent/active states. Theme tokens only — light and dark both derive from these.
+// The one shared visual language for a dialog: the card every dialog is drawn as (the bridge's
+// QuestionCard and each block a grammar lifts off the screen), its rows and its actions. One source,
+// so a menu, a preview and a permission can't drift into different styles again. Theme tokens only,
+// and no `dark:` variant: a block also renders inside the terminal mirror (ADR 0002).
 //
 // XSS boundary unchanged: labels/descriptions passed in are React text nodes; nothing is ever set as
 // innerHTML.
+
+/** The card's surface: an elevated card with a hairline, the same in the thread and the mirror. */
+export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm";
+
+/** The card's status: the blocked dot carries the urgency, the words stay plain (direction.md). */
+export function WaitingOnYou() {
+  return (
+    <span className="flex shrink-0 items-center gap-2 font-medium text-foreground">
+      <span aria-hidden className="size-2 rounded-full bg-status-blocked" />
+      Waiting on you
+    </span>
+  );
+}
+
+/**
+ * A dialog a grammar lifted off the screen, drawn as the card: the status line, then the block's own
+ * content. Named by its question, like the QuestionCard.
+ */
+export function DialogCard({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section aria-label={label} data-dialog-card className={DIALOG_CARD}>
+      <div className="flex min-w-0 items-center gap-2 text-[13px] leading-[18px]">
+        <WaitingOnYou />
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** The card's question. */
+export function QuestionHeading({ children }: { children: ReactNode }) {
+  return <p className="text-[17px] leading-[22px] font-semibold tracking-[-0.01em] text-pretty text-foreground">{children}</p>;
+}
 
 /**
  * Surface tone of an option row:
@@ -22,45 +53,34 @@ import { cn } from "@/lib/utils";
  */
 export type OptionTone = "default" | "selected" | "busy";
 
-/** Shared surface classes for a tappable option row. Applied verbatim in all three blocks. */
+/** A tappable option row: 44 px at least, the card's row radius. */
 export function optionSurface(tone: OptionTone): string {
   return cn(
-    "flex w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-left shadow-sm transition-all",
+    "flex min-h-11 w-full items-center gap-3 rounded-xl border px-3.5 py-2 text-left transition-colors",
     "active:scale-[0.99]",
     tone === "busy"
       ? "border-primary bg-primary/10" // in flight — accent, never dimmed (the spinner reads over it)
       : tone === "selected"
-        ? "border-primary bg-primary/10 active:bg-primary/15 disabled:opacity-60"
-        : "border-border bg-secondary active:border-primary/50 active:bg-primary/5 disabled:opacity-60",
+        ? "border-primary/60 bg-primary/10 active:bg-primary/15 disabled:opacity-60"
+        : "border-border bg-secondary active:bg-muted disabled:opacity-60",
   );
 }
 
-/** The small square key chip — the option's terminal digit, so the menu mapping is visible.
- *  `aria-hidden`: the digit is a visual affordance; the button is already named by its label. */
-export function KeyBadge({ children, tone = "default" }: { children: ReactNode; tone?: OptionTone }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "mt-px flex size-5 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold leading-none tabular-nums",
-        tone === "default"
-          ? "border-border bg-background text-muted-foreground"
-          : "border-primary/40 bg-primary/15 text-primary",
-      )}
-    >
-      {children}
-    </span>
-  );
-}
+/** The card's one commit: an ink fill, full width (direction.md: one primary per surface). */
+export const PRIMARY_ACTION =
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-3.5 text-base font-medium text-background transition-colors active:scale-[0.99] disabled:bg-muted disabled:text-muted-foreground";
+/** A second key the screen names that commits too, beside the primary but never as loud. */
+export const NEUTRAL_ACTION =
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-3.5 text-base font-medium text-foreground transition-colors active:scale-[0.99] disabled:opacity-60";
+/** An escape or a utility under the card (Cancel, Chat about this, Add a note…): plain text, neutral. */
+export const SECONDARY_ACTION =
+  "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";
+/** The row of SECONDARY_ACTIONs, bled into the card's padding so their text lines up with the content. */
+export const SECONDARY_ROW = "-mx-2 -mb-2 flex flex-wrap items-center";
 
 /**
- * The enclosing surface for an up-levelled dialog: a bordered, filled panel that lifts the WHOLE
- * prompt off the raw terminal mirror behind it — the primary "these are controls, not output"
- * signal, shared by all three block renderers so the separation can't drift. `bg-card` sits one
- * layer above the page background in dark (the terminal is on `--background`, the option rows on the
- * lighter `--secondary`, so the panel reads as a distinct middle layer); in light, where card ==
- * background, the border + shadow carry the separation. Owns `role="group"` + its aria label, so a
- * block's outermost element IS this panel.
+ * The enclosing surface for a block that is not a dialog (the completion popup): a bordered panel
+ * that lifts it off the raw terminal mirror behind it. Owns `role="group"` + its aria label.
  */
 export function PromptPanel({ ariaLabel, children }: { ariaLabel: string; children: ReactNode }) {
   return (
@@ -74,17 +94,11 @@ export function PromptPanel({ ariaLabel, children }: { ariaLabel: string; childr
   );
 }
 
-// The small primary tick that flags an option group as "the terminal is asking you something",
-// separating the block from the raw mirror above it. Shared by both group headers below.
-const accentTick = <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-primary/60" />;
-
-/** The compact caption above an option group — a short uppercase label, for the single-question
- *  dialogs whose actual question stays visible in the raw scrollback just above. Non-semantic (the
- *  group is already aria-labelled by its question). */
+/** The compact caption above a PromptPanel's rows. Non-semantic (the group is already labelled). */
 export function OptionGroupCaption({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5 pl-0.5">
-      {accentTick}
+      <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-primary/60" />
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {children}
       </span>
@@ -92,24 +106,10 @@ export function OptionGroupCaption({ children }: { children: ReactNode }) {
   );
 }
 
-/** The readable question heading, for the wizard steps whose question is NOT in the raw mirror (the
- *  dialog block replaced it) — kept prominent, with the same accent tick as {@link OptionGroupCaption}. */
-export function QuestionHeading({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-1.5 pl-0.5">
-      <span className="mt-[3px] flex">{accentTick}</span>
-      <div className="text-sm font-medium text-foreground">{children}</div>
-    </div>
-  );
-}
-
-/** A full option row: leading key badge, label + optional description, and a trailing slot (spinner
- *  or a state mark). Shared by prompt-select and wizard answers, which are structurally identical;
- *  preview-select composes {@link optionSurface}/{@link KeyBadge} directly because its rows also
- *  carry the pointer chevron. */
+/** A full option row: label + optional description, and a trailing slot (spinner or a state mark).
+ *  Shared by prompt-select and wizard answers, which are structurally identical. */
 export function OptionButton({
   tone = "default",
-  keyLabel,
   label,
   description,
   trailing,
@@ -117,7 +117,6 @@ export function OptionButton({
   onClick,
 }: {
   tone?: OptionTone;
-  keyLabel?: ReactNode;
   label: ReactNode;
   description?: ReactNode;
   trailing?: ReactNode;
@@ -126,11 +125,10 @@ export function OptionButton({
 }) {
   return (
     <button type="button" disabled={disabled} onClick={onClick} className={optionSurface(tone)}>
-      {keyLabel != null ? <KeyBadge tone={tone}>{keyLabel}</KeyBadge> : null}
-      <span className="min-w-0 flex-1">
-        <span className="block break-words text-sm font-medium leading-snug text-foreground">{label}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="break-words text-base leading-5 font-medium text-foreground">{label}</span>
         {description ? (
-          <span className="block break-words text-xs leading-snug text-muted-foreground">{description}</span>
+          <span className="break-words text-[13px] leading-[18px] text-muted-foreground">{description}</span>
         ) : null}
       </span>
       {trailing}
