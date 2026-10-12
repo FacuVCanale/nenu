@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRevalidator } from "react-router";
 import { ChevronDown } from "lucide-react";
 import { connectConversation, fetchConversations } from "@/lib/api";
@@ -21,7 +22,9 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
   const request = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
   const revalidator = useRevalidator();
-  const fieldId = useId();
+  const regionId = useId();
+  const listId = useId();
+  const input = useRef<HTMLInputElement>(null);
   useEffect(() => () => request.current?.abort(), []);
 
   async function load() {
@@ -46,32 +49,47 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
     finally { inFlight.current = false; setBusy(null); }
   }
 
+  // Opened by a tap, the field takes focus inside that tap so a phone raises its keyboard.
+  function toggleManual() {
+    flushSync(() => setManual(!manual));
+    if (!manual) input.current?.focus();
+  }
+
   const listed = choices !== null && choices.length > 0;
-  const field = "mt-1.5 min-h-11 w-full rounded-lg border bg-background px-3 text-body text-foreground";
-  // One primary at a time: Find, or Connect once a list or the typed ID is open.
-  const connectButton = <Button className="w-full" disabled={disabled || busy !== null || !id.trim()} aria-busy={busy === "connect" || undefined} onClick={() => void connect()}>Connect history</Button>;
-  return <div className="w-full space-y-3 text-left">
+  const field = "min-h-11 w-full rounded-lg border bg-background px-3 text-body text-foreground";
+  const quiet = "flex min-h-9 items-center justify-center gap-1 rounded-md text-footnote text-muted-foreground hover:text-foreground coarse:min-h-11";
+  // One primary at a time: Find, or Connect once a list or the typed ID is open. Next to Connect, a
+  // line says linking only brings the history in.
+  const connectButton = <>
+    <Button className="w-full" disabled={disabled || busy !== null || !id.trim()} aria-busy={busy === "connect" || undefined} onClick={() => void connect()}>Connect history</Button>
+    <p className="text-center text-footnote text-muted-foreground">Messages still go to this terminal.</p>
+  </>;
+  return <div className="flex w-full flex-col gap-3 text-left">
     {listed
-      ? <label className="block text-footnote text-muted-foreground">Running in this folder
-        <select aria-label="Conversation to connect" className={field} value={id} onChange={(event) => setId(event.target.value)}>
+      ? <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor={listId} className="text-footnote text-muted-foreground">Running in this folder</label>
+          <button type="button" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()} className={cn(quiet, "-mr-2 px-2 disabled:text-disabled-foreground")}>Search again</button>
+        </div>
+        <select id={listId} aria-label="Conversation to connect" className={field} value={id} onChange={(event) => setId(event.target.value)}>
           <option value="">Choose a conversation</option>
           {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.title} ({choice.id.slice(0, 8)})</option>)}
         </select>
-      </label>
+      </div>
       : <Button variant={manual ? "outline" : "default"} className="w-full" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()}>Find Codex conversations</Button>}
     {choices?.length === 0 && <p role="status" className="text-center text-footnote text-muted-foreground">No Codex conversation is running in this folder.</p>}
     {listed && connectButton}
-    <button type="button" aria-expanded={manual} aria-controls={fieldId} onClick={() => setManual(!manual)}
-      className="flex min-h-9 w-full items-center justify-center gap-1 rounded-md text-footnote text-muted-foreground hover:text-foreground coarse:min-h-11">
+    <button type="button" aria-expanded={manual} aria-controls={regionId} onClick={toggleManual} className={cn(quiet, "w-full")}>
       Enter a session ID
       <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform duration-200 motion-reduce:transition-none", manual && "rotate-180")} />
     </button>
-    {manual && <div id={fieldId} className="space-y-3">
-      <label className="block text-footnote text-muted-foreground">Session ID, from Codex /status
-        <input aria-label="Session ID" className={field} value={id} onChange={(event) => setId(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} />
+    <div id={regionId} hidden={!manual} className="flex flex-col gap-3">
+      <label className="block space-y-1.5 text-footnote text-muted-foreground">
+        <span className="block">Session ID, from Codex /status</span>
+        <input ref={input} aria-label="Session ID" className={field} value={id} onChange={(event) => setId(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} />
       </label>
       {!listed && connectButton}
-    </div>}
-    {error && <p role="alert" className="text-footnote text-destructive">{error}</p>}
+    </div>
+    {error && <p role="alert" className="text-center text-footnote text-destructive">{error}</p>}
   </div>;
 }
