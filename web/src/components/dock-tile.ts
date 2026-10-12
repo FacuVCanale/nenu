@@ -12,7 +12,7 @@ export const DOCK_TILE =
 /** A tile that just took a press: a step past hover, never the accent. */
 export const DOCK_TILE_PRESSED = "bg-foreground/20 hover:bg-foreground/20";
 
-// A segmented control (the Keys pads, Display's Chat text): a hairline track whose chosen segment is
+// A segmented control (the Keys pads, the chat's Text size in Display): a hairline track whose chosen segment is
 // a tile. The track has no fill of its own, so the tile's edge sits on the card at its full 3:1.
 export const SEGMENT_TRACK = "grid auto-cols-fr grid-flow-col gap-1 rounded-lg border border-border p-1";
 

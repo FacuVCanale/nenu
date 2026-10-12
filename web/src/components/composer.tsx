@@ -121,6 +121,8 @@ interface ComposerProps {
   /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
   workingSince?: string;
   usageControls?: ReactNode;
+  /** The conversation is on screen rather than the terminal mirror: sends can queue, and Display
+   *  offers the chat's own settings. */
   nativeWorkbench?: boolean;
   prepareSend?: () => Promise<boolean>;
   onInputFocus?: () => void;
@@ -1262,6 +1264,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {drawer === "display" && (
           <ComposerDock title="Display" onClose={closeDrawer}>
             <DisplayPrefsContent
+              surface={nativeWorkbench ? "chat" : "terminal"}
               prefs={prefs}
               setWrap={setWrap}
               stepFontSize={stepFontSize}

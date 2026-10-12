@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.65.1] - 2026-10-12
+
+### Added
+- Drag a tab to reorder it (hold 450 ms on a phone, drag with a mouse on a desk), plus Move left/right in its sheet; Herdr's `tab.move`, audited. (#100)
+- Copy on every agent reply (its Markdown) and every table (Markdown text plus HTML cells). (#100)
+
+### Fixed
+- The tab and pane strips scroll sideways with a finger again. (#100)
+- Display shows only what changes the view on screen: Text size scales the chat; Wrap lines, Tap to type and its text size belong to the terminal mirror. (#100)
+
 ## [0.65.0] - 2026-10-12
 
 ### Changed

@@ -1975,6 +1975,15 @@ describe("Composer — display prefs behind the gear", () => {
     expect(screen.getByRole("button", { name: "Esc" })).toBeInTheDocument();
   });
 
+  it("over the chat, the Display dock holds only the chat's text size", async () => {
+    const user = userEvent.setup();
+    renderComposer({ nativeWorkbench: true });
+    await user.click(control("Display"));
+    expect(screen.getByRole("radiogroup", { name: "Text size" })).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Wrap lines" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Tap to type" })).not.toBeInTheDocument();
+  });
+
   it("display prefs stay reachable on a read-only device", async () => {
     const user = userEvent.setup();
     renderComposer({ readOnly: true });

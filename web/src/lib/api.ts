@@ -633,6 +633,15 @@ export function closeTab(tabId: string, session?: string): Promise<ActionRespons
   });
 }
 
+/** Move a tab within its space so it sits before `before` (null: last). The bridge resolves the
+ *  anchor against Herdr's order when it writes, so a poll-old order can't misplace it. */
+export function moveTab(tabId: string, before: string | null, session?: string): Promise<ActionResponse> {
+  return req<ActionResponse>(withSession(`/api/tab/${encodeURIComponent(tabId)}/move`, session), {
+    method: "POST",
+    body: JSON.stringify({ before }),
+  });
+}
+
 /** Create a new tab in a space, opening a fresh shell pane. `cwd` omitted = inherits the space dir. */
 export function createTab(
   workspaceId: string,

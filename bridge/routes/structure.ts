@@ -8,9 +8,9 @@ import { deviceAuth } from "./access.ts";
 import type { PaneAction, Route } from "./context.ts";
 import { json, jsonError, text } from "./http.ts";
 
-// A tab supports rename + close — an action group like the pane route. The `/api/tab` POST below
-// (create) is an exact match on `/api/tab`, so it never collides with this `/api/tab/<id>/<action>`.
-const TAB_ACTION_ROUTE = /^\/api\/tab\/([^/]+)\/(rename|close)$/;
+// A tab supports rename, close and move — an action group like the pane route. The `/api/tab` POST
+// below (create) is an exact match on `/api/tab`, so it never collides with this `/api/tab/<id>/<action>`.
+const TAB_ACTION_ROUTE = /^\/api\/tab\/([^/]+)\/(rename|close|move)$/;
 
 export const structureRoutes: Route[] = [
   // Folder names under home for the new-chat picker. Write-level: only a device that can start a
@@ -47,7 +47,7 @@ export const structureRoutes: Route[] = [
       return createWorkspace(rt.herdr, req, audit, deviceAuth(req, cfg).device, rt.name);
     },
   },
-  // ── Tab actions: rename (set its label) / close (kill it + every pane in it) ──
+  // ── Tab actions: rename (set its label) / close (kill it + every pane in it) / move (reorder) ──
   {
     method: "POST",
     path: TAB_ACTION_ROUTE,
@@ -58,6 +58,7 @@ export const structureRoutes: Route[] = [
       const action = match![2];
       const device = deviceAuth(req, cfg).device;
       if (action === "close") return closeTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
+      if (action === "move") return moveTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
       return renameTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
     },
   },
@@ -204,6 +205,60 @@ async function closeTab(
   try {
     await herdr.closeTab(tabId);
     audit.record({ action: "tab.close", session, device, detail: { tabId } });
+    await refreshStructuralState(engine);
+    return json({ ok: true } satisfies ActionResponse, ae);
+  } catch (err) {
+    return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
+  }
+}
+
+/**
+ * Where Herdr's `tab.move` should put `tabId` so that it lands just before the tab `before` (null: at
+ * the end), given every tab in Herdr's array order. `insert_index` counts the workspace's tabs before
+ * the moved one is taken out (HERDR_API.md "Move methods"), which makes it the anchor's own index.
+ * Pure + exported so the rule is unit-testable without standing up Bun.serve.
+ */
+export function tabInsertIndex(
+  tabs: ReadonlyArray<{ tab_id: string; workspace_id: string }>,
+  tabId: string,
+  before: string | null,
+): { ok: true; index: number } | { ok: false; error: string } {
+  const tab = tabs.find((t) => t.tab_id === tabId);
+  if (!tab) return { ok: false, error: `tab ${tabId} not found` };
+  const order = tabs.filter((t) => t.workspace_id === tab.workspace_id).map((t) => t.tab_id);
+  if (before === null) return { ok: true, index: order.length };
+  const index = before === tabId ? -1 : order.indexOf(before);
+  if (index < 0) return { ok: false, error: "before must be another tab in the same workspace" };
+  return { ok: true, index };
+}
+
+// Move a tab within its workspace: the body names the tab it should now sit before (`before`, null
+// for the end), so a drop resolves against Herdr's order at the moment of the write rather than an
+// index the browser computed from a snapshot that may be a poll old. Structural metadata op, like a
+// rename — strictly less powerful than the text/keys injection the bridge already allows.
+async function moveTab(
+  herdr: HerdrClient,
+  engine: StateEngine,
+  tabId: string,
+  req: Request,
+  audit: AuditLog,
+  device: string | null,
+  session: string,
+): Promise<Response> {
+  const ae = req.headers.get("accept-encoding");
+  let body: { before?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return text("bad body", 400);
+  }
+  const before = body.before;
+  if (before !== null && typeof before !== "string") return text("bad before", 400);
+  try {
+    const target = tabInsertIndex(await herdr.listTabs(), tabId, before);
+    if (!target.ok) return json({ ok: false, error: target.error } satisfies ActionResponse, ae);
+    await herdr.moveTab(tabId, target.index);
+    audit.record({ action: "tab.move", session, device, detail: { tabId, before, insertIndex: target.index } });
     await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {

@@ -301,9 +301,14 @@ Two sibling structural ops reorder objects. Both live-verified 2026-07-20 on the
 - **Workspaces are the opposite: `workspace.move` renumbers.** After moving `w7` (number 5) to the
   front, it becomes `number 1` and every other workspace shifts — `number` always equals position,
   so array order and number order never disagree and sorting workspaces by `number` is safe.
-- **`insert_index` counts positions in the PRE-removal list** (workspace-scoped for tabs, clamped at
-  the end). Moving an item toward the end therefore needs `target + 1`: with `[t2, t1]`,
+- **`insert_index` counts positions in the PRE-removal list** (workspace-scoped for tabs). Moving an
+  item toward the end therefore needs `target + 1`: with `[t2, t1]`,
   `tab.move {tab_id: t2, insert_index: 1}` is a **no-op**; `insert_index: 2` yields `[t1, t2]`.
+- **Past the end is an error on 0.9.3, not a clamp** (re-verified 2026-10-12 on a disposable 0.9.3
+  session; the 2026-07-20 probe saw a clamp): with three tabs, `insert_index: 3` moves to the end and
+  `insert_index: 99` answers `{code:"tab_move_failed", message:"insert_index 99 is out of bounds"}`.
+  Nenu's `POST /api/tab/<id>/move` names the tab to land before (null for the end) and resolves it
+  against a fresh `tab.list`, so it never sends more than the count.
 - The event catalog lists sibling `tab.moved` / `workspace.moved` events (0.7.2); emission not
   observed here (no live subscription during the probe).
 
