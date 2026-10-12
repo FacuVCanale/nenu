@@ -634,7 +634,7 @@ describe("LiveConversation — a step tapped while the turn runs", () => {
   it("keeps a result that landed while an older page was loading", async () => {
     let resolvePage!: (value: PaneHistoryResponse) => void;
     vi.mocked(fetchHistory).mockImplementation(() => new Promise((resolve) => { resolvePage = resolve; }));
-    const paged = (entries: TranscriptEntry[]) => <MemoryRouter><LiveConversation paneId="w1:p1" history={{ ...history(entries), hasMore: true }}
+    const paged = (entries: TranscriptEntry[]) => <MemoryRouter><LiveConversation paneId="w1:p1" history={{ paneId: "w1:p1", available: true, entries, hasMore: true, total: entries.length, fileTruncated: false }}
       activityStatus="working" loading={false} error={false} /></MemoryRouter>;
     const { rerender } = render(paged([ask, read, run()]));
     fireEvent.click(screen.getByRole("button", { name: "Load older messages" }));
