@@ -11,7 +11,7 @@ import { projectForPane } from "@/lib/projects";
 import { workspaceName } from "@/lib/spaces";
 import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
 
-/** A name's words, upper-cased: split at spaces, punctuation and a lower-to-upper case change. */
+/** A name's words as upper-case letters: split at spaces, punctuation and a lower-to-upper case change. */
 function words(name: string): string[][] {
   const found = name.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   return (found.length ? found : [name.trim().charAt(0) || "?"]).map((word) => Array.from(word.toUpperCase()));
@@ -41,8 +41,9 @@ export function railMonograms(names: readonly string[]): string[] {
   const taken = new Set(first.filter((code) => !shared(code)));
   return choices.map((list, i) => {
     if (!shared(first[i]!)) return first[i]!;
+    const lead = Array.from(list[0]!)[0]!;
     let code = list.find((candidate) => !taken.has(candidate));
-    for (let n = 2; !code; n++) if (!taken.has(list[0]![0] + n)) code = list[0]![0] + n;
+    for (let n = 2; !code; n++) if (!taken.has(lead + n)) code = lead + n;
     taken.add(code);
     return code;
   });
@@ -148,7 +149,7 @@ interface Tile {
 
 function RailTile({ tile, monogram }: { tile: Tile; monogram: string }) {
   return (
-    <Link className="rail-link" to={tile.to} data-rail-tip={tile.name} aria-current={tile.current ? "page" : undefined}>
+    <Link className="rail-link hit-area" to={tile.to} data-rail-tip={tile.name} aria-current={tile.current ? "page" : undefined}>
       <span className="rail-tile" style={{ "--rail-hue": railHue(tile.name) } as CSSProperties} aria-hidden>{monogram}</span>
       {tile.status && <StatusDot status={tile.status} className="rail-tile-dot size-2" />}
       <span className="sr-only">{tile.status ? `${tile.name}, ${STATUS_LABEL[tile.status]}` : tile.name}</span>
@@ -174,7 +175,7 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
   const loose = looseWorkspaces(data);
   const projects = (data.projects ?? []).map((project): Tile => {
     const held = new Set(project.workspaceIds ?? []);
-    const panes = data.agents.filter((pane) => held.has(pane.workspaceId) || projectForPane(data.projects, pane.paneId)?.project === project);
+    const panes = data.agents.filter((pane) => held.has(pane.workspaceId) || projectForPane(data.projects, pane.paneId)?.project.slug === project.slug);
     return { key: project.slug, name: project.name, to: projectPath(project.slug, data.session), current: currentProject === project.slug, status: liveliest(panes) };
   });
   const workspaces = loose.workspaces.map((workspace): Tile => ({

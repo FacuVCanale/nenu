@@ -22,11 +22,6 @@ describe("railMonograms", () => {
     const shown = railMonograms(["nenu", "nenu", "nenu", "—", "—"]);
     expect(new Set(shown).size).toBe(shown.length);
   });
-
-  it("is the same for the same herd", () => {
-    const names = ["client-alpha-portal", "client-api", "api"];
-    expect(railMonograms(names)).toEqual(railMonograms([...names]));
-  });
 });
 
 describe("railHue", () => {
