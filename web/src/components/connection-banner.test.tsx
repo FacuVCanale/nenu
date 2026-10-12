@@ -60,6 +60,18 @@ it("keeps the notice stable until successful reads remain stable, without a Conn
   h.close();
 });
 
+it("stops saying it cannot reach Nenu once reads answer again, while it waits out the quiet interval", () => {
+  const h = renderBanner({ bridge: undefined, error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  act(() => { markLive(); h.update({ bridge: "connected", error: false }); });
+  act(() => vi.advanceTimersByTime(1_000));
+  const notice = screen.getByRole("status");
+  expect(notice).not.toHaveTextContent(/Can.t reach|Retrying/);
+  expect(notice).toHaveTextContent("Connection is unstable.");
+  expect(notice).not.toHaveTextContent(/\bConnected\b/);
+  h.close();
+});
+
 it("says which host it cannot reach when nothing ever loaded, and promises no snapshot", () => {
   const h = renderBanner({ bridge: undefined, error: true });
   act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS - 1));
