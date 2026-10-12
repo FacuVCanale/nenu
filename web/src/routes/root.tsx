@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { isRouteErrorResponse, Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
-import { Check, Copy, House, Inbox, Layers, RotateCw, Search, WifiOff } from "lucide-react";
+import { Check, Copy, House, Inbox, Layers, Plus, RotateCw, Search, WifiOff } from "lucide-react";
 
 import { usePolling } from "@/hooks/use-polling";
 import { useLiveEvents } from "@/hooks/use-live-events";
@@ -138,7 +138,9 @@ export function BootSplash() {
             </div>
           </main>
           <nav className="bottom-tab-bar" aria-hidden="true">
-            {BOOT_TABS.map(({ label, Icon }) => <span key={label} className="bottom-tab"><Icon size={22} strokeWidth={1.6} />{label}</span>)}
+            {BOOT_TABS.map(({ label, Icon }) => label === "New"
+              ? <span key={label} className="bottom-tab-new opacity-40"><Icon size={22} strokeWidth={2} /></span>
+              : <span key={label} className="bottom-tab"><Icon size={22} strokeWidth={1.6} />{label}</span>)}
           </nav>
         </div>
       </div>
@@ -150,6 +152,7 @@ export function BootSplash() {
 const BOOT_TABS = [
   { label: "Home", Icon: House },
   { label: "Needs you", Icon: Inbox },
+  { label: "New", Icon: Plus },
   { label: "Browse", Icon: Layers },
   { label: "Search", Icon: Search },
 ] as const;
@@ -175,8 +178,10 @@ function Crash({ error }: { error: unknown }) {
   const [copied, setCopied] = useState(false);
   const message = error instanceof Error ? error.message
     : isRouteErrorResponse(error) ? `${error.status} ${error.statusText}`.trim() : String(error ?? "Unknown error");
-  const stack = error instanceof Error && error.stack && error.stack !== message ? error.stack : null;
-  const details = [message, stack, `Build ${buildLabel()}`, `Path ${window.location.pathname}`].filter(Boolean).join("\n\n");
+  // A V8 stack already starts with the message; print it once.
+  const stack = error instanceof Error ? error.stack : undefined;
+  const trace = stack?.includes(message) ? stack : [message, stack].filter(Boolean).join("\n\n");
+  const details = [trace, `Build ${buildLabel()}`, `Path ${window.location.pathname}`].join("\n\n");
   async function copy() {
     try {
       await navigator.clipboard.writeText(details);
