@@ -3,13 +3,13 @@ import { Link, useLoaderData, useParams, useRouteLoaderData } from "react-router
 import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
-import { linkPhrase, linkProblemOf, type LinkProblem } from "@/components/connection-banner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FindBar } from "@/components/find-bar";
 import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
+import { linkPhrase, linkProblemOf, type LinkProblem } from "@/lib/connection";
 import { displayName } from "@/lib/display-name";
 import { HISTORY_PAGE_SIZE, ROOT_ROUTE_ID, type HistoryData, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";

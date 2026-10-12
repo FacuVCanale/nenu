@@ -13,7 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
-import { isConnecting } from "@/lib/connection";
+import { isConnecting, linkPhrase, linkProblemOf } from "@/lib/connection";
 import { clockTime } from "@/lib/format";
 import type { BridgeStatus } from "@/lib/types";
 
@@ -39,27 +39,6 @@ export const RECOVERY_QUIET_MS = 5_000;
 export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: ConnectionBannerProps) {
   if (authError) return <AuthErrorBanner />;
   return <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />;
-}
-
-/** What is wrong with the link: Nenu turned this device away, Nenu does not answer, or Herdr does not. */
-export type LinkProblem = "refused" | "nenu" | "herdr";
-
-/** The problem a snapshot's state implies, or null while the link is live. */
-export function linkProblemOf({ bridge, error, authError }: { bridge: BridgeStatus | undefined; error: boolean; authError: boolean }): LinkProblem | null {
-  if (authError) return "refused";
-  if (error || bridge === undefined) return "nenu";
-  return bridge === "disconnected" ? "herdr" : null;
-}
-
-const LINK_PHRASE: Record<LinkProblem, string> = { refused: "Access refused", nenu: "Can’t reach Nenu", herdr: "Herdr isn’t responding" };
-
-/**
- * The one phrase for each problem. The banner is the surface that names it; anything else that has to
- * refer to it (History, the boot splash) quotes this, so a problem is never worded two ways. `host` is
- * for a page that never reached Nenu, where the address is the useful fact.
- */
-export function linkPhrase(problem: LinkProblem, host?: string): string {
-  return problem === "nenu" && host ? `${LINK_PHRASE.nenu} at ${host}` : LINK_PHRASE[problem];
 }
 
 // A neutral row in the flow, never over content: up to two lines so the fact the operator needs (what

@@ -1,4 +1,4 @@
-import { isConnecting } from "./connection";
+import { isConnecting, linkPhrase, linkProblemOf } from "./connection";
 
 describe("isConnecting (poll-truth — navigator.onLine is never an input)", () => {
   it("is false when the snapshot path is healthy (data is live)", () => {
@@ -18,4 +18,16 @@ describe("isConnecting (poll-truth — navigator.onLine is never an input)", () 
     expect(isConnecting({ bridge: undefined, error: false })).toBe(true);
     expect(isConnecting({ bridge: "disconnected", error: false })).toBe(true);
   });
+});
+
+it("names each problem with one phrase, the one the banner, History and the boot splash quote", () => {
+  expect(linkProblemOf({ bridge: "connected", error: false, authError: false })).toBeNull();
+  expect(linkProblemOf({ bridge: "connected", error: true, authError: true })).toBe("refused");
+  expect(linkProblemOf({ bridge: "connected", error: true, authError: false })).toBe("nenu");
+  expect(linkProblemOf({ bridge: undefined, error: true, authError: false })).toBe("nenu");
+  expect(linkProblemOf({ bridge: "disconnected", error: false, authError: false })).toBe("herdr");
+  expect(linkPhrase("herdr")).toBe("Herdr isn’t responding");
+  expect(linkPhrase("nenu")).toBe("Can’t reach Nenu");
+  expect(linkPhrase("nenu", "nenu.tail.ts.net")).toBe("Can’t reach Nenu at nenu.tail.ts.net");
+  expect(linkPhrase("refused")).toBe("Access refused");
 });
