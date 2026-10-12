@@ -1101,6 +1101,7 @@ export function AgentChat({
             // Closing the tab this pane lives in kills the pane too; the refreshed snapshot without it
             // is what moves you to the tab beside it (DetailRoute), the same as a close made in Herdr.
             onClosed={() => revalidator.revalidate()}
+            onMoved={() => revalidator.revalidate()}
           />
         )}
         </>)}

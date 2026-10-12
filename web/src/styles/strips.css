@@ -53,16 +53,22 @@
   .strip-chip, .strip-add { transition: none; }
   .strip-chip:active { scale: none; }
 }
+/* A chip held to be dragged along its strip (ui/strip-reorder): lifted over its neighbours, which
+   slide aside into the slot it leaves while it follows the pointer. */
+.strip-chip[data-lifted] { z-index: 1; background: var(--workbench-row-selected); color: var(--foreground); box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); scale: 1.06; cursor: grabbing; }
+@media (prefers-reduced-motion: no-preference) {
+  .strip-scroller[data-reordering] .strip-chip:not([data-lifted]) { transition: background-color 150ms ease-out, color 150ms ease-out, scale 120ms ease-out, translate 150ms ease-out; }
+}
 
 /* A phone: both rows at 32px, so the thread starts 9px higher than it did under the two old rows,
    and a 28px chip leaves 4px between the two open ones. Each chip reaches 44px by hanging 16px below
    its row, never above it: the header paints over its own edge. The pane row covers a tab's reach,
-   so with both rows a tab keeps 30px. The scroller grows by the reach without growing the row, and
-   lets every tap through but a chip's. */
+   so with both rows a tab keeps 30px. The scroller grows by the reach without growing the row. It
+   keeps every touch on it, the band under the row included: a scroller that lets touches through
+   is one a finger can't scroll (strips.test.ts). */
 @media (pointer: coarse) {
   .strip { --reach: 16px; height: 32px; }
-  .strip-scroller { align-self: stretch; height: auto; margin-bottom: calc(-1 * var(--reach)); padding-bottom: var(--reach); pointer-events: none; }
-  .strip-chip, .strip-add { pointer-events: auto; }
+  .strip-scroller { align-self: stretch; height: auto; margin-bottom: calc(-1 * var(--reach)); padding-bottom: var(--reach); }
   .strip-add { width: 44px; }
 }
 }

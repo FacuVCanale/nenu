@@ -3,12 +3,12 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 
 // Hold a pill this long before the press counts as a long-press. Long enough that a tap or a scroll
 // fling never trips it, short enough to feel intentional rather than sluggish.
-const LONG_PRESS_MS = 450;
+export const LONG_PRESS_MS = 450;
 // Movement past this (px, from the press origin) cancels the pending long-press — that's a scroll or
 // a drag, not a hold. Keeps the strip's horizontal scroll working: a sideways pan cancels the timer.
 // Sized for a thumb: finger jitter during a deliberate hold is easily 10–15px, so a stricter bound
 // cancelled real holds on a phone; a scroll still moves well past this before the timer would fire.
-const MOVE_CANCEL_PX = 16;
+export const MOVE_CANCEL_PX = 16;
 
 interface LongPressOptions {
   delayMs?: number;

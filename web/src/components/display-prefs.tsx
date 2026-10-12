@@ -14,12 +14,17 @@ import { CHAT_TEXT_SIZES, FONT_MAX, FONT_MIN, useChatText } from "@/hooks/use-di
 // menu each persistent preference gets a real name and explanation. The workbench/terminal escape
 // hatch lives in the header, where it is reachable without opening another panel.
 //
-// The dock is offered over the conversation as well as over the mirror, so it says which surface each
-// row changes: Chat text sizes the conversation's prose, and everything under Terminal view changes
-// only the mirror. It rides the same in-flow ComposerDock as Keys/Quick rather than a covering sheet,
-// deliberately: every control here changes how the page LOOKS, so you have to see it while you flip it.
+// The dock holds only what changes the view on screen: over the conversation, its text size; over the
+// mirror, the mirror's wrap, tap and text size. Offering the mirror's rows over the chat read as
+// controls that do nothing. It rides the same in-flow ComposerDock as Keys/Quick rather than a
+// covering sheet, deliberately: every control here changes how the page LOOKS, so you have to see it
+// while you flip it.
+
+/** What the pane shows: the conversation, or the terminal mirror. */
+export type DisplaySurface = "chat" | "terminal";
 
 interface DisplayPrefsContentProps {
+  surface: DisplaySurface;
   prefs: DisplayPrefs;
   setWrap: (wrap: boolean) => void;
   stepFontSize: (delta: number) => void;
@@ -94,79 +99,78 @@ function ChatTextControl({ labelId }: { labelId: string }) {
 }
 
 export function DisplayPrefsContent({
+  surface,
   prefs,
   setWrap,
   stepFontSize,
   setTapToFocus,
 }: DisplayPrefsContentProps) {
   const chatTextId = useId();
-  const terminalId = useId();
+  if (surface === "chat") {
+    return (
+      <div className="px-3 pb-2">
+        <Row label="Text size" labelId={chatTextId} control={<ChatTextControl labelId={chatTextId} />} />
+      </div>
+    );
+  }
   return (
-    <div className="px-3 pb-2">
-      <Row label="Chat text" labelId={chatTextId} control={<ChatTextControl labelId={chatTextId} />} />
-      <section aria-labelledby={terminalId} className="mt-2 border-t border-border pt-3">
-        <h3 id={terminalId} className="text-footnote text-muted-foreground">
-          Terminal view
-        </h3>
-        <div className="divide-y divide-border">
-          <Row
-            label="Wrap lines"
-            hint="Off shows column-faithful output for TUI tables — you pan instead."
-            htmlFor="pref-wrap"
-            control={
-              <Switch
-                id="pref-wrap"
-                checked={prefs.wrap}
-                onCheckedChange={setWrap}
-                aria-label="Wrap lines"
-              />
-            }
+    <div className="divide-y divide-border px-3 pb-2">
+      <Row
+        label="Wrap lines"
+        hint="Off shows column-faithful output for TUI tables — you pan instead."
+        htmlFor="pref-wrap"
+        control={
+          <Switch
+            id="pref-wrap"
+            checked={prefs.wrap}
+            onCheckedChange={setWrap}
+            aria-label="Wrap lines"
           />
-          <Row
-            label="Tap to type"
-            hint="On, tapping the mirror anywhere opens the keyboard. Off, the mirror behaves like a document — taps land on the text and only the composer opens the keyboard."
-            htmlFor="pref-tap-to-focus"
-            control={
-              <Switch
-                id="pref-tap-to-focus"
-                checked={prefs.tapToFocus}
-                onCheckedChange={setTapToFocus}
-                aria-label="Tap to type"
-              />
-            }
+        }
+      />
+      <Row
+        label="Tap to type"
+        hint="On, tapping the mirror anywhere opens the keyboard. Off, the mirror behaves like a document — taps land on the text and only the composer opens the keyboard."
+        htmlFor="pref-tap-to-focus"
+        control={
+          <Switch
+            id="pref-tap-to-focus"
+            checked={prefs.tapToFocus}
+            onCheckedChange={setTapToFocus}
+            aria-label="Tap to type"
           />
-          <Row
-            label="Text size"
-            control={
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={DOCK_TILE}
-                  disabled={prefs.fontSize <= FONT_MIN}
-                  onClick={() => stepFontSize(-1)}
-                  aria-label="Decrease font size"
-                >
-                  <AArrowDown className="size-4" />
-                </Button>
-                <span className="w-8 text-center text-footnote tabular-nums text-muted-foreground">
-                  {prefs.fontSize}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={DOCK_TILE}
-                  disabled={prefs.fontSize >= FONT_MAX}
-                  onClick={() => stepFontSize(1)}
-                  aria-label="Increase font size"
-                >
-                  <AArrowUp className="size-4" />
-                </Button>
-              </div>
-            }
-          />
-        </div>
-      </section>
+        }
+      />
+      <Row
+        label="Text size"
+        control={
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={DOCK_TILE}
+              disabled={prefs.fontSize <= FONT_MIN}
+              onClick={() => stepFontSize(-1)}
+              aria-label="Decrease font size"
+            >
+              <AArrowDown className="size-4" />
+            </Button>
+            <span className="w-8 text-center text-footnote tabular-nums text-muted-foreground">
+              {prefs.fontSize}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={DOCK_TILE}
+              disabled={prefs.fontSize >= FONT_MAX}
+              onClick={() => stepFontSize(1)}
+              aria-label="Increase font size"
+            >
+              <AArrowUp className="size-4" />
+            </Button>
+          </div>
+        }
+      />
     </div>
   );
 }

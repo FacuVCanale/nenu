@@ -9,8 +9,10 @@ import { ImageStrip, JournalImages, type StripImage } from "./message-images";
 import { useContext, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+import { CopyButton, QUIET_ACTION } from "@/components/copy-button";
 import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { searchableText } from "@/lib/transcript-search";
 import { containsQuery, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
@@ -187,12 +189,17 @@ function Turn({
       </div>
     );
   }
+  // Their words, as they wrote them (Markdown), for pasting anywhere else.
+  const words = entry.parts.flatMap((part) => (part.kind === "text" ? [part.text] : [])).join("\n\n");
   return (
     <div data-speaker="assistant" className="space-y-1.5 px-0.5 select-text" title={time || undefined}>
       {entry.parts.map((part, i) => (
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
       <EntryImages entry={entry} />
+      {words.trim() && <div className="flex">
+        <CopyButton what="message" payload={() => ({ text: words })} className={cn(QUIET_ACTION, "-ml-2")} />
+      </div>}
     </div>
   );
 }

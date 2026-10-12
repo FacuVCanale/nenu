@@ -174,3 +174,46 @@ describe("find hits", () => {
     expect(current![0]!.className).not.toBe(other![0]!.className);
   });
 });
+
+describe("tables", () => {
+  const TABLE = "Comparé:\n\n| Opción | Costo |\n|---|---:|\n| A | $0 |\n| B | $40 |";
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "clipboard");
+    Reflect.deleteProperty(globalThis, "ClipboardItem");
+  });
+
+  // 0.65.0 had no way to take a table out of the chat but selecting it by hand.
+  it("copy as Markdown text, with an HTML twin a spreadsheet pastes as cells", async () => {
+    const written: Array<Record<string, string>> = [];
+    class FakeItem {
+      readonly types: Record<string, Blob>;
+      constructor(types: Record<string, Blob>) {
+        this.types = types;
+      }
+    }
+    Object.defineProperty(globalThis, "ClipboardItem", { configurable: true, value: FakeItem });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      writeText: vi.fn(),
+      write: vi.fn(async (items: FakeItem[]) => {
+        written.push(Object.fromEntries(await Promise.all(Object.entries(items[0]!.types).map(async ([type, blob]) => [type, await blob.text()]))));
+      }),
+    } });
+    render(<MarkdownText text={TABLE} />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy table" }));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(written).toEqual([{
+      "text/plain": "| Opción | Costo |\n| --- | ---: |\n| A | $0 |\n| B | $40 |",
+      "text/html": "<table><thead><tr><th>Opción</th><th>Costo</th></tr></thead><tbody><tr><td>A</td><td>$0</td></tr><tr><td>B</td><td>$40</td></tr></tbody></table>",
+    }]);
+  });
+
+  it("copy as text where the clipboard takes only text", async () => {
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<MarkdownText text={TABLE} />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy table" }));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("| Opción | Costo |\n| --- | ---: |\n| A | $0 |\n| B | $40 |");
+  });
+});
+

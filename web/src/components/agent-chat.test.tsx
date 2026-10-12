@@ -768,6 +768,19 @@ describe("AgentChat — history affordance", () => {
     }
   });
 
+  it("shows in Display only what changes the view on screen: the chat's size, or the mirror's settings", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+    renderChat({ agent, agents: [agent] });
+    await openMenuItem(user, "Display");
+    expect(screen.getByRole("radiogroup", { name: "Text size" })).toBeVisible();
+    expect(screen.queryByRole("switch", { name: "Wrap lines" })).not.toBeInTheDocument();
+    await openMenuItem(user, "Terminal view");
+    expect(screen.getByRole("switch", { name: "Wrap lines" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Increase font size" })).toBeVisible();
+    expect(screen.queryByRole("radiogroup", { name: "Text size" })).not.toBeInTheDocument();
+  });
+
   it("keeps the terminal switch in a desktop header, beside the ⋯, and no separate Agents button", async () => {
     const original = window.matchMedia;
     window.matchMedia = ((query: string) => ({ matches: query === "(min-width: 1024px)", media: query, onchange: null,

@@ -54,7 +54,7 @@
   .workbench-chat[data-view="terminal"] .workbench-composer { max-width: none; }
 }
 
-/* Display's Chat text (hooks/use-display-prefs.ts puts the choice on the root). The step is taken
+/* Display's Text size over the chat (hooks/use-display-prefs.ts puts the choice on the root). The step is taken
    from the root's own body size, so it follows the pointer and whatever index.css sets, and only the
    conversation's turns read it: the thread's, this device's pending ones and the queue's. Row titles
    elsewhere keep the app's body size. */

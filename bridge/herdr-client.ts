@@ -584,6 +584,16 @@ export class HerdrClient {
     return this.request<void>("tab.close", { tab_id: tabId });
   }
 
+  /**
+   * Reorder a tab within its workspace. `insertIndex` counts positions in the workspace's tab order
+   * BEFORE the tab is taken out (live-verified 2026-07-20, HERDR_API.md "Move methods"), so a move
+   * toward the end is the target's index + 1. Array order changes, `number` doesn't. Resolves on
+   * herdr's `tab_list` reply; the new order surfaces on the next snapshot. Bad id → `tab_not_found`.
+   */
+  moveTab(tabId: string, insertIndex: number): Promise<void> {
+    return this.request<void>("tab.move", { tab_id: tabId, insert_index: insertIndex });
+  }
+
   /** Reachability check for the connected/disconnected banner. */
   async ping(): Promise<boolean> {
     try {

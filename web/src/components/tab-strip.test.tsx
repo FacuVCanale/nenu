@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -332,5 +332,172 @@ describe("TabStrip — status on the chips", () => {
     for (const word of ["idle", "working", "done", "needs you"]) {
       expect(empty).not.toHaveTextContent(word);
     }
+  });
+});
+
+// Reordering by drag (ui/strip-reorder): jsdom lays nothing out, so the chips get the slots a strip of
+// three short names has (92px wide, 8px apart); the bench drags real ones (tabs-display-copy-shots).
+describe("TabStrip — dragging a tab to another place", () => {
+  const trio: TabView[] = [
+    { tabId: "w1:t1", workspaceId: "w1", number: 1, label: "one", focused: false, paneCount: 1 },
+    { tabId: "w1:t2", workspaceId: "w1", number: 2, label: "two", focused: false, paneCount: 1 },
+    { tabId: "w1:t3", workspaceId: "w1", number: 3, label: "three", focused: false, paneCount: 1 },
+  ];
+  const names = () => screen.getAllByRole("button").map((b) => b.textContent).filter((t) => t === "one" || t === "two" || t === "three");
+  const layOut = () => {
+    ["one", "two", "three"].forEach((name, i) => {
+      const chip = screen.getByRole("button", { name });
+      Object.defineProperty(chip, "offsetLeft", { configurable: true, value: i * 100 });
+      Object.defineProperty(chip, "offsetWidth", { configurable: true, value: 92 });
+    });
+    const scroller = screen.getByRole("button", { name: "one" }).closest(".strip-scroller")!;
+    scroller.getBoundingClientRect = () => ({ left: 0, right: 1000, top: 0, bottom: 32, width: 1000, height: 32, x: 0, y: 0, toJSON: () => ({}) });
+  };
+  const point = (pointerType: "mouse" | "touch", clientX: number, clientY = 16) => ({ pointerId: 1, pointerType, isPrimary: true, button: 0, clientX, clientY });
+  const draw = (props: Partial<Parameters<typeof TabStrip>[0]> = {}) =>
+    render(
+      <TabStrip workspaceId="w1" tabs={trio} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()}
+        onRenamed={vi.fn()} onClosed={vi.fn()} onMoved={vi.fn()} {...props} />,
+    );
+
+  afterEach(() => vi.useRealTimers());
+
+  it("moves a tab a mouse drags past its neighbours, before the tab it lands on", async () => {
+    const bodies: unknown[] = [];
+    let url = "";
+    server.use(http.post(/\/api\/tab\/[^/]+\/move$/, async ({ request }) => {
+      url = request.url;
+      bodies.push(await request.json());
+      return HttpResponse.json({ ok: true });
+    }));
+    const onMoved = vi.fn();
+    const onSelect = vi.fn();
+    draw({ onMoved, onSelect });
+    layOut();
+    const one = screen.getByRole("button", { name: "one" });
+    fireEvent.pointerDown(one, point("mouse", 46));
+    fireEvent.pointerMove(one, point("mouse", 60));
+    fireEvent.pointerMove(one, point("mouse", 260));
+    fireEvent.pointerUp(one, point("mouse", 260));
+    fireEvent.click(one);
+
+    expect(names()).toEqual(["two", "three", "one"]);
+    await waitFor(() => expect(onMoved).toHaveBeenCalledOnce());
+    expect(url).toContain("/api/tab/w1%3At1/move");
+    expect(bodies).toEqual([{ before: null }]);
+    // The click that ends a drag is not a tap on the tab.
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("puts the tab back where it was when Herdr refuses the move", async () => {
+    server.use(http.post(/\/api\/tab\/[^/]+\/move$/, () => HttpResponse.json({ ok: false, error: "tab_not_found" })));
+    const onMoved = vi.fn();
+    draw({ onMoved });
+    layOut();
+    const three = screen.getByRole("button", { name: "three" });
+    fireEvent.pointerDown(three, point("mouse", 246));
+    fireEvent.pointerMove(three, point("mouse", 100));
+    fireEvent.pointerUp(three, point("mouse", 100));
+    expect(names()).toEqual(["one", "three", "two"]);
+    await waitFor(() => expect(names()).toEqual(["one", "two", "three"]));
+    expect(onMoved).not.toHaveBeenCalled();
+  });
+
+  it("lifts a tab a finger holds, and opens its actions when the finger lets go in place", () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    draw({ onSelect });
+    layOut();
+    const two = screen.getByRole("button", { name: "two" });
+    fireEvent.pointerDown(two, point("touch", 146));
+    act(() => { vi.advanceTimersByTime(450); });
+    expect(two).toHaveAttribute("data-lifted");
+    fireEvent.pointerUp(two, point("touch", 147));
+    fireEvent.click(two);
+    expect(screen.getByRole("dialog", { name: "two" })).toBeInTheDocument();
+    expect(two).not.toHaveAttribute("data-lifted");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("leaves a finger that slides before the hold to scroll the strip", () => {
+    vi.useFakeTimers();
+    draw();
+    layOut();
+    const two = screen.getByRole("button", { name: "two" });
+    fireEvent.pointerDown(two, point("touch", 146));
+    fireEvent.pointerMove(two, point("touch", 120));
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(two).not.toHaveAttribute("data-lifted");
+    fireEvent.pointerUp(two, point("touch", 120));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // The phone saw [one, two, three] while Herdr already had [two, one, three]; "three before one"
+  // lands as [two, three, one]. The drop's order must give way to whatever Herdr says next.
+  it("shows Herdr's order once it answers, even when the drop was made on an older one", async () => {
+    server.use(http.post(/\/api\/tab\/[^/]+\/move$/, () => HttpResponse.json({ ok: true })));
+    const onMoved = vi.fn();
+    const props = { workspaceId: "w1", agents: [], selected: "w1:t1", onSelect: vi.fn(), onNewTab: vi.fn(), onRenamed: vi.fn(), onClosed: vi.fn(), onMoved };
+    const [one, two, three] = trio;
+    const view = render(<TabStrip {...props} tabs={[one, two, three]} />);
+    layOut();
+    const chip = screen.getByRole("button", { name: "three" });
+    fireEvent.pointerDown(chip, point("mouse", 246));
+    fireEvent.pointerMove(chip, point("mouse", 230));
+    fireEvent.pointerMove(chip, point("mouse", 20));
+    fireEvent.pointerUp(chip, point("mouse", 20));
+    expect(names()).toEqual(["three", "one", "two"]);
+    await waitFor(() => expect(onMoved).toHaveBeenCalledOnce());
+    view.rerender(<TabStrip {...props} tabs={[two, three, one]} />);
+    expect(names()).toEqual(["two", "three", "one"]);
+    view.rerender(<TabStrip {...props} tabs={[one, two, three]} />);
+    expect(names()).toEqual(["one", "two", "three"]);
+  });
+
+  // A thumb drifts 10-15px during a deliberate hold (use-long-press.ts); short of a scroll, that hold
+  // still opens the actions, and the jitter after the lift is no drag.
+  it("opens the actions of a hold whose finger drifted before the lift", () => {
+    vi.useFakeTimers();
+    draw();
+    layOut();
+    const two = screen.getByRole("button", { name: "two" });
+    fireEvent.pointerDown(two, point("touch", 146, 16));
+    fireEvent.pointerMove(two, point("touch", 146, 28));
+    act(() => { vi.advanceTimersByTime(450); });
+    fireEvent.pointerMove(two, point("touch", 149, 29));
+    fireEvent.pointerUp(two, point("touch", 149, 29));
+    fireEvent.click(two);
+    expect(screen.getByRole("dialog", { name: "two" })).toBeInTheDocument();
+  });
+
+  it("moves a tab one place from its actions, and offers no way past either end", async () => {
+    const bodies: unknown[] = [];
+    server.use(http.post(/\/api\/tab\/[^/]+\/move$/, async ({ request }) => {
+      bodies.push(await request.json());
+      return HttpResponse.json({ ok: true });
+    }));
+    const user = userEvent.setup();
+    draw();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "one" }));
+    expect(screen.queryByRole("button", { name: "Move left" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Move right" }));
+    expect(names()).toEqual(["two", "one", "three"]);
+    await waitFor(() => expect(bodies).toEqual([{ before: "w1:t3" }]));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "three" }));
+    expect(screen.queryByRole("button", { name: "Move right" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Move left" })).toBeInTheDocument();
+  });
+
+  it("doesn't drag, or offer a move, on a device that can't write", () => {
+    draw({ readOnly: true });
+    layOut();
+    const one = screen.getByRole("button", { name: "one" });
+    expect(one).not.toHaveAttribute("data-reorder-key");
+    fireEvent.pointerDown(one, point("mouse", 46));
+    fireEvent.pointerMove(one, point("mouse", 200));
+    fireEvent.pointerUp(one, point("mouse", 200));
+    expect(names()).toEqual(["one", "two", "three"]);
+    fireEvent.contextMenu(one);
+    expect(screen.queryByRole("button", { name: "Move right" })).toBeNull();
   });
 });

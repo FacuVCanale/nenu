@@ -10,7 +10,7 @@ import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
 import { paneReadResponse } from "./routes/pane.ts";
 import { keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
 import { cacheControlFor, isReservedAuthPath, resolveStaticPath, staticContentType } from "./routes/static.ts";
-import { normalizeTabLabel } from "./routes/structure.ts";
+import { normalizeTabLabel, tabInsertIndex } from "./routes/structure.ts";
 import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import { AuditLog } from "./audit.ts";
 import type { Config } from "./config.ts";
@@ -999,6 +999,34 @@ describe("normalizeTabLabel", () => {
     expect(normalizeTabLabel(null)).toEqual({ ok: false, error: "bad label" });
     expect(normalizeTabLabel(42)).toEqual({ ok: false, error: "bad label" });
     expect(normalizeTabLabel(undefined)).toEqual({ ok: false, error: "bad label" });
+  });
+});
+
+// Nenu names where a dragged tab lands by the tab it now sits before (null = the end); Herdr's
+// `tab.move` takes an insert_index counted in the workspace's PRE-removal order (HERDR_API.md), so
+// moving toward the end is the anchor's own index, never one less.
+describe("tabInsertIndex", () => {
+  const tabs = [
+    { tab_id: "w1:t1", workspace_id: "w1" },
+    { tab_id: "w2:t1", workspace_id: "w2" },
+    { tab_id: "w1:t2", workspace_id: "w1" },
+    { tab_id: "w1:t3", workspace_id: "w1" },
+  ];
+
+  test("counts positions within the tab's own workspace, in Herdr's array order", () => {
+    expect(tabInsertIndex(tabs, "w1:t3", "w1:t1")).toEqual({ ok: true, index: 0 });
+    expect(tabInsertIndex(tabs, "w1:t3", "w1:t2")).toEqual({ ok: true, index: 1 });
+  });
+
+  test("moves toward the end by the anchor's pre-removal index, and to the end with null", () => {
+    expect(tabInsertIndex(tabs, "w1:t1", "w1:t3")).toEqual({ ok: true, index: 2 });
+    expect(tabInsertIndex(tabs, "w1:t1", null)).toEqual({ ok: true, index: 3 });
+  });
+
+  test("refuses an unknown tab, an anchor in another workspace and the tab itself", () => {
+    expect(tabInsertIndex(tabs, "w9:t1", null)).toEqual({ ok: false, error: "tab w9:t1 not found" });
+    expect(tabInsertIndex(tabs, "w1:t1", "w2:t1")).toEqual({ ok: false, error: "before must be another tab in the same workspace" });
+    expect(tabInsertIndex(tabs, "w1:t1", "w1:t1")).toEqual({ ok: false, error: "before must be another tab in the same workspace" });
   });
 });
 

@@ -6,8 +6,8 @@ import { useChatText } from "@/hooks/use-display-prefs";
 
 const prefs = { wrap: true, fontSize: 12, rawTerminal: false, tapToFocus: true };
 
-function renderDock() {
-  return render(<DisplayPrefsContent prefs={prefs} setWrap={vi.fn()} stepFontSize={vi.fn()} setTapToFocus={vi.fn()} />);
+function renderDock(surface: "chat" | "terminal") {
+  return render(<DisplayPrefsContent surface={surface} prefs={prefs} setWrap={vi.fn()} stepFontSize={vi.fn()} setTapToFocus={vi.fn()} />);
 }
 
 describe("DisplayPrefsContent", () => {
@@ -18,10 +18,16 @@ describe("DisplayPrefsContent", () => {
     act(() => result.current[1]("default"));
   });
 
-  it("offers Chat text as Small, Default and Large, and the pick sizes the conversation", async () => {
+  // 0.65.0 offered the mirror's Wrap lines, Tap to type and Text size over the chat too, where none
+  // of them changes anything on screen (bench: tabs-display-copy-shots/repro.ts). A chat's Display
+  // holds only what sizes the chat.
+  it("over the chat, offers its Text size as Small, Default and Large, and the pick sizes the conversation", async () => {
     const user = userEvent.setup();
-    renderDock();
-    const group = screen.getByRole("radiogroup", { name: "Chat text" });
+    renderDock("chat");
+    expect(screen.queryByRole("switch", { name: "Wrap lines" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Tap to type" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Increase font size" })).toBeNull();
+    const group = screen.getByRole("radiogroup", { name: "Text size" });
     const sizes = within(group).getAllByRole("radio");
     expect(sizes.map((radio) => radio.textContent)).toEqual(["Small", "Default", "Large"]);
     expect(within(group).getByRole("radio", { name: "Default" })).toHaveAttribute("aria-checked", "true");
@@ -32,12 +38,11 @@ describe("DisplayPrefsContent", () => {
     expect(document.documentElement.dataset.chatText).toBe("large");
   });
 
-  it("puts the mirror's own settings under Terminal view", () => {
-    renderDock();
-    const terminal = screen.getByRole("region", { name: "Terminal view" });
-    expect(within(terminal).getByRole("switch", { name: "Wrap lines" })).toBeInTheDocument();
-    expect(within(terminal).getByRole("switch", { name: "Tap to type" })).toBeInTheDocument();
-    expect(within(terminal).getByRole("button", { name: "Decrease font size" })).toBeInTheDocument();
-    expect(within(terminal).queryByRole("radiogroup", { name: "Chat text" })).toBeNull();
+  it("over the terminal, offers the mirror's own settings and not the chat's size", () => {
+    renderDock("terminal");
+    expect(screen.getByRole("switch", { name: "Wrap lines" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Tap to type" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Decrease font size" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 });
