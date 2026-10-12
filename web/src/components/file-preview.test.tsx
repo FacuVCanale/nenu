@@ -396,6 +396,24 @@ describe("image viewer", () => {
     await waitFor(() => expect(viewer).toHaveAttribute("data-chrome", "shown"));
   });
 
+  // CSS cuts a title at its end, which hid the extension: the picture's name is cut in the middle to
+  // the bar's measured width, like a document's.
+  it("cuts a long picture name in the middle, keeping its extension", () => {
+    const width = vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+      return this.classList.contains("image-viewer-title") ? 160 : 0;
+    });
+    const measure = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 8 }) } as unknown as CanvasRenderingContext2D);
+    try {
+      const name = "screenshot-2026-10-12-at-14.03.22.png";
+      render(<FilePreview paneId="w1:p1" path={`/repo/shots/${name}`} onClose={() => {}} />);
+      expect(screen.getByRole("heading", { name })).toHaveTextContent(/^screenshot-…3\.22\.png$/);
+    } finally {
+      width.mockRestore();
+      measure.mockRestore();
+    }
+  });
+
   // The stage holds the pointer capture, so every pointerup names the stage as its target: a click on
   // the picture read as one beside it and closed the viewer halfway through a double click.
   it("zooms on a double click on the picture on a desk, and stays open", () => {
