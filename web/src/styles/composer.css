@@ -29,7 +29,7 @@
 @starting-style { .composer-fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
 /* The + leads the box: a 32px circle at the draft's last line, its column spanning the box so the
    menu it opens hangs above the box, never over the draft. */
-.composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out; }
+.composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s; }
 .composer-plus { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; color: var(--muted-foreground); background: var(--muted); transition: color 150ms ease-out, background-color 150ms ease-out, scale 120ms ease-out; }
 .composer-plus[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
 .composer-plus:active { scale: 0.96; }
@@ -77,12 +77,15 @@
   /* While typing, the model and background-work row gives its height back to the thread. */
   .workbench-chat[data-keyboard-open] .composer-meta { display: none; }
   /* …and a typed draft gets the +'s width, so it wraps no sooner than it did without one; the + is
-     back as soon as the box is empty or the keyboard goes down. */
-  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; }
+     back as soon as the box is empty or the keyboard goes down. The draft's inset moves with the
+     column, so the text slides over as one piece, and the + is hidden only once it has faded. */
+  .workbench-chat[data-keyboard-open] .composer-input { transition: padding-left 150ms ease-out; }
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s 150ms; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .composer-plus, .composer-lead { transition: none; }
+  .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }
   .composer-fold { transition: opacity 120ms ease-out; }
   .composer-plus:active { scale: none; }
 }
