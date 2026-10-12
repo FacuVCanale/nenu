@@ -1224,11 +1224,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         )}
 
-        {/* Stop lives on the row that says the agent is working, for the whole turn, and never in the
-            Send slot: a draft appearing or clearing must not move the target under the thumb. */}
+        {/* Stop lives on the row above the box for the whole turn, and never in the Send slot: a draft
+            appearing or clearing must not move the target under the thumb. The conversation's live
+            turn already says "Working for …" just above, so only the terminal view repeats it here. */}
         {stop.offered && (
           <div role="group" aria-label="Agent working" className="composer-working">
-            <WorkActivityLabel startedAt={workingSince} />
+            {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
             <StopControl stop={stop} disabled={locked} />
           </div>
         )}
