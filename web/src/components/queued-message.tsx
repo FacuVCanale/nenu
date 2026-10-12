@@ -61,6 +61,9 @@ export function QueuedMessage({
 }) {
   const { text: prose, images } = splitMessageImages(text);
   const [open, setOpen] = useState(false);
+  // The message started going (or went) while its menu was open: the ⋯ is gone, so is its menu, and
+  // it stays closed if the ⋯ comes back.
+  if (open && !menu.length) setOpen(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const queued = tone === "waiting";
   // The badge already says it is queued; the status copy's own "Queued." would repeat it.
