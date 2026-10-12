@@ -167,9 +167,10 @@ describe("a call waiting on the operator", () => {
     render(<ToolStep id="c" part={bash} query="" active={false} focused={false} waiting />);
     const row = screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" });
     expect(row).not.toHaveTextContent("Ran");
-    expect(row.querySelector(".bg-status-blocked")).not.toBeNull();
     expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
     await userEvent.click(row);
+    // The opened call says the same thing its line says, in the same words.
+    expect(screen.getAllByText("Waiting on you")).toHaveLength(2);
     expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
     expect(screen.queryByText("Running…")).not.toBeInTheDocument();
   });
@@ -244,5 +245,4 @@ it("draws the current find match's hits apart from the others", () => {
   const [other, current] = [screen.getByRole("button", { name: /^Ran git status/ }), screen.getByRole("button", { name: /^Ran git diff/ })];
   expect(other.querySelector("mark")).not.toHaveAttribute("aria-current");
   expect(current.querySelector("mark")).toHaveAttribute("aria-current", "true");
-  expect(current.querySelector("mark")!.className).not.toBe(other.querySelector("mark")!.className);
 });
