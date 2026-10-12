@@ -17,7 +17,7 @@ import { rowsFor } from "@/lib/operator-scope";
 import type { OperatorQuickReplyRow } from "@/lib/types";
 
 export interface QuickReplyGroup {
-  /** Lowercase section label shown above the grid. */
+  /** The group's name above its pills, shown as written: the shipped ones are sentence case. */
   title: string;
   /** The literal strings sent — each is typed into the pane and submitted verbatim. */
   items: readonly string[];
@@ -26,15 +26,15 @@ export interface QuickReplyGroup {
 // Shared by every LLM harness. Deduped to distinct intents: no yes/ok/approve/go-ahead pile-up, and
 // no "stop" that just duplicates Esc in the Keys pad.
 const AGENT: readonly QuickReplyGroup[] = [
-  { title: "confirm", items: ["yes", "no"] },
-  { title: "common", items: ["continue", "commit and push", "retry", "skip"] },
+  { title: "Confirm", items: ["yes", "no"] },
+  { title: "Common", items: ["continue", "commit and push", "retry", "skip"] },
 ];
 
 // A bare shell has no notion of continuing or skipping a turn — the only near-universal one-tap
 // replies are the classic Unix y/n confirmations, so that's all it gets. An almost-empty dock is the
 // honest answer here; padding it with agent phrases would just be four buttons that do nothing
 // useful when tapped.
-const SHELL: readonly QuickReplyGroup[] = [{ title: "confirm", items: ["y", "n"] }];
+const SHELL: readonly QuickReplyGroup[] = [{ title: "Confirm", items: ["y", "n"] }];
 
 // Per-agent overrides. Empty today by design — every known harness takes the shared AGENT set, and
 // this map exists so the FIRST real divergence is a data edit here rather than a refactor of the
