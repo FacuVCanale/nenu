@@ -14,18 +14,15 @@ import { useNavigate, useRevalidator } from "react-router";
 import { ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare } from "lucide-react";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { agentName } from "@/hooks/use-message-queue";
-import { useSwipeUp } from "@/hooks/use-swipe";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
 import { openNewAgent, useSpawnState } from "@/lib/spawn";
-import { useDashPrefs, openForCount } from "@/hooks/use-dash-prefs";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
-import { BottomSheet } from "@/components/ui/sheet";
 import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useKeyboardOpen } from "@/hooks/use-keyboard";
@@ -56,7 +53,6 @@ import { dismissModelPicker } from "@/lib/dismiss-model-picker";
 import { waitForModelAction } from "@/lib/wait-for-model-action";
 import { commandsFor } from "@/lib/agent-commands";
 import { useOperatorCommands } from "@/lib/operator-config";
-import { ThreadSidebar } from "@/components/agent-sidebar";
 import { TabStrip } from "@/components/tab-strip";
 import { PaneStrip } from "@/components/pane-strip";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
@@ -71,11 +67,13 @@ import type { PreviewBlockAction } from "@/components/preview-select-block";
 import { type MenuBlockAction } from "@/components/menu-block";
 import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
+import { displayName, displayPlace } from "@/lib/display-name";
+import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath } from "@/lib/nav";
 import { paneInTab } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
-import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, TabView, PaneReadResponse } from "@/lib/types";
+import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
   MenuModel,
   MultiSelectModel,
@@ -84,7 +82,7 @@ import type {
   WizardModel,
 } from "@/lib/blocks";
 
-/** The chat title's box, whether it opens the project's page or has nothing to open. */
+/** The chat title's box, whether it opens the navigation, the project's page or nothing. */
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
@@ -101,8 +99,8 @@ interface AgentChatProps {
   agents: AgentView[];
   shellPanes: AgentView[];
   tabs: TabView[];
-  /** Label of the pane's tab, shown in the header as "space › tab". */
-  tabLabel?: string;
+  /** The herd's projects, so the title and the pane strip name a project's thread as every row does. */
+  projects?: readonly ProjectView[];
   /** Owning project, when this pane is one of its coordinator/agent threads; `role` picks the composer copy. */
   project?: { slug: string; name: string; role: ProjectThreadView["role"] };
   /** Header title override; a project frame names the thread this pane runs. */
@@ -153,17 +151,12 @@ export interface DockedChat {
   onMirrorShown: (shown: boolean) => void;
 }
 
-// At most one drawer/sheet is open at a time; null = none. (The composer's own Keys/Quick/Agent
-// sheets are separate and live inside <Composer>.)
-type Drawer = "switcher" | null;
-
 // The detail view mirrors a terminal pane, NOT a chat thread. The pane's output comes from the
 // route loader (`text`); polling revalidates it. Replies/keys are confirmed via the header status
 // line (`setStatus`), then a revalidation pulls the fresh output.
 //
 // This shell owns the pane frame: the header (the find bar takes it over while find is open), the
-// terminal mirror (freeze, find highlighting, load-older scrollback), and navigation (the nav hub +
-// swipe-up switcher). The composer cluster — draft, send, keys, quick actions, slash-commands, image
+// terminal mirror (freeze, find highlighting, load-older scrollback), and the way back. The composer cluster — draft, send, keys, quick actions, slash-commands, image
 // upload, display prefs, and the find-in-output trigger — lives in <Composer>; it reaches back here
 // only to re-follow the tail after a send, focus on a mirror tap, and open find (which freezes the tail).
 export function AgentChat({
@@ -173,7 +166,7 @@ export function AgentChat({
   agents,
   shellPanes,
   tabs,
-  tabLabel,
+  projects,
   project,
   title: titleOverride,
   headerAction,
@@ -218,10 +211,6 @@ export function AgentChat({
   const lock = lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
   const refusedWrite = lock === "refused" ? "Access refused. Sign in again." : "Read-only — device not authorised";
 
-  // Drawers/sheets are mutually exclusive — at most one open. A single value makes that invariant
-  // unrepresentable to violate.
-  const [drawer, setDrawer] = useState<Drawer>(null);
-  const closeDrawer = () => setDrawer(null);
   const listRef = useRef<ChatMessageListHandle>(null);
   const composerRef = useRef<ComposerHandle>(null);
   // The header keeps one ⋯ on a phone; a desktop also shows the terminal switch.
@@ -256,14 +245,6 @@ export function AgentChat({
   const modelAvailable = commandsFor(agent?.agent, operatorCommands).some((c) => c.command === "/model" && !c.dangerous);
 
   const gone = !agent;
-
-  // Swipe up (or just tap) the handle above the composer to bring up the pane switcher. A lowish
-  // threshold + a taller hit area (below) make the gesture easy to land with a thumb; tapping is the
-  // reliable fallback. "Up" naturally reveals a bottom sheet without fighting the mirror's scroll.
-  const swipe = useSwipeUp(() => setDrawer("switcher"), 24);
-  // Fold state for the "Switch pane" sheet's two long tails, shared with the dashboard so one
-  // "hide the long tail" preference means the same thing in both places.
-  const dash = useDashPrefs();
 
   // Mirror freeze: at the bottom we follow live output; the moment you scroll up to read backscroll
   // we hold the text steady (no reflow / no re-pin) until you jump back to latest — so a long
@@ -806,10 +787,9 @@ export function AgentChat({
   // keyboard and cover the output. You read the pane first, then tap the input to type. (Explicit
   // actions inside the composer still focus it; the mirror tap focuses it via composerRef.)
 
-  // Switch to another thread from the sidebar or the swipe-up switcher (DetailRoute keys AgentChat
-  // by pane, so this remounts fresh — composer resets — same as opening from home).
+  // Switch to another pane from the strips (DetailRoute keys AgentChat by pane, so this remounts
+  // fresh — composer resets — same as opening from home).
   function switchTo(id: string) {
-    closeDrawer();
     if (id !== paneId) onSelect(id);
   }
 
@@ -823,7 +803,6 @@ export function AgentChat({
   // A project pane's title opens the project's page. A workspace has no page of its own: its tabs
   // and panes are the strips above the conversation.
   function openProject(slug: string) {
-    closeDrawer();
     navigate(projectPath(slug, session));
   }
 
@@ -916,11 +895,9 @@ export function AgentChat({
       }} />}
     detail={processDetail} detailContent={processDetailContent} detailName={processDetail ? detailTitle(processDetail, activity) : undefined}
     onBack={() => setProcessDetail(null)} />;
-  const title = titleOverride ??
-    project?.name ??
-    agent?.paneLabel ??
-    agent?.sessionName ??
-    (agent ? `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}` : "");
+  // The pane's one name, as its row in the sidebar and Home say it, and where it lives under it.
+  const title = titleOverride ?? (agent ? displayName(agent, projects) : "");
+  const place = agent && displayPlace(agent, projects);
 
   const findBar = findOpen ? (
     <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch}
@@ -932,22 +909,37 @@ export function AgentChat({
   const actionsMenu = agent && !subagent ? <ConversationActions
     groups={[{ label: "View", actions: viewActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
+    folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;
 
-  const titleLabel = agent && <>
-    {isShell
-      ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-      : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
-    <div className="min-w-0 flex-1">
-      <div className="truncate text-[15px] font-semibold leading-tight lg:text-sm">
-        {title}
-        {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
-      </div>
-      <div className="hidden truncate font-mono text-[11px] leading-tight text-muted-foreground lg:block">
-        {shortCwd(agent.cwd)}
-      </div>
-    </div>
-  </>;
+  // On a phone the title opens the navigation the brand mark used to, where every workspace, tab and
+  // pane is a tap away; a desk keeps that in the sidebar. A project's title opens its page instead.
+  const navigation = useContext(WorkbenchNavigationContext);
+  const opensNavigation = !desktop && navigation !== undefined;
+  // Herdr answering nothing blocks the composer at once, so the header says so at once too, in the
+  // place line, before the outage notice's grace runs out.
+  const herdrSilent = lock === "herdr";
+  const titleLabel = agent && <span className="flex min-w-0 flex-1 flex-col">
+    <span className="flex min-w-0 items-center gap-1">
+      <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
+      {!project && opensNavigation && <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
+      {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
+    </span>
+    {/* The place, never the folder: the folder sits in the ⋯ menu and in this line's tooltip. The
+        place gives up width first, so the tab that tells two chats apart survives. */}
+    <span data-chat-subtitle title={agent.cwd || undefined} className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
+      {herdrSilent ? <>
+        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-destructive" />
+        <span className="truncate">Herdr isn't responding</span>
+      </> : <>
+        {isShell
+          ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" />
+          : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
+        <span className="min-w-0 truncate">{place?.place}</span>
+        {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
+      </>}
+    </span>
+  </span>;
 
   return (
     <div
@@ -962,7 +954,7 @@ export function AgentChat({
         find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
         bridge={bridge}
         error={error}
-        onHome={onBack}
+        back={{ label: "Home", onClick: onBack }}
         override={findBar}
         rightLead={
           agent ? (
@@ -986,9 +978,9 @@ export function AgentChat({
           ) : headerAction
         }
       >
-        {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. In a
-            project, tapping it opens the project's page. */}
-        {agent ? (project ? (
+        {/* The screen's heading: the pane's name over its place. A project's title opens the
+            project's page; any other opens the navigation on a phone. */}
+        {agent ? <h1 className="flex min-w-0 flex-1">{project ? (
           <button
             type="button"
             onClick={() => openProject(project.slug)}
@@ -997,7 +989,18 @@ export function AgentChat({
           >
             {titleLabel}
           </button>
-        ) : <div className={TITLE_SHAPE}>{titleLabel}</div>) : (
+        ) : opensNavigation ? (
+          <button
+            type="button"
+            data-chat-title
+            aria-haspopup="dialog"
+            aria-expanded={navigation.open}
+            onClick={navigation.onOpen}
+            className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
+          >
+            {titleLabel}
+          </button>
+        ) : <span className={TITLE_SHAPE}>{titleLabel}</span>}</h1> : (
           <div className="min-w-0 flex-1 px-1">
             <span className="truncate font-semibold">(agent gone)</span>
           </div>
@@ -1164,23 +1167,6 @@ export function AgentChat({
             </p>
           )}
 
-          {/* Swipe-up / tap handle for the quick pane switcher — the sheet that switches AND closes
-              panes (each row has a ✕). A tall, full-width hit area so the swipe is easy to land (and a
-              tap always works). Shown whenever a pane is open — even the last one, so it stays
-              closable now that the nav drawer is gone. `touch-none` so the gesture is ours, not a
-              browser scroll. */}
-          {!showConversation && agents.length + shellPanes.length > 0 && (
-            <button
-              type="button"
-              aria-label="Switch pane"
-              {...swipe}
-              onClick={() => setDrawer("switcher")}
-              className="flex w-full touch-none items-center justify-center py-3.5 transition-colors active:bg-muted/50"
-            >
-              <span className="h-1.5 w-12 rounded-full bg-muted-foreground/50" />
-            </button>
-          )}
-
           {/* The agent's statusline, re-surfaced as app chrome (its branch/model/ctx/permission mode
               would otherwise vanish with the stripped input box). Sits directly above the composer,
               as it did in the TUI. Verbatim text — React text nodes, so no XSS surface.
@@ -1267,23 +1253,6 @@ export function AgentChat({
       {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
       </div>
 
-      {/* Swipe-up quick switcher — just the panes (agents + shells), reached by the thumb gesture.
-          Switch-only: pane closing lives in the pane pill's long-press sheet, not here. */}
-      <BottomSheet open={drawer === "switcher"} onClose={closeDrawer} title="Switch pane">
-        <ThreadSidebar
-          agents={agents}
-          shellPanes={shellPanes}
-          currentPaneId={paneId}
-          onSelect={switchTo}
-          recentOpen={dash.prefs.recentOpen}
-          onRecentOpenChange={dash.setRecentOpen}
-          // Shells fold on the same count rule Spaces uses: on a herd with dozens of bare shells
-          // they'd otherwise bury the agents you opened this sheet to reach.
-          shellsOpen={openForCount(dash.prefs.shellsOpen, shellPanes.length)}
-          onShellsOpenChange={dash.setShellsOpen}
-          className="px-0 py-1"
-        />
-      </BottomSheet>
     </div>
   );
 }

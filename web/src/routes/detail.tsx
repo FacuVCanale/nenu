@@ -6,7 +6,7 @@ import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame"
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
-import { paneAfterClose, tabName } from "@/lib/spaces";
+import { paneAfterClose } from "@/lib/spaces";
 import { setStatus } from "@/lib/status";
 import type { AgentView, TabView } from "@/lib/types";
 
@@ -44,8 +44,6 @@ export function DetailRoute() {
   const seen = lastListed.current?.pane.paneId === paneId;
 
   const agent = listed ?? (fresh && fresh.paneId === paneId && !seen ? fresh : undefined);
-  const tab = root.tabs.find((t) => t.tabId === agent?.tabId);
-  const tabLabel = tab && tabName(tab.label, root.tabs.filter((t) => t.workspaceId === tab.workspaceId).indexOf(tab) + 1);
   const owner = projectForPane(root.projects, paneId);
   const project = owner?.project;
   const gone = !agent;
@@ -74,7 +72,7 @@ export function DetailRoute() {
       agents={root.agents}
       shellPanes={root.shellPanes}
       tabs={root.tabs}
-      tabLabel={tabLabel}
+      projects={root.projects}
       text={pane.text}
       nativeTelemetry={pane.nativeTelemetry}
       requestedLines={pane.requestedLines}

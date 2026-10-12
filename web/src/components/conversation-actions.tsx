@@ -21,10 +21,12 @@ export interface ConversationActionGroup {
 interface Props {
   groups: ConversationActionGroup[];
   recovery?: ReactNode;
+  /** The pane's folder, as a quiet line at the foot of the menu: the header names the place instead. */
+  folder?: string;
 }
 
 /** The pane's one ⋯ menu: the pane's views, grouped and named when there is more than one group. */
-export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery }, ref) {
+export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery, folder }, ref) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   useImperativeHandle(ref, () => trigger.current!, []);
@@ -40,6 +42,7 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
         <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-sm lg:min-h-8 lg:text-[13px]">Change connected conversation</summary>
         {recovery}
       </details>}
+      {folder && <p className="mt-1 truncate border-t border-border/60 px-2.5 pt-2 pb-1 font-mono text-caption text-muted-foreground" title={folder}>{folder}</p>}
     </WorkbenchPopover>
   </>;
 });
