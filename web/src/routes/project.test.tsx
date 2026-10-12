@@ -75,10 +75,10 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "coordinator");
 
-  // Cards under the conversation: Merge only where Organizations says nothing blocks it.
+  // Cards under the conversation: Merge only where Organizations says nothing blocks it, named as the PR list names it.
   const cards = within(screen.getByRole("region", { name: "Threads" }));
-  expect(within(cards.getByRole("article", { name: "Docs" })).getByRole("button", { name: "Merge it" })).toBeInTheDocument();
-  expect(within(cards.getByRole("article", { name: "Build" })).queryByRole("button", { name: "Merge it" })).not.toBeInTheDocument();
+  expect(within(cards.getByRole("article", { name: "Docs" })).getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
+  expect(within(cards.getByRole("article", { name: "Build" })).queryByRole("button", { name: /^Merge/ })).not.toBeInTheDocument();
 
   const tabs = within(screen.getByRole("tablist", { name: "Project" }));
   await user.click(tabs.getByRole("tab", { name: /Threads/ }));
@@ -109,7 +109,7 @@ it("merges a thread's PR from its card only after confirming", async () => {
   let posted: unknown;
   server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
   const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-  await user.click(await screen.findByRole("button", { name: "Merge it" }));
+  await user.click(await screen.findByRole("button", { name: "Merge Docs" }));
   expect(posted).toBeUndefined();
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
@@ -166,6 +166,7 @@ describe("a wide screen beside the project panel", () => {
     await user.click(panel.getByRole("tab", { name: "PRs" }));
     // Merge only where Organizations says nothing blocks it.
     expect(panel.queryByRole("button", { name: "Merge Build" })).not.toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
     await user.click(panel.getByRole("button", { name: "Merge Docs" }));
     expect(posted).toBeUndefined();
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
