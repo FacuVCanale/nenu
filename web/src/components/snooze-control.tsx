@@ -51,6 +51,7 @@ function untilLabel(deadline: number, now: number): string {
 export function SnoozeControl({ snoozedUntil }: { snoozedUntil: number | null }) {
   const revalidator = useRevalidator();
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const now = Date.now();
   const snoozed = snoozedUntil !== null && snoozedUntil > now;
   const value = snoozed ? untilLabel(snoozedUntil, now) : "Off";
@@ -59,9 +60,13 @@ export function SnoozeControl({ snoozedUntil }: { snoozedUntil: number | null })
     const deadline = deadlineFor(choice, Date.now());
     if (deadline === undefined) return;
     setBusy(true);
+    setFailed(false);
     try {
       await setSnooze(deadline);
       revalidator.revalidate();
+    } catch {
+      // The select snaps back to the live state on its own; say why nothing changed.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -76,14 +81,21 @@ export function SnoozeControl({ snoozedUntil }: { snoozedUntil: number | null })
       )}
     >
       {/* The select carries the name and the value for assistive tech; these are its face. */}
-      <span aria-hidden="true" className="min-w-0 flex-1 text-body">
-        Do not disturb
+      <span className="min-w-0 flex-1">
+        <span aria-hidden="true" className="block text-body">
+          Do not disturb
+        </span>
+        {failed && (
+          <span role="alert" className="block text-footnote text-destructive">
+            Couldn't save. Try again.
+          </span>
+        )}
       </span>
       <span aria-hidden="true" className="shrink-0 text-body text-muted-foreground tabular-nums">
         {value}
       </span>
       {busy ? (
-        <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground" />
+        <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
       ) : (
         <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-subtle-foreground" />
       )}
