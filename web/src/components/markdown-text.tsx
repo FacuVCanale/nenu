@@ -5,6 +5,7 @@ import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
 import { cn } from "@/lib/utils";
+import { CodeBlock } from "./code-block";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
 // NODE — there is no `dangerouslySetInnerHTML` here and there must never be one. That is the repo's
@@ -150,9 +151,9 @@ function Block({ block }: { block: MdBlock }) {
     }
     case "code":
       return (
-        <pre className="overflow-x-auto rounded-md border bg-muted/50 px-2 py-1.5 font-mono text-[11px] leading-snug">
+        <CodeBlock lang={block.lang} text={block.text}>
           <Hit text={block.text} />
-        </pre>
+        </CodeBlock>
       );
     case "list": {
       const Tag = block.ordered ? "ol" : "ul";
