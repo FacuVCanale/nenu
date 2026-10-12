@@ -55,7 +55,7 @@ const EXPECTED: Record<string, string> = {
   "claude--v2285-ask-question.txt": "question: Apple=neutral | Banana=neutral | Chat about this=deny | Type something.=freeText",
   "claude--v2285-ask-wizard.txt": "wizard: Apple=neutral | Banana=neutral | Chat about this=deny | Next=nav",
   "claude--wizard-multiselect-checked.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
-  "claude--wizard-multiselect-final.txt": "multi-select: Garlic knots=neutral | Caesar salad=neutral | Dipping sauces=neutral | Submit=primary | Chat about this=deny | Back=nav",
+  "claude--wizard-multiselect-final.txt": "multi-select: Garlic knots=neutral | Caesar salad=neutral | Dipping sauces=neutral | Submit=primary | Chat about this=deny",
   "claude--wizard-multiselect-pointer-next.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
   "claude--wizard-multiselect-q1.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
   "claude--wizard-preview-note-attached.txt": "question: Grid=neutral | List=neutral",
@@ -687,6 +687,10 @@ describe("Interactions.answer", () => {
     expect((await answer({ signature: card.signature, optionIndex: back.index })).keys).toEqual(["Left"]);
     expect(pane.log.keys).toEqual([["Left"]]);
     expect(pushActions(card)).not.toContainEqual(expect.objectContaining({ title: "Back" }));
+  });
+
+  test("a checkbox step in a wizard serves no Back: Left is measured on a question and the review, never there", () => {
+    expect(detect("claude--wizard-multiselect-final.txt").options.filter((o) => o.role === "nav")).toEqual([]);
   });
 
   test("multi-select toggles carry the checkbox state", async () => {
