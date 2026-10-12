@@ -57,10 +57,8 @@ export function SettingsRoute() {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
-      <AppHeader bridge={root?.bridge} error={Boolean(root?.error)}
-        onHome={() => navigate(homePath(session))}>
-        <h1 className="truncate text-sm font-semibold tracking-tight">Settings</h1>
-      </AppHeader>
+      <AppHeader bridge={root?.bridge} error={Boolean(root?.error)} title="Settings"
+        onHome={() => navigate(homePath(session))} />
 
       <main className="page-body flex flex-col">
         <div className="page-column flex flex-1 flex-col gap-4">
