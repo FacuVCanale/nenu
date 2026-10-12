@@ -12,6 +12,8 @@ import { server } from "@/test/setup";
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
 const openNewAgent = vi.fn();
 vi.mock("@/lib/spawn", async (original) => ({ ...(await original<typeof import("@/lib/spawn")>()), openNewAgent: (target: unknown) => openNewAgent(target) }));
+const openNewDialog = vi.fn();
+vi.mock("@/components/new-agent-sheet", async (original) => ({ ...(await original<typeof import("@/components/new-agent-sheet")>()), openNewDialog: () => openNewDialog() }));
 
 beforeEach(() => localStorage.clear());
 
@@ -101,12 +103,26 @@ it("offers a blocked pane with no readable dialog as a row into its thread", asy
 it("opens the shared new-agent flow from the composer, carrying what was typed", async () => {
   const { user, main } = await setup({ ...data, agents: [], workspaces: [] });
   expect(screen.getByRole("heading", { level: 1, name: "What should we work on?" })).toBeInTheDocument();
-  expect(screen.getByText(/Describe a task to start your first agent/)).toBeInTheDocument();
   await user.click(main.getByRole("button", { name: "Start" }));
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace" });
   await user.type(main.getByRole("textbox", { name: "Task for a new agent" }), "Audit the auth flow{Enter}");
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace", message: "Audit the auth flow" });
   expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveValue("");
+});
+
+it("orients an empty herd: two ways to start an agent, and where else agents come from", async () => {
+  const { user, main } = await setup({ ...data, agents: [], workspaces: [] });
+  const starters = within(main.getByRole("region", { name: "Get started" }));
+  await user.click(starters.getByRole("button", { name: /^Start an agent in a folder/ }));
+  expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace" });
+  await user.click(starters.getByRole("button", { name: /^Start a project or a quick chat/ }));
+  expect(openNewDialog).toHaveBeenCalledTimes(1);
+  expect(main.getByText("Agents you start in Herdr show up here too.")).toBeVisible();
+});
+
+it("offers no starters once the herd has agents", async () => {
+  const { main } = await setup();
+  expect(main.queryByRole("region", { name: "Get started" })).not.toBeInTheDocument();
 });
 
 it("calls the one action by one verb: describe a task, in a place, then Start", async () => {
