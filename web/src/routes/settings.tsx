@@ -21,8 +21,9 @@ import { useSession } from "@/lib/session";
 
 // Settings, as a grouped list: This device, Notify when, Updates, About. Reachable from
 // the home header gear. Lives under the root route, so the snapshot polling/push-setup in RootLayout
-// keeps running behind it. Every group's shape is known from the first frame, so nothing below moves
-// when a value lands.
+// keeps running behind it. Every group's rows are there from the first frame. Footers are not: when
+// push state lands on a blocked or unavailable device, "This device" gains its note and the "Notify
+// when" footer can take a second line, so the groups under them move down once.
 export function SettingsRoute() {
   const navigate = useNavigate();
   const session = useSession();

@@ -19,7 +19,7 @@ export function ConnectionInfo({
 }: {
   bridge: BridgeStatus | undefined;
   device: DeviceAuth | undefined;
-  /** Build id the bridge reports it's serving (from /api/config); omitted while loading/offline. */
+  /** Build id the bridge serves, as its responses name it (lib/server-build.ts); omitted until one has. */
   build?: string;
 }) {
   const [open, setOpen] = useState(false);
