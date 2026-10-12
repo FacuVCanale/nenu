@@ -114,8 +114,8 @@ type Live = Pick<LiveStep, "since">;
 /**
  * A step's line. With `onToggle` it is the button that opens the step's body; without, it keeps the
  * chevron's place, so whatever ends a line sits in one column down the timeline. A toggle reports
- * itself (`data-work-toggle`) so the thread holds still and stops following; a held thread draws no
- * turn as running, so the live step, the tail the thread follows, opens without reporting.
+ * itself (`data-work-toggle`) so the thread holds still and stops following. The live step is the
+ * tail the thread follows, so it opens without reporting and the thread keeps following it.
  */
 function StepLine({ icon, live, label, expanded, controls, onToggle, children }: {
   icon: ReactNode;
