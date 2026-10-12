@@ -173,7 +173,8 @@ it("lets a start the person dismissed land without closing or moving what they o
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
   server.use(http.post("/api/org/node/start", async () => { await held; return HttpResponse.json({ ok: true, node: { id: "t-4000" } }); }));
-  const { user, onStarted, loads, router } = renderActions(project);
+  const onStarted = vi.fn();
+  const { user, loads, router } = renderActions(project, { onStarted });
 
   await user.click(await screen.findByRole("button", { name: "New thread" }));
   const dialog = within(await screen.findByRole("dialog", { name: "New thread" }));
