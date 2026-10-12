@@ -173,33 +173,35 @@ describe("formatWorkDuration", () => {
 });
 
 describe("describeTool", () => {
-  // A step reads as a verb and its target ("Ran bun run test", "Edited web/src/index.css"), past
-  // tense once it is done and present while it runs. The target says how it is drawn: a path keeps
-  // its file name whole, a command or a pattern stays monospace.
+  // A step reads as a verb and its target ("Ran bun run test", "Edited web/src/index.css"): past
+  // tense once it is done, "…ing" while it runs, the request ("Run") while a dialog asks about it.
+  // The target says how it is drawn: a path keeps its file name whole, a command or a pattern stays
+  // monospace, a plan reads by its title.
   it.each([
-    ["Bash", "terminal", "Ran", "Running", "code"],
-    ["exec_command", "terminal", "Ran", "Running", "code"],
-    ["Read", "read", "Read", "Reading", "path"],
-    ["Edit", "edit", "Edited", "Editing", "path"],
-    ["MultiEdit", "edit", "Edited", "Editing", "path"],
-    ["Write", "write", "Wrote", "Writing", "path"],
-    ["Grep", "search", "Searched", "Searching", "code"],
-    ["Glob", "search", "Searched", "Searching", "code"],
-    ["WebFetch", "web", "Fetched", "Fetching", "text"],
-    ["Task", "agent", "Ran agent", "Running agent", "text"],
-  ])("%s is a %s step: %s / %s, its target drawn as %s", (name, kind, done, doing, target) => {
-    expect(describeTool(name)).toEqual({ kind, done, doing, target });
+    ["Bash", "terminal", "Ran", "Running", "Run", "code"],
+    ["exec_command", "terminal", "Ran", "Running", "Run", "code"],
+    ["Read", "read", "Read", "Reading", "Read", "path"],
+    ["Edit", "edit", "Edited", "Editing", "Edit", "path"],
+    ["MultiEdit", "edit", "Edited", "Editing", "Edit", "path"],
+    ["Write", "write", "Wrote", "Writing", "Write", "path"],
+    ["Grep", "search", "Searched", "Searching", "Search", "code"],
+    ["Glob", "search", "Searched", "Searching", "Search", "code"],
+    ["WebFetch", "web", "Fetched", "Fetching", "Fetch", "text"],
+    ["Task", "agent", "Ran agent", "Running agent", "Run agent", "text"],
+    ["ExitPlanMode", "plan", "Plan", "Plan", "Plan", "title"],
+  ])("%s is a %s step: %s / %s / %s, its target drawn as %s", (name, kind, done, doing, ask, target) => {
+    expect(describeTool(name)).toEqual({ kind, done, doing, ask, target });
   });
 
   it("names a tool it does not know by its own name, with the summary as plain text", () => {
-    expect(describeTool("SendUserFile")).toEqual({ kind: "tool", done: "SendUserFile", doing: "SendUserFile", target: "text" });
+    expect(describeTool("SendUserFile")).toEqual({ kind: "tool", done: "SendUserFile", doing: "SendUserFile", ask: "SendUserFile", target: "text" });
   });
 
   // Claude Code names an MCP tool mcp__<server>__<tool>; the server's part is most of the length
   // and says nothing about what the step did.
   it("names an MCP tool by its own tool name, without the mcp__ prefix and the server", () => {
     expect(describeTool("mcp__plugin_playwright_playwright__browser_take_screenshot")).toEqual(
-      { kind: "tool", done: "browser_take_screenshot", doing: "browser_take_screenshot", target: "text" });
+      { kind: "tool", done: "browser_take_screenshot", doing: "browser_take_screenshot", ask: "browser_take_screenshot", target: "text" });
   });
 });
 

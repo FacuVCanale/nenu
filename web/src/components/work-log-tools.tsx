@@ -7,7 +7,7 @@ import { IMAGE_EXTENSION, imageLabel } from "@/lib/message-images";
 import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { describeTool, firstLine, type LiveStep, type StepKind, type ToolStepDescription } from "@/lib/work-timeline";
+import { describeTool, firstLine, QUESTION_STEP, type LiveStep, type StepKind, type ToolStepDescription } from "@/lib/work-timeline";
 import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
@@ -67,31 +67,10 @@ export function useToolImages() {
   return (part: ToolPart, owner?: string) => toolImages(part, owner, viewer, url);
 }
 
-type StepIconKind = StepKind | "question" | "thinking";
-const STEP_ICONS: Record<StepIconKind, LucideIcon> = {
+const STEP_ICONS: Record<StepKind | "thinking", LucideIcon> = {
   terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Bot, plan: ListTodo, tool: Wrench,
   question: MessageCircleQuestion, thinking: Brain,
 };
-
-/**
- * A call as its line draws it: the timeline's verbs, the words that say what it acted on, and `ask`,
- * the present it reads in while it waits on the operator ("Run"), since it has not run yet.
- */
-interface CallStep extends Omit<ToolStepDescription, "kind"> {
-  kind: StepKind | "question";
-  ask: string;
-  text: string;
-}
-
-// The present of each of the timeline's past verbs. One it lacks reads in its "…ing" form: a call
-// that waits must never read as one that already ran.
-const ASK: Record<string, string> = {
-  Ran: "Run", Read: "Read", Edited: "Edit", Wrote: "Write", Searched: "Search", Listed: "List", Fetched: "Fetch",
-  "Searched the web": "Search the web", "Ran agent": "Run agent", "Updated the plan": "Update the plan",
-};
-
-// Claude's AskUserQuestion and Codex's request_user_input, the calls that ask the operator a question.
-const QUESTION_TOOL = /^(?:AskUserQuestion|(?:.+\.)?request_user_input(?:_async)?)$/;
 
 /**
  * A plan's title from its summary, which the journal keeps as one line: up to its next heading, and
@@ -102,14 +81,15 @@ function planTitle(summary: string): string {
 }
 
 /**
- * A call that opens a dialog on the operator reads by what it asks, not by the CLI's name for it: a
- * Question with the question it asks, a Plan with the plan's title. Every other call is the timeline's.
+ * A call as its line draws it: the timeline's description and the words that say what it acted on. A
+ * call that asks the operator reads by what it asks, not by the CLI's name for it: a Question with the
+ * question it asks, a Plan with the plan's title.
  */
-function describeCall(part: ToolPart): CallStep {
-  if (QUESTION_TOOL.test(part.name)) return { kind: "question", done: "Question", doing: "Question", ask: "Question", target: "text", text: part.questions?.[0]?.title ?? part.summary };
-  if (part.name === "ExitPlanMode") return { kind: "plan", done: "Plan", doing: "Plan", ask: "Plan", target: "text", text: planTitle(part.summary) };
+function describeCall(part: ToolPart): ToolStepDescription & { text: string } {
+  const question = part.questions?.[0]?.title;
+  if (question) return { ...QUESTION_STEP, text: question };
   const step = describeTool(part.name);
-  return { ...step, ask: ASK[step.done] ?? step.doing, text: part.summary };
+  return { ...step, text: step.target === "title" ? planTitle(part.summary) : part.summary };
 }
 
 // 36px on a mouse, 44px under a finger, both from padding around one 20px line.
@@ -143,7 +123,7 @@ function StepLine({ icon, live, label, expanded, controls, onToggle, children }:
   </button>;
 }
 
-function StepIcon({ kind }: { kind: StepIconKind }) {
+function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
   const Icon = STEP_ICONS[kind];
   return <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />;
 }
