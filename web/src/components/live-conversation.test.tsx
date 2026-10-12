@@ -307,6 +307,41 @@ describe("LiveConversation", () => {
     expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
   });
 
+  // iOS keeps the keyboard up over a tap on plain text; Messages and herdr-web-ui close it when the
+  // reader drags the thread down or taps it. The draft stays in the box.
+  it("closes the keyboard when the reader drags the thread down 32 px, and keeps the draft", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" defaultValue="Half a thought" /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const draft = screen.getByRole("textbox", { name: "Draft" });
+    act(() => draft.focus());
+
+    fireEvent.touchStart(scroller, { touches: [{ clientX: 100, clientY: 200 }] });
+    fireEvent.touchMove(scroller, { touches: [{ clientX: 100, clientY: 160 }] });
+    fireEvent.touchMove(scroller, { touches: [{ clientX: 102, clientY: 220 }] });
+    expect(draft).toHaveFocus();
+    fireEvent.touchMove(scroller, { touches: [{ clientX: 104, clientY: 232 }] });
+    expect(draft).not.toHaveFocus();
+    expect(draft).toHaveValue("Half a thought");
+  });
+
+  it("closes the keyboard on a tap on the thread's text, not on its controls", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" defaultValue="Half a thought" /></MemoryRouter>);
+    const draft = screen.getByRole("textbox", { name: "Draft" });
+    const tap = (target: Element) => {
+      fireEvent.touchStart(target, { touches: [{ clientX: 50, clientY: 50 }] });
+      fireEvent.touchEnd(target, { changedTouches: [{ clientX: 52, clientY: 51 }] });
+    };
+
+    act(() => draft.focus());
+    tap(screen.getByRole("button", { name: /1 tool call · Bash/ }));
+    expect(draft).toHaveFocus();
+    tap(screen.getByText("One commit: abc1234."));
+    expect(draft).not.toHaveFocus();
+    expect(draft).toHaveValue("Half a thought");
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
