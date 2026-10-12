@@ -132,7 +132,7 @@ export function BootSplash() {
           </header>
           <PageBody>
             {stuck ? (
-              <EmptyState icon={WifiOff} title={linkPhrase("nenu", window.location.host)}
+              <EmptyState icon={WifiOff} title={linkPhrase("nenu", window.location.host)} titleAs="h1"
                 action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
                 Nenu keeps trying. Check that this device can reach the host.
               </EmptyState>
@@ -170,7 +170,7 @@ function Bone({ className, width }: { className?: string; width?: string }) {
 export function RootError() {
   const error = useRouteError();
   if (isRouteErrorResponse(error) && error.status === 404) {
-    return <main className="flex min-h-[100dvh] flex-col justify-center"><NotFound /></main>;
+    return <main className="flex min-h-[100dvh] flex-col justify-center"><NotFound titleAs="h1" /></main>;
   }
   return <Crash error={error} />;
 }
@@ -197,7 +197,7 @@ function Crash({ error }: { error: unknown }) {
   return (
     <main className="flex min-h-[100dvh] flex-col justify-center">
       {/* The one screen without the app's chrome, so the mark says whose it is. */}
-      <EmptyState icon={<img src="/nenu-mark.png" alt="" className="nenu-mark size-12" />} title="Nenu hit a problem" className="pb-0"
+      <EmptyState icon={<img src="/nenu-mark.png" alt="" className="nenu-mark size-12" />} title="Nenu hit a problem" titleAs="h1" className="pb-0"
         action={<div className="flex flex-wrap justify-center gap-3">
           <Button size="lg" onClick={() => {
             // Reload home, but stay in the session you were in (read from the live URL, since the
