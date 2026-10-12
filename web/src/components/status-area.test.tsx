@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { StatusArea } from "./status-area";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { StatusArea, TOAST_EXIT_MS, TOAST_EXIT_REDUCED_MS } from "./status-area";
 import { clearStatus, setStatus } from "@/lib/status";
+
+/** Past the exit: a dismissed notice stays mounted for its fade, then leaves. */
+const finishExit = () => act(() => vi.advanceTimersByTime(TOAST_EXIT_MS));
 
 describe("workbench notifications", () => {
   beforeEach(() => { vi.useFakeTimers(); clearStatus(); });
@@ -24,6 +28,7 @@ describe("workbench notifications", () => {
     fireEvent.click(screen.getByText("A complete, selectable message"));
     expect(screen.getByText("A complete, selectable message")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
+    finishExit();
     expect(screen.queryByText("A complete, selectable message")).not.toBeInTheDocument();
   });
 
@@ -38,6 +43,7 @@ describe("workbench notifications", () => {
     expect(screen.getByText("Finished")).toBeVisible();
     act(() => screen.getByRole("textbox").focus());
     act(() => vi.advanceTimersByTime(2500));
+    finishExit();
     expect(screen.queryByText("Finished")).not.toBeInTheDocument();
   });
 
@@ -51,7 +57,82 @@ describe("workbench notifications", () => {
     hidden.mockReturnValue(false);
     fireEvent(document, new Event("visibilitychange"));
     act(() => vi.advanceTimersByTime(2500));
+    finishExit();
     expect(screen.queryByText("Finished")).not.toBeInTheDocument();
     hidden.mockRestore();
+  });
+
+  it("keeps a dismissed notice on screen for its exit, then removes it", () => {
+    render(<StatusArea />);
+    act(() => setStatus("Tab closed", "info"));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
+    // Still drawn, fading out and no longer something to press or read.
+    const leaving = screen.getByText("Tab closed").closest("[data-leaving]");
+    expect(leaving).not.toBeNull();
+    expect(leaving).toHaveAttribute("inert");
+    act(() => vi.advanceTimersByTime(TOAST_EXIT_MS - 1));
+    expect(screen.getByText("Tab closed")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
+  });
+
+  it("shortens the exit to an opacity fade under reduced motion", () => {
+    const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"), media: query, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    }) as MediaQueryList);
+    render(<StatusArea />);
+    act(() => setStatus("Tab closed", "info"));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
+    act(() => vi.advanceTimersByTime(TOAST_EXIT_REDUCED_MS));
+    expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
+    matchMedia.mockRestore();
+  });
+
+  it("a newer notice replaces one that is still leaving", () => {
+    render(<StatusArea />);
+    act(() => setStatus("Tab closed", "info"));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
+    act(() => setStatus("Pane closed", "info"));
+    expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
+    expect(screen.getByText("Pane closed").closest("[data-leaving]")).toBeNull();
+    finishExit();
+    expect(screen.getByText("Pane closed")).toBeVisible();
+  });
+
+  it("dismisses on a swipe up past 24 px and springs back from a shorter drag", () => {
+    render(<StatusArea />);
+    act(() => setStatus("Tab closed", "info"));
+    const card = screen.getByRole("status");
+    fireEvent.pointerDown(card, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(card, { pointerId: 1, clientX: 100, clientY: 84 });
+    fireEvent.pointerUp(card, { pointerId: 1, clientX: 100, clientY: 84 });
+    expect(card.closest("[data-leaving]")).toBeNull();
+    fireEvent.pointerDown(card, { pointerId: 2, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(card, { pointerId: 2, clientX: 100, clientY: 80 });
+    fireEvent.pointerMove(card, { pointerId: 2, clientX: 100, clientY: 70 });
+    fireEvent.pointerUp(card, { pointerId: 2, clientX: 100, clientY: 70 });
+    expect(screen.getByText("Tab closed").closest("[data-leaving]")).not.toBeNull();
+    finishExit();
+    expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
+  });
+
+  it("makes a notice with a destination one control that opens it and clears the notice", async () => {
+    const router = createMemoryRouter([
+      { path: "/", element: <><p>Home page</p><StatusArea /></> },
+      { path: "/pane/:paneId", element: <><p>Pane page</p><StatusArea /></> },
+    ]);
+    render(<RouterProvider router={router} />);
+    act(() => setStatus("Working Claude needs your input", "warn", undefined, { description: "nenu · redesign", to: "/pane/w1%3Aworking" }));
+    const open = screen.getByRole("link", { name: /Working Claude needs your input/ });
+    expect(open).toHaveAccessibleName(/nenu · redesign/);
+    expect(open).toHaveAttribute("href", "/pane/w1%3Aworking");
+    // The control is the whole toast; there is no second, competing close button on it.
+    expect(screen.queryByRole("button", { name: "Dismiss notification" })).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(open); });
+    expect(router.state.location.pathname).toBe("/pane/w1%3Aworking");
+    finishExit();
+    expect(screen.queryByText("Working Claude needs your input")).not.toBeInTheDocument();
+    router.dispose();
   });
 });
