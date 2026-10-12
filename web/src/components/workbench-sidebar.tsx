@@ -124,7 +124,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   }
 
   return (
-    <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant}>
+    <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : mode}>
       {(!phone || searching) && <div className="nav-top">
         {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
           <Plus aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
