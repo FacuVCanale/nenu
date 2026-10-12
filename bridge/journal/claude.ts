@@ -462,8 +462,10 @@ export class ClaudeParser implements JournalParser {
       // Its call may sit outside a tail-read window; then the text has nowhere to go.
       const result = this.answered.get(row.sourceToolUseID)?.result;
       if (!result) return;
-      const merged = clamp(`${result.text}\n\n${text}`, MAX_RESULT_CHARS);
-      Object.assign(result, merged, result.truncated || merged.truncated ? { truncated: true } : {});
+      // An excerpt, never a truncation: the body is the operator's own file (its path leads it), and
+      // flagging it would mark every turn that loads a skill "truncated".
+      const merged = `${result.text}\n\n${text}`;
+      result.text = merged.length > MAX_RESULT_CHARS ? `${merged.slice(0, MAX_RESULT_CHARS)}…` : merged;
       return;
     }
     const command = this.lastCommand;

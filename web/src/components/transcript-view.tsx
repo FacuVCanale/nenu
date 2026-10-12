@@ -138,7 +138,7 @@ function Turn({
   if (entry.role === "summary" || entry.role === "note") {
     const recap = entry.parts.map((part) => (part.kind === "text" ? part.text : "")).join("\n\n").trim();
     return (
-      <div className="px-0.5" title={time || undefined}>
+      <div title={time || undefined}>
         {entry.role === "summary"
           ? <ContextLine label="Context compacted" text={recap === "Context compacted" ? "" : recap}
               truncated={entry.parts.some((part) => part.kind === "text" && part.truncated)} query={query} focused={focused} />
