@@ -284,3 +284,79 @@ it("leaves Ctrl+K to a text field off Apple platforms, and opens search from els
   await user.keyboard("{Control>}k{/Control}");
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
+
+// A herd like the operator's: a project, and loose workspaces whose chats moved at different times.
+const herd: HomeData = {
+  ...data,
+  workspaces: [
+    { workspaceId: "w:dev", number: 1, label: "Developer", focused: true, activeTabId: "t-dev", tabCount: 1, paneCount: 3 },
+    { workspaceId: "w:awam", number: 2, label: "AWAM producto", focused: false, activeTabId: "t-awam", tabCount: 1, paneCount: 1 },
+    { workspaceId: "w:psag", number: 3, label: "psag", focused: false, activeTabId: "t-psag", tabCount: 1, paneCount: 1 },
+  ],
+  tabs: [
+    { tabId: "t-dev", workspaceId: "w:dev", number: 1, label: "1", focused: true, paneCount: 3 },
+    { tabId: "t-awam", workspaceId: "w:awam", number: 1, label: "bench", focused: false, paneCount: 1 },
+    { tabId: "t-psag", workspaceId: "w:psag", number: 1, label: "1", focused: false, paneCount: 1 },
+  ],
+  agents: [
+    { paneId: "dev:mobile", workspaceId: "w:dev", workspaceLabel: "Developer", workspaceNumber: 1, tabId: "t-dev", agent: "claude", status: "working", cwd: "/", focused: true, paneLabel: "Brief de nenu-mobile", lastActiveAt: 40, lastSeenAt: 70 },
+    { paneId: "dev:send", workspaceId: "w:dev", workspaceLabel: "Developer", workspaceNumber: 1, tabId: "t-dev", agent: "claude", status: "blocked", cwd: "/", focused: false, paneLabel: "Brief nenu-send", lastActiveAt: 60 },
+    { paneId: "dev:done", workspaceId: "w:dev", workspaceLabel: "Developer", workspaceNumber: 1, tabId: "t-dev", agent: "claude", status: "done", cwd: "/", focused: false, paneLabel: "Rediseño de Nenu", lastActiveAt: 90 },
+    { paneId: "awam:bench", workspaceId: "w:awam", workspaceLabel: "AWAM producto", workspaceNumber: 2, tabId: "t-awam", agent: "claude", status: "working", cwd: "/", focused: false, paneLabel: "Afirmaciones marcadas", lastActiveAt: 80 },
+    { paneId: "psag:t76", workspaceId: "w:psag", workspaceLabel: "psag", workspaceNumber: 3, tabId: "t-psag", agent: "claude", status: "idle", cwd: "/", focused: false, paneLabel: "T-76 Mejoras", lastActiveAt: 5 },
+  ],
+  projects: [{
+    slug: "awam", name: "AWAM Comercio SaaS", goal: "", status: "active",
+    threads: [{ id: "t-0101", title: "Migración de stock", parentId: "root", role: "worker", status: "open" }],
+  }],
+};
+
+it("opens the mark's drawer from the top: what needs you, the chats that moved last, then folded projects and workspaces", async () => {
+  const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
+  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  const drawer = screen.getByRole("dialog", { name: "Navigation" });
+  // A drawer from the left edge, not the sheet that rises from the bottom.
+  expect(drawer.querySelector(".side-sheet-panel")).not.toBeNull();
+  const nav = within(drawer);
+  expect(nav.getByRole("link", { name: "Nenu home" })).toHaveAttribute("href", "/?s=work");
+
+  const sections = nav.getAllByRole("region").filter((region) => region.parentElement?.classList.contains("nav-scroll"));
+  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Recent", "Projects", "Workspaces"]);
+  const needs = within(nav.getByRole("region", { name: "Needs you" })).getAllByRole("link");
+  expect(needs.map((link) => [link.querySelector(".nav-pane-title")?.textContent, link.querySelector(".nav-pane-detail")?.textContent]))
+    .toEqual([["Brief nenu-send", "Developer"]]);
+  const recent = within(nav.getByRole("region", { name: "Recent" })).getAllByRole("link");
+  expect(recent.map((link) => link.querySelector(".nav-pane-title")?.textContent))
+    .toEqual(["Rediseño de Nenu", "Afirmaciones marcadas", "Brief de nenu-mobile", "T-76 Mejoras"]);
+  expect(recent[2]).toHaveAttribute("aria-current", "page");
+
+  expect(nav.getByRole("button", { name: "AWAM Comercio SaaS tasks" })).toHaveAttribute("aria-expanded", "false");
+  const workspaces = within(nav.getByRole("region", { name: "Workspaces" }));
+  expect(workspaces.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Developer", "AWAM producto", "psag"]);
+  for (const name of ["Developer", "AWAM producto", "psag"]) expect(workspaces.getByRole("button", { name: `${name} panes` })).toHaveAttribute("aria-expanded", "false");
+  expect(workspaces.getByRole("link", { name: /^Developer/ })).toHaveAttribute("aria-current", "true");
+
+  // Opening one lasts while the drawer is open; the next open is compact again.
+  await user.click(workspaces.getByRole("button", { name: "Developer panes" }));
+  expect(workspaces.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "true");
+  await user.click(nav.getByRole("button", { name: "Close" }));
+  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  expect(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+});
+
+it("searches and starts something new from the drawer's header", async () => {
+  const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
+  render(<NewDialogProbe />);
+  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  const nav = within(screen.getByRole("dialog", { name: "Navigation" }));
+  await user.click(nav.getByRole("button", { name: "Search" }));
+  const search = nav.getByRole("searchbox", { name: "Search projects and chats" });
+  expect(search).toHaveFocus();
+  await user.type(search, "psag");
+  expect(nav.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
+  expect(nav.getByRole("link", { name: /^psag/ })).toBeInTheDocument();
+  expect(nav.queryByRole("link", { name: /^AWAM producto/ })).not.toBeInTheDocument();
+  await user.click(nav.getByRole("button", { name: "New" }));
+  expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
+  expect(screen.getByText("New dialog")).toBeInTheDocument();
+});
