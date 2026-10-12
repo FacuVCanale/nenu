@@ -57,6 +57,20 @@ describe("history header", () => {
     expect(screen.queryByRole("button", { name: "Find in history" })).not.toBeInTheDocument();
   });
 
+  it("goes back to its pane with the one back link every page shares, and no second close", async () => {
+    setup("w1:idle", { entries: turns(4), total: 4 }, [pane("w1:idle", { paneLabel: "Idle Claude" })]);
+    const bar = await header();
+    expect(bar.getByRole("link", { name: "Back to Idle Claude" })).toHaveAttribute("href", "/pane/w1%3Aidle");
+    expect(bar.queryByRole("button", { name: /^(Back|Close history)$/ })).not.toBeInTheDocument();
+    // Titled like every other bar: the screen's name, then whose it is.
+    expect(bar.getByRole("heading", { level: 1, name: "History" })).toBeInTheDocument();
+  });
+
+  it("goes back Home from a closed pane's history", async () => {
+    setup("w9:ghost", { unavailable: "no-session" });
+    expect((await header()).getByRole("link", { name: "Back to Home" })).toHaveAttribute("href", "/");
+  });
+
   it("leaves the count out of the header", async () => {
     setup("w1:idle", { entries: turns(4), total: 4 }, [pane("w1:idle", { paneLabel: "Idle Claude" })]);
     expect((await header()).queryByText(/\d+\s*\/\s*\d+/)).not.toBeInTheDocument();
