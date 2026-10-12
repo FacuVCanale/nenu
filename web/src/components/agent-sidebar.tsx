@@ -61,7 +61,7 @@ export function ThreadSidebar({
   const row = (pane: AgentView) => <PaneRow key={pane.paneId} pane={pane} projects={projects} active={pane.paneId === currentPaneId} onSelect={onSelect} />;
 
   return (
-    <div className={cn("flex flex-col gap-2 px-2 py-3", className)}>
+    <div className={cn("-mx-2.5 flex flex-col gap-2 py-3", className)}>
       {needs.length > 0 && <Section label="Needs you" count={needs.length}>{needs.map(row)}</Section>}
       {workspace.length > 0 && <Section label="This workspace" count={workspace.length}>{workspace.map(row)}</Section>}
       {recent.length > 0 && (

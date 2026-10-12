@@ -323,7 +323,7 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
     {hasWorkspaces && (
       <section aria-label="Workspaces" className="nav-group">
         <h3 className="nav-label">Workspaces</h3>
-        <WorkspaceTree compact source={loose} session={data.session} currentPaneId={paneId}
+        <WorkspaceTree source={loose} session={data.session} currentPaneId={paneId}
           expanded={prefs.workspaces} onExpand={setWorkspaceOpen} startFolded={folded} />
       </section>
     )}
@@ -424,9 +424,11 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
         <Link className="nav-row" to={projectPath(project.slug, session)} aria-current={projectSlug === project.slug && !nodeId ? "page" : undefined}>
-          <OpeningMark to={projectPath(project.slug, session)}>
-            <span className="nav-avatar" aria-hidden>{project.name.trim().charAt(0).toUpperCase() || "P"}</span>
-          </OpeningMark>
+          <span className="nav-lead">
+            <OpeningMark to={projectPath(project.slug, session)}>
+              <span className="nav-avatar" aria-hidden>{project.name.trim().charAt(0).toUpperCase() || "P"}</span>
+            </OpeningMark>
+          </span>
           <span className="nav-row-text">{project.name}</span>
           {status && <StatusDot status={status} surface="bg-transparent" className="size-2" />}
           {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
@@ -443,7 +445,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
           {project.coordinator && (
             <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(project.coordinator.paneId, session)}
               aria-current={project.coordinator.paneId === paneId ? "page" : undefined}>
-              <OpeningMark to={panePath(project.coordinator.paneId, session)}><Bot aria-hidden size={14} /></OpeningMark>
+              <span className="nav-tree-mark"><OpeningMark to={panePath(project.coordinator.paneId, session)}><Bot aria-hidden size={14} /></OpeningMark></span>
               <span className="nav-row-text">Coordinator</span>
               <span className="sr-only">, {STATUS_LABEL[project.coordinator.liveStatus]}</span>
               {isAttention(project.coordinator.liveStatus)
@@ -455,14 +457,14 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
           {panes.map((pane) => (
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)}
               aria-current={pane.paneId === paneId ? "page" : undefined}>
-              <OpeningMark to={panePath(pane.paneId, session)}><PaneMark pane={pane} /></OpeningMark>
+              <span className="nav-tree-mark"><OpeningMark to={panePath(pane.paneId, session)}><PaneMark pane={pane} /></OpeningMark></span>
               <span className="nav-row-text">{displayName(pane, data.projects)}</span>
               {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
               <span className="nav-row-note">{pane.kind === "shell" ? "shell" : pane.agent}</span>
             </Link>
           ))}
           {tree.history.length > 0 && <>
-            <button type="button" className="nav-row nav-row-nested nav-history" aria-expanded={historyOpen}
+            <button type="button" className="nav-row nav-history" aria-expanded={historyOpen}
               title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
               <ChevronRight aria-hidden size={14} />History <span className="nav-count">{historyTotal}</span>
             </button>
@@ -531,7 +533,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
       )}
       <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head", state === "resolved" && "nav-tree-resolved")} style={depthStyle(depth)}
         to={to} aria-current={current ? "page" : undefined}>
-        <OpeningMark to={to}><NodeDot state={state} /></OpeningMark>
+        <span className="nav-tree-mark"><OpeningMark to={to}><NodeDot state={state} /></OpeningMark></span>
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {STATE_LABEL[state].toLowerCase()}</span>
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
