@@ -965,7 +965,10 @@ describe("free-text answers (Tab-amend, Type something, Codex notes)", () => {
     const pane = sequencePane(claude("permission-bash-amend-typed-v2296.txt"), []);
     const { card: c, answer } = await card(pane.io);
     expect(c.typing).toBe(true);
-    expect((await answer({ signature: c.signature, optionIndex: 0, confirm: true })).status).toBe(409);
+    const refused = await answer({ signature: c.signature, optionIndex: 0, confirm: true });
+    expect(refused.status).toBe(409);
+    // In the card's own words about the box, and what it did: nothing.
+    expect(refused.outcome).toMatchObject({ ok: false, error: "The terminal's text box is in use. Nothing was sent." });
     expect(pane.log).toEqual({ keys: [], text: [] });
   });
 
