@@ -45,8 +45,10 @@ import { NotFound } from "@/routes/not-found";
  * describing whatever the snapshot is doing.
  *
  * A herd with no stamp of its own while the link is down came from this page's own reads (Herdr down
- * still answers with the last herd the bridge saw), so it is as old as the last read that came back
- * live, `liveAt`. A page that never had one dates nothing.
+ * still answers with the last herd the bridge saw), so it is dated by `liveAt`, the last read on this
+ * page that came back live. That stamp is page-wide (any session, snapshot or pane read), so it is an
+ * approximation: a session switched to mid-outage, or a page left hidden while the bridge kept polling,
+ * can be dated off by that gap. A page that never had a live read dates nothing.
  */
 export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined, liveAt?: number): number | undefined {
   if (pane?.error && pane.text) return pane.lastSeenAt;
