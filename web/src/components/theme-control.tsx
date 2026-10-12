@@ -28,6 +28,8 @@ export function ThemeControl() {
   const index = Math.max(0, OPTIONS.findIndex((o) => o.value === theme));
 
   function onKeyDown(event: KeyboardEvent) {
+    // Alt+Left is Back and Cmd+arrows move through text: the browser's, not a theme change.
+    if (event.altKey || event.metaKey || event.ctrlKey) return;
     const step = STEP[event.key];
     if (step === undefined) return;
     event.preventDefault();
