@@ -11,7 +11,7 @@ import {
   PRIMARY_ACTION,
   QuestionHeading,
   SECONDARY_ACTION,
-  SECONDARY_ROW,
+  SecondaryActions,
 } from "@/components/option-button";
 import { NOTE_MAX_LENGTH } from "@/lib/preview-action";
 import { WIZARD_BACK_KEYS, WIZARD_NEXT_KEYS } from "@/lib/harness/wizard-model";
@@ -217,7 +217,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
       )}
 
       {!terminalEditing && !editorOpen && preview.note.state !== "attached" && (
-        <div className={SECONDARY_ROW}>
+        <SecondaryActions>
           <button
             type="button"
             disabled={locked}
@@ -230,7 +230,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
             <StickyNote aria-hidden className="size-4 shrink-0" />
             Add a note…
           </button>
-        </div>
+        </SecondaryActions>
       )}
     </DialogCard>
   );

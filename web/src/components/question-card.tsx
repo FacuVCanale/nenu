@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
+import { DIALOG_CARD, QuestionHeading, SECONDARY_ACTION, SECONDARY_ROW, WaitingOnYou } from "@/components/option-button";
 import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
@@ -258,11 +259,8 @@ export function QuestionCard({
 
   return (
     <Frame compact={compact} label={i.question}>
-      <div className={cn("flex min-w-0 items-center gap-2", compact ? "text-xs" : "text-[13px]")}>
-        <span className="flex shrink-0 items-center gap-1.5 font-medium text-status-blocked">
-          <span aria-hidden className="size-1.5 rounded-full bg-status-blocked ring-2 ring-status-blocked/25" />
-          Waiting on you
-        </span>
+      <div className={cn("flex min-w-0 items-center gap-2", compact ? "text-xs" : "text-[13px] leading-[18px]")}>
+        <WaitingOnYou />
         {title && <span className="min-w-0 truncate text-muted-foreground">· {title}</span>}
         {steps.length === 1 && <span className="min-w-0 truncate text-muted-foreground"><span aria-hidden>· </span><span>{steps[0]!.label}</span></span>}
         {steps.length > 1 && (
@@ -274,7 +272,7 @@ export function QuestionCard({
         )}
       </div>
       {steps.length > 1 && !compact && <Stepper steps={steps} />}
-      <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-[17px] leading-[22px] font-semibold tracking-[-0.01em] text-pretty")}>{i.question}</p>
+      {compact ? <p className="line-clamp-3 text-sm text-foreground">{i.question}</p> : <QuestionHeading>{i.question}</QuestionHeading>}
       <div ref={detail} tabIndex={-1} className="flex min-w-0 flex-col gap-[inherit] outline-none empty:hidden">
         {i.answers || i.incomplete ? <ReviewAnswers answers={i.answers ?? []} incomplete={Boolean(i.incomplete)} />
           : i.subject ? <Subject subject={i.subject} folded={codeFolded} onOpenAll={() => setOpened(true)} />
@@ -379,22 +377,22 @@ export function QuestionCard({
         )}
 
         {!compact && ((!staticList && (escapes.length > 0 || (notable && !writing))) || (inTerminal.length > 0 && onKeys) || onOpen) && (
-          <div data-secondary-actions className="-mx-1.5 -mb-1.5 flex flex-wrap items-center">
+          <div data-secondary-actions className={SECONDARY_ROW}>
             {!staticList && escapes.map((option) => (
               <button key={option.index} type="button" data-role={option.role} disabled={rowProps(option).disabled} onClick={() => press(option)} className={SECONDARY}>
-                {busy === option.index && <Loader2 aria-label="Sending" className="size-3.5 animate-spin" />}{option.label}
+                {busy === option.index && <Loader2 aria-label="Sending" className="size-4 animate-spin" />}{option.label}
               </button>
             ))}
             {!staticList && notable && !writing && <NoteButton locked={locked} textId={textId} className={SECONDARY} onClick={() => write({ to: "note" })} />}
             {onKeys && inTerminal.map((option) => (
               <button key={option.index} type="button" data-in-terminal onClick={onKeys} className={SECONDARY}
                 aria-label="Type your own answer in the terminal" title={`${bare(option.label)} in the terminal`}>
-                <Keyboard aria-hidden className="size-3.5 shrink-0" />Type your own
+                <Keyboard aria-hidden className="size-4 shrink-0" />Type your own
               </button>
             ))}
             {onOpen && (
               <button type="button" onClick={onOpen} className={cn(SECONDARY, "sm:ml-auto")}>
-                <TerminalSquare aria-hidden className="size-3.5 shrink-0" />{openLabel}
+                <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabel}
               </button>
             )}
           </div>
@@ -409,12 +407,12 @@ function Frame({ compact, answered, label, children }: { compact: boolean; answe
     <section aria-label={label ?? "Answered"} data-question-card={compact ? "compact" : "full"}
       className={cn(
         "flex min-w-0 flex-col",
-        compact ? "gap-2 rounded-2xl p-3" : answered ? "rounded-xl px-3.5 py-2.5" : "gap-3 rounded-2xl p-4",
+        compact ? "gap-2 rounded-2xl p-3" : answered ? "rounded-xl px-3.5 py-2.5" : "",
         answered
           ? "border border-border/60 bg-muted/30"
-          // A thread card is a message in the conversation, not an alarm: the dot and its label carry
-          // the urgency. Home's card keeps the tint, since it sits among other panes' summaries.
-          : compact ? "border border-status-blocked/40 bg-status-blocked/[0.06]" : "border border-border bg-card shadow-sm",
+          // A thread card is a message in the conversation, not an alarm: the dot carries the urgency.
+          // Home's card keeps the tint, since it sits among other panes' summaries.
+          : compact ? "border border-status-blocked/40 bg-status-blocked/[0.06]" : DIALOG_CARD,
       )}>
       {children}
     </section>
@@ -603,7 +601,7 @@ const DECISION = "inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text
 const LIST_ROW = "flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left text-base transition-colors hover:bg-muted/50 active:bg-muted";
 const OUTLINED = "border border-border bg-transparent text-muted-foreground disabled:text-muted-foreground/70";
 const NEUTRAL = "border border-border bg-secondary text-foreground";
-const SECONDARY = "inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-1.5 rounded-lg px-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";
+const SECONDARY = SECONDARY_ACTION;
 /** A control that cannot fire: muted, never a faded fill that reads as highlighted. */
 const DISABLED = "border border-transparent bg-muted text-muted-foreground cursor-not-allowed";
 /** The tapped option a refusal is about, until the next tap. */

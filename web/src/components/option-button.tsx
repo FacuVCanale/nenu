@@ -78,6 +78,11 @@ export const SECONDARY_ACTION =
 /** The row of SECONDARY_ACTIONs, bled into the card's padding so their text lines up with the content. */
 export const SECONDARY_ROW = "-mx-2 -mb-2 flex flex-wrap items-center";
 
+/** The card's footer of escapes and utilities, apart from the answers above it. */
+export function SecondaryActions({ children }: { children: ReactNode }) {
+  return <div data-secondary-actions className={SECONDARY_ROW}>{children}</div>;
+}
+
 /**
  * The enclosing surface for a block that is not a dialog (the completion popup): a bordered panel
  * that lifts it off the raw terminal mirror behind it. Owns `role="group"` + its aria label.

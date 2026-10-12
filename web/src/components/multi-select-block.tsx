@@ -4,7 +4,14 @@ import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MultiSelectModel } from "@/lib/blocks";
 import type { MultiSelectIntent } from "@/lib/multi-select-action";
-import { optionSurface, PromptPanel, QuestionHeading } from "@/components/option-button";
+import {
+  DialogCard,
+  optionSurface,
+  PRIMARY_ACTION,
+  QuestionHeading,
+  SECONDARY_ACTION,
+  SecondaryActions,
+} from "@/components/option-button";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { WIZARD_BACK_KEYS, WIZARD_NEXT_KEYS } from "@/lib/harness/wizard-model";
 
@@ -48,11 +55,8 @@ export function MultiSelectBlock({ multi, onAction, disabled }: MultiSelectBlock
   return <CheckboxPhase multi={multi} locked={locked} sending={sending} onPress={press} />;
 }
 
-const spinnerSm = (
-  <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
-);
-const spinnerMd = (
-  <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+const spinner = (
+  <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
 );
 
 function CheckboxPhase({
@@ -67,20 +71,20 @@ function CheckboxPhase({
   onPress: (id: string, action: MultiSelectIntent) => void;
 }) {
   return (
-    <PromptPanel ariaLabel={multi.question}>
+    <DialogCard label={multi.question}>
       {multi.steps && (
         <WizardStepper
           steps={multi.steps}
           locked={locked}
           busyBack={sending === "nav-back"}
           busyNext={sending === "nav-next"}
-          busyIcon={spinnerSm}
+          busyIcon={spinner}
           onBack={() => onPress("nav-back", { kind: "nav", keys: WIZARD_BACK_KEYS })}
           onNext={() => onPress("nav-next", { kind: "nav", keys: WIZARD_NEXT_KEYS })}
         />
       )}
       <QuestionHeading>{multi.question}</QuestionHeading>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {multi.options.map((option) => {
           const id = `opt-${option.n}`;
           const busy = sending === id;
@@ -99,25 +103,25 @@ function CheckboxPhase({
               <span
                 aria-hidden
                 className={cn(
-                  "mt-px flex size-4 shrink-0 items-center justify-center rounded border",
+                  "flex size-5 shrink-0 items-center justify-center rounded-md border",
                   option.checked
-                    ? "border-primary bg-primary/20 text-primary"
-                    : "border-border bg-background",
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-muted-foreground/60",
                 )}
               >
-                {option.checked ? <Check className="size-3" /> : null}
+                {option.checked ? <Check className="size-3.5" /> : null}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium leading-snug text-foreground">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-base leading-5 font-medium text-foreground">
                   {option.label}
                 </span>
                 {option.description ? (
-                  <span className="block text-xs leading-snug text-muted-foreground">
+                  <span className="text-[13px] leading-[18px] text-muted-foreground">
                     {option.description}
                   </span>
                 ) : null}
               </span>
-              {busy ? spinnerMd : null}
+              {busy ? spinner : null}
             </button>
           );
         })}
@@ -133,28 +137,28 @@ function CheckboxPhase({
         // child-text swap on a focused control is not reliably re-announced.
         aria-label={multi.advanceLabel}
         onClick={() => onPress("advance", { kind: "advance" })}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/60 bg-primary/15 px-3 py-2 text-sm font-medium text-foreground transition-colors active:bg-primary/25 disabled:opacity-60"
+        className={PRIMARY_ACTION}
       >
-        {sending === "advance" ? spinnerSm : null}
+        {sending === "advance" ? spinner : null}
         {multi.advanceLabel}
       </button>
 
-      {/* "Chat about this" ABORTS the tool — de-emphasised, apart from the answers (like the wizard). */}
+      {/* "Chat about this" ABORTS the tool — with the card's utilities, apart from the answers. */}
       {multi.escape ? (
-        <button
-          type="button"
-          disabled={locked}
-          onClick={() => onPress("escape", { kind: "escape" })}
-          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
-        >
-          <span className="min-w-0 flex-1">
+        <SecondaryActions>
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => onPress("escape", { kind: "escape" })}
+            className={SECONDARY_ACTION}
+          >
             {multi.escape.label}
-            <span className="text-muted-foreground"> — ends the questions</span>
-          </span>
-          {sending === "escape" ? spinnerSm : null}
-        </button>
+            <span className="font-normal"> — ends the questions</span>
+            {sending === "escape" ? spinner : null}
+          </button>
+        </SecondaryActions>
       ) : null}
-    </PromptPanel>
+    </DialogCard>
   );
 }
 
@@ -170,36 +174,36 @@ function ReviewPhase({
   onPress: (id: string, action: MultiSelectIntent) => void;
 }) {
   return (
-    <PromptPanel ariaLabel="Ready to submit your answers?">
+    <DialogCard label="Ready to submit your answers?">
       <QuestionHeading>Ready to submit your answers?</QuestionHeading>
       {incomplete ? (
         // role="alert" so a screen reader announces the incomplete-answers warning when the review
         // screen mounts — otherwise a user could confirm a partial set without ever hearing it.
-        <div role="alert" className="flex items-center gap-1.5 text-xs text-status-working">
-          <AlertTriangle className="size-3.5 shrink-0" />
+        <p role="alert" className="flex items-center gap-2 text-[15px] leading-5 text-status-working">
+          <AlertTriangle aria-hidden className="size-4 shrink-0" />
           You have not answered all questions
-        </div>
+        </p>
       ) : null}
-      <div className="flex flex-col gap-1.5">
-        <button
-          type="button"
-          disabled={locked}
-          onClick={() => onPress("confirm", { kind: "confirm" })}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/60 bg-primary/15 px-3 py-2 text-sm font-medium text-foreground transition-colors active:bg-primary/25 disabled:opacity-60"
-        >
-          {sending === "confirm" ? spinnerSm : null}
-          Submit answers
-        </button>
+      <button
+        type="button"
+        disabled={locked}
+        onClick={() => onPress("confirm", { kind: "confirm" })}
+        className={PRIMARY_ACTION}
+      >
+        {sending === "confirm" ? spinner : null}
+        Submit answers
+      </button>
+      <SecondaryActions>
         <button
           type="button"
           disabled={locked}
           onClick={() => onPress("cancel", { kind: "cancel" })}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors active:bg-muted disabled:opacity-60"
+          className={SECONDARY_ACTION}
         >
-          {sending === "cancel" ? spinnerSm : null}
+          {sending === "cancel" ? spinner : null}
           Cancel
         </button>
-      </div>
-    </PromptPanel>
+      </SecondaryActions>
+    </DialogCard>
   );
 }
