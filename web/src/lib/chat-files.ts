@@ -94,7 +94,8 @@ export function filePathsInText(text: string): string[] {
 }
 
 function textInPart(part: TranscriptPart): string[] {
-  if (part.kind === "image") return [];
+  // Injected text (a skill's body, a notification) is not the conversation; its paths are not the chat's files.
+  if (part.kind === "image" || part.kind === "context") return [];
   if (part.kind === "text" || part.kind === "thinking") return [part.text];
   return [part.summary, part.result?.text ?? ""];
 }

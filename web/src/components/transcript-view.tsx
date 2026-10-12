@@ -7,11 +7,11 @@ import { ChatMedia } from "./chat-media";
 import { MediaViewerContext } from "./file-preview-provider";
 import { ImageStrip, JournalImages, type StripImage } from "./message-images";
 import { useContext, useMemo, useState } from "react";
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
 import { searchableText } from "@/lib/transcript-search";
-import { relabel, useToolImages, WorkLogTools } from "@/components/work-log-tools";
+import { Highlight, relabel, useToolImages, WorkLogTools } from "@/components/work-log-tools";
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { buildWorkTimeline, formatWorkDuration, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -42,18 +42,40 @@ function dayKey(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
-function ThinkingPart({ part, query, focused = false }: { part: Extract<TranscriptPart, { kind: "thinking" }>; query: string; focused?: boolean }) {
+/** A quiet line that opens onto its body: Thinking, a loaded skill, a notification, a recap. */
+function Fold({ label, text, truncated = false, query, focused = false }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const hit = query.trim() !== "" && part.text.toLowerCase().includes(query.trim().toLowerCase());
-  const open = expanded || focused || hit;
+  const needle = query.trim().toLowerCase();
+  const open = expanded || focused || (needle !== "" && text.toLowerCase().includes(needle));
   return <div>
     <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)}
-      className="flex min-h-11 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground md:min-h-7">
-      <ChevronRight aria-hidden="true" className={`size-3.5 ${open ? "rotate-90" : ""}`} />Thinking{part.truncated ? " · truncated" : ""}
+      className="flex min-h-11 max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-foreground md:min-h-7">
+      <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`} />
+      <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>
     </button>
-    {open && <div className="pb-2 pl-5 text-xs text-muted-foreground"><MarkdownText text={part.text} query={query} />
-      {part.truncated && <p>… truncated</p>}</div>}
+    {open && <div className="pb-2 pl-5 text-left text-xs text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
+      {truncated && <p>… truncated</p>}</div>}
   </div>;
+}
+
+/** Injected text as one line: a fold when it has a body, else just its caption. */
+function ContextLine({ label, text, truncated, query, focused }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
+  if (text.trim() !== "") return <div data-notice><Fold label={label} text={text} truncated={truncated} query={query} focused={focused} /></div>;
+  return <div data-notice className="flex min-h-7 max-w-full items-center gap-1.5 text-xs text-muted-foreground">
+    <span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
+    <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>
+  </div>;
+}
+
+/**
+ * A note's part as its line. The web is live the moment it is built and the bridge only after a
+ * restart, so an older bridge's plain-text note is drawn the same way: its first line, the rest behind it.
+ */
+function NoteLine({ part, query, focused }: { part: TranscriptPart; query: string; focused: boolean }) {
+  if (part.kind === "context") return <ContextLine {...part} query={query} focused={focused} />;
+  if (part.kind !== "text") return null;
+  const [first = ""] = part.text.trim().split("\n", 1);
+  return <ContextLine label={first} text={part.text.trim() === first ? "" : part.text} truncated={part.truncated} query={query} focused={focused} />;
 }
 
 function Part({ part, entryId, query, focused = false, active = false, compactMedia = false, uploads = true, delivers = true }: {
@@ -73,7 +95,8 @@ function Part({ part, entryId, query, focused = false, active = false, compactMe
   if (part.kind === "image") return null;
   // Tool output is COMMAND output, not prose — it stays verbatim in a monospace block (see ToolPart).
   if (part.kind === "tool") return <WorkLogTools calls={[{ id: "single", part, owner: entryId }]} query={query} active={active} />;
-  if (part.kind === "thinking") return <ThinkingPart part={part} query={query} focused={focused} />;
+  if (part.kind === "thinking") return <Fold label={part.truncated ? "Thinking · truncated" : "Thinking"} text={part.text} truncated={part.truncated} query={query} focused={focused} />;
+  if (part.kind === "context") return <ContextLine {...part} query={query} focused={focused} />;
   // Prose is Markdown, so it renders formatted. MarkdownText emits React elements only — never
   // markup — so this keeps the same XSS boundary the raw text node had.
   return (
@@ -109,20 +132,17 @@ function Turn({
   const time = clockTime(entry.ts);
   const inline = journalImages(entry).length > 0;
 
-  // Neither of these is speech, so both render dashed-and-muted — visibly set apart from the
-  // conversation rather than attributed to the user or the agent. Their file names stay text: a
-  // recap or an injected note names files relative to folders of its own, it does not deliver them.
+  // Neither of these is speech, so each is one quiet line, attributed to neither party, its body
+  // folded behind it. Their file names stay text: a recap or an injected note names files relative
+  // to folders of its own, it does not deliver them.
   if (entry.role === "summary" || entry.role === "note") {
+    const recap = entry.parts.map((part) => (part.kind === "text" ? part.text : "")).join("\n\n").trim();
     return (
-      <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
-        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-          <Info className="size-3" />
-          {entry.role === "summary" ? "Context compacted" : "System"}
-          {time && ` · ${time}`}
-        </div>
-        {entry.parts.map((part, i) => (
-          <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} delivers={false} />
-        ))}
+      <div className="px-0.5" title={time || undefined}>
+        {entry.role === "summary"
+          ? <ContextLine label="Context compacted" text={recap === "Context compacted" ? "" : recap}
+              truncated={entry.parts.some((part) => part.kind === "text" && part.truncated)} query={query} focused={focused} />
+          : entry.parts.map((part, i) => <NoteLine key={i} part={part} query={query} focused={focused} />)}
         <EntryImages entry={entry} />
       </div>
     );
@@ -131,16 +151,19 @@ function Turn({
   // A chat, not a log: your messages are soft bubbles on the right, the agent's are plain text on
   // the left. The header already names the agent, so neither side repeats a speaker label; the time
   // sits under your bubble and on hover for the agent.
+  // What a command of theirs loaded (a skill's body) is not their words: a line beside the bubble.
   if (entry.role === "user") {
+    const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
         <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
-          {entry.parts.map((part, i) => (
+          {entry.parts.map((part, i) => part.kind === "context" ? null : (
             <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
           ))}
           <EntryImages entry={entry} />
         </div>
         {showHeader && time && <span className="mt-1 px-1 text-[11px] leading-none text-muted-foreground/70">{time}</span>}
+        {loaded.map((part, i) => <div key={i} className="max-w-[85%] min-w-0"><ContextLine {...part} query={query} focused={focused} /></div>)}
       </div>
     );
   }
