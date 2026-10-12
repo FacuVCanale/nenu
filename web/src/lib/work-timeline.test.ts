@@ -235,8 +235,9 @@ describe("liveStep", () => {
     expect(liveStep(running([tool, { kind: "thinking", text: "Ahora ajusto el chip.\nDespués el test." }]))).toMatchObject({ kind: "thinking", verb: "Thinking", target: "Ahora ajusto el chip.", format: "thought", entry: "step", index: 1 });
   });
 
-  it("says only Working between steps, and claims no step to draw", () => {
-    expect(liveStep(running([tool]))).toEqual({ kind: "working", verb: "Working", target: "", format: "text" });
+  it("names no step between steps: the turn's own line says it is working", () => {
+    expect(liveStep(running([tool]))).toBeNull();
+    expect(liveStep(running([thought, tool]))).toBeNull();
   });
 
   // Claude writes each parallel call as its own entry, and the results come back in any order.

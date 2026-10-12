@@ -1,6 +1,6 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
@@ -650,6 +650,42 @@ describe("TranscriptView — the work timeline", () => {
     expect(live).toHaveTextContent("Running agent");
     expect(live).toHaveTextContent("Audit the tab strip");
     expect(screen.getAllByText("Audit the tab strip")).toHaveLength(1);
+  });
+
+  // The step in progress is the one the operator most wants to read whole: it opens like any step.
+  const command = "cd web && bun run test tab-strip --watch=false";
+  const liveRow = (container: HTMLElement) => container.querySelector<HTMLElement>("[data-live-step]")!;
+
+  it("opens the running step with one tap onto its whole command, still running", async () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
+    const row = within(liveRow(container)).getByRole("button", { name: `Running ${command}`, expanded: false });
+    await userEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(within(liveRow(container)).getByText("Running…")).toBeVisible();
+    expect(liveRow(container).querySelector("pre")).toHaveTextContent(command);
+  });
+
+  it("opens the thought being written onto the whole of it", async () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "thinking", text: "Now the chip height.\nThen the e2e." }])} activityStatus="working" />);
+    await userEvent.click(within(liveRow(container)).getByRole("button", { name: /^Thinking/ }));
+    expect(screen.getByText(/Then the e2e\./)).toBeVisible();
+  });
+
+  it("opens the running step on a search hit inside it, and marks the hit", () => {
+    const { container } = render(<TranscriptView query="watch=false" entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
+    expect(within(liveRow(container)).getByRole("button", { name: /^Running/ })).toHaveAttribute("aria-expanded", "true");
+    expect(liveRow(container).querySelector("mark")).toHaveTextContent("watch=false");
+  });
+
+  it("opens the running step when search focus lands on its entry", () => {
+    const { container } = render(<TranscriptView focusedUuid="now" entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
+    expect(within(liveRow(container)).getByRole("button", { name: /^Running/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("draws no bottom row between steps, where the turn's line already says it is working", () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Grep", summary: "chip", result: { text: "chip.tsx" } }])} activityStatus="working" />);
+    expect(screen.getByRole("button", { name: /^Working/ })).toBeInTheDocument();
+    expect(container.querySelector("[data-live-step]")).toBeNull();
   });
 
   it("draws compaction as a divider that carries its time and opens onto the summary", async () => {
