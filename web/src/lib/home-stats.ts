@@ -2,7 +2,8 @@
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
 import { nodeState } from "./org-tree";
-import { byRecency, chatRecency, isOpenThread, paneIdentity, type PaneIdentity } from "./projects";
+import { displayName, displayPlace, type DisplayPlace } from "./display-name";
+import { byRecency, chatRecency, isOpenThread } from "./projects";
 import { isUnseen } from "./triage";
 import type { AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
 
@@ -149,9 +150,10 @@ export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRe
   return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
 }
 
-/** A chat in Home's "Recent": what it is, where it lives, and when it last moved. */
-export interface RecentChat extends PaneIdentity {
+/** A chat in Home's "Recent": what it is called (as every view calls it), where it lives, and when it last moved. */
+export interface RecentChat extends DisplayPlace {
   agent: AgentView;
+  title: string;
   /** Last movement or visit, epoch ms; 0 when unknown. */
   at: number;
   /** Finished since you last opened it. */
@@ -164,7 +166,7 @@ export interface RecentChat extends PaneIdentity {
  */
 export function recentChats(agents: readonly AgentView[], projects: readonly ProjectView[] | undefined, shown: ReadonlySet<string>): RecentChat[] {
   return byRecency(agents.filter((agent) => !shown.has(agent.paneId)))
-    .map((agent) => ({ agent, ...paneIdentity(agent, projects), at: chatRecency(agent), unseen: isUnseen(agent) }));
+    .map((agent) => ({ agent, title: displayName(agent, projects), ...displayPlace(agent, projects), at: chatRecency(agent), unseen: isUnseen(agent) }));
 }
 
 /** Workflows still running, with the pane that launched them. */

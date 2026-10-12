@@ -7,14 +7,13 @@ import { StatusDot } from "@/components/status-badge";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
 import type { NeedsYouItem } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
-import { paneIdentity } from "@/lib/projects";
+import { displayName, displayPlace } from "@/lib/display-name";
 import type { AgentView, Interaction, ProjectView } from "@/lib/types";
 
-/** Who is asking and where it lives, as Recent names the same pane. */
+/** Who is asking and where it lives, by the names every other view gives the same pane. */
 function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | undefined, paneId: string): { name: string; where?: string } {
   if (!agent) return { name: paneId };
-  const { title, place } = paneIdentity(agent, projects);
-  return { name: title, where: place };
+  return { name: displayName(agent, projects), where: displayPlace(agent, projects).place };
 }
 
 const WAITING = "waiting in the terminal";
