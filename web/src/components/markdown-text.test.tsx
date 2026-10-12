@@ -94,6 +94,8 @@ describe("code blocks", () => {
     expect(container.querySelector("pre")).toHaveTextContent(SOURCE.replace(/\s+/g, " "));
   });
 
+  // "Failed" is no wider than "Copied", so the button the header reserves for both never grows and
+  // Wrap stays under the finger (the bench measures the widths).
   it("says so when the clipboard refuses, and offers Copy again", async () => {
     vi.useFakeTimers();
     try {
@@ -101,7 +103,7 @@ describe("code blocks", () => {
       render(<MarkdownText text={BLOCK} />);
       fireEvent.click(screen.getByRole("button", { name: "Copy" }));
       await act(async () => {});
-      expect(screen.getByRole("button", { name: "Copy failed" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Failed" })).toBeInTheDocument();
       act(() => vi.advanceTimersByTime(2500));
       expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
     } finally {
