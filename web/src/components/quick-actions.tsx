@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Check, Loader2 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ECHO_DONE_MS, useActionEcho } from "@/hooks/use-action-echo";
 import type { EchoPhase } from "@/hooks/use-action-echo";
@@ -47,15 +46,13 @@ function Group({
             <Button
               key={t}
               type="button"
-              // The tapped reply goes accent (and stays undimmed under `disabled`, so it reads over
-              // its dimmed siblings) — the same busy language the dialog option rows use.
+              // The tapped reply fills, and aria-busy keeps that fill while the dock is disabled, so it
+              // reads over its unavailable siblings: the same busy language the dialog option rows use.
               variant={phase === "idle" ? "outline" : "default"}
               disabled={disabled || busy}
+              aria-busy={phase === "pending" || undefined}
               onClick={() => onFire(t)}
-              className={cn(
-                "h-12 gap-1.5 text-sm font-medium",
-                phase !== "idle" && "disabled:opacity-100",
-              )}
+              className="h-12 gap-1.5 text-sm font-medium"
             >
               {phase === "pending" && <Loader2 className="size-4 animate-spin" />}
               {phase === "done" && <Check className="size-4" />}

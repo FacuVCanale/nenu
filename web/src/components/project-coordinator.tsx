@@ -83,7 +83,7 @@ function ReplaceCoordinatorDialog({ project, agent, session, onReplaced, onCance
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" size="lg" disabled={busy} onClick={onCancel}>Cancel</Button>
-          <Button type="submit" variant="destructive" size="lg" disabled={busy || !profile}>{busy ? "Replacing…" : "Replace"}</Button>
+          <Button type="submit" variant="destructive" size="lg" disabled={busy || !profile} aria-busy={busy || undefined}>{busy ? "Replacing…" : "Replace"}</Button>
         </div>
       </form>
     </Dialog>

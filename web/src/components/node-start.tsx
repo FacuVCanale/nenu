@@ -152,7 +152,7 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         {onCancel && <Button type="button" size="lg" variant="ghost" className="text-sm" disabled={submitting} onClick={onCancel}>Cancel</Button>}
-        <Button type="submit" size="lg" className="text-sm" disabled={submitting || readOnly}>{submitting ? "Starting…" : `Create ${ROLE_NOUN[role]}`}</Button>
+        <Button type="submit" size="lg" className="text-sm" disabled={submitting || readOnly} aria-busy={submitting || undefined}>{submitting ? "Starting…" : `Create ${ROLE_NOUN[role]}`}</Button>
       </div>
     </form>
   );

@@ -387,7 +387,7 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
         <code aria-label="Command" className="min-w-0 flex-1 overflow-x-auto font-mono text-[11.5px] whitespace-nowrap text-muted-foreground [scrollbar-width:none]">
           {projectCommand(name, goal, repo)}
         </code>
-        <Button type="submit" className="h-11 lg:h-9" disabled={busy || readOnly || !name.trim()}>{busy ? "Creating…" : "Create project"}</Button>
+        <Button type="submit" className="h-11 lg:h-9" disabled={busy || readOnly || !name.trim()} aria-busy={busy || undefined}>{busy ? "Creating…" : "Create project"}</Button>
       </div>
     </form>
   );
@@ -430,7 +430,7 @@ function QuickChatPane({ data, readOnly, onDone }: { data: HomeData | undefined;
       </p>
       {readOnly && <p className="text-sm text-muted-foreground">Read-only: this device is not authorised to create.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="h-11" disabled={busy || readOnly}>{busy ? "Starting…" : "Start chat"}</Button>
+      <Button type="submit" className="h-11" disabled={busy || readOnly} aria-busy={busy || undefined}>{busy ? "Starting…" : "Start chat"}</Button>
     </form>
   );
 }

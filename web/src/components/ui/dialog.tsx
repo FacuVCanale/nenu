@@ -68,7 +68,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, busy = f
       {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="ghost" size="lg" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button type="button" variant="destructive" size="lg" onClick={onConfirm} disabled={busy}>{busy ? "Working…" : confirmLabel}</Button>
+        <Button type="button" variant="destructive" size="lg" onClick={onConfirm} disabled={busy} aria-busy={busy || undefined}>{busy ? "Working…" : confirmLabel}</Button>
       </div>
     </Dialog>
   );
