@@ -39,8 +39,8 @@ export function Chip({ label, tag, active, focused, status, icon, onClick, onLon
   // A long-press already suppresses the click that follows (longPress.onClickCapture), so this only
   // sees a genuine tap.
   function handleClick() {
-    if (opensActions) {
-      onTapActive!();
+    if (active && onTapActive) {
+      onTapActive();
       return;
     }
     onClick();
@@ -96,17 +96,11 @@ export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
     if (left !== null) scroller.scrollLeft = left;
   }, [activeKey]);
 
-  // Which edges fade, written straight to the DOM: it follows every scroll frame and needs no render.
-  // Runs after every render too, since a rename or a new chip changes what overflows.
+  // Which edges fade follows every scroll frame and every resize, written straight to the DOM.
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    const update = () => {
-      const max = scroller.scrollWidth - scroller.clientWidth;
-      const edges = [scroller.scrollLeft > 1 && "start", scroller.scrollLeft < max - 1 && "end"].filter(Boolean);
-      scroller.dataset.overflow = edges.join(" ");
-    };
-    update();
+    const update = () => markFadingEdges(scroller);
     scroller.addEventListener("scroll", update, { passive: true });
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     resize?.observe(scroller);
@@ -114,6 +108,10 @@ export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
       scroller.removeEventListener("scroll", update);
       resize?.disconnect();
     };
+  }, []);
+  // A rename or a new chip changes what overflows without resizing the strip.
+  useEffect(() => {
+    if (scrollerRef.current) markFadingEdges(scrollerRef.current);
   });
 
   return (
@@ -124,4 +122,11 @@ export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
       </div>
     </div>
   );
+}
+
+/** Marks the edges a strip can still scroll toward, which strips.css fades. */
+function markFadingEdges(scroller: HTMLElement) {
+  const max = scroller.scrollWidth - scroller.clientWidth;
+  const edges = [scroller.scrollLeft > 1 && "start", scroller.scrollLeft < max - 1 && "end"].filter(Boolean);
+  scroller.dataset.overflow = edges.join(" ");
 }

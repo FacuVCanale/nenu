@@ -72,6 +72,7 @@ export function PaneStrip({
           open={sheetPane !== null}
           onClose={() => setSheetPane(null)}
           pane={sheetPane}
+          projects={projects}
           session={session}
           readOnly={readOnly}
           onRenamed={onRenamed}
