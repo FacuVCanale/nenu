@@ -67,11 +67,12 @@ export function timeAgo(ts: number, now: number = Date.now()): string {
 }
 
 /**
- * Wall-clock "HH:MM" in the phone's own locale and timezone — for "last seen 14:32" on a disconnected
- * render. A clock time, not an age, because that is the question being answered: an age has to be
- * recomputed to stay true, and a screen showing cached data may sit there for minutes without a
- * re-render. `14:32` is still `14:32` an hour later.
+ * Wall-clock time in the phone's own locale and timezone ("2:32 PM", "14:32") — for "last synced" on a
+ * disconnected render and the times in a conversation. A clock time, not an age, because that is the
+ * question being answered: an age has to be recomputed to stay true, and a screen showing cached data
+ * may sit there for minutes without a re-render. The hour has no leading zero: these times stand
+ * alone, never in a column that needs one.
  */
 export function clockTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }

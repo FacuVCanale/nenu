@@ -10,10 +10,11 @@ import { useContext, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
+import { clockTime as formatClock } from "@/lib/format";
 import { searchableText } from "@/lib/transcript-search";
-import { Highlight, relabel, useToolImages, WorkLogTools } from "@/components/work-log-tools";
-import { WorkActivityLabel } from "@/components/work-activity-label";
-import { buildWorkTimeline, formatWorkDuration, type WorkTurn } from "@/lib/work-timeline";
+import { Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
+import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
+import { buildWorkTimeline, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 // Renders an agent transcript — the conversation history a Claude pane's terminal structurally
@@ -29,11 +30,8 @@ import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 /** Times only — the date lives on the day divider, and a phone row has no width to spare. */
 function clockTime(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const ts = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(ts) ? "" : formatClock(ts);
 }
 
 function dayKey(iso: string): string {
@@ -42,28 +40,47 @@ function dayKey(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
-/** A quiet line that opens onto its body: Thinking, a loaded skill, a notification, a recap. */
-function Fold({ label, text, truncated = false, query, focused = false }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+/** Whether a folded body holds the searched words, so the hit is on screen. */
+function holds(text: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
-  const open = expanded || focused || (needle !== "" && text.toLowerCase().includes(needle));
-  return <div>
-    <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)}
-      className="flex min-h-11 max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-foreground md:min-h-7">
-      <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`} />
-      <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>
+  return needle !== "" && text.toLowerCase().includes(needle);
+}
+
+const META_LINE = "flex min-h-8 max-w-full items-center gap-2 text-left text-footnote text-muted-foreground coarse:min-h-11";
+
+/** Injected text as one quiet line: a loaded skill, a notification. It opens onto its body when it has more than its caption. */
+function ContextLine({ label, text, truncated, query, focused = false }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const caption = <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>;
+  if (text.trim() === "" || text.trim() === label) return <div data-notice className={META_LINE}>
+    <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
+    {caption}
+  </div>;
+  const open = expanded || focused || holds(text, query);
+  return <div data-notice>
+    <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)} className={`${META_LINE} hover:text-foreground`}>
+      <ChevronRight aria-hidden="true" className={`size-4 shrink-0 p-px ${open ? "rotate-90" : ""}`} />
+      {caption}
     </button>
-    {open && <div className="pb-2 pl-5 text-left text-xs text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
-      {truncated && <p>… truncated</p>}</div>}
+    {open && <div className="pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
+      {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
 
-/** Injected text as one line: a fold when it has more to show than its caption, else the caption. */
-function ContextLine({ label, text, truncated, query, focused }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
-  if (text.trim() !== "" && text.trim() !== label) return <div data-notice><Fold label={label} text={text} truncated={truncated} query={query} focused={focused} /></div>;
-  return <div data-notice className="flex min-h-7 max-w-full items-center gap-1.5 text-xs text-muted-foreground">
-    <span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
-    <span className="min-w-0 truncate"><Highlight text={label} query={query} /></span>
+/** Compaction marks where the session's earlier context was summarised: a divider, with the summary behind it. */
+function CompactionLine({ text, time, truncated, query, focused = false }: { text: string; time: string; truncated: boolean; query: string; focused?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const open = expanded || focused || holds(text, query);
+  const rule = <span aria-hidden="true" className="h-px min-w-6 flex-1 bg-border" />;
+  const caption = <span className="shrink-0"><Highlight text="Context compacted" query={query} />{time && ` · ${time}`}</span>;
+  if (!text) return <div data-notice className="flex min-h-8 items-center gap-3 text-footnote text-muted-foreground">{rule}{caption}{rule}</div>;
+  return <div data-notice>
+    <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)}
+      className="flex min-h-8 w-full items-center gap-3 text-footnote text-muted-foreground hover:text-foreground coarse:min-h-11">
+      {rule}{caption}{rule}
+    </button>
+    {open && <div className="pb-2 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
+      {truncated && <p className="text-footnote">… truncated</p>}</div>}
   </div>;
 }
 
@@ -78,9 +95,11 @@ function NoteLine({ part, query, focused }: { part: TranscriptPart; query: strin
   return <ContextLine label={first} text={part.text} truncated={part.truncated} query={query} focused={focused} />;
 }
 
-function Part({ part, entryId, query, focused = false, active = false, compactMedia = false, uploads = true, delivers = true }: {
+function Part({ part, entryId, id = entryId, query, focused = false, active = false, compactMedia = false, uploads = true, delivers = true }: {
   part: TranscriptPart;
   entryId: string;
+  /** The step's own key in the timeline, when an entry holds several. */
+  id?: string;
   query: string;
   focused?: boolean;
   active?: boolean;
@@ -94,8 +113,8 @@ function Part({ part, entryId, query, focused = false, active = false, compactMe
   // Inline journal images render as one strip per entry (EntryImages), not part by part.
   if (part.kind === "image") return null;
   // Tool output is COMMAND output, not prose — it stays verbatim in a monospace block (see ToolPart).
-  if (part.kind === "tool") return <WorkLogTools calls={[{ id: "single", part, owner: entryId }]} query={query} active={active} />;
-  if (part.kind === "thinking") return <Fold label={part.truncated ? "Thinking · truncated" : "Thinking"} text={part.text} truncated={part.truncated} query={query} focused={focused} />;
+  if (part.kind === "tool") return <ToolStep id={id} part={part} owner={entryId} query={query} active={active} focused={focused} />;
+  if (part.kind === "thinking") return <ThinkingStep text={part.text} truncated={part.truncated} query={query} focused={focused} />;
   if (part.kind === "context") return <ContextLine {...part} query={query} focused={focused} />;
   // Prose is Markdown, so it renders formatted. MarkdownText emits React elements only — never
   // markup — so this keeps the same XSS boundary the raw text node had.
@@ -140,7 +159,7 @@ function Turn({
     return (
       <div title={time || undefined}>
         {entry.role === "summary"
-          ? <ContextLine label="Context compacted" text={recap}
+          ? <CompactionLine text={recap} time={time}
               truncated={entry.parts.some((part) => part.kind === "text" && part.truncated)} query={query} focused={focused} />
           : entry.parts.map((part, i) => <NoteLine key={i} part={part} query={query} focused={focused} />)}
         <EntryImages entry={entry} />
@@ -162,7 +181,7 @@ function Turn({
           ))}
           <EntryImages entry={entry} />
         </div>
-        {showHeader && time && <span className="mt-1 px-1 text-[11px] leading-none text-muted-foreground/70">{time}</span>}
+        {showHeader && time && <time dateTime={entry.ts} className="mt-1 px-1 text-footnote leading-none text-muted-foreground">{time}</time>}
         {loaded.map((part, i) => <div key={i} className="max-w-[85%] min-w-0"><ContextLine {...part} query={query} focused={focused} /></div>)}
       </div>
     );
@@ -177,23 +196,24 @@ function Turn({
   );
 }
 
-function ActivityLog({ entries, query, focusedUuid, active }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean }) {
-  const blocks: Array<{ kind: "tools"; entries: TranscriptEntry[] } | { kind: "entry"; entry: TranscriptEntry }> = [];
-  for (const entry of entries) {
-    if (entry.parts.every((part) => part.kind === "tool")) {
-      const last = blocks.at(-1);
-      if (last?.kind === "tools") last.entries.push(entry);
-      else blocks.push({ kind: "tools", entries: [entry] });
-    } else blocks.push({ kind: "entry", entry });
-  }
-  return <div className="space-y-1 pl-5 text-xs text-muted-foreground">
-    {blocks.map((block) => block.kind === "tools"
-      ? <WorkLogTools key={block.entries[0]!.uuid} calls={block.entries.flatMap((entry) => entry.parts.flatMap((part, index) => part.kind === "tool" ? [{ id: `${entry.uuid}:${index}`, entryId: index === 0 ? entry.uuid : undefined, owner: entry.uuid, part }] : []))} query={query} focusedEntryId={focusedUuid} active={active} />
-      : <div key={block.entry.uuid} data-turn={block.entry.uuid} className={focusedUuid === block.entry.uuid ? "rounded ring-2 ring-primary/60" : undefined}>
-          {block.entry.parts.map((part, index) => <Part key={index} part={part} entryId={block.entry.uuid} query={query} focused={focusedUuid === block.entry.uuid} active={active} />)}
-          <EntryImages entry={block.entry} />
-        </div>)}
-  </div>;
+/** The parts of an entry that draw as steps: images go to one gallery, the live step to the bottom row. */
+function stepParts(entry: TranscriptEntry, live: LiveStep | null) {
+  return entry.parts.flatMap((part, index) => part.kind === "image" || (live?.entry === entry.uuid && live.index === index) ? [] : [{ part, index }]);
+}
+
+/** A turn's work, one step per row, in the order it happened. */
+function ActivityLog({ entries, query, focusedUuid, active, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; live: LiveStep | null }) {
+  return <ol className="min-w-0">
+    {entries.map((entry) => {
+      const steps = stepParts(entry, live);
+      if (!steps.length && !journalImages(entry).length) return null;
+      const focused = focusedUuid === entry.uuid;
+      return <li key={entry.uuid} data-turn={entry.uuid} className={focused ? "rounded ring-2 ring-primary/60" : undefined}>
+        {steps.map(({ part, index }) => <Part key={index} part={part} entryId={entry.uuid} id={`${entry.uuid}:${index}`} query={query} focused={focused} active={active} />)}
+        <EntryImages entry={entry} />
+      </li>;
+    })}
+  </ol>;
 }
 
 function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean }) {
@@ -203,11 +223,16 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
   const open = searching || (expanded ?? !turn.settled);
   const tools = turn.activity.flatMap((entry) => entry.parts.filter((part) => part.kind === "tool"));
   const failures = tools.filter((part) => part.result?.isError).length;
-  const truncated = turn.activity.some((entry) => entry.parts.some((part) => part.kind === "tool" ? part.result?.truncated : part.kind !== "image" && part.truncated));
-  const hasDetails = turn.activity.length > 0;
+  const live = liveStep(turn);
+  const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
   const label = turn.interrupted ? "Stopped" : turn.settled ? "Worked" : "Work log";
-  const duration = turn.durationMs !== undefined ? ` for ${formatWorkDuration(turn.durationMs)}` : "";
-  const lastPart = turn.activity.at(-1)?.parts.at(-1);
+  const duration = turn.durationMs !== undefined ? ` ${turn.interrupted ? "after" : "for"} ${formatWorkDuration(turn.durationMs)}` : "";
+  // One time per turn, when it finished: the question's time is already under its bubble.
+  const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
+  const endTime = clockTime(end);
+  // The live step's own entry may have nothing else to draw; the live row then carries its scroll marker.
+  const liveEntry = live?.entry ? turn.activity.find((entry) => entry.uuid === live.entry) : undefined;
+  const liveMarker = liveEntry && !stepParts(liveEntry, live).length && !journalImages(liveEntry).length ? liveEntry.uuid : undefined;
   const viewer = useContext(MediaViewerContext);
   const toolImages = useToolImages();
   // Folded work still shows what the agent looked at, as one gallery for the turn.
@@ -219,17 +244,22 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
   const delivered = [...new Set(turn.activity.flatMap((entry) => entry.parts.flatMap(sentFiles)))]
     .filter((path) => !IMAGE_EXTENSION.test(path) && !answerPaths.some((mention) => path === mention || path.endsWith(`/${mention.replace(/^\.\//, "")}`)));
   return <div className="space-y-2" data-work-turn={turn.id}>
-    <button type="button" data-work-toggle aria-expanded={open} disabled={!hasDetails}
-      onClick={() => setExpanded(!open)} className="flex min-h-11 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0 text-left text-xs text-muted-foreground hover:text-foreground disabled:opacity-100 md:min-h-7">
-      <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`} />
-      {turn.active ? <WorkActivityLabel startedAt={turn.startedAt} thinking={lastPart?.kind === "thinking"} /> : <span>{label}{turn.settled ? duration : ""}</span>}
-      {tools.length > 0 && <span className="whitespace-nowrap">· {tools.length} tool {tools.length === 1 ? "call" : "calls"}</span>}
-      {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} {failures === 1 ? "error" : "errors"}</span>}
-      {truncated && <span className="whitespace-nowrap">· truncated</span>}
-    </button>
+    <div className="flex max-w-full flex-wrap items-center gap-x-1.5 text-footnote text-muted-foreground">
+      <button type="button" data-work-toggle aria-expanded={open} disabled={!hasDetails}
+        onClick={() => setExpanded(!open)} className="flex min-h-8 min-w-0 items-center gap-1.5 text-left hover:text-foreground disabled:opacity-100 coarse:min-h-11">
+        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`} />
+        {turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" /> : <span>{label}{turn.settled ? duration : ""}</span>}
+        {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
+      </button>
+      {endTime && <span className="whitespace-nowrap">· <time dateTime={end}>{endTime}</time></span>}
+    </div>
     {tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
       <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />))}
-    {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} />}
+    {/* The rail under the turn's line ties its steps to it; a running turn keeps its live row under it, open or folded. */}
+    {(open || live) && <div className="ml-[7px] min-w-0 border-l pl-3">
+      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} live={live} />}
+      {live && <LiveStepRow step={live} marker={liveMarker} />}
+    </div>}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
       <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} />
@@ -272,7 +302,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
       lastRole = entry.role;
       return <div key={row.kind === "message" ? `message:${entry.uuid}` : `work:${row.id}`} data-turn={row.kind === "message" ? entry.uuid : undefined}
         className={`${showHeader ? "space-y-3 pt-1" : "space-y-3"} ${row.kind === "message" && entry.uuid === focusedUuid ? "rounded-lg ring-2 ring-primary/60 ring-offset-2 ring-offset-background" : ""}`}>
-        {newDay && <div className="pt-1 text-center text-[11px] text-muted-foreground/70">{day}</div>}
+        {newDay && <div className="pt-1 text-center text-footnote text-muted-foreground"><time dateTime={entry.ts}>{day}</time></div>}
         {row.kind === "message" ? <Turn entry={entry} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
           : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} />}
       </div>;

@@ -87,3 +87,69 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
   flush(false);
   return rows;
 }
+
+/** What a tool call is to the reader: its icon, and the verbs a row says it with. */
+export type StepKind = "terminal" | "read" | "edit" | "write" | "search" | "web" | "agent" | "plan" | "tool";
+export interface ToolStepDescription {
+  kind: StepKind;
+  /** Past tense for a finished step ("Ran"), present for the one in progress ("Running"). */
+  done: string;
+  doing: string;
+  /** How the call's summary is drawn: a path keeps its file name whole, code stays monospace. */
+  target: "path" | "code" | "text";
+}
+
+// Names across harnesses: Claude Code, Codex and pi spell the same few tools differently.
+const TOOL_STEPS: Array<[RegExp, ToolStepDescription]> = [
+  [/^(bash|shell|exec|exec_command|local_shell|run_shell_command)$/, { kind: "terminal", done: "Ran", doing: "Running", target: "code" }],
+  [/^(read|read_file|view|notebookread)$/, { kind: "read", done: "Read", doing: "Reading", target: "path" }],
+  [/^(edit|multiedit|edit_file|notebookedit|str_replace_editor|str_replace_based_edit_tool)$/, { kind: "edit", done: "Edited", doing: "Editing", target: "path" }],
+  [/^apply_patch$/, { kind: "edit", done: "Edited", doing: "Editing", target: "text" }],
+  [/^(write|write_file|create_file)$/, { kind: "write", done: "Wrote", doing: "Writing", target: "path" }],
+  [/^(grep|glob|find|rg|search|search_files|codebase_search)$/, { kind: "search", done: "Searched", doing: "Searching", target: "code" }],
+  [/^(ls|list_dir|list_directory)$/, { kind: "search", done: "Listed", doing: "Listing", target: "path" }],
+  [/^(webfetch|web_fetch|fetch)$/, { kind: "web", done: "Fetched", doing: "Fetching", target: "text" }],
+  [/^(websearch|web_search)$/, { kind: "web", done: "Searched the web", doing: "Searching the web", target: "text" }],
+  [/^(task|agent|spawn_agent)$/, { kind: "agent", done: "Ran agent", doing: "Running agent", target: "text" }],
+  [/^(todowrite|update_plan)$/, { kind: "plan", done: "Updated the plan", doing: "Updating the plan", target: "text" }],
+];
+
+/** A tool call as a step; a tool it does not know keeps its own name as the verb. */
+export function describeTool(name: string): ToolStepDescription {
+  const key = name.toLowerCase();
+  return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: name, doing: name, target: "text" };
+}
+
+/** The first line of `text` that has words, trimmed: what a one-line preview of a thought shows. */
+export function firstLine(text: string): string {
+  return text.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+}
+
+/**
+ * What a running turn is doing now: the call that has no result yet, or the thought being written.
+ * `entry` and `index` name that part, so the timeline draws it once, as this live row; between
+ * steps there is no part to name and the row only says Working.
+ */
+export interface LiveStep {
+  kind: StepKind | "thinking" | "working";
+  verb: string;
+  target: string;
+  format: ToolStepDescription["target"] | "thought";
+  since?: string;
+  entry?: string;
+  index?: number;
+}
+
+export function liveStep(turn: WorkTurn): LiveStep | null {
+  if (!turn.active) return null;
+  const entry = turn.activity.at(-1);
+  const index = entry ? entry.parts.findLastIndex((part) => part.kind !== "image") : -1;
+  const part = entry?.parts[index];
+  const at = { ...(validTime(entry?.ts) ? { since: entry!.ts } : {}), entry: entry?.uuid, index };
+  if (part?.kind === "tool" && !part.result) {
+    const step = describeTool(part.name);
+    return { kind: step.kind, verb: step.doing, target: part.summary, format: step.target, ...at };
+  }
+  if (part?.kind === "thinking") return { kind: "thinking", verb: "Thinking", target: firstLine(part.text), format: "thought", ...at };
+  return { kind: "working", verb: "Working", target: "", format: "text" };
+}

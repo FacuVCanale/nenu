@@ -30,8 +30,7 @@ describe("LiveConversation", () => {
     expect(screen.getByRole("button", { name: "Load older messages" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Open full history/ })).not.toBeInTheDocument();
     expect(screen.queryByText("abc1234 fix")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /1 tool call · Bash/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Bash.*git log/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ran git log/ }));
     expect(screen.getByText("abc1234 fix")).toBeInTheDocument();
   });
 
@@ -40,8 +39,7 @@ describe("LiveConversation", () => {
     const view = (history: PaneHistoryResponse) => <><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" defaultValue="Still writing" /></>;
     const { rerender } = render(view(initial));
     const draft = screen.getByRole("textbox", { name: "Draft" });
-    fireEvent.click(screen.getByRole("button", { name: /1 tool call · Bash/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Bash.*git log/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ran git log/ }));
     rerender(view({ ...initial, entries: [{ uuid: "new", ts: "", role: "assistant", parts: [{ kind: "text", text: "New latest turn" }] }] }));
     expect(screen.getByText("abc1234 fix")).toBeInTheDocument();
     expect(screen.queryByText("New latest turn")).not.toBeInTheDocument();

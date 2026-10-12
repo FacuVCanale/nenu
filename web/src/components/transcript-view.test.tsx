@@ -67,7 +67,6 @@ describe("TranscriptView", () => {
       />,
     );
 
-    expect(screen.queryByText("git log --oneline")).not.toBeInTheDocument();
     await openWork();
     expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.getByText("git log --oneline")).toBeInTheDocument();

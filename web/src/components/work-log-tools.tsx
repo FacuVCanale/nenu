@@ -1,21 +1,23 @@
-import { useContext, useId, useState } from "react";
-import { ChevronRight, TriangleAlert, Wrench } from "lucide-react";
+import { useContext, useId, useState, type ReactNode } from "react";
+import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
+import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
 import { IMAGE_EXTENSION, imageLabel } from "@/lib/message-images";
 import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { describeTool, firstLine, type LiveStep, type StepKind } from "@/lib/work-timeline";
+import { MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
+import { Elapsed, LiveGlyph } from "./work-activity-label";
+
+// A turn's work as a timeline: one line per step, its icon, a verb and what it acted on. A step with
+// a body (a call's output, a whole thought) opens it under its line; nothing groups steps behind a
+// second fold, so a failure is one tap from its output once the turn is open.
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
-interface Props {
-  /** `owner` is the entry the call sits in, which addresses the images its result carries. */
-  calls: Array<{ id: string; part: ToolPart; entryId?: string; owner?: string }>;
-  query?: string;
-  active?: boolean;
-  focusedEntryId?: string;
-}
 
 function matches(part: ToolPart, query: string) {
   const needle = query.trim().toLowerCase();
@@ -59,71 +61,121 @@ export function useToolImages() {
   return (part: ToolPart, owner?: string) => toolImages(part, owner, viewer, url);
 }
 
-function ToolRow({ id, part, entryId, owner, query, active, focused }: { id: string; part: ToolPart; entryId?: string; owner?: string; query: string; active: boolean; focused: boolean }) {
+const STEP_ICONS: Record<StepKind | "thinking", LucideIcon> = {
+  terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Bot, plan: ListTodo, tool: Wrench, thinking: Brain,
+};
+
+// 36px on a mouse, 44px under a finger, both from padding around one 20px line.
+const LINE = "flex w-full min-w-0 items-center gap-2 py-2 text-left text-subhead min-h-9 coarse:min-h-11";
+
+/** A step's line. With `onToggle` it is the button that opens the step's body. */
+function StepLine({ icon, label, expanded, controls, onToggle, children }: {
+  icon: ReactNode;
+  label?: string;
+  expanded?: boolean;
+  controls?: string;
+  onToggle?: () => void;
+  children: ReactNode;
+}) {
+  if (!onToggle) return <div className={LINE}>{icon}{children}</div>;
+  return <button type="button" data-work-toggle aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
+    className={cn(LINE, "rounded-md hover:text-foreground")}>
+    {icon}{children}
+    <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} />
+  </button>;
+}
+
+function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
+  const Icon = STEP_ICONS[kind];
+  return <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />;
+}
+
+/**
+ * What a step acted on: a path shows its folders muted and its file name whole, code stays monospace.
+ * The folders give up whole leading segments first, then lose characters from their start (the rtl
+ * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay.
+ */
+function StepTarget({ text, format, query }: { text: string; format: LiveStep["format"]; query: string }) {
+  if (!text) return <span className="flex-1" />;
+  if (format === "path") {
+    const { dir, base } = displayPath(text, "", 32);
+    return <span className="flex min-w-0 flex-1">
+      {dir && <span className="min-w-0 truncate text-muted-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} /></span></span>}
+      <span className="max-w-full shrink-0 truncate text-foreground"><Highlight text={base} query={query} /></span>
+    </span>;
+  }
+  return <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", format === "code" && "font-mono text-code", format === "thought" && "italic")}>
+    <Highlight text={text} query={query} />
+  </span>;
+}
+
+/** A finished step that failed says so on its line, so the failure shows before anything opens. */
+function FailedChip() {
+  return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/40 px-2 text-caption text-destructive">
+    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />Failed
+  </span>;
+}
+
+const OUTPUT = "min-w-0 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]";
+
+/** A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). */
+export function ToolStep({ id, part, owner, query, active, focused }: { id: string; part: ToolPart; owner?: string; query: string; active: boolean; focused: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   const images = useToolImages();
   const open = expanded || focused || matches(part, query);
-  const status = part.result?.isError ? "Failed" : !part.result ? active ? "Running…" : "No output recorded" : null;
+  const step = describeTool(part.name);
+  const failed = !!part.result?.isError;
+  const running = !part.result && active;
+  const verb = running ? step.doing : step.done;
+  const status = failed ? "Failed" : !part.result && !active ? "No output recorded" : null;
+  const truncated = !!part.result?.truncated;
   return (
-    <div data-tool={id} data-turn={entryId} className="min-w-0">
-      <button
-        type="button"
-        data-work-toggle
-        aria-label={[part.name, part.summary, status, part.result?.truncated ? "Truncated" : null].filter(Boolean).join(" ")}
-        aria-expanded={open}
-        aria-controls={contentId}
-        onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-left text-xs leading-5 outline-none hover:bg-accent/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 md:min-h-7"
-      >
-        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground/65 transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`} />
-        <span className="max-w-[45%] shrink-0 truncate font-medium"><Highlight text={part.name} query={query} /></span>
-        {part.summary && <span className="min-w-0 flex-1 truncate text-muted-foreground/65"><Highlight text={part.summary} query={query} /></span>}
-        {status && <span className={`shrink-0 text-[11px] ${part.result?.isError ? "text-destructive" : "text-muted-foreground"}`}>{status}</span>}
-        {part.result?.truncated && <span className="shrink-0 text-[11px] text-muted-foreground">Truncated</span>}
-      </button>
-      <ImageStrip images={images(part, owner)} label="Images the tool returned" className="px-6 pb-1" />
-      {open && <div id={contentId} className="min-w-0 space-y-2 px-6 pb-2 text-xs">
-        {part.summary && <pre className="min-w-0 font-mono text-[11px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]"><Highlight text={part.summary} query={query} /></pre>}
-        {part.result ? <pre className="min-w-0 font-mono text-[11px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]"><Highlight text={part.result.text} query={query} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
-          : <p className="text-muted-foreground">{active ? "Running…" : "No output recorded"}</p>}
+    <div data-tool={id} data-step={step.kind} className="min-w-0">
+      <StepLine icon={<StepIcon kind={step.kind} />} label={[verb, part.summary, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+        expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
+        <span className="shrink-0 text-foreground">{verb}</span>
+        <StepTarget text={part.summary} format={step.target} query={query} />
+        {failed ? <FailedChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
+        {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
+      </StepLine>
+      <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
+      {open && <div id={contentId} className="mb-2 ml-6 min-w-0 space-y-2 rounded-lg bg-muted px-3 py-2">
+        <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} /></p>
+        {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} /></pre>}
+        {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
+          : <p className="text-footnote text-muted-foreground">{active ? "Running…" : "No output recorded"}</p>}
       </div>}
     </div>
   );
 }
 
-/** Consecutive tool activity; the parent assigns entry markers only to their first tool part. */
-export function WorkLogTools({ calls, query = "", active = false, focusedEntryId }: Props) {
+/** A thought as one italic line of its opening words; the whole of it opens beneath. */
+export function ThinkingStep({ text, truncated = false, query, focused = false }: { text: string; truncated?: boolean; query: string; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
-  const images = useToolImages();
-  if (calls.length === 0) return null;
-  const open = expanded || calls.some(({ part, entryId }) => matches(part, query) || (!!focusedEntryId && entryId === focusedEntryId));
-  const names = [...new Set(calls.map(({ part }) => part.name))];
-  const errors = calls.filter(({ part }) => part.result?.isError).length;
-  const truncated = calls.filter(({ part }) => part.result?.truncated).length;
-  const label = `${calls.length} tool ${calls.length === 1 ? "call" : "calls"} · ${names.slice(0, 3).join(", ")}${names.length > 3 ? `, +${names.length - 3} more` : ""}`;
-  return (
-    <div className="work-log-tools min-w-0 text-foreground/85">
-      <button
-        type="button"
-        data-work-toggle
-        aria-label={[label, errors ? `${errors} ${errors === 1 ? "error" : "errors"}` : null, truncated ? `${truncated} truncated` : null].filter(Boolean).join(", ")}
-        aria-expanded={open}
-        aria-controls={contentId}
-        onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-left text-xs leading-5 outline-none hover:bg-accent/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 md:min-h-7"
-      >
-        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground/65 transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`} />
-        <Wrench aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground/65" />
-        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{label}</span>
-        {!!errors && <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-destructive"><TriangleAlert aria-hidden="true" className="size-3" />{errors} {errors === 1 ? "error" : "errors"}</span>}
-        {!!truncated && <span className="shrink-0 text-[11px] text-muted-foreground">{truncated} truncated</span>}
-      </button>
-      {!open && <ImageStrip images={relabel(calls.flatMap(({ part, owner }) => images(part, owner)))} label="Images the tools returned" className="px-6 pb-1" />}
-      {open && <div id={contentId} className="min-w-0 pl-3">
-        {calls.map(({ id, part, entryId, owner }) => <ToolRow key={id} id={id} part={part} entryId={entryId} owner={owner} query={query} active={active} focused={!!focusedEntryId && entryId === focusedEntryId} />)}
-      </div>}
-    </div>
-  );
+  const needle = query.trim().toLowerCase();
+  const open = expanded || focused || (needle !== "" && text.toLowerCase().includes(needle));
+  const preview = firstLine(text);
+  return <div data-step="thinking" className="min-w-0">
+    <StepLine icon={<StepIcon kind="thinking" />} label={truncated ? "Thinking · truncated" : "Thinking"} expanded={open} controls={contentId}
+      onToggle={preview ? () => setExpanded((value) => !value) : undefined}>
+      {/* Open, the thought is below in full: the line names it instead of repeating its start. */}
+      {open && preview ? <span className="flex-1 text-muted-foreground">Thinking</span> : <StepTarget text={preview || "Thinking"} format="thought" query={query} />}
+    </StepLine>
+    {open && preview && <div id={contentId} className="min-w-0 pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]">
+      <MarkdownText text={text} query={query} />
+      {truncated && <p className="text-footnote">… truncated</p>}
+    </div>}
+  </div>;
+}
+
+/** The bottom line of a running turn: what the agent is doing now, and for how long. */
+export function LiveStepRow({ step, marker }: { step: LiveStep; marker?: string }) {
+  return <div data-live-step data-turn={marker} className={LINE}>
+    <LiveGlyph />
+    <span className="shrink-0 text-foreground">{step.verb}</span>
+    <StepTarget text={step.target} format={step.format} query="" />
+    {step.since && <Elapsed since={step.since} className="shrink-0 text-footnote text-muted-foreground" />}
+  </div>;
 }
