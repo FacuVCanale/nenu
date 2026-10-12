@@ -112,6 +112,9 @@ describe("TranscriptView", () => {
     await openWork();
     expect(screen.getByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
     expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent(/^Edited\s*~\/\.config\/nenu\/keys\.toml$/);
+    // The row is named by what it shows, so a spoken "tap Read web src workbench.css" finds it.
+    expect(screen.getByRole("button", { name: "Read web/src/workbench.css" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edited ~/.config/nenu/keys.toml" })).toBeInTheDocument();
   });
 
   it("flags truncated output rather than silently dropping the tail", async () => {
