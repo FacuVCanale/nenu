@@ -718,3 +718,62 @@ describe("TranscriptView — the work timeline", () => {
     expect(faded).toEqual([]);
   });
 });
+
+// While a dialog waits on the operator, the newest turn's calls without a result are what it waits
+// for: they have not run. Older turns and the history page keep what the journal says.
+describe("TranscriptView — a turn waiting on the operator", () => {
+  const at = (hm: string) => `2026-07-25T${hm}:00`;
+  const old = [
+    turn({ uuid: "q0", ts: at("08:00"), parts: [{ kind: "text", text: "Earlier." }] }),
+    turn({ uuid: "old", ts: at("08:01"), role: "assistant", turnId: "t0", parts: [{ kind: "tool", name: "Bash", summary: "sleep 9" }] }),
+    turn({ uuid: "old-end", ts: at("08:02"), role: "assistant", turnId: "t0", phase: "final_answer", parts: [{ kind: "text", text: "Done earlier." }] }),
+  ];
+  const blocked = [
+    ...old,
+    turn({ uuid: "q1", ts: at("09:00"), parts: [{ kind: "text", text: "Seguí con lo que haga falta." }] }),
+    turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "text", text: "Antes de seguir necesito una decisión tuya." },
+      { kind: "tool", name: "Bash", summary: "echo hi > hello.txt" },
+    ] }),
+  ];
+  const view = (live: "card" | "dialog" | null, entries = blocked, status: "blocked" | "working" = "blocked") =>
+    <QuestionLiveContext.Provider value={live}><TranscriptView entries={entries} activityStatus={status} /></QuestionLiveContext.Provider>;
+
+  it("says the pending call waits on you, in the present, under a live card", () => {
+    render(view("card"));
+    expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Ran echo hi/ })).not.toBeInTheDocument();
+  });
+
+  it("says so for a dialog drawn elsewhere too", () => {
+    render(view("dialog"));
+    expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+  });
+
+  it("names the question it waits on", () => {
+    const asked = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "tool", name: "AskUserQuestion", summary: "", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] },
+    ] })];
+    render(view("card", asked));
+    expect(screen.getByRole("button", { name: "Question Which source? Waiting on you" })).toBeInTheDocument();
+    expect(screen.queryByText("AskUserQuestion")).not.toBeInTheDocument();
+  });
+
+  it("waits on the bottom row of a turn the agent's state still calls running", () => {
+    const running = blocked.map((entry) => entry.uuid === "a1" ? { ...entry, turn: { status: "running" as const, startedAt: at("09:00") } } : entry);
+    const { container } = render(view("card", running, "working"));
+    expect(within(container.querySelector<HTMLElement>("[data-live-step]")!).getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+  });
+
+  it("leaves an older turn's missing output as it was", async () => {
+    render(view("card"));
+    await userEvent.click(screen.getByRole("button", { name: /^Worked/ }));
+    expect(screen.getByRole("button", { name: "Ran sleep 9 No output recorded" })).toBeInTheDocument();
+  });
+
+  it("claims no wait without a live dialog", () => {
+    render(view(null));
+    expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
+  });
+});

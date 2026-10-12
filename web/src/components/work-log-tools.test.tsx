@@ -158,6 +158,48 @@ describe("LiveStepRow", () => {
   });
 });
 
+// A call the agent cannot run until the operator answers (a permission, a question, a plan) has not
+// run: its line asks in the present, carries the blocked dot, and never says Ran or No output.
+describe("a call waiting on the operator", () => {
+  const bash: Call = { kind: "tool", name: "Bash", summary: "echo hi > hello.txt" };
+
+  it("reads as the request, Waiting on you, not as a finished call", async () => {
+    render(<ToolStep id="c" part={bash} query="" active={false} focused={false} waiting />);
+    const row = screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" });
+    expect(row).not.toHaveTextContent("Ran");
+    expect(row.querySelector(".bg-status-blocked")).not.toBeNull();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    await userEvent.click(row);
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    expect(screen.queryByText("Running…")).not.toBeInTheDocument();
+  });
+
+  it("waits without a spinner or a clock even while the turn runs", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
+    const { container } = render(<LiveStepRow step={{ part: bash, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} waiting />);
+    expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+    expect(screen.queryByText("12s")).not.toBeInTheDocument();
+  });
+
+  it("keeps a finished call in the past even inside a waiting turn", () => {
+    render(<ToolStep id="c" part={status} query="" active={false} focused={false} waiting />);
+    expect(screen.getByRole("button", { name: "Ran git status" })).toBeInTheDocument();
+    expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
+  });
+
+  // Every verb the timeline knows has its present form; one it lacks falls back to "…ing", never to a past.
+  it.each([
+    ["Bash", "Run"], ["Read", "Read"], ["Edit", "Edit"], ["apply_patch", "Edit"], ["Write", "Write"], ["Grep", "Search"],
+    ["ls", "List"], ["WebFetch", "Fetch"], ["WebSearch", "Search the web"], ["Task", "Run agent"], ["TodoWrite", "Update the plan"],
+    ["mcp__plugin_playwright_playwright__browser_click", "browser_click"],
+  ])("asks %s as %s", (name, verb) => {
+    render(<ToolStep id="c" part={{ kind: "tool", name, summary: "x" }} query="" active={false} focused={false} waiting />);
+    expect(screen.getByRole("button", { name: `${verb} x Waiting on you` })).toBeInTheDocument();
+  });
+});
+
 // The dialogs a call opens on the operator read by what they are, not by the CLI's tool name.
 describe("dialog calls", () => {
   const asked: Call = { kind: "tool", name: "AskUserQuestion", summary: "", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] };
@@ -177,5 +219,10 @@ describe("dialog calls", () => {
   it("names a plan Plan, with its title and no heading marks", () => {
     render(<Steps calls={[{ ...plan, result: { text: "User approved" } }]} />);
     expect(screen.getByRole("button", { name: /^Plan Plan: Add haiku\.txt/ })).not.toHaveTextContent("ExitPlanMode");
+  });
+
+  it("says a pending question waits on you", () => {
+    render(<ToolStep id="c" part={asked} query="" active={false} focused={false} waiting />);
+    expect(screen.getByRole("button", { name: "Question Which source? Waiting on you" })).toBeInTheDocument();
   });
 });
