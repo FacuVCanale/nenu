@@ -88,7 +88,7 @@ export function HomeRoute() {
         <h1 className="text-large-title text-balance">{title}</h1>
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
-      <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} offline={outage !== null} />
+      <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} outage={outage} />
       {live && !data.agents.length && <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />}
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
       <div data-stale={outage ? "" : undefined} className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
@@ -151,7 +151,7 @@ class Unavailable extends Error {}
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
-function HomeComposer({ data, projects, disabled, offline }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; offline: boolean }) {
+function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; outage: Outage | null }) {
   const [message, setMessage] = useState("");
   const [choice, setChoice] = useState<string | null>(readTarget);
   const [asking, setAsking] = useState(false);
@@ -169,7 +169,8 @@ function HomeComposer({ data, projects, disabled, offline }: { data: HomeData; p
   ];
   const target = targets.find((candidate) => valueOf(candidate) === choice) ?? targets[0]!;
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
-  const placeholder = offline ? (target.kind === "project" ? `Reconnect to reach ${target.project.name}'s coordinator` : "Reconnect to start an agent")
+  const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
+  const placeholder = outage === "refused" ? `Sign in again to ${action}` : outage ? `Reconnect to ${action}`
     : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
   async function send(mode: DeliveryMode) {
@@ -225,8 +226,9 @@ function HomeComposer({ data, projects, disabled, offline }: { data: HomeData; p
           }}
           className="field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-body outline-none placeholder:text-muted-foreground disabled:placeholder:text-disabled-foreground" />
         <div className="flex items-center gap-2 px-2.5 pt-1 pb-2.5">
-          <label className="relative inline-flex h-9 min-w-0 items-center gap-1 rounded-md bg-muted px-2.5 text-footnote focus-within:ring-2 focus-within:ring-ring coarse:h-11">
-            <span className="shrink-0 text-muted-foreground">{target.kind === "project" ? "To:" : "In:"}</span>
+          <label className={cn("relative inline-flex h-9 min-w-0 items-center gap-1 rounded-md bg-muted px-2.5 text-footnote focus-within:ring-2 focus-within:ring-ring coarse:h-11",
+            locked && "text-disabled-foreground")}>
+            <span className={cn("shrink-0", !locked && "text-muted-foreground")}>{target.kind === "project" ? "To:" : "In:"}</span>
             <span className="max-w-[16rem] truncate font-medium">{label}</span>
             <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
             <select aria-label="Send to" value={valueOf(target)} disabled={locked}
@@ -242,8 +244,9 @@ function HomeComposer({ data, projects, disabled, offline }: { data: HomeData; p
             </select>
           </label>
           <span className="flex-1" />
-          <Button type="submit" size="icon" disabled={locked || (target.kind === "project" && !message.trim())} aria-label={target.kind === "project" ? "Send" : "Start"}
-            aria-busy={busy || undefined} className="rounded-md">
+          {/* Ink once there is something to send; until then Start still opens the sheet, quietly. */}
+          <Button type="submit" size="icon" variant={message.trim() ? "default" : "secondary"} disabled={locked || (target.kind === "project" && !message.trim())}
+            aria-label={target.kind === "project" ? "Send" : "Start"} aria-busy={busy || undefined} className="rounded-md">
             {busy ? <Loader2 aria-hidden className="animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden />}
           </Button>
         </div>

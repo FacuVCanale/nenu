@@ -236,10 +236,10 @@ export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean
   return (
     <section aria-label="Get started" className="flex flex-col gap-2">
       <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-        <StarterRow icon={FolderPlus} title="Start an agent in a folder" hint="Claude Code, Codex or a shell, in a folder you pick." disabled={disabled} onClick={onFolder} />
-        <StarterRow icon={Sparkles} title="Start a project or a quick chat" hint="A coordinator with its threads, or one question with no repo." disabled={disabled} onClick={onMore} />
+        <StarterRow icon={FolderPlus} title="Start an agent in a folder" hint="Pick the agent, then the folder." disabled={disabled} onClick={onFolder} />
+        <StarterRow icon={Sparkles} title="Start a project or a quick chat" hint="Many threads, or one question." disabled={disabled} onClick={onMore} />
       </div>
-      <p className="px-1 text-footnote text-muted-foreground">Agents you start in Herdr show up here too.</p>
+      <p className="text-footnote text-muted-foreground">Agents you start in Herdr show up here too.</p>
     </section>
   );
 }
