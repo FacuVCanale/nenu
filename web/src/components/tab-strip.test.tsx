@@ -174,6 +174,19 @@ describe("TabStrip — long-press actions", () => {
     expect(screen.getByRole("button", { name: "Tab 1" }).querySelector("[data-chip-actions]")).toBeNull();
   });
 
+  // A read-only device's sheet holds only a note, so the open tab promises nothing; a long-press
+  // still shows the note.
+  it("puts no actions affordance on the open tab on a read-only device", () => {
+    render(
+      <TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} readOnly onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: "Tab 1" });
+    expect(open).not.toHaveAttribute("aria-haspopup");
+    expect(open.querySelector("[data-chip-actions]")).toBeNull();
+    fireEvent.contextMenu(open);
+    expect(screen.getByText(/isn't authorised to rename or close tabs/)).toBeInTheDocument();
+  });
+
   it("still switches on a tap of a non-selected tab even with actions wired", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

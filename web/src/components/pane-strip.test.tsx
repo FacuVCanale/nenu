@@ -205,6 +205,17 @@ describe("PaneStrip", () => {
     expect(screen.getByRole("button", { name: /codex/ }).querySelector("[data-chip-actions]")).toBeNull();
   });
 
+  // A read-only device's sheet holds only a note, so the open pill promises nothing; a long-press
+  // still shows the note.
+  it("puts no actions affordance on the open pill on a read-only device", () => {
+    render(
+      <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} readOnly onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: /claude/ });
+    expect(open).not.toHaveAttribute("aria-haspopup");
+    expect(open.querySelector("[data-chip-actions]")).toBeNull();
+  });
+
   it("still navigates on a tap of an INACTIVE pill even when actions are wired", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
