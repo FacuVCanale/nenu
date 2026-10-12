@@ -22,9 +22,10 @@ beforeEach(() => localStorage.clear());
 
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
   const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
-  const router = createMemoryRouter([{ path: "/pane/:paneId", element }, { path: "/pane/:paneId/history", element }, { path: "*", element }], { initialEntries: [initialEntry] });
-  render(<RouterProvider router={router} />);
-  return { router, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
+  const routes = ["/pane/:paneId", "/pane/:paneId/history", "/project/:projectSlug", "/project/:projectSlug/node/:nodeId", "*"].map((path) => ({ path, element }));
+  const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
+  const { unmount } = render(<RouterProvider router={router} />);
+  return { router, unmount, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
 }
 
 it("uses one shared mobile header without the old brand or session row", () => {
@@ -117,20 +118,29 @@ it("shows the tab bar off a pane, and its tabs open the navigation in the matchi
 });
 
 it("hides the tab bar on a pane and its History, where the composer owns the bottom edge", () => {
-  setup(data, "/pane/w%3A1%3Ap2?s=work");
-  expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
-  document.body.innerHTML = "";
-  setup(data, "/pane/w%3A1%3Ap2/history?s=work");
-  expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
+  for (const path of ["/pane/w%3A1%3Ap2?s=work", "/pane/w%3A1%3Ap2/history?s=work"]) {
+    const { unmount } = setup(data, path);
+    expect(screen.queryByRole("navigation", { name: "Primary" }), path).not.toBeInTheDocument();
+    unmount();
+  }
 });
 
+// The coordinator's pane w:1:p9 is not running, so the project page is its organization.
+const restingProject: HomeData = { ...projectData, agents: data.agents };
+
 it("keeps the tab bar on a project page and a node page, which draw no composer", () => {
-  // A live coordinator sends /project/:slug to its pane, so these pages are the organization only.
+  // A node page stays put even while its project's coordinator runs.
+  for (const [home, path] of [[restingProject, "/project/nenu?s=work"], [projectData, "/project/nenu/node/t-0007?s=work"]] as const) {
+    const { unmount } = setup(home, path);
+    expect(screen.getByRole("navigation", { name: "Primary" }), path).toBeInTheDocument();
+    unmount();
+  }
+});
+
+it("draws no tab bar on a project whose live coordinator is opening its pane", () => {
+  // The router stays on /project/:slug while the pane loads; a tab bar there would sit alone on an empty page.
   setup(projectData, "/project/nenu?s=work");
-  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
-  document.body.innerHTML = "";
-  setup(projectData, "/project/nenu/node/t-0007?s=work");
-  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
 });
 
 it("draws New as a tab with its own label, like its neighbours", () => {
