@@ -78,7 +78,9 @@ type Live = Pick<LiveStep, "since">;
 
 /**
  * A step's line. With `onToggle` it is the button that opens the step's body; without, it keeps the
- * chevron's place, so whatever ends a line sits in one column down the timeline.
+ * chevron's place, so whatever ends a line sits in one column down the timeline. A toggle reports
+ * itself (`data-work-toggle`) so the thread holds still and stops following; a held thread draws no
+ * turn as running, so the live step, the tail the thread follows, opens without reporting.
  */
 function StepLine({ icon, live, label, expanded, controls, onToggle, children }: {
   icon: ReactNode;
@@ -92,7 +94,7 @@ function StepLine({ icon, live, label, expanded, controls, onToggle, children }:
   const lead = live ? <LiveGlyph /> : icon;
   const time = live?.since && <Elapsed since={live.since} className="shrink-0 text-footnote text-muted-foreground" />;
   if (!onToggle) return <div className={LINE}>{lead}{children}{time}<span aria-hidden="true" className="size-3.5 shrink-0" /></div>;
-  return <button type="button" data-work-toggle aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
+  return <button type="button" data-work-toggle={live ? undefined : true} aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
     className={cn(LINE, "group")}>
     {lead}{children}{time}
     <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} />
