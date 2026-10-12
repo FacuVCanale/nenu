@@ -154,3 +154,10 @@ it("when stopping sent Claude's own queue, the new turn gets a Stop of its own",
   expect(screen.queryByText("Stopping…")).not.toBeInTheDocument();
   expect(stopButton()).toBeVisible();
 });
+
+it("leaves the elapsed time to the conversation's own live turn, so the row above the box holds only Stop", () => {
+  setup({ nativeWorkbench: true });
+  const row = screen.getByRole("group", { name: "Agent working" });
+  expect(within(row).getByRole("button", { name: "Stop" })).toBeVisible();
+  expect(within(row).queryByText(/^Working/)).not.toBeInTheDocument();
+});
