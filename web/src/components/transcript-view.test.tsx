@@ -1,4 +1,4 @@
-import { QuestionReplyContext } from "./transcript-question";
+import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -534,4 +534,12 @@ describe("journal media", () => {
 it("treats an AskUserQuestion that already has its answer as closed", () => {
   render(<QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={[turn({ role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }], result: { text: "User answered: Web" } }] })]} /></QuestionReplyContext.Provider>);
   expect(screen.getByRole("button", { name: "Instagram" })).toBeDisabled();
+});
+
+it("leaves a live question to the card under it", () => {
+  const asked = [turn({ role: "assistant", turn: { status: "running" }, parts: [{ kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] }] })];
+  const { rerender } = render(<QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider>);
+  expect(screen.getByRole("region", { name: "Agent question" })).toBeInTheDocument();
+  rerender(<QuestionLiveContext.Provider value><QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={asked} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>);
+  expect(screen.queryByRole("region", { name: "Agent question" })).not.toBeInTheDocument();
 });

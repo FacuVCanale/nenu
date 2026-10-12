@@ -632,6 +632,12 @@ export interface InteractionHint {
   detail?: string;
 }
 
+export interface InteractionStep {
+  label: string;
+  answered: boolean;
+  current: boolean;
+}
+
 export interface Interaction {
   paneId: string;
   agent: string;
@@ -639,6 +645,8 @@ export interface Interaction {
   family: string;
   question: string;
   context?: string;
+  /** The question's header chips: one names a lone question, several are a wizard's steps. */
+  steps?: InteractionStep[];
   options: InteractionOption[];
   /** Identity of the dialog on screen; an answer with another signature comes back `interaction_changed`. */
   signature: string;

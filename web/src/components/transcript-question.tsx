@@ -8,6 +8,8 @@ export function TranscriptQuestion({ title, options, active }: { title: string; 
   const live = useContext(QuestionLiveContext);
   const reply = useContext(QuestionReplyContext);
   const prepare = live ? null : reply;
+  // The card right under it asks the same question and owns the answer.
+  if (active && live) return null;
   return <section aria-label="Agent question" className="space-y-2 rounded-lg border bg-muted/30 p-3">
     <p className="text-sm font-medium">{title}</p>
     {options.length > 0 && <div className="flex flex-wrap gap-2">
@@ -16,6 +18,5 @@ export function TranscriptQuestion({ title, options, active }: { title: string; 
         onClick={() => prepare?.(`${title}\n${option}`)}>{option}</button>)}
     </div>}
     {active && prepare && <p className="text-xs text-muted-foreground">Choose an option to prepare your reply, or answer in the message field.</p>}
-    {active && live && <p className="text-xs text-muted-foreground">Answer it in the card below.</p>}
   </section>;
 }
