@@ -101,8 +101,10 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
 
   if (!visible) return null;
   // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,
-  // so there is nothing cached to promise and the host is the useful fact.
-  const headline = bridge === "disconnected" ? "Herdr is unavailable."
+  // so there is nothing cached to promise and the host is the useful fact. Once reads answer again the
+  // notice waits out the quiet interval saying only what is still true, never "Connected".
+  const headline = !connecting ? "Connection is unstable."
+    : bridge === "disconnected" ? "Herdr is unavailable."
     : bridge === undefined ? `${cantReachNenu()}.` : "Can’t reach Nenu.";
   async function retry() {
     setRetrying(true);
@@ -112,7 +114,7 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
     <div role="status" aria-live="polite" className={BANNER}>
       <WifiOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
-        <span className="font-medium text-foreground">{headline}</span> Retrying…
+        <span className="font-medium text-foreground">{headline}</span>{connecting && " Retrying…"}
         {lastSeenAt !== undefined && <> <span className="whitespace-nowrap">Last synced {clockTime(lastSeenAt)}.</span></>}
       </p>
       <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
