@@ -36,6 +36,7 @@ import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { detectNoEchoPrompt } from "@/lib/no-echo";
 import type { DeliveryMode } from "@/lib/types";
+import type { LockReason } from "@/components/question-card";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
@@ -107,6 +108,10 @@ interface ComposerProps {
   readOnly: boolean;
   /** Transport unavailable: stop terminal writes while keeping the local draft editable. */
   disconnected?: boolean;
+  /** Why the composer is locked, when the caller knows: the box then names that cause instead of the
+   *  generic one (a refused sign-in is not an unauthorised device, Herdr down is not a reconnect).
+   *  It only changes the words; `readOnly`, `gone` and `disconnected` still decide what is locked. */
+  lockReason?: LockReason;
   modelControl?: ReactNode;
   /** The background-work chip, beside the model in the row under the draft. */
   processesControl?: ReactNode;
@@ -246,12 +251,15 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
   // Every write affordance is off when the pane is gone OR this device is read-only.
   const locked = gone || readOnly || disconnected;
+  // Nothing can be written here at all (as opposed to a draft waiting out an outage): the box keeps
+  // only the reason, with no + and no Send to offer what would refuse.
+  const lockedOut = gone || readOnly;
   // …and a ref alongside it, for the ONE caller that reads it after an await. `send()` checks
   // `locked` once, up front, but its pre-clear sweep goes out on the far side of the pre-flight's
   // pane read; a re-render that locks the composer in that window must be able to stop the most
@@ -1288,13 +1296,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
-          <div className={cn("composer-box", direct.active && "composer-box-armed")}>
-            <div ref={menuAnchorRef} className="composer-lead">
+          <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked")}>
+            {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
               <button type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
                 onPointerDown={(e) => e.preventDefault()} onClick={() => setMenuOpen(!menuOpen)}>
                 <Plus aria-hidden="true" className="size-5" />
               </button>
-            </div>
+            </div>}
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}
@@ -1338,9 +1346,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 gone
                   ? "Pane is gone"
                   : readOnly
-                    ? "Read-only — device not authorised"
+                    ? lockReason === "refused" ? "Sign in again to reply" : "Read-only — device not authorised"
                     : disconnected
-                      ? "Write a draft while reconnecting…"
+                      ? lockReason === "herdr" ? "Herdr isn't responding. Drafts are kept." : "Write a draft while reconnecting…"
                     : direct.active
                       ? "Type into the terminal…"
                       : isShell
@@ -1355,11 +1363,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               autoComplete={noEcho ? "off" : undefined}
               // While a password prompt is recognised the draft is a secret the pane never took: it is
               // masked on screen as well as kept out of the store (noticeNoEcho).
-              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", noEcho !== null && !direct.active && "composer-input-secret")}
+              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", lockedOut && "pl-3.5", noEcho !== null && !direct.active && "composer-input-secret")}
               disabled={gone || readOnly}
               rows={1}
             />
-            <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
+            {!lockedOut && <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
             {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
             {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
@@ -1404,10 +1412,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 )}
               </Button>
             )}
-            </div>
+            </div>}
           </div>
         </div>
-        <WorkbenchPopover open={menuOpen} onDismiss={() => setMenuOpen(false)} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+        <WorkbenchPopover open={menuOpen && !lockedOut} onDismiss={() => setMenuOpen(false)} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
           <ActionGroups groups={menuGroups} onRun={(run) => { setMenuOpen(false); run(); }} />
         </WorkbenchPopover>
         {(modelControl || processesControl) && (
