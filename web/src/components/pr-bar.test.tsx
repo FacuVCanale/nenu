@@ -30,6 +30,12 @@ it("shows the PR and its checks, and toggles Organizations' automation", async (
   expect(posted).toEqual({ project: "hub", id: "T1", autoMerge: true });
 });
 
+it("lets a finger reach the PR number's link at 44 px", () => {
+  render(<PrBar project={project(true)} thread={{ ...thread, pr: { ...thread.pr!, url: "https://github.com/awam/hub/pull/1345" } }} readOnly={false} onChanged={vi.fn()} />);
+  // A 38 px wide "#n" on the bench; the shared .hit-area gives it the touch floor.
+  expect(screen.getByRole("link", { name: /^#\d+$/ })).toHaveClass("hit-area");
+});
+
 it("keeps the checks read-only when Organizations has no PR actions", async () => {
   render(<PrBar project={project(false)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
   await userEvent.click(screen.getByRole("button", { name: "CI 4/6, checks" }));
