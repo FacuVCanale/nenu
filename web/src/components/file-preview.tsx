@@ -49,14 +49,18 @@ function whereLine(folder: string, from: string, max: number): string {
 }
 
 /**
- * A file name cut in the middle to `max` characters, keeping its start and its extension. CSS can only
- * cut the end, which hid the extension, and an ellipsis on a separate stem left a gap before it.
+ * A file name cut in the middle to `max` characters, keeping its start, the last letters before its
+ * extension and the extension, as Files does. CSS can only cut the end, which hid the extension, and
+ * an ellipsis right against the extension read as four dots ("informe….md").
  */
 function shortName(name: string, max: number): string {
   if (name.length <= max) return name;
   const dot = name.lastIndexOf(".");
   const extension = dot > 0 && name.length - dot <= 8 ? name.slice(dot) : "";
-  return `${name.slice(0, Math.max(1, max - extension.length - 1))}…${extension}`;
+  const stem = name.slice(0, name.length - extension.length);
+  const room = Math.max(1, max - extension.length - 1);
+  const tail = Math.min(4, Math.floor(room / 3));
+  return `${stem.slice(0, room - tail)}…${tail ? stem.slice(-tail) : ""}${extension}`;
 }
 
 let canvas: CanvasRenderingContext2D | null = null;
