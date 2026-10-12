@@ -46,7 +46,6 @@
 .nav-disclosure-end { right: 4px; width: 26px; }
 .nav-disclosure > svg, .nav-history > svg { transition: transform 150ms ease-out; }
 .nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
-.nav-row-nested { padding-left: 32px; }
 .nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: var(--text-caption); }
 .nav-count { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 

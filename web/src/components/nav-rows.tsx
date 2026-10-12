@@ -45,7 +45,7 @@ export function PlaceText({ place, query }: { place: DisplayPlace; query?: strin
 }
 
 /** How long a row's route may load before the row says so; a fast link never flickers. */
-export const OPENING_DELAY_MS = 120;
+const OPENING_DELAY_MS = 120;
 
 /** Whether the route `to` names has been loading for longer than {@link OPENING_DELAY_MS}. */
 function useOpening(to: string): boolean {

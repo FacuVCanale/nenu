@@ -10,7 +10,7 @@ import { workspaceName } from "./spaces";
 import type { AgentView, ProjectThreadView, ProjectView, WorkspaceView } from "./types";
 
 /** How many rows a group shows before it only counts the rest. */
-export const SEARCH_LIMIT = 8;
+const SEARCH_LIMIT = 8;
 
 interface HitBase {
   /** Unique across every group, for React keys and the option ids. */
