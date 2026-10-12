@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createRef, type ComponentProps } from "react";
-import { act, render, screen, within } from "@testing-library/react";
+import { createRef, useState, type ComponentProps } from "react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendMessage } from "@/lib/api";
@@ -219,6 +219,50 @@ it("takes the phone keyboard down when the + opens its menu, so the menu has the
   await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
   expect(screen.getByRole("dialog", { name: "Message shortcuts" })).toBeVisible();
   expect(input).not.toHaveFocus();
+});
+
+it("reaches the + menu's rows from the keyboard and hands focus back to the + on Escape", async () => {
+  const { user } = setup({ usageControls: <button>Session metrics</button> });
+  const plus = screen.getByRole("button", { name: "Message shortcuts" });
+  plus.focus();
+  await user.keyboard("{Enter}");
+  const menu = screen.getByRole("dialog", { name: "Message shortcuts" });
+  await user.tab();
+  expect(within(menu).getByRole("button", { name: "Photo" })).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
+  expect(plus).toHaveFocus();
+});
+
+it("takes the keyboard down itself when the + opens its menu, as a tap on iOS leaves focus in the draft", async () => {
+  const { user } = setup();
+  const input = screen.getByRole("textbox");
+  await user.click(input);
+  // Safari on iOS does not focus a button it taps, so the click arrives with the draft still focused.
+  fireEvent.click(screen.getByRole("button", { name: "Message shortcuts" }));
+  expect(screen.getByRole("dialog", { name: "Message shortcuts" })).toBeVisible();
+  expect(input).not.toHaveFocus();
+});
+
+it("closes the + menu when the pane locks, so it does not come back by itself on unlock", async () => {
+  function Lockable(props: ComponentProps<typeof Composer>) {
+    const [readOnly, setReadOnly] = useState(false);
+    return <><button type="button" onClick={() => setReadOnly(!readOnly)}>Toggle lock</button><Composer {...props} readOnly={readOnly} /></>;
+  }
+  const props: ComponentProps<typeof Composer> = {
+    paneId: "w1:p1", agent: "codex", isShell: false, gone: false, readOnly: false, nativeWorkbench: true, dialogPresent: false,
+    text: "pane output", terminalDraft: null, rawTerminalDraft: null,
+    prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
+    setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(), onSent: vi.fn(),
+  };
+  render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Lockable {...props} /> }])} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+  expect(screen.getByRole("dialog", { name: "Message shortcuts" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Toggle lock" }));
+  expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Toggle lock" }));
+  expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
 });
 
 it("opens the image picker from the menu's Photo row", async () => {
