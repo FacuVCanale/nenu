@@ -341,10 +341,14 @@ export function ChatFilesBrowser({
   );
 }
 
+// Four names share a phone's width, so a segment takes the footnote step (an iOS segmented control's
+// size) and a 2px inset: every name, a three-digit Files count included, fits from 320px at the
+// default text size. A four-digit count at 320px, or larger browser text, ends in an ellipsis inside
+// its own segment.
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" aria-pressed={active} onClick={onClick} className={cn(segmentClass(active), "whitespace-nowrap")}>
-      {children}
+    <button type="button" aria-pressed={active} onClick={onClick} className={cn(segmentClass(active), "px-0.5 text-footnote")}>
+      <span className="block truncate">{children}</span>
     </button>
   );
 }
