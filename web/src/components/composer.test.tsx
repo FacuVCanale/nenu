@@ -50,6 +50,9 @@ const UNSEEN = "Your message wasn't seen in the agent's input box. Nothing was s
 const MAYBE_SENT = "The earlier try of this message is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal.";
 
 const accepted = (body: SendRequest): SendOutcome => ({ ok: true, requestId: body.requestId, ack: "submitted" });
+
+/** A refused send is said beside the draft it refused, not in a toast across the screen. */
+const sendNotice = () => screen.getByRole("alert", { name: /^Not (sent|confirmed)$/ });
 function refusal(body: SendRequest, stage: SendStage, error: string, textDelivered: boolean, code?: "not_ready" | "busy"): SendOutcome {
   return { ok: false, requestId: body.requestId, stage, error, textDelivered, ...(code ? { code } : {}) };
 }
@@ -188,7 +191,7 @@ describe("Composer — send", () => {
     await user.type(box, "please do not approve anything");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/dialog is waiting/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/dialog is waiting/i));
     expect(wire).toEqual([]); // nothing reached the pane at all
     expect(box).toHaveValue("please do not approve anything"); // the message survives
     expect(props.onSent).not.toHaveBeenCalled();
@@ -241,7 +244,7 @@ describe("Composer — send", () => {
     await user.type(box, "please do not approve anything");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/input box isn't on screen/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i));
     expect(wire).toEqual(["send"]);
     expect(box).toHaveValue("please do not approve anything");
     expect(screen.getByRole("button", { name: /type anyway/i })).toBeInTheDocument();
@@ -263,14 +266,12 @@ describe("Composer — send", () => {
     await user.type(box, "please do not approve anything");
 
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent(/Tap Send again to type anyway/i),
-    );
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/tap Type anyway/i));
     expect(sends).toHaveLength(1);
     expect(sends[0]!.force).toBeUndefined();
 
     await user.click(screen.getByRole("button", { name: "Type anyway?" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/wasn't seen in the agent's input box/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/wasn't seen in the agent's input box/i));
     expect(sends).toHaveLength(2);
     expect(sends[1]).toMatchObject({ text: "please do not approve anything", force: true });
     expect(wire).toEqual(["send", "send"]);
@@ -286,7 +287,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "keep this message");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/typed into the pane but not submitted/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/typed into the pane but not submitted/i));
     expect(screen.getByText(/check the terminal before sending again/i)).toBeInTheDocument();
     expect(box).toHaveValue("keep this message");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -308,8 +309,8 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "try again");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/send_text failed/i));
-    expect(screen.getByText(/tap send to try again/i)).toBeInTheDocument();
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/send_text failed/i));
+    expect(within(sendNotice()).getByRole("button", { name: "Try again" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(sends).toHaveLength(2);
@@ -329,7 +330,7 @@ describe("Composer — send", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends).toHaveLength(1));
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/may already have been sent/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/may already have been sent/i));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends).toHaveLength(3));
     expect(sends[1]!.requestId).toBe(sends[0]!.requestId);
@@ -354,7 +355,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "deploy the thing");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/may already be sent/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/may already be sent/i));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(requests).toHaveLength(2);
@@ -377,7 +378,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "fix the typo");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("Nenu couldn't use that request. Refresh and try again."));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent("Nenu couldn't use that request. Refresh and try again."));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(requests).toHaveLength(2);
@@ -449,7 +450,7 @@ describe("Composer — send", () => {
     await user.type(box, "almost sent");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(UNSEEN));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(UNSEEN));
     expect(box).toHaveValue("almost sent");
     expect(screen.getByText(/check the terminal before sending again/i)).toBeInTheDocument();
     expect(props.onSent).not.toHaveBeenCalled();
@@ -463,6 +464,76 @@ describe("Composer — send", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(screen.getByTestId("status")).toHaveTextContent(/sent, not verified/i);
+  });
+});
+
+// A refused send used to land in a toast at the middle of the screen while the draft sat at the
+// bottom, with only a ✕ to offer. The notice sits on the draft it is about and carries the recovery.
+describe("Composer — a refused send is said beside the draft", () => {
+  const VERIFY = "The message didn't reach Claude: its input box wasn't on screen. Nothing was typed.";
+
+  it("keeps the draft, says why above it and retries from the notice, with no toast", async () => {
+    const user = userEvent.setup();
+    let first = true;
+    const sends = serveSend((body) => {
+      if (!first) return accepted(body);
+      first = false;
+      return refusal(body, "verify", VERIFY, false);
+    });
+    const props = renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "Run the migration again");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+    expect(box).toHaveValue("Run the migration again");
+    // The terminal view already shows the pane, so it offers no Open terminal.
+    expect(within(sendNotice()).queryByRole("button", { name: "Open terminal" })).not.toBeInTheDocument();
+    const retry = within(sendNotice()).getByRole("button", { name: "Try again" });
+    expect(retry).toHaveClass("hit-area");
+    await user.click(retry);
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(sends.map((send) => send.text)).toEqual(["Run the migration again", "Run the migration again"]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("puts the message back in the conversation view's box and opens the terminal from the notice", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", VERIFY, false));
+    const props = renderComposerWithStatus({ nativeWorkbench: true });
+    const box = screen.getByRole("textbox");
+    await user.type(box, "Run the migration again");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    expect(box).toHaveValue("Run the migration again");
+    expect(within(sendNotice()).getByRole("button", { name: "Try again" })).toBeVisible();
+    const open = within(sendNotice()).getByRole("button", { name: "Open terminal" });
+    expect(open).toHaveClass("hit-area");
+    await user.click(open);
+    expect(props.setRawTerminal).toHaveBeenCalledWith(true);
+  });
+
+  it("goes away on the next edit, which is the operator taking it from there", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "Run the migration");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toBeVisible());
+    await user.type(box, " again");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("offers no retry when the text may already be in the pane, only the way to check", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", UNSEEN, true));
+    renderComposerWithStatus({ nativeWorkbench: true });
+    await user.type(screen.getByRole("textbox"), "almost sent");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByRole("alert", { name: "Not confirmed" })).toHaveTextContent(UNSEEN));
+    expect(within(sendNotice()).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    expect(within(sendNotice()).getByRole("button", { name: "Open terminal" })).toBeVisible();
   });
 });
 
@@ -949,10 +1020,8 @@ describe("Composer — blocked pre-flight override", () => {
     await user.type(box, "use fable please");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("status")).toHaveTextContent(/input box isn't on screen/i),
-    );
-    expect(screen.getByTestId("status")).toHaveTextContent(/tap send again to type anyway/i);
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/input box isn't on screen/i));
+    expect(sendNotice()).toHaveTextContent(/tap Type anyway/i);
     expect(calls).toEqual(["send"]); // one refused send, nothing forced into the picker
     expect(box).toHaveValue("use fable please"); // the message survives
     expect(props.onSent).not.toHaveBeenCalled();
@@ -976,7 +1045,7 @@ describe("Composer — blocked pre-flight override", () => {
     // The second tap overrules the pre-flight: one forced send. The bridge never sees the text in an
     // input box, so it never presses Enter, and the composer keeps the message. THE #34 invariant.
     await waitFor(() => expect(calls).toEqual(["send", "forced"]));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/check Terminal/i));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(/check Terminal/i));
     expect(box).toHaveValue("use fable please");
   });
 });
