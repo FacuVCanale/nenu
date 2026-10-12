@@ -29,6 +29,13 @@ describe("strip chips", () => {
     expect(declarations(css, '.strip-chip[aria-current="true"] .strip-chip-tag', [LAYER]).color).toBe("var(--muted-foreground)");
   });
 
+  // A short name with no dot ("ui", a shell "x") left the chip, and its touch target, 37px wide.
+  it("never narrow below 44px, with a short name centred", () => {
+    const chip = declarations(css, ".strip-chip", [LAYER]);
+    expect(chip["min-width"]).toBe("44px");
+    expect(chip["justify-content"]).toBe("center");
+  });
+
   it("fade the edge a strip can still scroll toward", () => {
     expect(declarations(css, '.strip-scroller[data-overflow~="start"]', [LAYER])["--fade-start"]).toBe("24px");
     expect(declarations(css, '.strip-scroller[data-overflow~="end"]', [LAYER])["--fade-end"]).toBe("24px");
