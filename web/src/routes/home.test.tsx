@@ -187,6 +187,19 @@ describe("a project's coordinator", () => {
     expect(posts).toEqual([]);
   });
 
+  it("says in a card why a send failed, keeps the draft and offers the coordinator in one tap", async () => {
+    server.use(http.get("/api/pane/:pane/queue", () => HttpResponse.json({ available: false, messages: [] })));
+    const { user, router, main } = await setup(projectData);
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Start phase two{Enter}");
+    const notice = within(await main.findByRole("alert"));
+    expect(notice.getByText("Hub's coordinator can't take messages from Home")).toBeVisible();
+    expect(notice.getByText(/Your message is still in the box/)).toBeVisible();
+    expect(box).toHaveValue("Start phase two");
+    await user.click(notice.getByRole("link", { name: "Open coordinator" }));
+    expect(router.state.location.pathname).toBe("/pane/c1");
+  });
+
   it("sends at once while only background work runs, as the terminal does", async () => {
     const posts = queue();
     const waiting = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1"
