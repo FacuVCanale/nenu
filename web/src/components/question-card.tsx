@@ -244,11 +244,9 @@ export function QuestionCard({
         {notice.tone === "error" ? <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" /> : <RefreshCw aria-hidden className="mt-0.5 size-4 shrink-0" />}
         <span className="min-w-0">{notice.text}</span>
       </p>
+      {/* The card's own row already leads to the terminal (or the thread): one way there, not two. */}
       {notice.retry && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={locked} onClick={() => press(notice.retry!)} className={cn(compact ? PILL : DECISION, NEUTRAL)}>Try again</button>
-          {onOpen && <button type="button" onClick={onOpen} className={cn(compact ? PILL : DECISION, NEUTRAL)}>{openLabelFor}</button>}
-        </div>
+        <button type="button" disabled={locked} onClick={() => press(notice.retry!)} className={cn(compact ? PILL : DECISION, NEUTRAL, "self-start")}>Try again</button>
       )}
     </div>
   );
