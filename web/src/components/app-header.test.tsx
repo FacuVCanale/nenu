@@ -21,21 +21,20 @@ function LocationProbe() {
 describe("AppHeader — the one shared header shell", () => {
   beforeEach(() => __resetConnectionHealth());
 
-  it("is calm in the PANE variant while live — breadcrumb + status badge, no pill, no wordmark", () => {
+  it("is calm in the PANE variant while live — back, breadcrumb + status badge, no pill, no wordmark", () => {
     // Connection copy lives in the top ConnectionBanner now; the header carries none. A healthy pane
-    // header shows its own bits and a resting (static) Nenu mark.
-    const { container } = render(
+    // header shows its own bits behind its back.
+    render(
       <MemoryRouter initialEntries={["/pane/p1"]}>
         <WorkbenchNavigationContext value={{ open: false, onOpen: () => {} }}>
-          <AppHeader bridge="connected" error={false} rightLead={<span>working</span>}>
+          <AppHeader bridge="connected" error={false} back={{ label: "Home", to: "/" }} rightLead={<span>working</span>}>
             <span>webapp › main</span>
           </AppHeader>
         </WorkbenchNavigationContext>
       </MemoryRouter>,
     );
-    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to Home" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull(); // no connection pill of any kind
-    expect(container.querySelector(".dog-gallop")).toBeNull(); // mark at rest (static icon)
     expect(screen.getByText("webapp › main")).toBeInTheDocument(); // the breadcrumb slot
     expect(screen.getByText("working")).toBeInTheDocument(); // the agent status badge
     expect(screen.queryByText("Nenu")).toBeNull(); // no wordmark in a pane
@@ -47,13 +46,6 @@ describe("AppHeader — the one shared header shell", () => {
     );
     expect(container.querySelector(".dog-gallop")).toBeNull(); // mark at rest while live
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-  });
-
-  it("runs the caller's onHome when the mark is tapped outside the workbench", async () => {
-    const onHome = vi.fn();
-    renderHeader(<AppHeader bridge="connected" error={false} onHome={onHome} />);
-    await userEvent.click(screen.getByRole("button", { name: "Nenu home" }));
-    expect(onHome).toHaveBeenCalledOnce();
   });
 
   it("uses the shell drawer as the single mobile navigation control", async () => {
@@ -91,7 +83,6 @@ describe("AppHeader — the one shared header shell", () => {
       <AppHeader
         bridge="connected"
         error
-        onHome={() => {}}
         rightLead={<span>working</span>}
         override={<div>FINDBAR</div>}
       >
@@ -133,13 +124,6 @@ describe("AppHeader — the phone's leading control", () => {
     expect(screen.getByRole("link", { name: "Back to AWAM" })).toHaveAttribute("href", "/project/awam");
   });
 
-  it("goes back through an older caller's onHome, which names its own destination", async () => {
-    const onHome = vi.fn();
-    renderAt("/pane/p1/history", <AppHeader bridge="connected" error={false} onHome={onHome}><span>History</span></AppHeader>);
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(onHome).toHaveBeenCalledOnce();
-  });
-
   it("keeps the mark on Home, opening navigation, and leaves the bar without a title", async () => {
     const { onOpen } = renderAt("/", <AppHeader bridge="connected" error={false} title="Home" />);
     await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
@@ -148,10 +132,10 @@ describe("AppHeader — the phone's leading control", () => {
     expect(within(screen.getByRole("banner")).queryByText("Home")).toBeNull();
   });
 
-  it("keeps the mark for a bare header on a chat route", () => {
-    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} onHome={() => {}}><span>Working Claude</span></AppHeader>);
-    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  it("leads a chat route with a back too: only Home keeps the mark", () => {
+    renderAt("/pane/p1?s=work", <AppHeader bridge="connected" error={false}><span>Working Claude</span></AppHeader>);
+    expect(screen.getByRole("link", { name: "Back to Home" })).toHaveAttribute("href", "/?s=work");
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 
   it("leads with the back a caller passes, even where the mark would sit", () => {
@@ -207,7 +191,7 @@ describe("AppHeader — the dog keys on trouble/lost, not the first not-live fra
   afterEach(() => vi.useRealTimers());
 
   it("stays static through brief signal losses and becomes muted only for a sustained outage", () => {
-    const { container } = renderHeader(<AppHeader bridge="connected" error onHome={() => {}} />);
+    const { container } = renderHeader(<AppHeader bridge="connected" error />);
     // A single not-live frame is NOT trouble yet: the mark stays the static, full-color icon.
     expect(container.querySelector(".dog-gallop")).toBeNull();
     expect(container.querySelector("img")).toHaveAttribute("src", "/nenu-mark.png");

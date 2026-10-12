@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { fixtureTranscript } from "@/test/handlers";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
@@ -518,15 +518,58 @@ it("skips transcript rendering on unrelated parent polls but renders changed his
 
 it("searches the native transcript and holds results while new messages arrive", () => {
   const count = vi.fn();
-  Element.prototype.scrollIntoView = vi.fn();
   const view = (history: PaneHistoryResponse) => <LiveConversation paneId="w1:p1" history={history} loading={false} error={false} searching query="changed" onMatchCount={count} />;
   const { container, rerender } = render(view(initialHistory));
   expect(count).toHaveBeenLastCalledWith(1);
-  expect(container.querySelector("mark")).toHaveTextContent("changed");
-  expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  expect(container.querySelector('mark[aria-current="true"]')).toHaveTextContent("changed");
   rerender(view({ ...initialHistory, available: true, entries: [olderEntry] }));
   expect(container.querySelector("mark")).toHaveTextContent("changed");
   expect(screen.queryByText("An older request")).not.toBeInTheDocument();
+});
+
+// Find leaves the current hit a third down what the reader sees, below the chrome a phone draws over
+// the list's top (its scroll-padding), so each step lands the eye in one place. A call's result landing
+// in the held window redraws the turns; the hit stays put.
+describe("find's current hit", () => {
+  const asked: TranscriptEntry = { uuid: "q", ts: "", role: "user", parts: [{ kind: "text", text: "what changed today?" }] };
+  const call = (result?: { text: string }): TranscriptEntry => ({ uuid: "c", ts: "", role: "assistant", parts: [{ kind: "tool", name: "Bash", summary: "git log", ...(result ? { result } : {}) }] });
+  const history = (entries: TranscriptEntry[]): PaneHistoryResponse => ({ paneId: "w1:p1", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false });
+
+  function setup(inset: number) {
+    const view = (entries: TranscriptEntry[], searching: boolean) => <LiveConversation paneId="w1:p1" history={history(entries)} loading={false} error={false} searching={searching} query={searching ? "changed" : ""} currentMatch={0} activityStatus="working" />;
+    const { container, rerender } = render(view([asked, call()], false));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    if (inset) scroller.style.setProperty("scroll-padding-top", `${inset}px`);
+    // The hit sits 900px down the list; the list's box is the top 600px of the screen.
+    const rect = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 390, width: 390, height, x: 0, y: top, toJSON: () => ({}) });
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      if (this === scroller) return rect(0, 600);
+      if (this.matches('mark[aria-current="true"]')) return rect(900 - box.top, 20);
+      if (this.matches("[data-turn]")) return rect(880 - box.top, 60);
+      return rect(0, 0);
+    });
+    onTestFinished(() => spy.mockRestore());
+    // What the browser's centring would do, so a stray scrollIntoView shows up as a moved hit.
+    const centre = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) { box.top += this.getBoundingClientRect().top - 300; });
+    onTestFinished(() => centre.mockRestore());
+    return { box, show: (entries: TranscriptEntry[]) => rerender(view(entries, true)) };
+  }
+
+  it("lands a third down the list, and stays there when a call's result lands", () => {
+    const { box, show } = setup(0);
+    show([asked, call()]);
+    expect(box.top).toBe(700);
+    show([asked, call({ text: "abc1234 fix" })]);
+    expect(screen.getByRole("button", { name: /^Ran git log/ })).toBeInTheDocument();
+    expect(box.top).toBe(700);
+  });
+
+  it("measures the third below the chrome drawn over the list's top", () => {
+    const { box, show } = setup(90);
+    show([asked, call()]);
+    expect(box.top).toBe(640);
+  });
 });
 
 it("opens older messages from the toolbar without replacing the live draft", async () => {

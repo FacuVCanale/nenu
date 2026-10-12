@@ -26,7 +26,7 @@ import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/cha
 import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useKeyboardOpen } from "@/hooks/use-keyboard";
-import { AppHeader } from "@/components/app-header";
+import { AppHeader, type HeaderBack } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
 import { AgentsFooter } from "@/components/agents-footer";
@@ -42,6 +42,7 @@ import { PaneGone } from "@/components/pane-gone";
 import { Composer, type ComposerControl, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
 import { LiveConversation } from "@/components/live-conversation";
+import { PaneCwdContext } from "@/components/work-log-tools";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
 import { useLiveConversation } from "@/hooks/use-live-conversation";
 import { useModelMenuSource } from "@/hooks/use-model-menu-source";
@@ -73,7 +74,8 @@ import { shortCwd } from "@/lib/format";
 import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
-import { historyPath, projectPath } from "@/lib/nav";
+import { historyPath, nodePath, panePath, projectPath } from "@/lib/nav";
+import { projectForPane } from "@/lib/projects";
 import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
@@ -87,6 +89,21 @@ import type {
 
 /** The chat title's box, whether it opens the navigation, the project's page or nothing. */
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
+
+/**
+ * Where a project thread's back leads, one level up as its node page's does: the coordinator it runs
+ * under (its chat while that runs, else its page), else its project. The project's own coordinator
+ * has none: the project opens on it, so its back stays Home.
+ */
+function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], session?: string): HeaderBack | undefined {
+  const owner = projectForPane(projects, paneId);
+  if (!owner?.thread) return undefined;
+  const { project, thread } = owner;
+  const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
+  if (!parent) return { label: project.name, to: projectPath(project.slug, session) };
+  const chat = parent.paneId !== undefined && panes.some((pane) => pane.paneId === parent.paneId) ? parent.paneId : undefined;
+  return { label: parent.title, to: chat ? panePath(chat, session) : nodePath(project.slug, parent.id, session) };
+}
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
 const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
@@ -501,14 +518,13 @@ export function AgentChat({
     observer.observe(chrome);
     return () => observer.disconnect();
   }, []);
-  // The list centres the current hit when it moves to it; this runs after that (a parent's effect
+  // The mirror centres its current hit when it moves to it; this runs after that (a parent's effect
   // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
-  // Only the mirror marks its current hit so far: the chat's turns mark none (transcript-view), so in
-  // the chat this finds nothing and the conversation keeps the turn centred.
+  // The conversation places its own (live-conversation).
   useEffect(() => {
     const root = chatRef.current;
-    if (!findOpen || matchCount === 0 || !root) return;
-    const hit = root.querySelector<HTMLElement>('mark[aria-current="true"], [data-find-match="current"]');
+    if (!findOpen || showConversation || matchCount === 0 || !root) return;
+    const hit = root.querySelector<HTMLElement>('[data-find-match="current"]');
     let scroller = hit?.parentElement ?? null;
     while (scroller && scroller !== root && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
     if (!hit || !scroller || scroller === root) return;
@@ -516,7 +532,7 @@ export function AgentChat({
     const chrome = root.querySelector("[data-chat-chrome]")?.getBoundingClientRect();
     const inset = chrome ? Math.max(0, chrome.bottom - view.top) : 0;
     scroller.scrollTop = thirdScrollTop({ scrollTop: scroller.scrollTop, viewTop: view.top, viewBottom: view.bottom, hitTop: hit.getBoundingClientRect().top, inset });
-  }, [findOpen, findQuery, currentMatch, matchCount]);
+  }, [findOpen, showConversation, findQuery, currentMatch, matchCount]);
 
   // What the top of the buffer can offer — see the JSX for why these are mutually exclusive.
   // `historyAvailable`: the pane reported an agent session, so a transcript exists to open.
@@ -1014,7 +1030,7 @@ export function AgentChat({
           find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
           bridge={bridge}
           error={error}
-          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : { label: "Home", onClick: onBack }}
+          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : threadBack(projects, paneId, agents, session) ?? { label: "Home", onClick: onBack }}
           override={subagent ? undefined : findBar}
           rightLead={
             subagent ? undefined : agent ? (
@@ -1120,6 +1136,8 @@ export function AgentChat({
       </div>
       {overlay && <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col">{overlay}</div>}
 
+      {/* The pane's folder, for every work log under it: the conversation's and a subagent's. */}
+      <PaneCwdContext value={agent?.cwd ?? ""}>
       <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
       {/* Content region below the header — the mirror inside is the scroller. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1175,7 +1193,7 @@ export function AgentChat({
                   <button
                     type="button"
                     onClick={() => navigate(historyPath(paneId, session))}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 coarse:min-h-11"
                   >
                     <ScrollText className="size-3.5" />
                     Show entire history
@@ -1188,7 +1206,7 @@ export function AgentChat({
                     onClick={loadOlder}
                     disabled={loadingOlder}
                     aria-busy={loadingOlder || undefined}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60 coarse:min-h-11"
                   >
                     {loadingOlder ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -1331,6 +1349,7 @@ export function AgentChat({
       </div>
       {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
       </div>
+      </PaneCwdContext>
 
       {/* Closing the open pane or its tab moves the route to the pane beside it (DetailRoute). */}
       {agent && <PaneActionsSheet open={paneSheet === "pane"} onClose={() => setPaneSheet(null)} pane={agent} name={title}

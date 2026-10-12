@@ -1,4 +1,4 @@
-import { useContext, useId, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, MessageCircleQuestion, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
 import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
@@ -18,6 +18,9 @@ import { Elapsed, LiveGlyph } from "./work-activity-label";
 // second fold, so a failure is one tap from its output once the turn is open.
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
+
+/** The pane's folder: a step's path reads from it, as the operator names files inside the project. */
+export const PaneCwdContext = createContext("");
 
 /** Whether `text` holds the searched words: a folded body that does opens, so the hit is on screen. */
 export function containsQuery(text: string, query: string): boolean {
@@ -134,9 +137,10 @@ function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
  * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay.
  */
 function StepTarget({ text, format, query, current }: { text: string; format: ToolStepDescription["target"] | "thought"; query: string; current: boolean }) {
+  const cwd = useContext(PaneCwdContext);
   if (!text) return <span className="flex-1" />;
   if (format === "path") {
-    const { dir, base } = displayPath(text, "", 32);
+    const { dir, base } = displayPath(text, cwd, 32);
     return <span className="flex min-w-0 flex-1">
       {dir && <span className="min-w-0 truncate text-muted-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} current={current} /></span></span>}
       <span className="max-w-full shrink-0 truncate text-foreground"><Highlight text={base} query={query} current={current} /></span>
@@ -145,6 +149,12 @@ function StepTarget({ text, format, query, current }: { text: string; format: To
   return <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", format === "code" && "font-mono text-code", format === "thought" && "italic")}>
     <Highlight text={text} query={query} current={current} />
   </span>;
+}
+
+/** A step's path as its row reads it whole, for the row's name: what a voice command says is what it sees. */
+function spokenPath(path: string, cwd: string): string {
+  const { dir, base } = displayPath(path, cwd, Infinity);
+  return dir + base;
 }
 
 /** A finished step that failed says so on its line, so the failure shows before anything opens. */
@@ -174,6 +184,8 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
   const images = useToolImages();
   const open = expanded || focused || matches(part, query);
   const step = describeCall(part);
+  const cwd = useContext(PaneCwdContext);
+  const target = step.target === "path" && step.text ? spokenPath(step.text, cwd) : step.text;
   const failed = !!part.result?.isError;
   const asking = waiting && !part.result;
   const running = !part.result && active && !asking;
@@ -182,7 +194,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
   const truncated = !!part.result?.truncated;
   return (
     <div data-tool={id} data-step={step.kind} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, step.text, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+      <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, target, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
         <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>

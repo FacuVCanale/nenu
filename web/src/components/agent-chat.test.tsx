@@ -782,8 +782,8 @@ describe("AgentChat — history affordance", () => {
     const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
     renderChat({ agent, agents: [agent] });
     const shortcut = async (name: string) => {
-      await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
-      await user.click(within(screen.getByRole("dialog", { name: "Message shortcuts" })).getByRole("button", { name }));
+      await user.click(screen.getByRole("button", { name: "Message actions" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name }));
     };
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
     await shortcut("Keys");
@@ -791,7 +791,7 @@ describe("AgentChat — history affordance", () => {
     await shortcut("Type into terminal");
     expect(screen.getByPlaceholderText(/type into the terminal/i)).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Close Keys" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Message actions" }));
     expect(screen.getByRole("button", { name: "Type into terminal" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -820,6 +820,8 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
+    // A full-width row a thumb reaches: 44 px under a finger (QA 15).
+    expect(showHistory()).toHaveClass("coarse:min-h-11");
     expect(loadOlder()).not.toBeInTheDocument();
   });
 
@@ -828,6 +830,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     const agent = { ...fixtureAgents[0]!, kind: "shell" as const, readableLines: 6946 };
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(loadOlder()).toBeInTheDocument();
+    expect(loadOlder()).toHaveClass("coarse:min-h-11");
     expect(showHistory()).not.toBeInTheDocument();
   });
 
@@ -1125,6 +1128,42 @@ it("names a project's pane in the pane strip as its rows do", () => {
   expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
 });
 
+// A project thread's back climbs one level, as its node page's does (NAV-03): to the coordinator it
+// runs under, else to its project. Only the project's own coordinator leads Home, since the project
+// opens on it.
+describe("AgentChat — a project thread's back", () => {
+  const coordinatorPane = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
+  const thread = (id: string, title: string, parentId: string, role: "worker" | "coordinator", paneId?: string) =>
+    ({ id, title, parentId, role, status: "open" as const, ...(paneId ? { paneId } : {}) });
+  const shop = (threads: ReturnType<typeof thread>[], coordinator?: string) => [{
+    slug: "shop", name: "Shop", status: "active" as const, threads,
+    ...(coordinator ? { coordinator: { paneId: coordinator, agent: "claude", liveStatus: "idle" as const } } : {}),
+  }];
+  const worker = { slug: "shop", name: "Shop", role: "worker" as const };
+
+  it("leads a worker back to its coordinator's chat while that runs", () => {
+    renderChat({ session: "work", agents: [fixtureAgents[0]!, coordinatorPane], project: worker,
+      projects: shop([thread("t-1", "Checkout", "root", "coordinator", "w1:p2"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) }, { open: false, onOpen: vi.fn() });
+    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
+    expect(screen.queryByRole("button", { name: "Back to Home" })).toBeNull();
+  });
+
+  it("leads a worker back to its coordinator's page when the coordinator has no chat", () => {
+    renderChat({ project: worker, projects: shop([thread("t-1", "Checkout", "root", "coordinator"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) });
+    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/project/shop/node/t-1");
+  });
+
+  it("leads a thread of the project itself back to the project", () => {
+    renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
+  });
+
+  it("leads the project's own coordinator Home", () => {
+    renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([], "w1:p1") });
+    expect(screen.getByRole("button", { name: "Back to Home" })).toBeInTheDocument();
+  });
+});
+
 // A project lays its Threads and PRs over the chat (ProjectFrame) and brings its own tabs into the
 // overlay, so only the header stays above it: the strips belong to the chat underneath.
 describe("AgentChat — a project's overlay", () => {
@@ -1143,6 +1182,42 @@ describe("AgentChat — a project's overlay", () => {
     expect(screen.queryByRole("navigation", { name: "Threads" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Second pane/ })).toBeNull();
   });
+});
+
+// The work log names a file as the operator thinks of it inside the project: from the pane's folder.
+it("shows a work step's file relative to the pane's folder", async () => {
+  const ts = "2026-07-25T06:22:21.253Z";
+  server.use(http.get(/\/api\/pane\/[^/]+\/history/, () => HttpResponse.json({
+    paneId: "w1:p1", available: true, hasMore: false, total: 2, fileTruncated: false, entries: [
+      { uuid: "t1", ts, role: "user", parts: [{ kind: "text", text: "read the stylesheet" }] },
+      { uuid: "t2", ts, role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "ok" } }] },
+    ],
+  })));
+  const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+  renderChat({ agent, agents: [agent] });
+  const work = await screen.findByRole("button", { name: /^(Worked|Work log)/ });
+  if (work.getAttribute("aria-expanded") === "false") await userEvent.click(work);
+  expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+});
+
+// A subagent works in its parent's folder, so its work log names the same file the same way.
+it("shows a subagent's work step file relative to the pane's folder too", async () => {
+  const reviewer = { id: "a1", parentId: "", name: "reviewer", task: "Review the diff", status: "running" };
+  server.use(
+    http.get(/\/api\/pane\/[^/]+\/subagents$/, () => HttpResponse.json({ available: true, sessionKey: "parent-key", agents: [reviewer], truncated: false })),
+    http.get(/\/api\/pane\/[^/]+\/subagent-history$/, () => HttpResponse.json({ sessionKey: "parent-key", agent: reviewer, truncated: false, entries: [
+      { uuid: "c1", ts: "2026-07-25T06:22:21.253Z", role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "ok" } }] },
+    ] })),
+  );
+  const user = userEvent.setup();
+  const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
+  renderChat({ agent, agents: [agent] });
+  await user.click(await screen.findByRole("button", { name: /^Processes/ }));
+  await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
+  await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
+  const work = await screen.findByRole("button", { name: /^(Worked|Work log|Working)/ });
+  if (work.getAttribute("aria-expanded") === "false") await user.click(work);
+  expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
 });
 
 // Find names what it searches, in the menu and in the bar (T31).

@@ -2,6 +2,7 @@ import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, 
 import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
+import { thirdScrollTop } from "@/components/find-bar";
 import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
@@ -229,12 +230,19 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       setFrozen((current) => current ?? history);
     }
   }, [searching, history]);
+  // Find's current hit lands a third down what the reader sees, below the chrome a phone draws over the
+  // list (its scroll-padding), and every redraw of the held window (a result landing, an older page)
+  // puts it back there. The turn stands in for a hit the view doesn't draw.
   useEffect(() => {
+    const el = scrollRef.current;
     const uuid = entries[matches[currentMatch] ?? -1]?.uuid;
-    if (!searching || !uuid) return;
-    const target = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>("[data-turn]") ?? [])
-      .find((element) => element.dataset.turn === uuid);
-    target?.scrollIntoView({ block: "center" });
+    if (!searching || !uuid || !el) return;
+    const turn = Array.from(el.querySelectorAll<HTMLElement>("[data-turn]")).find((element) => element.dataset.turn === uuid);
+    const hit = turn?.querySelector<HTMLElement>('mark[aria-current="true"]') ?? turn;
+    if (!hit) return;
+    const view = el.getBoundingClientRect();
+    el.scrollTop = thirdScrollTop({ scrollTop: el.scrollTop, viewTop: view.top, viewBottom: view.bottom, hitTop: hit.getBoundingClientRect().top,
+      inset: parseFloat(getComputedStyle(el).scrollPaddingTop) || 0 });
   }, [searching, currentMatch, matches, entries]);
 
   const cancelOlder = useCallback(() => {

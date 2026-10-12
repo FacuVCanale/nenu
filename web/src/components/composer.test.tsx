@@ -2207,7 +2207,7 @@ describe("conversation composer", () => {
     // The model chip sits in the row under the draft; attach and usage are rows of the + menu.
     const row = screen.getByRole("group",{name:"Message tools"});
     expect(within(row).getByRole("button",{name:"Choose model"})).toBeInTheDocument();
-    expect(screen.getByRole("button",{name:"Message shortcuts"})).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Message actions"})).toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Usage"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"More message actions"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Add to queue"})).not.toBeInTheDocument();
@@ -2617,11 +2617,11 @@ describe("Composer — placeholder", () => {
 
   it("draws no + where nothing can be written, Send only as a disabled slot, and keeps both while a draft can wait", () => {
     renderComposer({ readOnly: true });
-    expect(screen.queryByRole("button", { name: "Message shortcuts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Message actions" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     cleanup();
     renderComposer({ disconnected: true });
-    expect(screen.getByRole("button", { name: "Message shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Message actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 });

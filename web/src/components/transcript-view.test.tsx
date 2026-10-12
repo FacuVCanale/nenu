@@ -8,6 +8,7 @@ import { server } from "@/test/setup";
 
 import { TranscriptView } from "./transcript-view";
 import { FilePreviewProvider } from "./file-preview-provider";
+import { PaneCwdContext } from "./work-log-tools";
 import type { TranscriptEntry } from "@/lib/types";
 
 // TranscriptView renders the agent's own conversation log — the only history a Claude pane can have
@@ -95,6 +96,25 @@ describe("TranscriptView", () => {
     expect(screen.queryByText("Running…")).not.toBeInTheDocument();
     await userEvent.click(tool);
     expect(screen.getAllByText("No output recorded")).toHaveLength(2);
+  });
+
+  it("shows a step's file relative to the pane's folder, and one outside it from home", async () => {
+    render(
+      <PaneCwdContext value="/home/you/webapp">
+        <TranscriptView
+          entries={[turn({ role: "assistant", parts: [
+            { kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "" } },
+            { kind: "tool", name: "Edit", summary: "/home/you/.config/nenu/keys.toml", result: { text: "" } },
+          ] })]}
+        />
+      </PaneCwdContext>,
+    );
+    await openWork();
+    expect(screen.getByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+    expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent(/^Edited\s*~\/\.config\/nenu\/keys\.toml$/);
+    // The row is named by what it shows, so a spoken "tap Read web src workbench.css" finds it.
+    expect(screen.getByRole("button", { name: "Read web/src/workbench.css" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edited ~/.config/nenu/keys.toml" })).toBeInTheDocument();
   });
 
   it("flags truncated output rather than silently dropping the tail", async () => {
