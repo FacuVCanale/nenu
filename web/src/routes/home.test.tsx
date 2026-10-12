@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
@@ -190,6 +190,24 @@ it("sends with the thread composer's own button: one 32px circle with a 44px rea
   expect(main.getByRole("button", { name: "Start" })).toHaveClass("composer-action", "composer-send", "hit-area");
   const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
   expect(declarations(css, ".composer-action")).toMatchObject({ width: "32px", height: "32px", "border-radius": "9999px" });
+});
+
+// Safari before 26.2 has no `field-sizing: content`: the box stayed one line over a four-line task.
+it("grows the box with a multi-line task where the browser has no field-sizing", async () => {
+  vi.stubGlobal("CSS", { supports: () => false });
+  // jsdom lays nothing out: a row is 24px of scrollHeight here, plus 20px of padding.
+  Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", { configurable: true, get(this: HTMLTextAreaElement) { return this.value.split("\n").length * 24 + 20; } });
+  try {
+    const { main } = await setup();
+    const box = main.getByRole("textbox", { name: "Task for a new agent" });
+    fireEvent.change(box, { target: { value: "Audit the auth flow\nthen the session store\nthen the cookies\nand report back" } });
+    expect(box.style.height).toBe(`${4 * 24 + 20}px`);
+    fireEvent.change(box, { target: { value: "" } });
+    expect(box.style.height).toBe("");
+  } finally {
+    delete (HTMLTextAreaElement.prototype as { scrollHeight?: number }).scrollHeight;
+    vi.unstubAllGlobals();
+  }
 });
 
 it("starts a thread in a chosen workspace", async () => {
