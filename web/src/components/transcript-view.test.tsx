@@ -766,6 +766,34 @@ describe("TranscriptView — a turn waiting on the operator", () => {
     expect(container.querySelector("[data-live-glyph]")).toBeNull();
   });
 
+  // Claude runs subagents side by side; when one of them asks for a permission, the dialog is the
+  // subagent's. Their own calls keep running, and none of them is the request.
+  it("keeps parallel subagents running while a dialog inside one waits", () => {
+    const agents = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "tool", name: "Task", summary: "Review the parser" },
+      { kind: "tool", name: "Task", summary: "Review the UI" },
+      { kind: "tool", name: "Task", summary: "Review the tests" },
+    ] })];
+    render(view("card", agents));
+    for (const name of ["Review the parser", "Review the UI", "Review the tests"]) {
+      expect(screen.getByRole("button", { name: `Running agent ${name}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Waiting on you")).not.toBeInTheDocument();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+  });
+
+  // The agent stops at the first call it needs an answer for; the ones after it have not been reached.
+  it("puts the wait on one call, the first the agent stopped at", () => {
+    const two = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
+      { kind: "tool", name: "Bash", summary: "rm -rf build" },
+      { kind: "tool", name: "Bash", summary: "bun run build" },
+    ] })];
+    render(view("card", two));
+    expect(screen.getByRole("button", { name: "Run rm -rf build Waiting on you" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Running bun run build" })).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting on you")).toHaveLength(1);
+  });
+
   it("leaves an older turn's missing output as it was", async () => {
     render(view("card"));
     await userEvent.click(screen.getByRole("button", { name: /^Worked/ }));
