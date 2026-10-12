@@ -227,9 +227,11 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
   const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
   const label = turn.interrupted ? "Stopped" : turn.settled ? "Worked" : "Work log";
   const duration = turn.durationMs !== undefined ? ` ${turn.interrupted ? "after" : "for"} ${formatWorkDuration(turn.durationMs)}` : "";
-  // One time per turn, when it finished: the question's time is already under its bubble.
+  // One time per turn, when it finished. The question's time is already under its bubble, so a turn
+  // that ends in the minute it started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
-  const endTime = clockTime(end);
+  const finished = clockTime(end);
+  const endTime = finished !== clockTime(turn.startedAt ?? "") ? finished : "";
   // The live step's own entry may have nothing else to draw; the live row then carries its scroll marker.
   const liveEntry = live?.entry ? turn.activity.find((entry) => entry.uuid === live.entry) : undefined;
   const liveMarker = liveEntry && !stepParts(liveEntry, live).length && !journalImages(liveEntry).length ? liveEntry.uuid : undefined;
