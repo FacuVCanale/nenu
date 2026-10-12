@@ -231,6 +231,36 @@ function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onP
   );
 }
 
+// How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
+const FOLD_OPEN_MS = 220;
+const FOLD_SHUT_MS = 150;
+
+/**
+ * A row above the box (Stop's, a notice) folds open and shut instead of appearing at once, so the
+ * thread above moves with it rather than jumping. One already there on mount is simply there.
+ * Folding shut, it keeps showing what it last showed, out of reach: inert and hidden from assistive
+ * tech, so a Stop on its way out can never be pressed.
+ */
+function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
+  const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
+  const last = useRef<T | null>(null);
+  if (value) last.current = value;
+  const shown = Boolean(value);
+  useEffect(() => setPhase((current) => (shown ? (current === "open" ? current : "opening") : current === "shut" ? current : "shutting")), [shown]);
+  useEffect(() => {
+    if (phase !== "opening" && phase !== "shutting") return;
+    const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
+  if (phase === "shut" || last.current === null) return null;
+  const shutting = phase === "shutting";
+  return (
+    <div className="composer-fold" data-phase={phase} inert={shutting} aria-hidden={shutting || undefined}>
+      <div>{children(last.current)}</div>
+    </div>
+  );
+}
+
 /** A send that did not go through, said above the box until the next edit or send. */
 interface SendFailure {
   error: string;
@@ -1257,7 +1287,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two
             strips, because that is where the eye already is when a send is refused — and it is a
             NOTICE beside the unchanged "Type anyway?" override, never a replacement for it. */}
-        {noEcho !== null && !direct.active && (
+        <Fold value={!direct.active && noEcho}>{(noEcho) => (
           <NoEchoNotice
             prompt={noEcho.prompt}
             typed={noEcho.typed}
@@ -1279,7 +1309,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             onDismiss={() => noticeNoEcho(null)}
             overrideOffered={forcingSend}
           />
-        )}
+        )}</Fold>
         {/* Armed indicator for direct typing. In the same in-flow slot as the "You sent:" strip,
             deliberately NOT only on the button and textarea — see the component. */}
         {direct.active && <DirectTypingStrip onStop={() => direct.deactivate()} />}
@@ -1308,7 +1338,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         )}
 
-        {failure && (
+        <Fold value={failure}>{(failure) => (
           <ComposerNotice
             icon={CircleAlert}
             tone="error"
@@ -1323,16 +1353,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             {/* Said only while the override is there to tap: it lapses long before the notice does. */}
             {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
           </ComposerNotice>
-        )}
+        )}</Fold>
         {/* Stop lives on the row above the box for the whole turn, and never in the Send slot: a draft
             appearing or clearing must not move the target under the thumb. The conversation's live
             turn already says "Working for …" just above, so only the terminal view repeats it here. */}
-        {stop.offered && (
+        <Fold value={stop.offered}>{() => (
           <div role="group" aria-label="Agent working" className="composer-working">
             {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
             <StopControl stop={stop} disabled={locked} />
           </div>
-        )}
+        )}</Fold>
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
         {/* One rounded box: the draft grows upward to its cap and the single action sits inside on
             the right (send, stop, or the confirm pill). Quiet controls live in the row below it. */}

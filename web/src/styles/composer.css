@@ -20,6 +20,13 @@
 .composer-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composer-notice-dismiss { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; margin: -4px -4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--accent); } }
+/* A row above the box (Stop's, a notice) folds open and shut, so the thread moves with it instead of
+   jumping (Fold in composer.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
+.composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 220ms ease-out, opacity 220ms ease-out; }
+.composer-fold > div { min-height: 0; }
+.composer-fold:not([data-phase="open"]) > div { overflow: hidden; }
+.composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: 150ms; }
+@starting-style { .composer-fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
 /* The + leads the box: a 32px circle at the draft's last line, its column spanning the box so the
    menu it opens hangs above the box, never over the draft. */
 .composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out; }
@@ -76,5 +83,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .composer-plus, .composer-lead { transition: none; }
+  .composer-fold { transition: opacity 120ms ease-out; }
   .composer-plus:active { scale: none; }
 }
