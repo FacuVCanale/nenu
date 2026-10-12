@@ -30,8 +30,10 @@ function observeIntersections() {
   });
   return {
     watched,
-    scroll(inView: boolean) {
-      act(() => watched.forEach(({ target, callback }) => callback([{ target, isIntersecting: inView } as IntersectionObserverEntry], {} as IntersectionObserver)));
+    /** One delivery per observer: several states at once arrive the way a busy page gets them, oldest first. */
+    scroll(...inView: boolean[]) {
+      act(() => watched.forEach(({ target, callback }) =>
+        callback(inView.map((isIntersecting) => ({ target, isIntersecting }) as IntersectionObserverEntry), {} as IntersectionObserver)));
     },
   };
 }
@@ -53,6 +55,31 @@ describe("ColumnPage — the large title", () => {
     io.scroll(false);
     expect(headerTitle()).toBeInTheDocument();
     io.scroll(true);
+    expect(headerTitle()).toBeNull();
+  });
+
+  it("goes by the latest of several crossings delivered at once", () => {
+    const io = observeIntersections();
+    renderPage("/project/awam");
+    // Flung down and back up while the page was busy: the heading ends in view, so the bar stays empty.
+    io.scroll(false, true);
+    expect(headerTitle()).toBeNull();
+    io.scroll(true, false);
+    expect(headerTitle()).toBeInTheDocument();
+  });
+
+  it("keeps the header title when the page's heading names something else", () => {
+    const io = observeIntersections();
+    // A node page titled by its project, over the node's own heading: the bar must not go empty.
+    renderPage("/project/awam/node/t-0102", <h2>Rediseño mobile</h2>);
+    expect(io.watched).toEqual([]);
+    expect(headerTitle()).toBeInTheDocument();
+  });
+
+  it("watches the heading that says the title, wherever it sits among the page's headings", () => {
+    const io = observeIntersections();
+    renderPage("/project/awam", <><h1>Needs you</h1><h2>AWAM Comercio SaaS</h2></>);
+    expect(io.watched.map(({ target }) => target.textContent)).toEqual(["AWAM Comercio SaaS"]);
     expect(headerTitle()).toBeNull();
   });
 
