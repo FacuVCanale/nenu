@@ -22,7 +22,7 @@ describe("PendingTurns", () => {
     expect(screen.getByText("after this turn")).toBeInTheDocument();
     const status = screen.getByRole("status");
     expect(within(status).getByText("Queued")).toBeInTheDocument();
-    expect(status).toHaveTextContent("Queued It goes when Claude finishes this turn.");
+    expect(status).toHaveTextContent("Queued Waiting for Claude to finish this turn.");
     // Nothing to tap on the line itself: the row's management lives in its menu.
     expect(screen.queryByRole("button", { name: "Send now" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();

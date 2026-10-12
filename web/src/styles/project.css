@@ -21,7 +21,7 @@
 .panel-tab[aria-selected="true"] { background: var(--workbench-row-selected); color: var(--foreground); }
 @media (hover: hover) { .panel-tab[aria-selected="false"]:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 @media (pointer: coarse) { .panel-tab::after { content: ""; position: absolute; inset: -6px 0; } }
-.quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
+.quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
 .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 /* Hover only where a pointer hovers: a tap leaves :hover stuck on a touch screen until the next tap. */
 @media (hover: hover) { .quiet-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
@@ -50,7 +50,7 @@
 .task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
 @media (hover: hover) { .task-fold:hover { color: var(--foreground); background: var(--workbench-row-selected); } }
 /* History: everything resolved, in grey, behind one row that opens and closes in place. */
-.task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; }
+.task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); text-align: left; cursor: pointer; }
 @media (hover: hover) { .task-history-toggle:hover { background: var(--workbench-row-hover); } }
 /* A page of History fades up as it arrives, never all at once. */
 @keyframes task-row-in { from { opacity: 0; transform: translateY(4px); } }

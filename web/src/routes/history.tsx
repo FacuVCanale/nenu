@@ -206,8 +206,10 @@ export function HistoryRoute() {
 
   const matchCursor = matches.indexOf(cursor);
   // The pane this history belongs to, or Home once the pane is gone: the one way out, in the bar and
-  // on an empty page alike.
-  const back = gone ? { to: homePath(session), label: "Home" } : { to: panePath(paneId, session), label: name ?? "the pane" };
+  // on an empty page alike. Its button says Go to Home as every empty state does, or Back to the pane.
+  const back = gone
+    ? { to: homePath(session), label: "Home", action: "Go to Home" }
+    : { to: panePath(paneId, session), label: name ?? "the pane", action: `Back to ${name ?? "the pane"}` };
   const total = Math.max(data.total, entries.length);
   const empty = gone
     ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
@@ -266,7 +268,7 @@ export function HistoryRoute() {
             // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link.
             action={
               <Link to={back.to} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
-                <span className="truncate">Back to {back.label}</span>
+                <span className="truncate">{back.action}</span>
               </Link>
             }
           >

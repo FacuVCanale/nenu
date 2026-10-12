@@ -1052,7 +1052,7 @@ describe("AgentChat — a pane that is gone", () => {
     expect(screen.queryByText("(no recent output)")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Open Blocked Claude" }));
     expect(props.onSelect).toHaveBeenCalledWith("w1:p9");
-    await userEvent.click(screen.getByRole("button", { name: "Home" }));
+    await userEvent.click(screen.getByRole("button", { name: "Go to Home" }));
     expect(props.onBack).toHaveBeenCalled();
   });
 

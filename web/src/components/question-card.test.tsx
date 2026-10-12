@@ -1,6 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import type { AnswerOutcome, Interaction } from "@/lib/types";
 import { lockReasonOf, QuestionCard } from "./question-card";
 
@@ -576,6 +577,26 @@ describe("QuestionCard", () => {
     expect(yes).toBeDisabled();
     // A disabled primary loses its ink fill instead of fading into a grey slab.
     expect(yes).not.toHaveClass("bg-foreground");
+  });
+
+  // The connection banner names a link problem once it is sustained (connection-banner.tsx); from then
+  // on the card says only what the problem means for it, so the screen names it once. Before that the
+  // card is the one place that says why its answers stopped.
+  it.each([
+    ["offline", "Answers are paused until Nenu reconnects."],
+    ["herdr", "Herdr isn't responding. Answers are paused."],
+  ] as const)("leaves naming a sustained outage (%s) to the banner and only says answers are paused", (lockReason, named) => {
+    vi.useFakeTimers();
+    try {
+      setup({ interaction: { ...permission, detailComplete: true }, lockReason });
+      expect(screen.getByText(named)).toBeVisible();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getByText("Answers are paused.")).toBeVisible();
+      expect(screen.queryByText(/Herdr|Nenu/)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^Yes$/ })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a read-only device sees the options as a list it cannot press, and one line saying why", () => {

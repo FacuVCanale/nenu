@@ -315,7 +315,8 @@ describe("the send-time choice reaches the bridge", () => {
 describe("queueRowStatus says what each CLI does with the row", () => {
   it.each([
     ["claude", { state: "queued", deliveryMode: "afterTurn", waitingFor: "working" }, "Waiting for Claude to finish this turn."],
-    ["codex", { state: "queued", deliveryMode: "afterTurn" }, "Queued. It goes when Codex finishes this turn."],
+    // A row held for the turn reads the same whether or not the bridge has said why yet.
+    ["codex", { state: "queued", deliveryMode: "afterTurn" }, "Waiting for Codex to finish this turn."],
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "dialog" }, "Waiting. Answer the dialog first."],
     ["codex", { state: "queued", deliveryMode: "steer" }, "Goes as soon as Codex's input box is free."],
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "turn-start" }, "Waiting for Claude to start on the previous message."],

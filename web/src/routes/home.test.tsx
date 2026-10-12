@@ -571,7 +571,8 @@ describe("an outage", () => {
     expect(headline()).toBe("1 thread needs you");
     expect(main.queryByText(/Can.t reach|Last synced|Showing the last herd|Nenu keeps trying/)).not.toBeInTheDocument();
     // The herd stays to look at and open; what it cannot vouch for is paused.
-    expect(await needs.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    expect(await needs.findByText("Answers are paused.")).toBeVisible();
+    expect(needs.queryByText(/Herdr/)).not.toBeInTheDocument();
     expect(needs.getByRole("button", { name: "Yes" })).toBeDisabled();
     expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");

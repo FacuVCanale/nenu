@@ -8,6 +8,7 @@ import {
   SecondaryActions, WaitingOnYou,
 } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
+import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
@@ -53,6 +54,8 @@ const LOCK_COPY: Record<LockReason, string> = {
   herdr: "Herdr isn't responding. Answers are paused.",
   refused: "Sign in again to answer.",
 };
+/** Once an outage is sustained the connection banner names it, so the card only says what it means here. */
+const PAUSED_UNDER_BANNER = "Answers are paused.";
 
 /** The lock a snapshot implies: a read-only device first, then a refused or failed read, then Herdr itself. */
 export function lockReasonOf(s: { readOnly: boolean; error: boolean; authError: boolean; bridge: BridgeStatus | undefined }): LockReason | undefined {
@@ -127,6 +130,9 @@ export function QuestionCard({
   const [answerList, setAnswerList] = useState<HTMLElement | null>(null);
   // Kept only so a resize renders the card again and the measure below runs.
   const [, setFrameWidth] = useState(0);
+  // The banner's own reading of the same outage (one shared store), so the card and the banner agree.
+  const outage = lockReason === "offline" || lockReason === "herdr";
+  const bannerUp = useConnectionLost(outage);
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
   const noticeLine = useRef<HTMLParagraphElement>(null);
@@ -184,7 +190,7 @@ export function QuestionCard({
   }
 
   const typing = Boolean(i.typing);
-  const lockLine = lockReason ? LOCK_COPY[lockReason] : readOnly ? "Answers are paused right now." : null;
+  const lockLine = lockReason ? (outage && bannerUp ? PAUSED_UNDER_BANNER : LOCK_COPY[lockReason]) : readOnly ? "Answers are paused right now." : null;
   const locked = lockLine !== null || typing || busy !== null;
   const staticList = lockReason === "read-only";
 

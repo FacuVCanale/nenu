@@ -182,7 +182,7 @@ export function OptionGroupCaption({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5 pl-0.5">
       <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-primary/60" />
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-footnote font-medium text-muted-foreground">
         {children}
       </span>
     </div>

@@ -24,10 +24,12 @@ export interface QueuedAction {
   armed?: boolean;
 }
 
+// Inline, so the mark flows with the words of the status line it leads.
+const MARK = "mr-0.5 inline-block size-3.5 align-[-2px]";
 const TONE_ICON: Record<Exclude<QueuedTone, "waiting">, ReactNode> = {
-  busy: <Loader2 aria-hidden="true" className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />,
-  done: <Check aria-hidden="true" className="size-3.5 shrink-0" />,
-  problem: <AlertCircle aria-hidden="true" className="size-3.5 shrink-0" />,
+  busy: <Loader2 aria-hidden="true" className={cn(MARK, "animate-spin motion-reduce:animate-none")} />,
+  done: <Check aria-hidden="true" className={MARK} />,
+  problem: <AlertCircle aria-hidden="true" className={MARK} />,
 };
 
 /**
@@ -73,8 +75,6 @@ export function QueuedMessage({
   // The ⋯ is described by the message it manages, so two of them read apart.
   const bubbleId = useId();
   const queued = tone === "waiting";
-  // The badge already says it is queued; the status copy's own "Queued." would repeat it.
-  const detail = queued ? label.replace(/^Queued\.\s*/, "") : label;
   return (
     <div className="flex flex-col items-end">
       <div
@@ -94,55 +94,63 @@ export function QueuedMessage({
         )}
       </div>
       {/* The words take the line while they leave them 15rem; past that (a long failure next to Open
-          Terminal on a phone) the buttons wrap under them instead of squeezing them into a column. */}
+          Terminal on a phone) the buttons wrap under them, together, instead of squeezing the words
+          into a column or leaving the ⋯ on a row of its own. Every line ends under the bubble's edge
+          and its mark leads its words. Nenu's own short words stay one right-aligned run even when
+          they wrap; a failure is the bridge's sentence, so once it wraps it reads as a paragraph. */}
       <div className="flex w-full flex-wrap items-center justify-end gap-x-1">
         <p
           role="status"
           aria-live="polite"
-          className={cn("flex min-w-0 grow basis-60 items-center justify-end gap-1.5 px-1 py-1 text-footnote text-muted-foreground", tone === "problem" && "text-destructive")}
+          className={cn("min-w-0 grow basis-60 px-1 py-1 text-right text-pretty text-footnote text-muted-foreground [overflow-wrap:anywhere]", tone === "problem" && "text-destructive")}
         >
-          {queued ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-micro text-foreground">
-              <Clock aria-hidden="true" className="size-3" />
-              Queued
-            </span>
-          ) : (
-            TONE_ICON[tone]
-          )}{" "}
-          <span className="min-w-0">
-            {detail}
-            {device ? <> · from {device}</> : null}
+          <span className={cn(tone === "problem" && "inline-block text-left")}>
+            {queued ? (
+              <span className="mr-0.5 inline-flex items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 align-middle text-micro text-foreground">
+                <Clock aria-hidden="true" className="size-3" />
+                Queued
+              </span>
+            ) : (
+              TONE_ICON[tone]
+            )}{" "}
+            {label}
+            {/* Bound to its dot, so a wrapped line breaks before the device, never inside "· from". */}
+            {device ? ` ·\u00a0from\u00a0${device}` : null}
           </span>
         </p>
-        {remedies.map(({ id, label: text, icon: Icon, run, disabled, name, armed }) => (
-          <button
-            key={id}
-            type="button"
-            aria-label={name}
-            disabled={disabled}
-            onClick={run}
-            className={cn(
-              "flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-footnote font-medium text-foreground hover:bg-accent disabled:text-disabled-foreground coarse:min-h-11",
-              armed && "bg-destructive/10 text-destructive hover:bg-destructive/15",
+        {(remedies.length > 0 || menu.length > 0) && (
+          <div className="flex shrink-0 items-center gap-x-1">
+            {remedies.map(({ id, label: text, icon: Icon, run, disabled, name, armed }) => (
+              <button
+                key={id}
+                type="button"
+                aria-label={name}
+                disabled={disabled}
+                onClick={run}
+                className={cn(
+                  "flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-footnote font-medium text-foreground hover:bg-accent disabled:text-disabled-foreground coarse:min-h-11",
+                  armed && "bg-destructive/10 text-destructive hover:bg-destructive/15",
+                )}
+              >
+                <Icon aria-hidden="true" className="size-3.5" />
+                {text}
+              </button>
+            ))}
+            {menu.length > 0 && (
+              <button
+                ref={trigger}
+                type="button"
+                aria-label={menuLabel}
+                aria-describedby={bubbleId}
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                onClick={() => setOpen(!open)}
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
+              >
+                <MoreHorizontal aria-hidden="true" className="size-5" />
+              </button>
             )}
-          >
-            <Icon aria-hidden="true" className="size-3.5" />
-            {text}
-          </button>
-        ))}
-        {menu.length > 0 && (
-          <button
-            ref={trigger}
-            type="button"
-            aria-label={menuLabel}
-            aria-describedby={bubbleId}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
-          >
-            <MoreHorizontal aria-hidden="true" className="size-5" />
-          </button>
+          </div>
         )}
       </div>
       <WorkbenchPopover
