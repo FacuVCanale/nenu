@@ -1031,7 +1031,7 @@ describe("AgentChat — bridge-detected dialog", () => {
     server.use(
       http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
         paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
-        context: "Bash command\nmkfifo fixture-fifo", signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: false,
+        context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: false,
         options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
       }] })),
       http.post(/\/api\/interactions\/[^/]+\/answer$/, async ({ request }) => {

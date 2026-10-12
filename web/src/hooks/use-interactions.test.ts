@@ -3,12 +3,32 @@ import { http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
 import type { Interaction } from "@/lib/types";
-import { useInteractions } from "./use-interactions";
+import { receiptSummary, useInteractions } from "./use-interactions";
 
 const card: Interaction = {
   paneId: "w1:p1", agent: "claude", kind: "question", family: "select", question: "Which fruit?", signature: "sig-1",
   revision: 1, detectedAt: 0, options: [{ index: 0, label: "Apple", role: "neutral" }, { index: 1, label: "Pear", role: "neutral" }],
 };
+
+describe("receiptSummary", () => {
+  const ask = (over: Partial<Interaction>): Interaction => ({ ...card, kind: "permission", family: "permission", question: "Do you want to proceed?", ...over });
+  const yes = { index: 0, label: "Yes", role: "primary" } as const;
+
+  // Shapes the bridge serves for the fixture corpus: claude--trust-prompt, codex--v0156-trust,
+  // agy--permission-edit, agy--permission-bash and grok--permission-rm.
+  it.each([
+    ["a folder's trust names the answer, never the prompt's last line", ask({ family: "trust", context: "Accessing workspace:\n/tmp/project\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide" }), { index: 0, label: "Yes, I trust this folder", role: "persistent" as const }, "Approved · Yes, I trust this folder"],
+    ["Codex's trust likewise", ask({ family: "trust", context: "can run code automatically. Your trust\ndecision will be saved." }), { index: 0, label: "Trust and continue", role: "persistent" as const }, "Approved · Trust and continue"],
+    ["a declined trust", ask({ family: "trust", context: "Accessing workspace:\n/tmp/project\nSecurity guide" }), { index: 1, label: "No, exit", role: "deny" as const }, "Declined · No, exit"],
+    ["a command the screen folded names the answer, not its fold", ask({ context: "Requesting permission for:\ncat << 'EOF' > test_logger.py\nimport unittest\n⋯ (25 lines hidden)" }), yes, "Approved · Yes"],
+    ["a request in several plain rows names the answer", ask({ context: "Requesting permission for:\nls -la /tmp" }), yes, "Approved · Yes"],
+    ["a request that is one plain row is the command", ask({ context: "rm hello.txt" }), yes, "Approved · rm hello.txt"],
+    ["a command in parts", ask({ subject: { tool: "Bash", command: "echo hi > hello.txt" }, context: "Bash\necho hi > hello.txt" }), yes, "Approved · echo hi > hello.txt"],
+    ["a file in parts", ask({ subject: { tool: "Create file", file: "hello.txt", preview: "1 hello" } }), yes, "Approved · hello.txt"],
+  ])("%s", (_, interaction, option, summary) => {
+    expect(receiptSummary(interaction, option)).toBe(summary);
+  });
+});
 
 describe("useInteractions", () => {
   it("hides an answered dialog behind its receipt even when a read still returns it", async () => {
