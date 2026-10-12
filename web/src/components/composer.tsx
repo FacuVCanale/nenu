@@ -865,7 +865,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         const delivered = res.status === "stalled" || res.textDelivered === true;
         failSend(started, res.error, secret, delivered);
         setDeliveryPhase(null);
-        if (!secret) refused(res.error, delivered, t, isDraft);
+        // A toolbar action is not a message: its failure is a toast, with nothing to "try again".
+        if (action) setStatus(res.error, "error");
+        else if (!secret) refused(res.error, delivered, t, isDraft);
         return false;
       }
     } catch (e) {
@@ -1035,6 +1037,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // uploads straight away and shows as a chip; the paths join the text only when the message is sent.
   function attachFiles(files: Iterable<File>) {
     if (locked || direct.active) return;
+    setFailure(null); // the draft changed, so the refusal no longer describes it
     const skipped = attachments.add(files);
     if (skipped > 0) setStatus(`${skipped} file${skipped === 1 ? "" : "s"} skipped. Only images, up to 10 per message.`, "info");
     focusInputEnd();
