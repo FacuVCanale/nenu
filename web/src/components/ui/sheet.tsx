@@ -5,14 +5,22 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePresence } from "@/components/ui/presence";
 
+/** A mouse or trackpad drives the page, so focusing a field raises no on-screen keyboard. */
+export function finePointer(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
+}
+
 // Minimal modal focus handling (no deps, no full trap): on open move focus into the panel so
 // keyboard / screen-reader users land inside the dialog; on close restore focus to whatever was
-// focused before it opened. The panel must carry tabIndex={-1} to be a focus target.
+// focused before it opened. The panel must carry tabIndex={-1} to be a focus target. Where focusing
+// a field raises no on-screen keyboard, the field the sheet marks `data-autofocus` takes focus
+// instead, so a search starts on the first keystroke; on a touch screen the keyboard stays down.
 function useDialogFocus(open: boolean, panelRef: React.RefObject<HTMLElement | null>) {
   React.useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus({ preventScroll: true });
+    const field = finePointer() ? panelRef.current?.querySelector<HTMLElement>("[data-autofocus]") : null;
+    (field ?? panelRef.current)?.focus({ preventScroll: true });
     return () => {
       if (previouslyFocused?.isConnected) previouslyFocused.focus?.({ preventScroll: true });
     };
@@ -31,6 +39,19 @@ const BACKDROP_MOTION = {
   closing: "animate-out fade-out fill-mode-forwards",
 };
 
+/**
+ * How a bottom sheet sits on a desk (1024 px and up, where the app shows its sidebar): `panel` is a
+ * compact panel for a few actions, centred; `dialog` is a dialog for a list you search, held near
+ * the top so its field stays put while the results change. Both keep the sheet's own surface, the
+ * one the rows and headers other screens put inside a sheet are drawn for, and come in and go out as
+ * the app's dialogs do, with a fade and a 0.98 scale. index.css caps the panel's height outside any
+ * layer, so only an important utility can lower that cap.
+ */
+const DESKTOP = {
+  panel: { viewport: "lg:justify-center", panel: "lg:max-w-80" },
+  dialog: { viewport: "lg:justify-start lg:pt-[12dvh]", panel: "lg:max-w-160 lg:max-h-[80dvh]!" },
+} as const;
+
 // A minimal bottom sheet — no Radix, no portals, no extra deps. Renders nothing once closed and
 // gone. Dismisses on backdrop tap or Escape.
 interface BottomSheetProps {
@@ -39,9 +60,11 @@ interface BottomSheetProps {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  /** Its shape from 1024 px; below that it is always the bottom sheet. */
+  desktop?: keyof typeof DESKTOP;
 }
 
-export function BottomSheet({ open, onClose, title, children, className }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, children, className, desktop = "panel" }: BottomSheetProps) {
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const drag = React.useRef({ startY: 0, atTop: false, engaged: false, dy: 0 });
@@ -135,7 +158,11 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
   return (
     <div
       ref={viewportRef}
-      className={cn("sheet-viewport fixed inset-x-0 z-50 flex flex-col justify-end", closing ? LAYER_MOTION.closing : LAYER_MOTION.open)}
+      className={cn(
+        "sheet-viewport fixed inset-x-0 z-50 flex flex-col justify-end lg:items-center",
+        DESKTOP[desktop].viewport,
+        closing ? LAYER_MOTION.closing : LAYER_MOTION.open,
+      )}
       role="dialog"
       aria-modal="true"
       aria-labelledby={content.title ? titleId : undefined}
@@ -148,7 +175,10 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
         type="button"
         aria-hidden="true"
         tabIndex={-1}
-        className={cn("absolute inset-0 bg-black/50 duration-200 ease-out motion-reduce:animate-none", closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open)}
+        className={cn(
+          "absolute inset-0 bg-black/50 duration-200 ease-out motion-reduce:animate-none lg:duration-150",
+          closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open,
+        )}
         onPointerDown={() => {
           backdropArmed.current = true;
         }}
@@ -168,28 +198,28 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
         className={cn(
           "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl border-t border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
           "pb-[calc(env(safe-area-inset-bottom)_+_1rem)]",
+          "lg:rounded-2xl lg:border lg:pb-1 lg:shadow-[var(--shadow-float)] lg:duration-150",
           // A released drag closes from where the finger left it: the exit runs from the panel's
           // own transform to fully below the screen.
-          closing ? "animate-out slide-out-to-bottom fill-mode-forwards" : "animate-in slide-in-from-bottom-4",
+          closing
+            ? "animate-out slide-out-to-bottom fill-mode-forwards lg:fade-out lg:zoom-out-98 lg:slide-out-to-bottom-0"
+            : "animate-in slide-in-from-bottom-4 lg:fade-in lg:zoom-in-98 lg:slide-in-from-bottom-0",
+          DESKTOP[desktop].panel,
           className,
         )}
       >
         <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-md">
-          {/* Grab handle — pull down (from anywhere at the top) to dismiss. */}
-          <div className="flex justify-center pt-2 pb-1">
+          {/* Grab handle — pull down (from anywhere at the top) to dismiss. From 640 px a sheet may
+              float as a dialog (its owner's or the desk's), where a handle promises a pull that
+              isn't there. */}
+          <div className="flex justify-center pt-2 pb-1 sm:hidden">
             <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
           </div>
-          <div className="flex items-center justify-between px-4 pb-3">
+          <div className="flex items-center justify-between px-4 pb-3 sm:pt-3">
             <span id={content.title ? titleId : undefined} className="text-sm font-semibold">
               {content.title}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-11"
-              onClick={onClose}
-              aria-label="Close"
-            >
+            <Button variant="ghost" size="icon" className="lg:-mr-2" onClick={onClose} aria-label="Close">
               <X className="size-4" />
             </Button>
           </div>
