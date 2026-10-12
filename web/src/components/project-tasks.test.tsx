@@ -35,6 +35,13 @@ it("lists the coordinator, then the open threads, with the resolved ones folded 
   expect(onOpenPane).toHaveBeenCalledWith("c");
 });
 
+it("marks the project coordinator's row You're here when its chat is the one on screen", () => {
+  setup({ currentPaneId: "c" });
+  const own = screen.getByRole("button", { name: /^Coordinator/ });
+  expect(own).toHaveTextContent("You're here · claude");
+  expect(own.closest("li")).toHaveAttribute("aria-current", "true");
+});
+
 it("sums up a pull request as far as Organizations reported it", () => {
   expect(prSummary({ number: 7, state: "open", review: "approved", checks: { passed: 6, failed: 0, pending: 0 } })).toBe("PR #7 · approved · checks passed");
   expect(prSummary({ number: 7, state: "open", checks: { passed: 4, failed: 0, pending: 2 } })).toBe("PR #7 · checks 4/6");
