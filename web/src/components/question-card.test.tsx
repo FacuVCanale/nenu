@@ -584,9 +584,12 @@ describe("QuestionCard", () => {
       const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(60);
       const short = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(36);
       try {
-        const { onOpen, onAnswer, user } = setup({ compact: true, interaction: described });
+        const recommended: Interaction = { ...described, options: [{ ...described.options[0]!, label: "Apple (Recommended)" }, ...described.options.slice(1)] };
+        const { onOpen, onAnswer, user } = setup({ compact: true, interaction: recommended });
         expect(screen.queryByRole("button", { name: /Apple/ })).not.toBeInTheDocument();
-        expect(within(screen.getByRole("list", { name: "Options" })).getByText("Apple")).toBeVisible();
+        const options = screen.getByRole("list", { name: "Options" });
+        expect(within(options).getByText("Apple")).toBeVisible();
+        expect(within(options).getByText("Recommended")).toBeVisible();
         await user.click(screen.getByRole("button", { name: "Answer in thread" }));
         expect(onOpen).toHaveBeenCalled();
         expect(onAnswer).not.toHaveBeenCalled();

@@ -102,6 +102,17 @@ describe("PreviewSelectBlock — intents", () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
+  it("while a note is being written, Choose waits for it to be saved or dropped", async () => {
+    const user = userEvent.setup();
+    const model = fixtureModel("claude--select-preview.txt");
+    render(<PreviewSelectBlock preview={model} onAction={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /Add a note/ }));
+    expect(screen.queryByRole("button", { name: "Choose Boxy" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Choose Boxy" })).toBeInTheDocument();
+  });
+
   it("Choose commits the pointed row", async () => {
     const onAction = vi.fn();
     const user = userEvent.setup();
