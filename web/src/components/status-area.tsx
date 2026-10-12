@@ -115,7 +115,9 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
     else { lastOffset.current = 0; setOffset(0); }
   };
 
-  const text = <div className="max-h-[min(16rem,40dvh)] min-w-0 flex-1 overflow-y-auto overscroll-contain [overflow-wrap:anywhere]">
+  // touch-none here too: a scroller is where the browser decides a touch is its pan, so the card's
+  // own touch-none stops at it and a swipe that starts on the text would be cancelled as a scroll.
+  const text = <div className="max-h-[min(16rem,40dvh)] min-w-0 flex-1 touch-none overflow-y-auto overscroll-contain [overflow-wrap:anywhere]">
     <p className="whitespace-pre-wrap text-subhead font-semibold">{message.text}</p>
     {message.description && <p className="mt-0.5 whitespace-pre-wrap text-footnote text-muted-foreground">{message.description}</p>}
   </div>;
