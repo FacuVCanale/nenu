@@ -5,10 +5,12 @@ import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
 import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { SEGMENT_TRACK, segmentClass } from "@/components/dock-tile";
 import { fetchHistory, paneFileUrl } from "@/lib/api";
 import { chatFileReferences, fileExtension, artifactKind, type ChatFileKind } from "@/lib/chat-files";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 type ScanState = {
@@ -238,15 +240,13 @@ export function ChatFilesBrowser({
       </button>}
 
       <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" desktop="dialog">
-        <div className="mb-4 grid grid-cols-4 gap-1" role="group" aria-label="File type">
-          <FilterButton active={filter === "artifacts"} onClick={() => changeFilter("artifacts")} icon={null}>Artifacts</FilterButton>
-          <FilterButton active={filter === "project"} onClick={() => changeFilter("project")} icon={null}>Project</FilterButton>
-          <FilterButton active={filter === "file"} onClick={() => changeFilter("file")} icon={null}>
+        <div className={cn("mb-4", SEGMENT_TRACK)} role="group" aria-label="File type">
+          <FilterButton active={filter === "artifacts"} onClick={() => changeFilter("artifacts")}>Artifacts</FilterButton>
+          <FilterButton active={filter === "project"} onClick={() => changeFilter("project")}>Project</FilterButton>
+          <FilterButton active={filter === "file"} onClick={() => changeFilter("file")}>
             Files{!scan.loading ? ` · ${files.length}` : ""}
           </FilterButton>
-          <FilterButton active={filter === "photo"} onClick={() => changeFilter("photo")} icon={null}>
-            Media
-          </FilterButton>
+          <FilterButton active={filter === "photo"} onClick={() => changeFilter("photo")}>Media</FilterButton>
         </div>
 
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
@@ -341,11 +341,10 @@ export function ChatFilesBrowser({
   );
 }
 
-function FilterButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" aria-pressed={active} onClick={onClick}
-      className={`flex min-h-11 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring ${active ? "border-primary/40 bg-primary/10 text-foreground" : "bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}>
-      {icon}{children}
+    <button type="button" aria-pressed={active} onClick={onClick} className={cn(segmentClass(active), "whitespace-nowrap")}>
+      {children}
     </button>
   );
 }
