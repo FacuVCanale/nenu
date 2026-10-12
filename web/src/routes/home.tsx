@@ -49,6 +49,9 @@ export function HomeRoute() {
   const opening = useOpeningPath();
   // The herd on screen is not live: a refusal at once, an outage once it is sustained.
   const stale = data.authError || lost;
+  // The composer says a failed read is why it waits only once the outage is sustained (a brief one is
+  // the quiet retry); Herdr down, a refusal and a read-only device are said at once.
+  const composerLock = lock === "offline" && !lost ? undefined : lock;
   // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
   if (data.bridge === undefined) {
     return <ColumnPage data={data} title="Home">
@@ -81,7 +84,7 @@ export function HomeRoute() {
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
       <div className="flex flex-col">
-        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} lock={lock} />
+        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} lock={composerLock} />
         <Reveal>{live && !data.agents.length && (
           <div className="pt-6 lg:pt-7">
             <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />
