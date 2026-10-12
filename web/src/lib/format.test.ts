@@ -1,4 +1,4 @@
-import { initials, shortCwd, timeAgo, timeAgoShort } from "./format";
+import { clockTime, initials, shortCwd, timeAgo, timeAgoShort } from "./format";
 
 describe("shortCwd", () => {
   it("collapses /home/<user> to ~", () => {
@@ -109,5 +109,13 @@ describe("timeAgoShort", () => {
 
   it("says 'now' rather than 'just now'", () => {
     expect(timeAgoShort(now - 1000, now)).toBe("now");
+  });
+});
+
+describe("clockTime", () => {
+  // A clock time reads "9:05", never "09:05": the zero is a column filler for a table of times,
+  // and these sit one at a time under a message or at the end of a work line.
+  it("drops the hour's leading zero", () => {
+    expect(clockTime(new Date(2026, 9, 10, 9, 5).getTime())).toMatch(/^9:05/);
   });
 });

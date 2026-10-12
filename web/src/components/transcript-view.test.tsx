@@ -1,6 +1,7 @@
+import { vi } from "vitest";
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
@@ -22,10 +23,10 @@ const turn = (over: Partial<TranscriptEntry> = {}): TranscriptEntry => ({
   ...over,
 });
 
-async function openToolGroup() {
+/** Opens the turn's work: its steps are rows right under it, with nothing more to open first. */
+async function openWork() {
   const work = screen.getByRole("button", { name: /^Work log/ });
   if (work.getAttribute("aria-expanded") === "false") await userEvent.click(work);
-  await userEvent.click(screen.getByRole("button", { name: /^1 tool call/ }));
 }
 
 describe("TranscriptView", () => {
@@ -67,14 +68,13 @@ describe("TranscriptView", () => {
       />,
     );
 
-    expect(screen.queryByText("git log --oneline")).not.toBeInTheDocument();
-    await openToolGroup();
-    expect(screen.getByText("Bash")).toBeInTheDocument();
+    await openWork();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.getByText("git log --oneline")).toBeInTheDocument();
     // Collapsed by default — a real thread is mostly tool traffic, and expanding it all buries the prose.
     expect(screen.queryByText(/abc1234 the commit body/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Bash git log --oneline", expanded: false }));
+    await userEvent.click(screen.getByRole("button", { name: "Ran git log --oneline", expanded: false }));
     expect(screen.getByText(/abc1234 the commit body/)).toBeInTheDocument();
   });
 
@@ -89,7 +89,7 @@ describe("TranscriptView", () => {
         ]}
       />,
     );
-    await openToolGroup();
+    await openWork();
     const tool = screen.getByRole("button", { name: "Read /a.ts No output recorded" });
     expect(tool).toBeEnabled();
     expect(screen.queryByText("Running…")).not.toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("TranscriptView", () => {
         ]}
       />,
     );
-    await openToolGroup();
+    await openWork();
     await userEvent.click(screen.getByRole("button", { name: "Read /big Truncated", expanded: false }));
     expect(screen.getByText(/output truncated/)).toBeInTheDocument();
   });
@@ -128,7 +128,7 @@ describe("TranscriptView", () => {
     );
     expect(screen.queryByText("You")).not.toBeInTheDocument();
     expect(screen.queryByText("…prior context…")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Context compacted", expanded: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Context compacted/, expanded: false }));
     expect(screen.getByText("…prior context…")).toBeInTheDocument();
   });
 
@@ -204,8 +204,8 @@ describe("TranscriptView", () => {
         ]}
       />,
     );
-    await openToolGroup();
-    await userEvent.click(screen.getByRole("button", { name: "Bash cat notes.md", expanded: false }));
+    await openWork();
+    await userEvent.click(screen.getByRole("button", { name: "Ran cat notes.md", expanded: false }));
     expect(screen.getByText(/## literal heading/)).toBeInTheDocument();
     expect(container.textContent).toContain(hostile);
     expect(container.querySelector("img,script,strong,h2")).toBeNull();
@@ -241,7 +241,7 @@ describe("TranscriptView", () => {
 // a run carries the role/time header. Without this the scroll length roughly doubles with nothing
 // new in it.
 describe("TranscriptView — speaker grouping", () => {
-  const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const at = "2026-07-25T06:22:21.253Z";
 
   it("times only the first of your consecutive messages", () => {
@@ -326,7 +326,7 @@ describe("TranscriptView — system notes", () => {
         ]}
       />,
     );
-    expect(screen.getByRole("button", { name: "Context compacted" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Context compacted/ })).toBeInTheDocument();
     expect(screen.getByText("task done")).toBeInTheDocument();
   });
 
@@ -394,7 +394,7 @@ describe("TranscriptView — work folding", () => {
   it("a query opens completed work and its matching thinking detail, then restores the fold", () => {
     const { rerender } = render(<TranscriptView entries={[activity, final]} activityStatus="done" query="dependency direction" />);
     expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Thinking", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Thinking: /, expanded: true })).toBeInTheDocument();
     expect(screen.getByText("dependency direction")).toBeVisible();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
     expect(screen.getByRole("button", { name: "Worked for 21s", expanded: false })).toBeInTheDocument();
@@ -404,7 +404,6 @@ describe("TranscriptView — work folding", () => {
     const action = turn({ uuid: "tool-entry", role: "assistant", turnId: "native-turn", parts: [{ kind: "tool", name: "Read", summary: "src/app.ts", result: { text: "source contents" } }] });
     const { container } = render(<TranscriptView entries={[action, final]} activityStatus="done" focusedUuid="tool-entry" />);
     expect(screen.getByRole("button", { name: /^Worked for 21s/, expanded: true })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^1 tool call/, expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read src/app.ts", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("source contents")).toBeVisible();
     expect(container.querySelectorAll('[data-turn="tool-entry"]')).toHaveLength(1);
@@ -494,7 +493,7 @@ describe("journal media", () => {
       turn({ uuid: "s", role: "summary", parts: [{ kind: "text", text: "Key files: `assets/canvas.template.html`, the real one `real/scroll.html`, shots in frames/frame1.png." }] }),
       turn({ uuid: "n", role: "note", parts: [{ kind: "text", text: "Base directory for this skill: /skills/designboard\n\nOpen assets/canvas.template.html or report.html" }] }),
     ]} />));
-    await userEvent.click(screen.getByRole("button", { name: "Context compacted" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Context compacted/ }));
     await userEvent.click(screen.getByRole("button", { name: /^Base directory for this skill/ }));
     expect(screen.queryByRole("button", { name: /^Open / })).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
@@ -550,4 +549,171 @@ it("leaves a live question to the card under it, and only that one", () => {
   rerender(view("dialog"));
   expect(screen.getAllByRole("region", { name: "Agent question" })).toHaveLength(2);
   expect(screen.queryByText(/prepare your reply/)).not.toBeInTheDocument();
+});
+
+// A turn reads as a timeline: one row per step, the failure on its own row, and while the agent
+// works, the step in progress at the bottom saying what it is doing now.
+describe("TranscriptView — the work timeline", () => {
+  const at = (hm: string) => `2026-07-25T${hm}:00`;
+  const ask = turn({ uuid: "ask", ts: at("09:05"), parts: [{ kind: "text", text: "Fix the composer gap." }] });
+  const step = (uuid: string, hm: string, parts: TranscriptEntry["parts"], extra: Partial<TranscriptEntry> = {}) =>
+    turn({ uuid, ts: at(hm), role: "assistant", turnId: "t1", ...extra, parts });
+  const settled = [
+    ask,
+    step("think", "09:05", [{ kind: "thinking", text: "The inset is counted twice.\nLook at the viewport hook." }]),
+    step("grep", "09:06", [{ kind: "tool", name: "Grep", summary: "safe-area-inset-bottom", result: { text: "web/src/workbench.css:212" } }]),
+    step("edit", "09:06", [{ kind: "tool", name: "Edit", summary: "/home/fran/repo/web/src/index.css", result: { text: "updated" } }]),
+    step("test", "09:07", [{ kind: "tool", name: "Bash", summary: "bun run test composer", result: { text: "FAIL composer.test.tsx", isError: true } }]),
+    step("final", "09:09", [{ kind: "text", text: "Fixed." }], { phase: "final_answer", turn: { status: "completed", durationMs: 252_000 } }),
+  ];
+  const clock = (hm: string) => new Date(at(hm)).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  it("opens a finished turn onto one row per step, with no fold of tool calls inside it", async () => {
+    render(<TranscriptView entries={settled} activityStatus="done" />);
+    const fold = screen.getByRole("button", { name: /^Worked for 4m 12s/, expanded: false });
+    // The failure shows on the folded line, before anything is opened.
+    expect(fold).toHaveTextContent("1 failed");
+    await userEvent.click(fold);
+    expect(screen.getByRole("button", { name: "Thinking: The inset is counted twice." })).toHaveTextContent("The inset is counted twice.");
+    expect(screen.getByRole("button", { name: /^Searched safe-area-inset-bottom/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent("index.css");
+    expect(screen.queryByText(/tool calls?/)).not.toBeInTheDocument();
+    // The failed step is one tap from its output.
+    const failed = screen.getByRole("button", { name: /^Ran bun run test composer Failed/ });
+    expect(failed).toHaveTextContent("Failed");
+    await userEvent.click(failed);
+    expect(screen.getByText("FAIL composer.test.tsx")).toBeVisible();
+  });
+
+  it("times your message and the finished turn once each, with no leading zero", () => {
+    const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
+    expect(clock("09:05")).toMatch(/^9:05/);
+    expect(screen.getAllByText(clock("09:05"))).toHaveLength(1);
+    const line = container.querySelector("[data-work-turn]")!;
+    expect(line).toHaveTextContent(clock("09:09"));
+    expect(container.textContent!.split(clock("09:09")).length - 1).toBe(1);
+    expect(container.textContent).not.toMatch(/\b0\d:\d\d/);
+  });
+
+  it("gives a turn that ends in the minute it started no second time, since its question already shows it", () => {
+    const { container } = render(<TranscriptView activityStatus="done" entries={[
+      ask,
+      step("look", "09:05", [{ kind: "tool", name: "Grep", summary: "x", result: { text: "y" } }]),
+      step("final", "09:05", [{ kind: "text", text: "Done." }], { phase: "final_answer", turn: { status: "completed", durationMs: 17_000 } }),
+    ]} />);
+    expect(screen.getByRole("button", { name: /^Worked for 17s/ })).toBeInTheDocument();
+    expect(screen.getAllByText(clock("09:05"))).toHaveLength(1);
+    expect(container.querySelector("[data-work-turn] time")).toBeNull();
+  });
+
+  const working = (last: TranscriptEntry["parts"]) => [
+    ask,
+    step("read", "09:06", [{ kind: "tool", name: "Read", summary: "/repo/web/src/components/tab-strip.tsx", result: { text: "import" } }], { turn: { status: "running", startedAt: at("09:05") } }),
+    step("now", "09:07", last, { turn: { status: "running", startedAt: at("09:05") } }),
+  ];
+
+  it("says Working on the turn and puts the running step at the bottom, drawn once", async () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: "bun run test tab-strip" }])} activityStatus="working" />);
+    const header = screen.getByRole("button", { name: /^Working/, expanded: true });
+    expect(header).not.toHaveTextContent("Thinking");
+    const live = container.querySelector("[data-live-step]")!;
+    expect(live).toHaveTextContent("Running");
+    expect(live).toHaveTextContent("bun run test tab-strip");
+    expect(screen.getAllByText("bun run test tab-strip")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /^Read / })).toBeInTheDocument();
+    // Folding the turn keeps the live row: it is what the operator glances at.
+    await userEvent.click(header);
+    expect(screen.queryByRole("button", { name: /^Read / })).not.toBeInTheDocument();
+    expect(container.querySelector("[data-live-step]")).toHaveTextContent("Running");
+  });
+
+  it("says Thinking with the thought's first line on the bottom row, never on the turn's line", () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "thinking", text: "Now the chip height.\nThen the e2e." }])} activityStatus="working" />);
+    expect(screen.getByRole("button", { name: /^Working/ })).not.toHaveTextContent("Thinking");
+    expect(container.querySelector("[data-live-step]")).toHaveTextContent("ThinkingNow the chip height.");
+    // Drawn once: the thought is the bottom row, not also a step above it.
+    expect(screen.getAllByText("Now the chip height.")).toHaveLength(1);
+  });
+
+  it("previews a thought's bold title on the bottom row without its asterisks", () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "thinking", text: "**Inspecting the inset**\n\nThe composer adds it twice." }])} activityStatus="working" />);
+    expect(container.querySelector("[data-live-step]")).toHaveTextContent("Inspecting the inset");
+    expect(container.querySelector("[data-live-step]")).not.toHaveTextContent("*");
+  });
+
+  it("keeps the agent that still runs on the bottom row when a parallel one finishes first", () => {
+    const running = { turn: { status: "running" as const, startedAt: at("09:05") } };
+    const { container } = render(<TranscriptView activityStatus="working" entries={[
+      ask,
+      step("a", "09:06", [{ kind: "tool", name: "Task", summary: "Audit the tab strip" }], running),
+      step("b", "09:06", [{ kind: "tool", name: "Task", summary: "Audit the composer", result: { text: "fine" } }], running),
+    ]} />);
+    const live = container.querySelector("[data-live-step]")!;
+    expect(live).toHaveTextContent("Running agent");
+    expect(live).toHaveTextContent("Audit the tab strip");
+    expect(screen.getAllByText("Audit the tab strip")).toHaveLength(1);
+  });
+
+  // The step in progress is the one the operator most wants to read whole: it opens like any step.
+  const command = "cd web && bun run test tab-strip --watch=false";
+  const liveRow = (container: HTMLElement) => container.querySelector<HTMLElement>("[data-live-step]")!;
+
+  it("opens the running step with one tap onto its whole command, still running", async () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
+    const row = within(liveRow(container)).getByRole("button", { name: `Running ${command}`, expanded: false });
+    await userEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(within(liveRow(container)).getByText("Running…")).toBeVisible();
+    expect(liveRow(container).querySelector("pre")).toHaveTextContent(command);
+  });
+
+  it("opens the thought being written onto the whole of it", async () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "thinking", text: "Now the chip height.\nThen the e2e." }])} activityStatus="working" />);
+    await userEvent.click(within(liveRow(container)).getByRole("button", { name: /^Thinking/ }));
+    expect(screen.getByText(/Then the e2e\./)).toBeVisible();
+  });
+
+  it("opens the running step on a search hit inside it, and marks the hit", () => {
+    const { container } = render(<TranscriptView query="watch=false" entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
+    expect(within(liveRow(container)).getByRole("button", { name: /^Running/ })).toHaveAttribute("aria-expanded", "true");
+    expect(liveRow(container).querySelector("mark")).toHaveTextContent("watch=false");
+  });
+
+  it("opens the running step when search focus lands on its entry", () => {
+    const { container } = render(<TranscriptView focusedUuid="now" entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" />);
+    expect(within(liveRow(container)).getByRole("button", { name: /^Running/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  // A toggle reports itself so the thread can hold still and stop following, and a held thread
+  // draws no turn as running. The live row is the tail the thread follows: opening it must keep the
+  // turn live, so it does not report.
+  it("opens the running step without holding the thread still, and a finished step still does", async () => {
+    const onWorkToggle = vi.fn();
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: command }])} activityStatus="working" onWorkToggle={onWorkToggle} />);
+    await userEvent.click(within(liveRow(container)).getByRole("button", { name: /^Running/ }));
+    expect(onWorkToggle).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /^Read / }));
+    expect(onWorkToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws no bottom row between steps, where the turn's line already says it is working", () => {
+    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Grep", summary: "chip", result: { text: "chip.tsx" } }])} activityStatus="working" />);
+    expect(screen.getByRole("button", { name: /^Working/ })).toBeInTheDocument();
+    expect(container.querySelector("[data-live-step]")).toBeNull();
+  });
+
+  it("draws compaction as a divider that carries its time and opens onto the summary", async () => {
+    render(<TranscriptView entries={[turn({ uuid: "s", ts: at("13:40"), role: "summary", parts: [{ kind: "text", text: "The operator asked for X." }] })]} />);
+    const divider = screen.getByRole("button", { name: `Context compacted · ${clock("13:40")}`, expanded: false });
+    await userEvent.click(divider);
+    expect(screen.getByText("The operator asked for X.")).toBeVisible();
+  });
+
+  it("draws no text tone from alpha: times, the day, the work line and every step are solid", async () => {
+    const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
+    await userEvent.click(screen.getByRole("button", { name: /^Worked for/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ran bun run test/ }));
+    const faded = [...container.querySelectorAll("[class]")].flatMap((el) => [...el.classList].filter((name) => /^text-(muted-foreground|foreground|destructive)\/\d+$/.test(name)));
+    expect(faded).toEqual([]);
+  });
 });

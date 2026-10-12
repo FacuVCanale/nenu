@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkTimeline, formatWorkDuration, type WorkTurn } from "./work-timeline";
+import { buildWorkTimeline, describeTool, firstLine, formatWorkDuration, liveStep, type WorkTurn } from "./work-timeline";
 import type { TranscriptEntry, TranscriptPart } from "./types";
 
 const text = (value: string): TranscriptPart => ({ kind: "text", text: value });
@@ -169,5 +169,89 @@ describe("buildWorkTimeline", () => {
 describe("formatWorkDuration", () => {
   it.each([[0, "0s"], [59_999, "59s"], [60_000, "1m 0s"], [125_000, "2m 5s"], [3_661_000, "1h 1m"]])("formats %s milliseconds as %s", (ms, label) => {
     expect(formatWorkDuration(ms as number)).toBe(label);
+  });
+});
+
+describe("describeTool", () => {
+  // A step reads as a verb and its target ("Ran bun run test", "Edited web/src/index.css"), past
+  // tense once it is done and present while it runs. The target says how it is drawn: a path keeps
+  // its file name whole, a command or a pattern stays monospace.
+  it.each([
+    ["Bash", "terminal", "Ran", "Running", "code"],
+    ["exec_command", "terminal", "Ran", "Running", "code"],
+    ["Read", "read", "Read", "Reading", "path"],
+    ["Edit", "edit", "Edited", "Editing", "path"],
+    ["MultiEdit", "edit", "Edited", "Editing", "path"],
+    ["Write", "write", "Wrote", "Writing", "path"],
+    ["Grep", "search", "Searched", "Searching", "code"],
+    ["Glob", "search", "Searched", "Searching", "code"],
+    ["WebFetch", "web", "Fetched", "Fetching", "text"],
+    ["Task", "agent", "Ran agent", "Running agent", "text"],
+  ])("%s is a %s step: %s / %s, its target drawn as %s", (name, kind, done, doing, target) => {
+    expect(describeTool(name)).toEqual({ kind, done, doing, target });
+  });
+
+  it("names a tool it does not know by its own name, with the summary as plain text", () => {
+    expect(describeTool("SendUserFile")).toEqual({ kind: "tool", done: "SendUserFile", doing: "SendUserFile", target: "text" });
+  });
+
+  // Claude Code names an MCP tool mcp__<server>__<tool>; the server's part is most of the length
+  // and says nothing about what the step did.
+  it("names an MCP tool by its own tool name, without the mcp__ prefix and the server", () => {
+    expect(describeTool("mcp__plugin_playwright_playwright__browser_take_screenshot")).toEqual(
+      { kind: "tool", done: "browser_take_screenshot", doing: "browser_take_screenshot", target: "text" });
+  });
+});
+
+describe("firstLine", () => {
+  it("is the first line that has words, trimmed", () => {
+    expect(firstLine("\n  Compare the two.  \nThen pick one.")).toBe("Compare the two.");
+    expect(firstLine("   ")).toBe("");
+  });
+
+  // Codex and pi open a thought with a bold title. The preview reads like the rendered thought,
+  // so it drops what the Markdown renderer would draw as formatting, and only that.
+  it("drops the Markdown the thought would render as formatting", () => {
+    expect(firstLine("**Inspecting TypeScript errors**\n\nThe build fails on…")).toBe("Inspecting TypeScript errors");
+    expect(firstLine("## Plan\n1. Read")).toBe("Plan");
+    expect(firstLine("> Check `tab-strip.tsx` *first*")).toBe("Check tab-strip.tsx first");
+  });
+
+  it("leaves identifiers and globs alone", () => {
+    expect(firstLine("rename use_app_viewport and *.ts to *.tsx")).toBe("rename use_app_viewport and *.ts to *.tsx");
+  });
+});
+
+describe("liveStep", () => {
+  const running = (parts: TranscriptPart[], ts = "2026-09-08T12:00:30Z") =>
+    work([user(), entry("step", { ts, parts, turn: { status: "running", startedAt: "2026-09-08T12:00:00Z" } })], "working");
+
+  it("names the call that has no result yet, from when it started", () => {
+    const call: TranscriptPart = { kind: "tool", name: "Bash", summary: "bun run test tab-strip" };
+    expect(liveStep(running([thought, call]))).toEqual({ part: call, entry: "step", index: 1, since: "2026-09-08T12:00:30Z" });
+  });
+
+  it("names the thought being written while the agent thinks", () => {
+    const thinking: TranscriptPart = { kind: "thinking", text: "Ahora ajusto el chip.\nDespués el test." };
+    expect(liveStep(running([tool, thinking]))).toEqual({ part: thinking, entry: "step", index: 1, since: "2026-09-08T12:00:30Z" });
+  });
+
+  it("names no step between steps: the turn's own line says it is working", () => {
+    expect(liveStep(running([tool]))).toBeNull();
+    expect(liveStep(running([thought, tool]))).toBeNull();
+  });
+
+  // Claude writes each parallel call as its own entry, and the results come back in any order.
+  it("names the call still running when one started after it has already finished", () => {
+    const at = (uuid: string, ts: string, part: TranscriptPart) => entry(uuid, { ts, parts: [part], turn: { status: "running", startedAt: "2026-09-08T12:00:00Z" } });
+    const turn = work([user(),
+      at("a", "2026-09-08T12:00:30Z", { kind: "tool", name: "Task", summary: "Audit the tab strip" }),
+      at("b", "2026-09-08T12:00:31Z", { kind: "tool", name: "Task", summary: "Audit the composer", result: { text: "fine" } }),
+    ], "working");
+    expect(liveStep(turn)).toMatchObject({ entry: "a", index: 0, since: "2026-09-08T12:00:30Z" });
+  });
+
+  it("has nothing to say about a turn that is not running", () => {
+    expect(liveStep(work([user(), entry("done", { parts: [tool], turn: { status: "completed" } })], "done"))).toBeNull();
   });
 });
