@@ -43,7 +43,7 @@ const EXPECTED: Record<string, string> = {
   "claude--plan-approval--three-row.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | No, refine with Ultraplan on Claude Code on the web=deny | Tell Claude what to change=freeText",
   "claude--select-menu.txt": "question: Red=neutral | Green=neutral | Blue=neutral | Chat about this=deny | Type something.=freeText",
-  "claude--select-multi.txt": "wizard: Plan first=neutral | Just build it=neutral | Build + verify=neutral | Chat about this=deny",
+  "claude--select-multi.txt": "wizard: Plan first=neutral | Just build it=neutral | Build + verify=neutral | Chat about this=deny | Back=nav | Next=nav",
   "claude--select-multiselect-checked.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "claude--select-multiselect-review.txt": "multi-select: Submit answers=primary | Cancel=deny",
   "claude--select-multiselect-single.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
@@ -53,19 +53,19 @@ const EXPECTED: Record<string, string> = {
   "claude--trust-prompt.txt": "permission: Yes, I trust this folder=persistent | No, exit=deny",
   "claude--v2285-ask-multi.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "claude--v2285-ask-question.txt": "question: Apple=neutral | Banana=neutral | Chat about this=deny | Type something.=freeText",
-  "claude--v2285-ask-wizard.txt": "wizard: Apple=neutral | Banana=neutral | Chat about this=deny",
+  "claude--v2285-ask-wizard.txt": "wizard: Apple=neutral | Banana=neutral | Chat about this=deny | Next=nav",
   "claude--wizard-multiselect-checked.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
-  "claude--wizard-multiselect-final.txt": "multi-select: Garlic knots=neutral | Caesar salad=neutral | Dipping sauces=neutral | Submit=primary | Chat about this=deny",
+  "claude--wizard-multiselect-final.txt": "multi-select: Garlic knots=neutral | Caesar salad=neutral | Dipping sauces=neutral | Submit=primary | Chat about this=deny | Back=nav",
   "claude--wizard-multiselect-pointer-next.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
   "claude--wizard-multiselect-q1.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
   "claude--wizard-preview-note-attached.txt": "question: Grid=neutral | List=neutral",
   "claude--wizard-preview-q1.txt": "question: Grid=neutral | List=neutral",
   "claude--wizard-preview-wrapped-label.txt": "question: Grid of equal-width cards with a fixed gutter (Recommended)=neutral | List=neutral",
-  "claude--wizard-q1-revisit.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny",
-  "claude--wizard-q1.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny",
-  "claude--wizard-q2.txt": "wizard: Small=neutral | Medium=neutral | Large=neutral | Chat about this=deny",
-  "claude--wizard-submit-unanswered.txt": "wizard: Submit answers=primary | Cancel=deny",
-  "claude--wizard-submit.txt": "wizard: Submit answers=primary | Cancel=deny",
+  "claude--wizard-q1-revisit.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny | Next=nav",
+  "claude--wizard-q1.txt": "wizard: Parser=neutral | UI=neutral | Tests=neutral | Chat about this=deny | Next=nav",
+  "claude--wizard-q2.txt": "wizard: Small=neutral | Medium=neutral | Large=neutral | Chat about this=deny | Back=nav | Next=nav",
+  "claude--wizard-submit-unanswered.txt": "wizard: Submit answers=primary | Cancel=deny | Back=nav",
+  "claude--wizard-submit.txt": "wizard: Submit answers=primary | Cancel=deny | Back=nav",
   "claude-lab--menu-config-panel--w82.txt": "menu: Tabs=neutral | Clear=deny",
   "claude-lab--menu-effort-slider--w82.txt": "menu: Confirm=neutral | This session only=persistent | Cancel=deny",
   "claude-lab--menu-model-picker--w82.txt": "menu: Set as default=persistent | Use this session only=persistent | Cancel=deny",
@@ -188,6 +188,28 @@ describe("where a question sits in its set", () => {
     expect(i.steps?.some((s) => s.current)).toBe(false);
     const unanswered = detect("claude--wizard-submit-unanswered.txt");
     expect(unanswered.steps?.some((s) => s.current)).toBe(false);
+  });
+
+  test("a review with a question left unanswered says so", () => {
+    expect(detect("claude--wizard-submit-unanswered.txt").incomplete).toBe(true);
+    expect(detect("claude--select-multiselect-review.txt").incomplete).toBe(true);
+    expect(detect("claude--wizard-submit.txt").incomplete).toBeUndefined();
+  });
+
+  test("a multi-select review serves what Submit sends", () => {
+    const screen = fixture("ask-review-v2296.txt", join(ROOT, "web/src/lib/harness/claude/fixtures"));
+    const i = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [], 0).interaction;
+    expect(i.answers).toEqual([{ question: "Which fruits do you like?", answer: "Apple, Mango" }]);
+  });
+
+  test("Codex's 'Question 1/2' header becomes the steps, never the detail", () => {
+    const q1 = detect("codex--ask-wizard-q1.txt");
+    expect(q1.steps).toEqual([{ label: "Question 1", answered: false, current: true }, { label: "Question 2", answered: false, current: false }]);
+    expect(q1.context).toBeUndefined();
+    expect(detect("codex--ask-wizard-q2.txt").steps).toEqual([{ label: "Question 1", answered: true, current: false }, { label: "Question 2", answered: false, current: true }]);
+    const single = detect("codex--ask-fruit.txt");
+    expect(single.steps).toBeUndefined();
+    expect(single.context).toBeUndefined();
   });
 
   test("a permission keeps its subject and has no steps", () => {
@@ -329,6 +351,12 @@ describe("hints enrich, the screen decides", () => {
     const plan = "## Change\n\nCreate haiku.txt\n\n## Verification\n\n- Confirm the file exists and contains exactly three lines.\n- Read it back to confirm the 5–7–5 structure and dog theme.";
     const i = detect("claude--plan-approval.txt", [{ source: "claude-journal", observedAt: 1, detail: plan }]);
     expect(i.context).toBe(plan);
+  });
+
+  test("a plan is whole on the card only when its hint agreed with the screen", () => {
+    const plan = "## Change\n\nCreate haiku.txt\n\n## Verification\n\n- Confirm the file exists and contains exactly three lines.\n- Read it back to confirm the 5–7–5 structure and dog theme.";
+    expect(detect("claude--plan-approval.txt", [{ source: "claude-journal", observedAt: 1, detail: plan }]).detailComplete).toBe(true);
+    expect(detect("claude--plan-approval.txt").detailComplete).toBe(false);
   });
 
   test("a plan hint for another plan is dropped", () => {
@@ -568,7 +596,7 @@ describe("Interactions.answer", () => {
     pane.show(fixture("claude--permission-bash.txt"));
     const result = await answer({ signature: card.signature, optionIndex: 0 });
     expect(result.status).toBe(409);
-    expect(result.outcome).toMatchObject({ ok: false, code: "interaction_changed" });
+    expect(result.outcome).toEqual({ ok: false, code: "interaction_changed", error: "The question changed in the terminal. Nothing was sent." });
     expect(pane.log.keys).toEqual([]);
   });
 
@@ -591,6 +619,26 @@ describe("Interactions.answer", () => {
     const result = await answer({ signature: card.signature, optionIndex: next.index });
     expect(result.outcome).toEqual({ ok: true });
     expect(pane.log.keys).toEqual([["Down"], ["Enter"]]);
+  });
+
+  test("a Submit walk that never reaches its row sends no Enter and says what happened", async () => {
+    const { pane, card, answer } = await ready("claude--wizard-multiselect-checked.txt");
+    const next = card.options.find((o) => o.label === "Next")!;
+    const result = await answer({ signature: card.signature, optionIndex: next.index });
+    expect(result.status).toBe(409);
+    expect(result.outcome).toEqual({ ok: false, code: "not_reached", error: "Couldn't reach Next in the terminal. Nothing was submitted." });
+    expect(pane.log.keys.flat()).not.toContain("Enter");
+  });
+
+  test("a wizard's Back and Next press the arrows its footer names, and only where they lead somewhere", async () => {
+    const first = detect("claude--wizard-q1.txt").options.filter((o) => o.role === "nav").map((o) => o.label);
+    expect(first).toEqual(["Next"]);
+    const { pane, card, answer } = await ready("claude--wizard-q2.txt");
+    const back = card.options.find((o) => o.label === "Back")!;
+    expect(back.role).toBe("nav");
+    expect((await answer({ signature: card.signature, optionIndex: back.index })).keys).toEqual(["Left"]);
+    expect(pane.log.keys).toEqual([["Left"]]);
+    expect(pushActions(card)).not.toContainEqual(expect.objectContaining({ title: "Back" }));
   });
 
   test("multi-select toggles carry the checkbox state", async () => {
