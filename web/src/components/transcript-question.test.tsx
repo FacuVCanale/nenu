@@ -10,4 +10,11 @@ describe("TranscriptQuestion", () => {
     expect(within(block).queryByText(/\(Recommended\)/)).not.toBeInTheDocument();
     expect(within(block).getByText("Recommended")).toBeVisible();
   });
+
+  it("shows what each option means under its label, as the live card does", () => {
+    render(<TranscriptQuestion title="Which fruit?" options={["Apple", "Pear"]} descriptions={["Crisp and red.", ""]} active={false} />);
+    const apple = screen.getByRole("button", { name: /Apple/ });
+    expect(within(apple).getByText("Crisp and red.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pear" })).toBeVisible();
+  });
 });
