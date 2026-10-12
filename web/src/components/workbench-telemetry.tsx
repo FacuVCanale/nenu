@@ -117,7 +117,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
         {telemetry?.effort && <span className="shrink-0 capitalize">{telemetry.effort}</span>}
       </button>
       {/* The composer row carries the context ring and its number (and its Compact action). */}
-      <WorkbenchContextMeter compact reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
+      <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
         onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
         onOpenChange={(open) => changePanel(open ? "context" : null)} />
     </div>

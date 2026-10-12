@@ -11,13 +11,12 @@ export function formatContextTokens(value: number | null): string {
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
 }
 
-export function WorkbenchContextMeter({ compact = false, reportedPercent, usedTokens, maxTokens, totalProcessedTokens = null, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
-  /** The composer's quiet row: a 16px ring and its number, and nothing at all while unreported. */
-  compact?: boolean;
+/** The composer row's context ring: a 16px ring and its number, and nothing at all while unreported
+ *  (a hollow ring said nothing; Compact stays one Commands row away). */
+export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
   reportedPercent?: number;
   usedTokens: number | null;
   maxTokens: number | null;
-  totalProcessedTokens?: number | null;
   onCompact?: () => void;
   compactDisabled?: boolean;
   open?: boolean;
@@ -33,28 +32,25 @@ export function WorkbenchContextMeter({ compact = false, reportedPercent, usedTo
   const used = usedTokens !== null && Number.isFinite(usedTokens) && usedTokens >= 0 ? usedTokens : null;
   const max = maxTokens !== null && Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : null;
   const percentage = reportedPercent !== undefined && Number.isFinite(reportedPercent) && reportedPercent >= 0 && reportedPercent <= 100 ? reportedPercent : used !== null && max !== null ? Math.min(100, (used / max) * 100) : null;
+  if (percentage === null) return null;
   const radius = 9.75;
   const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - ((percentage ?? 0) / 100) * circumference;
-  const label = percentage === null ? `Context usage: ${formatContextTokens(used)}` : `Context window ${Math.round(percentage)}% used`;
-  const usageColor = percentage !== null && percentage > 90 ? "var(--destructive)" : compact ? "var(--primary)" : "var(--muted-foreground)";
-  // A ring with no value says nothing in a row this small; Compact stays one Commands row away.
-  if (compact && percentage === null) return null;
+  const dashOffset = circumference - (percentage / 100) * circumference;
+  const label = `Context window ${Math.round(percentage)}% used`;
+  const usageColor = percentage > 90 ? "var(--destructive)" : "var(--primary)";
 
   return <div className="relative">
-    <button ref={anchorRef} type="button" className={compact ? "composer-quiet hit-area gap-1.5" : "workbench-context-trigger"} aria-label={label} title={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
-      <svg viewBox="0 0 24 24" width={compact ? 16 : 22} height={compact ? 16 : 22} className="-rotate-90" aria-hidden="true">
+    <button ref={anchorRef} type="button" className="composer-quiet hit-area gap-1.5" aria-label={label} title={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
+      <svg viewBox="0 0 24 24" width={16} height={16} className="-rotate-90" aria-hidden="true">
         <circle cx="12" cy="12" r={radius} fill="none" stroke="color-mix(in oklab, var(--muted-foreground) 24%, transparent)" strokeWidth="3" />
-        {percentage !== null && <circle cx="12" cy="12" r={radius} fill="none" stroke={usageColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} />}
+        <circle cx="12" cy="12" r={radius} fill="none" stroke={usageColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} />
       </svg>
-      <span className="tabular-nums">{percentage === null ? "Context" : `${Math.round(percentage)}%`}</span>
+      <span className="tabular-nums">{Math.round(percentage)}%</span>
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window">
       <div className="space-y-3 text-sm">
         {(used !== null || max !== null) && <div className="flex justify-between gap-4"><span>{used !== null ? "Tokens used" : "Context window"}</span><span className="tabular-nums">{used !== null ? formatContextTokens(used) : formatContextTokens(max)}{used !== null && max !== null ? ` / ${formatContextTokens(max)}` : ""}</span></div>}
-        {percentage !== null && <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percentage)}><div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: usageColor }} /></div>}
-        {totalProcessedTokens !== null && <div className="flex justify-between gap-4 text-muted-foreground"><span>Total processed</span><span>{formatContextTokens(totalProcessedTokens)}</span></div>}
-        {percentage === null && <p className="text-xs text-muted-foreground">Context usage is not available yet.</p>}
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percentage)}><div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: usageColor }} /></div>
         {onCompact && <div className="border-t border-border pt-3">
           <p className="mb-2 text-xs text-muted-foreground">Summarize this session to make room for the next messages.</p>
           <button type="button" disabled={compactDisabled} onClick={() => { setOpen(false); onCompact(); }} className="min-h-11 w-full rounded-lg bg-primary/10 px-3 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50">Compact context</button>
