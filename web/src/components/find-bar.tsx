@@ -35,9 +35,9 @@ export function thirdScrollTop({ scrollTop, viewTop, viewBottom, hitTop, inset =
 
 // Compact one-row find bar that takes over the header while searching the pane mirror. Thumb-reach:
 // the input fills the row, the match count sits inline, and prev/next/close are right-aligned, each
-// the app's icon button (44 px under a finger). On a phone the header starts 4 px in, so the bar pads
-// its search glass onto the 16 px gutter the page's text starts on. Enter jumps to the next match
-// (Shift+Enter the previous), Escape closes — matching a desktop find bar.
+// the app's icon button (44 px under a finger). Under a desk's width the header starts 4 px in, so the
+// bar pads its search glass onto the page's gutter, where the text and the strips start. Enter jumps
+// to the next match (Shift+Enter the previous), Escape closes — matching a desktop find bar.
 export function FindBar({
   query,
   onQueryChange,
@@ -57,7 +57,7 @@ export function FindBar({
   const countLabel = query ? (count > 0 ? `${current + 1}/${count}` : "0/0") : "";
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1.5 max-lg:pl-3 coarse:gap-2">
+    <div className="flex min-w-0 flex-1 items-center gap-1.5 max-lg:pl-[calc(var(--page-gutter)-4px)] coarse:gap-2">
       <Search className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
       <input
         ref={inputRef}
