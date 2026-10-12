@@ -121,6 +121,27 @@ describe("PaneActionsSheet — rename", () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
+  // While the write is out, Save used to sit disabled at the same colour with nothing moving: on a
+  // slow link that reads as a tap that never took.
+  it("shows a spinner on Save while the rename is in flight, keeping its name", async () => {
+    const user = userEvent.setup();
+    let release = () => {};
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/rename$/, () => new Promise<Response>((resolve) => {
+        release = () => resolve(HttpResponse.json({ ok: true }));
+      })),
+    );
+    const props = renderSheet();
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const save = screen.getByRole("button", { name: "Save" });
+    await waitFor(() => expect(save).toHaveAttribute("aria-busy", "true"));
+    expect(save.querySelector(".animate-spin")).not.toBeNull();
+    release();
+    await waitFor(() => expect(props.onRenamed).toHaveBeenCalledTimes(1));
+  });
+
   it("clears the label by saving an empty field (sends an empty label)", async () => {
     const user = userEvent.setup();
     let body: unknown;
