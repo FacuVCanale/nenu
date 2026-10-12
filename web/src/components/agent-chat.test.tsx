@@ -1065,6 +1065,7 @@ describe("AgentChat — a pane that is gone", () => {
   it("does not claim a pane is gone while Nenu cannot ask Herdr", () => {
     renderChat({ agent: undefined, error: true });
     expect(screen.getByRole("heading", { name: "Nenu can't find this pane yet" })).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1 })).toHaveTextContent(/^Pane$/);
   });
 });
 
