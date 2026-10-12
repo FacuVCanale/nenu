@@ -196,8 +196,8 @@ function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; proj
   const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
   const busyChoice = target.kind === "project" ? busyChoiceFor(target.coordinator.agent) : null;
   // A locked box says what it waits for, from the moment it locks; the banner says what went wrong.
-  const placeholder = disabled && lock ? `${LOCKED_VERB[lock]} to ${action}`
-    : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
+  const reason = disabled && lock ? `${LOCKED_VERB[lock]} to ${action}` : null;
+  const placeholder = reason ?? (target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…");
 
   /** Send in `mode`, or with "ask" only check that the queue takes it and then ask when it is read. */
   async function send(mode: DeliveryMode | "ask") {
@@ -265,7 +265,10 @@ function HomeComposer({ data, projects, disabled, lock }: { data: HomeData; proj
               if (!locked) submit();
             }
           }}
-          className="field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-body outline-none placeholder:text-muted-foreground disabled:placeholder:text-disabled-foreground" />
+          // Before a banner shows, the reason is the only explanation on screen, so it stays readable;
+          // the greyed picker and Send say the box is locked.
+          className={cn("field-sizing-content max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-body outline-none placeholder:text-muted-foreground",
+            !reason && "disabled:placeholder:text-disabled-foreground")} />
         <div className="flex items-center gap-2 px-2.5 pt-1 pb-2.5">
           <label className={cn("relative inline-flex h-9 min-w-0 items-center gap-1 rounded-md bg-muted px-2.5 text-footnote focus-within:ring-2 focus-within:ring-ring coarse:h-11",
             locked && "text-disabled-foreground")}>
