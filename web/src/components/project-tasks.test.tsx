@@ -133,9 +133,9 @@ describe("closing is never a check", () => {
     const { user } = setup();
     const close = screen.getByRole("button", { name: "Close Build" });
     expect(close).toHaveTextContent("Close");
-    expect(close.querySelector(".lucide-check")).toBeNull();
+    expect(close.closest("li")!.querySelector('[data-node-state="resolved"]')).toBeNull();
     await user.click(screen.getByRole("button", { name: /^History/ }));
-    expect(screen.getByRole("button", { name: /^Audit/ }).querySelector(".lucide-check")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^Audit/ }).querySelector('[data-node-state="resolved"]')).not.toBeNull();
   });
 
   it("closes from the row's ⋯ on a touch screen, and still asks first", async () => {
@@ -158,6 +158,12 @@ describe("closing is never a check", () => {
     expect(posted).toBeUndefined();
     await user.click(within(confirm).getByRole("button", { name: "Close thread" }));
     await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T1" }));
+  });
+
+  it("offers no ⋯ on a read-only touch screen", () => {
+    touchScreen();
+    setup({ readOnly: true, project: { ...project, nodeActions: true } });
+    expect(screen.queryByRole("button", { name: /actions$/ })).not.toBeInTheDocument();
   });
 
   it("replaces the project coordinator from its ⋯ on a touch screen", async () => {
