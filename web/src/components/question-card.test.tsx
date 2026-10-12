@@ -469,7 +469,7 @@ describe("QuestionCard", () => {
     expect(screen.getByRole("status")).toHaveTextContent("The question changed in the terminal. Nothing was sent.");
   });
 
-  it("a Submit the terminal never reached says so, and offers to try again or open the terminal", async () => {
+  it("a Submit the terminal never reached says so, and offers to try again beside the card's one way to the terminal", async () => {
     const error = "Couldn't reach Submit in the terminal. Nothing was submitted.";
     const onAnswer = vi.fn()
       .mockResolvedValueOnce({ ok: false, error, code: "not_reached" })
@@ -477,7 +477,8 @@ describe("QuestionCard", () => {
     const { onOpen, user } = setup({ interaction: multi, onAnswer });
     await user.click(screen.getByRole("button", { name: /^Submit/ }));
     expect(await screen.findByRole("status")).toHaveTextContent(error);
-    await user.click(screen.getByRole("button", { name: "Open terminal" }));
+    expect(screen.getAllByRole("button", { name: /terminal/i })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
     expect(onOpen).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(onAnswer).toHaveBeenLastCalledWith(multi.options[2], {});
