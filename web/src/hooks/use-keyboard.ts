@@ -12,17 +12,29 @@ import { useEffect, useState } from "react";
 // Why this exists: a textarea keeps DOM focus when Android collapses the keyboard (no `blur` fires),
 // so focus alone can't tell us the keyboard closed — but the viewport resize always does.
 
-// Threshold (px) for the height drop to count as a keyboard: large enough to ignore the URL bar
-// showing/hiding (~60–100px), smaller than any soft keyboard (~250px+).
-const KEYBOARD_MIN_PX = 150;
+// Two thresholds, so a height that hovers near one of them cannot flip the layout back and forth:
+// it opens past 150px (more than the URL bar's ~60–100px, less than any keyboard's ~250px+) and
+// closes only once the height is back within 100px. A suggestion bar folding or the URL bar showing
+// while the keyboard is up stays inside the band.
+const OPEN_DROP_PX = 150;
+const CLOSE_DROP_PX = 100;
 
-/** Pure predicate (testable): the keyboard is likely open when the height dropped past the threshold. */
-export function keyboardLikelyOpen(
-  baselineHeight: number,
-  currentHeight: number,
-  threshold = KEYBOARD_MIN_PX,
-): boolean {
-  return baselineHeight - currentHeight > threshold;
+export interface KeyboardState {
+  open: boolean;
+  /** The tallest height seen while closed. */
+  baseline: number;
+  width: number;
+}
+
+/** One visual-viewport sample through the machine (pure, so the band is testable). */
+export function keyboardStep(state: KeyboardState, sample: { height: number; width: number }): KeyboardState {
+  // A width change is an orientation/layout change, not the keyboard: re-baseline, so a portrait
+  // baseline doesn't read as "open" in landscape.
+  if (sample.width !== state.width) return { open: false, baseline: sample.height, width: sample.width };
+  const baseline = state.open ? state.baseline : Math.max(state.baseline, sample.height);
+  const drop = baseline - sample.height;
+  const open = state.open ? drop >= CLOSE_DROP_PX : drop > OPEN_DROP_PX;
+  return { open, baseline, width: state.width };
 }
 
 export function useKeyboardOpen(): boolean {
@@ -30,19 +42,10 @@ export function useKeyboardOpen(): boolean {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    let baseline = vv.height;
-    let baselineWidth = vv.width;
+    let state: KeyboardState = { open: false, baseline: vv.height, width: vv.width };
     const update = () => {
-      // A width change is an orientation/layout change, not the keyboard — re-baseline so a portrait
-      // baseline doesn't read as "open" in landscape.
-      if (vv.width !== baselineWidth) {
-        baselineWidth = vv.width;
-        baseline = vv.height;
-        setOpen(false);
-        return;
-      }
-      baseline = Math.max(baseline, vv.height);
-      setOpen(keyboardLikelyOpen(baseline, vv.height));
+      state = keyboardStep(state, { height: vv.height, width: vv.width });
+      setOpen(state.open);
     };
     update();
     vv.addEventListener("resize", update);

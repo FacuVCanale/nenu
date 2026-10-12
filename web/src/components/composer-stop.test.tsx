@@ -49,22 +49,34 @@ function setup(overrides: Partial<Props> = {}) {
 
 const stopButton = () => screen.queryByRole("button", { name: "Stop" });
 
-it("is the one round button while Claude works; a draft turns it into Send and moves Stop to the Working row", async () => {
+it("keeps Stop in one place on the Working row while Claude works, draft or not; the round button is only Send", async () => {
   const { user } = setup();
-  expect(stopButton()).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
-  await user.type(screen.getByRole("textbox"), "and the tests");
-  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   const row = screen.getByRole("group", { name: "Agent working" });
   expect(within(row).getByText(/^Working/)).toBeVisible();
-  // Exactly one Stop, and it is the row's small one, not a second button beside Send.
-  expect(screen.getAllByRole("button", { name: "Stop" })).toHaveLength(1);
-  expect(within(row).getByRole("button", { name: "Stop" })).toBeVisible();
-  await user.click(within(row).getByRole("button", { name: "Stop" }));
+  const stop = within(row).getByRole("button", { name: "Stop" });
+  // Send keeps its slot, waiting for a draft, so nothing else ever sits under the thumb there.
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  await user.type(screen.getByRole("textbox"), "and the tests");
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  // The same Stop, in the same row: typing never moves it.
+  expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
+  expect(screen.getAllByRole("button", { name: "Stop" })).toEqual([stop]);
+  await user.click(stop);
   await waitFor(() => expect(bodies).toEqual([{}]));
   await user.clear(screen.getByRole("textbox"));
-  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
+});
+
+// The row comes and goes with every turn; appearing or vanishing at once jerked the thread 40 px.
+it("folds the Working row shut when the turn ends, out of reach while it goes", async () => {
+  const { rerender } = setup();
+  const row = screen.getByRole("group", { name: "Agent working" });
+  rerender({ working: false });
+  // Still on screen while it folds, but nothing in it can be pressed or announced.
+  expect(row).toBeInTheDocument();
+  expect(row.closest("[inert]")).not.toBeNull();
+  expect(stopButton()).not.toBeInTheDocument();
+  await waitFor(() => expect(row).not.toBeInTheDocument());
 });
 
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
@@ -153,4 +165,11 @@ it("when stopping sent Claude's own queue, the new turn gets a Stop of its own",
   expect(await screen.findByText("Claude stopped and is reading your queued message.")).toBeVisible();
   expect(screen.queryByText("Stopping…")).not.toBeInTheDocument();
   expect(stopButton()).toBeVisible();
+});
+
+it("leaves the elapsed time to the conversation's own live turn, so the row above the box holds only Stop", () => {
+  setup({ nativeWorkbench: true });
+  const row = screen.getByRole("group", { name: "Agent working" });
+  expect(within(row).getByRole("button", { name: "Stop" })).toBeVisible();
+  expect(within(row).queryByText(/^Working/)).not.toBeInTheDocument();
 });

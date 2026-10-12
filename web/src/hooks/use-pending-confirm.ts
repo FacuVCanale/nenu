@@ -17,6 +17,17 @@ export function usePendingConfirm(timeoutMs = 3000) {
     setPending(null);
   }, [clearTimer]);
 
+  // Arms `id` and restarts its timer, and is never the confirming tap: for a caller that offers the
+  // same confirm again (a refusal that came back the same way) rather than answering it.
+  const arm = useCallback(
+    (id: string) => {
+      clearTimer();
+      setPending(id);
+      timer.current = setTimeout(() => setPending(null), timeoutMs);
+    },
+    [clearTimer, timeoutMs],
+  );
+
   // Returns true when `id` was already armed (this is the confirming second tap) — the caller should
   // proceed. On the first tap it arms `id`, starts the disarm timer, and returns false.
   const confirm = useCallback(
@@ -25,15 +36,13 @@ export function usePendingConfirm(timeoutMs = 3000) {
         reset();
         return true;
       }
-      clearTimer();
-      setPending(id);
-      timer.current = setTimeout(() => setPending(null), timeoutMs);
+      arm(id);
       return false;
     },
-    [pending, clearTimer, reset, timeoutMs],
+    [pending, reset, arm],
   );
 
   useEffect(() => clearTimer, [clearTimer]);
 
-  return { pending, confirm, reset };
+  return { pending, confirm, reset, arm };
 }
