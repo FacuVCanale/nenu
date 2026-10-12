@@ -975,6 +975,22 @@ it("blocks sending immediately after access is refused, without waiting for the 
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 });
 
+// The composer names why it is locked, the same reason the question card gives: a refused sign-in is
+// not a device that was never authorised, and a silent Herdr is not a lost network.
+describe("AgentChat — why the composer is locked", () => {
+  beforeEach(() => __resetConnectionHealth());
+
+  it("asks for a new sign-in when access was refused", () => {
+    renderChat({ error: true, authError: true });
+    expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
+  });
+
+  it("says Herdr isn't responding as soon as Herdr reports disconnected", () => {
+    renderChat({ bridge: "disconnected" });
+    expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+  });
+});
+
 // Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box
 // unsendable (ADR 0048 step 4), which is right, but it is not a question for the operator: Claude
 // resumes on its own. Only a screen that really waits on a key earns the interaction notice.
