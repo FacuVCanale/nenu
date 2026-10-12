@@ -80,7 +80,7 @@ export function HomeRoute() {
           {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
           <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
         </p>
-        <h1 className="text-large-title text-balance">{title}</h1>
+        <h1 className={cn("text-large-title text-balance", stale && "text-muted-foreground")}>{title}</h1>
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
       <div className="flex flex-col">
