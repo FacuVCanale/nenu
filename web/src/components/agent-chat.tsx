@@ -1343,6 +1343,7 @@ export function AgentChat({
             stepFontSize={stepFontSize}
             setRawTerminal={setRawTerminal}
             setTapToFocus={setTapToFocus}
+            displaySurface={showConversation ? "chat" : "terminal"}
             onSent={() => { onSent(); setFollowKey((key) => key + 1); conversation.refresh(); }}
             onControlsChange={setComposerControls}
           />

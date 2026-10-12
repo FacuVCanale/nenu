@@ -20,7 +20,7 @@ function mount(agent = "codex", disconnected = false) {
   );
   const router = createMemoryRouter([{ path: "/", element: <Composer paneId="w1:p1" session="work" agent={agent} isShell={false} gone={false} readOnly={false} disconnected={disconnected}
     dialogPresent={false} text="" terminalDraft={null} rawTerminalDraft={null}
-    prefs={{ wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true }} setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()} /> }]);
+    prefs={{ wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true }} setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} displaySurface="terminal" onSent={vi.fn()} /> }]);
   render(<RouterProvider router={router} />);
   return { user: userEvent.setup(), writes, catalogs, input: screen.getByRole("textbox") };
 }
