@@ -24,16 +24,16 @@ describe("AppHeader — the one shared header shell", () => {
   it("is calm in the PANE variant while live — breadcrumb + status badge, no pill, no wordmark", () => {
     // Connection copy lives in the top ConnectionBanner now; the header carries none. A healthy pane
     // header shows its own bits and a resting (static) Nenu mark.
-    const { container } = renderHeader(
-      <AppHeader
-        bridge="connected"
-        error={false}
-        onHome={() => {}}
-        rightLead={<span>working</span>}
-      >
-        <span>webapp › main</span>
-      </AppHeader>,
+    const { container } = render(
+      <MemoryRouter initialEntries={["/pane/p1"]}>
+        <WorkbenchNavigationContext value={{ open: false, onOpen: () => {} }}>
+          <AppHeader bridge="connected" error={false} rightLead={<span>working</span>}>
+            <span>webapp › main</span>
+          </AppHeader>
+        </WorkbenchNavigationContext>
+      </MemoryRouter>,
     );
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull(); // no connection pill of any kind
     expect(container.querySelector(".dog-gallop")).toBeNull(); // mark at rest (static icon)
     expect(screen.getByText("webapp › main")).toBeInTheDocument(); // the breadcrumb slot
@@ -49,7 +49,7 @@ describe("AppHeader — the one shared header shell", () => {
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
-  it("returns to the dashboard via onHome when the Nenu mark is tapped", async () => {
+  it("runs the caller's onHome when the mark is tapped outside the workbench", async () => {
     const onHome = vi.fn();
     renderHeader(<AppHeader bridge="connected" error={false} onHome={onHome} />);
     await userEvent.click(screen.getByRole("button", { name: "Nenu home" }));
