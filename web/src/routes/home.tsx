@@ -4,7 +4,8 @@ import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, RecentChats, RunningWorkCard, SendNotice } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, HomeStarters, RecentChats, RunningWorkCard, SendNotice } from "@/components/home-panels";
+import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
@@ -46,7 +47,7 @@ export function HomeRoute() {
   const headline = homeHeadline(counts, data.agents.length);
   const notice = data.error ? "Showing your last workspace snapshot. Reconnect to see current activity."
     : data.bridge !== "connected" ? "Waiting for your workspaces to connect."
-    : data.agents.length ? null : "Describe a task to start your first agent. You pick the agent and folder next.";
+    : null;
 
   // On a phone the date sits right under the header, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
@@ -61,6 +62,7 @@ export function HomeRoute() {
         {notice && <p className="mt-1 text-subhead text-pretty text-muted-foreground">{notice}</p>}
       </div>
       <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
+      {live && !data.agents.length && <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />}
       {calm
         ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
         : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}

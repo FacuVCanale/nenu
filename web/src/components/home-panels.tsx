@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { AlertCircle, ChevronRight, Workflow } from "lucide-react";
+import { AlertCircle, ChevronRight, FolderPlus, Sparkles, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
@@ -172,5 +172,36 @@ export function SendNotice({ title, detail, to }: { title: string; detail: strin
         <Link to={to} className={buttonVariants({ variant: "secondary" })}>Open coordinator</Link>
       </div>
     </div>
+  );
+}
+
+/** One way to start, as a 64px row: what it starts and the one line that tells it apart. */
+function StarterRow({ icon: Icon, title, hint, disabled, onClick }: { icon: LucideIcon; title: string; hint: string; disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent active:bg-muted disabled:pointer-events-none disabled:text-disabled-foreground">
+      <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-body font-medium">{title}</span>
+        <span className="text-footnote text-pretty text-muted-foreground">{hint}</span>
+      </span>
+      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+/**
+ * An empty herd's first screen: the two ways to start an agent from here, and where else they come
+ * from. Each opens the same create surface the composer and the New button do.
+ */
+export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean; onFolder: () => void; onMore: () => void }) {
+  return (
+    <section aria-label="Get started" className="flex flex-col gap-2">
+      <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <StarterRow icon={FolderPlus} title="Start an agent in a folder" hint="Claude Code, Codex or a shell, in a folder you pick." disabled={disabled} onClick={onFolder} />
+        <StarterRow icon={Sparkles} title="Start a project or a quick chat" hint="A coordinator with its threads, or one question with no repo." disabled={disabled} onClick={onMore} />
+      </div>
+      <p className="px-1 text-footnote text-muted-foreground">Agents you start in Herdr show up here too.</p>
+    </section>
   );
 }
