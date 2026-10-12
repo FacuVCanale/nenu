@@ -41,7 +41,7 @@ export function NativeMenuContent({ menu, lines }: { menu: MenuModel; lines: Sty
   const margin = Math.min(...rows.map((row) => row.indent));
 
   return (
-    <div className="flex flex-col gap-1 break-words text-[15px] leading-5">
+    <div className="flex flex-col gap-1 break-words text-body">
       {rows.map(({ indent, content }, index) => {
         const style = { paddingLeft: `${indent - margin}ch` };
         const option = /^([❯›])?\s*(?:(\d+)\.\s+)?(.+)$/u.exec(content);
@@ -51,12 +51,12 @@ export function NativeMenuContent({ menu, lines }: { menu: MenuModel; lines: Sty
           return (
             <div key={index} data-row style={style} className={`flex items-start py-0.5 ${selected ? "font-medium text-foreground" : "text-foreground"}`}>
               {/* The cursor's two columns: its chevron, or the gap it leaves on the other rows. */}
-              <span className="flex w-[2ch] shrink-0 pt-[3px]">
+              <span className="flex w-[2ch] shrink-0 pt-[5px]">
                 {selected && <ChevronRight className="size-3.5" aria-label="Highlighted" />}
               </span>
               <div className="min-w-0 flex-1">
                 <p>{option[2] && <span className="mr-1.5 font-normal text-muted-foreground">{option[2]}.</span>}{label}</p>
-                {description.length > 0 && <p className="mt-0.5 text-[13px] leading-[18px] font-normal text-muted-foreground">{description.join(" ")}</p>}
+                {description.length > 0 && <p className="mt-0.5 text-footnote font-normal text-muted-foreground">{description.join(" ")}</p>}
               </div>
             </div>
           );

@@ -46,15 +46,15 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
       {items.map(({ paneId, interaction }) => {
         const who = asker(byPane.get(paneId), projects, paneId);
         const title = who.where ? `${who.name} · ${who.where}` : who.name;
+        const to = panePath(paneId, session);
+        const busy = isOpening(opening, to);
         if (interaction) {
           return (
             <QuestionCard key={`${paneId}:${interaction.signature}`} compact interaction={interaction} title={title} lockReason={lockReason}
-              refused={interactions.refusalFor(interaction)}
-              onOpen={() => navigate(panePath(paneId, session))} onAnswer={(option, extra) => interactions.answer(interaction, option, extra)} />
+              refused={interactions.refusalFor(interaction)} opening={busy}
+              onOpen={() => navigate(to)} onAnswer={(option, extra) => interactions.answer(interaction, option, extra)} />
           );
         }
-        const to = panePath(paneId, session);
-        const busy = isOpening(opening, to);
         return (
           <Link key={paneId} to={to} aria-busy={busy || undefined} aria-label={[who.name, who.where, WAITING].filter(Boolean).join(", ")}
             className={cn("flex min-h-14 min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-2 transition-colors hover:bg-accent",

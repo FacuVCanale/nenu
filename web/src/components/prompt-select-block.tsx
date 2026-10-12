@@ -3,16 +3,16 @@ import { Loader2, MessageSquarePlus } from "lucide-react";
 
 import type { PromptFeedbackPurpose, PromptModel, PromptOption } from "@/lib/blocks";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
-import { cn } from "@/lib/utils";
 import {
   DialogCard,
   OptionButton,
-  PRIMARY_ACTION,
+  OptionList,
   QuestionHeading,
   SECONDARY_ACTION,
   SecondaryActions,
 } from "@/components/option-button";
 import { PromptRequestContext } from "@/components/prompt-request-context";
+import { Button } from "@/components/ui/button";
 
 /** What a tap on this block asks for: an option's keystroke plan, or feedback typed on the phone. */
 export type PromptBlockAction =
@@ -133,7 +133,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
     <DialogCard label={prompt.question}>
       <QuestionHeading>{prompt.question}</QuestionHeading>
       <PromptRequestContext prompt={prompt} />
-      <div className="flex flex-col gap-2">
+      <OptionList aria-label="Answers">
         {prompt.options.map((option, index) => {
           const id = `opt-${index}`;
           const busy = sending === id;
@@ -156,36 +156,36 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
             />
           );
         })}
-      </div>
+      </OptionList>
 
       {/* The inline text input, in whichever of its states this screen is in. OUR OWN send comes
           first: the choreography focuses the row and fills it, so from the moment Send is pressed the
           screen is briefly indistinguishable from "someone at the terminal is typing" — and saying
           that to the person who just pressed the button would be a lie about their own action. */}
       {feedback && feedbackCopy && sending === "feedback" ? (
-        <p className="flex items-center gap-2 text-[15px] leading-5 text-muted-foreground">
+        <p className="flex items-center gap-2 text-body text-muted-foreground">
           {busyIcon}
           {feedbackCopy.sending}
         </p>
       ) : feedback && feedbackCopy && terminalFocused ? (
-        <p className="rounded-xl border border-dashed border-status-working/50 px-3.5 py-2.5 text-[15px] leading-5 text-status-working">
+        <p className="rounded-lg border border-dashed border-status-working/50 px-3.5 py-2.5 text-body text-status-working">
           {feedbackCopy.focused}
           {feedback.text ? <span className="text-muted-foreground"> ({feedback.text})</span> : null}
         </p>
       ) : feedback && feedbackCopy && feedback.text !== "" ? (
-        <div className="flex items-start gap-2 rounded-xl bg-muted/60 px-3.5 py-2.5">
+        <div className="flex items-start gap-2 rounded-lg bg-muted/60 px-3.5 py-2.5">
           <MessageSquarePlus
             className="mt-0.5 size-4 shrink-0 text-muted-foreground"
             aria-label="Existing feedback"
           />
-          <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">
+          <span className="min-w-0 flex-1 text-body text-foreground">
             {feedbackCopy.typedPrefix}
             {feedback.text}
           </span>
         </div>
       ) : feedback && feedbackCopy && feedbackCopy.offer && editorOpen ? (
         <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-1.5 text-[13px] leading-[18px] font-medium text-muted-foreground">
+          <label className="flex items-center gap-1.5 text-footnote font-medium text-muted-foreground">
             <MessageSquarePlus className="size-4 shrink-0" />
             {feedbackCopy.editorLabel}
           </label>
@@ -197,19 +197,19 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
             autoFocus
             aria-label="Feedback text"
             placeholder={feedbackCopy.placeholder}
-            className="min-h-16 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
+            className="min-h-16 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-body text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-          <p className="text-[13px] leading-[18px] text-muted-foreground">{feedbackCopy.help}</p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={locked || draft.trim().length === 0}
-              onClick={() => void sendFeedback()}
-              className={cn(PRIMARY_ACTION, "w-auto")}
-            >
-              {sending === "feedback" ? busyIcon : null}
-              {feedbackCopy.send}
-            </button>
+          <p className="text-footnote text-muted-foreground">{feedbackCopy.help}</p>
+          <Button
+            type="button"
+            size="block"
+            disabled={locked || draft.trim().length === 0}
+            aria-busy={sending === "feedback" || undefined}
+            onClick={() => void sendFeedback()}
+          >
+            {feedbackCopy.send}
+          </Button>
+          <div className="-mx-2 flex items-center">
             <button
               type="button"
               disabled={sending !== null}
