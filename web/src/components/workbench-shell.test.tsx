@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
@@ -22,7 +22,7 @@ beforeEach(() => localStorage.clear());
 
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
   const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
-  const router = createMemoryRouter([{ path: "/pane/:paneId", element }, { path: "*", element }], { initialEntries: [initialEntry] });
+  const router = createMemoryRouter([{ path: "/pane/:paneId", element }, { path: "/pane/:paneId/history", element }, { path: "*", element }], { initialEntries: [initialEntry] });
   render(<RouterProvider router={router} />);
   return { router, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
 }
@@ -116,9 +116,27 @@ it("shows the tab bar off a pane, and its tabs open the navigation in the matchi
   expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
 });
 
-it("hides the tab bar on a pane, where the composer owns the bottom edge", () => {
+it("hides the tab bar on a pane and its History, where the composer owns the bottom edge", () => {
   setup(data, "/pane/w%3A1%3Ap2?s=work");
   expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
+  document.body.innerHTML = "";
+  setup(data, "/pane/w%3A1%3Ap2/history?s=work");
+  expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
+});
+
+it("keeps the tab bar on a project page and a node page, which draw no composer", () => {
+  // A live coordinator sends /project/:slug to its pane, so these pages are the organization only.
+  setup(projectData, "/project/nenu?s=work");
+  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  document.body.innerHTML = "";
+  setup(projectData, "/project/nenu/node/t-0007?s=work");
+  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+});
+
+it("draws New as a tab with its own label, like its neighbours", () => {
+  setup();
+  const bar = within(screen.getByRole("navigation", { name: "Primary" }));
+  for (const name of ["Home", "Browse", "Search", "New"]) expect(bar.getByRole(name === "Home" ? "link" : "button", { name })).toHaveTextContent(name);
 });
 
 it("searches with Cmd+K and reaches every action from the collapsed rail", async () => {
@@ -129,7 +147,7 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
   // A workspace of one pane opens that pane.
-  expect(rail.getByRole("link", { name: "Nenu" })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
+  expect(rail.getByRole("link", { name: /^Nenu\b/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(rail.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
   await user.click(rail.getByRole("button", { name: "Needs you, 1" }));
   expect(sidebar.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "true");
@@ -166,7 +184,7 @@ it("opens a workspace on the same pane from the sidebar, search and the collapse
 
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
-  expect(rail.getByRole("link", { name: "ops" })).toHaveAttribute("href", opsPane);
+  expect(rail.getByRole("link", { name: /^ops\b/ })).toHaveAttribute("href", opsPane);
 });
 
 it("opens a workspace on the same pane from the phone's Browse", async () => {
@@ -369,4 +387,48 @@ it("leaves Needs you and Recent to Home in the tab bar's Browse, and folds every
   expect(sheet.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
   expect(sheet.getByRole("button", { name: "AWAM Comercio SaaS tasks" })).toHaveAttribute("aria-expanded", "false");
   expect(sheet.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+});
+
+// The audit's folded rail: six client-*-portal workspaces read as six "C" tiles, api and acme as two "A".
+const fleetNames = ["nenu", "api", "acme-enterprise-billing-platform-migration", "data-pipeline-backfill-2026-q4-customer-events", "personal-site",
+  ...["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].map((word) => `client-${word}-portal`)];
+const fleet: HomeData = {
+  ...data,
+  workspaces: fleetNames.map((label, i) => ({ workspaceId: `w:${i}`, number: i + 1, label, focused: false, activeTabId: `t${i}`, tabCount: 1, paneCount: 1 })),
+  tabs: fleetNames.map((_, i) => ({ tabId: `t${i}`, workspaceId: `w:${i}`, number: 1, label: "1", focused: false, paneCount: 1 })),
+  agents: fleetNames.map((label, i) => ({ paneId: `w:${i}:p`, workspaceId: `w:${i}`, workspaceLabel: label, workspaceNumber: i + 1, tabId: `t${i}`,
+    agent: "claude", status: i === 2 ? "blocked" : "idle", cwd: "/", focused: false, paneLabel: `Task ${i}` })),
+};
+
+/** What a rail tile shows, without the words only a screen reader hears. */
+function shownText(element: HTMLElement): string {
+  const copy = element.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll(".sr-only").forEach((node) => node.remove());
+  return copy.textContent!.trim();
+}
+
+it("folds every workspace to two letters no other tile shares, and names it on hover and focus", async () => {
+  desktop();
+  const { sidebar, user } = setup(fleet);
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
+  const tiles = fleetNames.map((name) => rail.getByRole("link", { name: new RegExp(`^${name}\\b`) }));
+  const shown = tiles.map(shownText);
+  for (const monogram of shown) expect(monogram).toMatch(/^[A-Z0-9]{2}$/);
+  expect(new Set(shown).size).toBe(fleetNames.length);
+  // The dot on a tile is spoken with its name.
+  expect(tiles[2]).toHaveAccessibleName("acme-enterprise-billing-platform-migration, needs you");
+
+  await user.hover(tiles[5]!);
+  expect(await screen.findByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
+  await user.unhover(tiles[5]!);
+  await waitFor(() => expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument());
+
+  tiles[5]!.focus();
+  await user.tab();
+  expect(tiles[6]).toHaveFocus();
+  expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("client-bravo-portal");
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument();
+  expect(tiles[6]).toHaveFocus();
 });
