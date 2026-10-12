@@ -308,12 +308,13 @@ export function HistoryRoute() {
 
         {/* Jump between the turns YOU wrote — in a thousand-turn thread those are the only landmarks
             (20 human turns in 900 is typical). Bottom-right so it's thumb-reachable and clear of the
-            centred "scroll to latest" button, on the same line above the home indicator. Side by
+            centred "scroll to latest" button, on the same line above the home indicator, at the reading
+            column's edge rather than the window's on a wide screen. Side by
             side, so it is no taller than that button and the list's bottom padding clears both.
             Hidden while find is open, which owns prev/next then. Each half rounds itself instead of
             the pill clipping them, because a clip would also cut the focus ring drawn outside a button. */}
         {userTurns.length > 1 && !findOpen && (
-          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)_+_0.75rem)] right-(--page-gutter) z-10 flex rounded-full border bg-popover shadow-(--shadow-float)">
+          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)_+_0.75rem)] right-[max(var(--page-gutter),calc((100%_-_var(--chat-column))/2))] z-10 flex rounded-full border bg-popover shadow-(--shadow-float)">
             <button
               type="button"
               onClick={() => jumpTo(step(userTurns, cursor, -1))}
