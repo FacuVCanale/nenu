@@ -139,16 +139,15 @@ function RecentRow({ chat, session, now, opening }: { chat: RecentChat; session?
 }
 
 /**
- * Home's "Recent": the chats that moved or were opened last, each one tap from its thread, with how
- * many agents are working right now. "New" marks one that finished since you last opened it.
+ * Home's "Recent": the chats that moved or were opened last, each one tap from its thread. "New" marks
+ * one that finished since you last opened it. How many are working is the headline's to say.
  */
-export function RecentChats({ chats, working, session, now }: { chats: readonly RecentChat[]; working: number; session?: string; now: number }) {
+export function RecentChats({ chats, session, now }: { chats: readonly RecentChat[]; session?: string; now: number }) {
   const opening = useOpeningPath();
   if (!chats.length) return null;
   return (
     <section aria-labelledby="home-recent" className="flex flex-col gap-1.5">
-      <HomeHeading id="home-recent" label="Recent"
-        note={working > 0 && <><StatusDot status="working" className="size-1.5" />{working} working now</>} />
+      <HomeHeading id="home-recent" label="Recent" />
       <FoldedList items={chats} rows={RECENT_ROWS}>
         {(chat) => <RecentRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} />}
       </FoldedList>

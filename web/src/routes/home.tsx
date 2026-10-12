@@ -99,7 +99,7 @@ export function HomeRoute() {
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
             interactions={interactions} lockReason={lockReasonOf({ ...data, readOnly })} />}
-        <RecentChats chats={recent} working={outage ? 0 : counts.working} session={data.session} now={now} />
+        <RecentChats chats={recent} session={data.session} now={now} />
         <ReadyToReviewList entries={reviews} session={data.session} />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
