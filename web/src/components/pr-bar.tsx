@@ -74,7 +74,7 @@ export function PrBar({ project, thread, session, readOnly, onChanged }: {
     <div className="mx-3 mb-2 flex min-h-11 items-center gap-2.5 rounded-xl border border-border bg-card/40 pl-3 pr-1.5 text-footnote">
       <GitPullRequest aria-hidden className={cn("size-4 shrink-0", pr.state === "merged" ? "text-violet-400" : "text-status-done")} />
       {pr.url
-        ? <a href={pr.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center font-medium tabular-nums hover:underline lg:min-h-0">{pr.number !== undefined ? `#${pr.number}` : "PR"}</a>
+        ? <a href={pr.url} target="_blank" rel="noreferrer" className="hit-area inline-flex min-h-11 shrink-0 items-center font-medium tabular-nums hover:underline lg:min-h-0">{pr.number !== undefined ? `#${pr.number}` : "PR"}</a>
         : <span className="shrink-0 font-medium tabular-nums">{pr.number !== undefined ? `#${pr.number}` : "PR"}</span>}
       {pr.state !== "open" && <span className="shrink-0 text-xs text-muted-foreground">{pr.state}</span>}
       <span className="hidden min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground sm:block">{thread.branch}</span>
