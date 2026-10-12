@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView, ProjectView } from "@/lib/types";
@@ -296,6 +296,17 @@ describe("the sidebar", () => {
       sheet();
       expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     });
+  });
+
+  it("orients an empty herd: where agents come from, and on a phone a way to start one", async () => {
+    const empty = { ...herd, agents: [], workspaces: [], tabs: [], projects: [] } as unknown as HomeData;
+    const onNewChat = vi.fn();
+    const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={empty} variant="sheet" onNewChat={onNewChat} /> }]);
+    render(<RouterProvider router={router} />);
+    expect(screen.getByText("No agents yet")).toBeInTheDocument();
+    expect(screen.getByText(/Agents you start in Herdr show up here too\./)).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "New agent" }));
+    expect(onNewChat).toHaveBeenCalledOnce();
   });
 
   it("names the host and what it holds in the footer, beside Settings", () => {
