@@ -8,9 +8,11 @@
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
 .composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
 .composer-input::placeholder { color: var(--muted-foreground); }
-/* The one action: a 32px circle. Send takes the accent only once there is something to send. */
+/* The one action: a 32px circle. Send is ink once there is something to send, and takes the accent
+   only while Type into terminal is armed, matching the box's border. */
 .composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
-.composer-send:disabled { opacity: 1; background: var(--muted); color: var(--muted-foreground); }
+.composer-send:disabled { background: var(--muted); color: var(--muted-foreground); }
+.composer-send[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
 .composer-stop { border: 1.5px solid currentColor; color: var(--foreground); background: transparent; }
 .composer-stop:hover { background: var(--accent); }
 .composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: 13px; color: var(--muted-foreground); }
