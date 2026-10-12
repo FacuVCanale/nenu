@@ -281,6 +281,9 @@ describe("QuestionCard", () => {
       const preview = screen.getByLabelText("Preview");
       expect(within(preview).getByText("hello")).toBeVisible();
       expect(within(preview).getByText("2")).toHaveAttribute("aria-hidden", "true");
+      // Named groups a screen reader announces, not labels on generic boxes.
+      expect(screen.getByRole("group", { name: "File" })).toHaveTextContent("hello.txt");
+      expect(screen.getByRole("group", { name: "Preview" })).toBe(preview);
     });
 
     it("names Codex's facts and the options only the terminal answers", () => {
@@ -559,6 +562,8 @@ describe("QuestionCard", () => {
       await user.click(screen.getByRole("button", { name: "Show all 12 lines" }));
       expect(screen.getByLabelText("Command")).toHaveTextContent("step 12");
       expect(screen.getByRole("button", { name: /^Yes$/ })).toBeVisible();
+      // The button it pressed is gone, so focus lands on what it opened rather than the page.
+      expect(screen.getByRole("group", { name: "Command" }).closest("[tabindex='-1']")).toHaveFocus();
     });
 
     it("puts the whole command on screen before the button that approves it", () => {
