@@ -138,10 +138,11 @@ export function RenameView({
     <div className="flex flex-col gap-3">
       {/* Bleeds through the sheet body's padding (16px sides, 12px top) to sit where the title row was. */}
       <div data-sheet-edit-header className="sticky top-0 z-10 -mx-4 -mt-3 border-b border-border/60 bg-background">
-        <div aria-hidden="true" className="flex justify-center pt-2 pb-1">
+        {/* From 640 px a sheet floats and has nothing to pull, as in ui/sheet.tsx. */}
+        <div aria-hidden="true" className="flex justify-center pt-2 pb-1 sm:hidden">
           <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
         </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pb-1">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pb-1 sm:pt-1">
           <button type="button" onClick={onCancel} className="h-11 justify-self-start rounded-md px-2 text-headline font-normal text-muted-foreground">
             Cancel
           </button>
