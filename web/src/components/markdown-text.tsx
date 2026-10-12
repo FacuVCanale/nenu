@@ -22,8 +22,9 @@ import { IMAGE_EDGE } from "./message-images";
 const FindContext = createContext({ query: "", current: false });
 
 // Every hit wears the work log's amber; the current match's go solid, so "2/7" can be found on screen.
-const HIT = "rounded-sm box-decoration-clone bg-amber-300/70 text-inherit dark:bg-amber-500/40";
-const CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outline-amber-600 dark:bg-amber-400";
+// Exported so the work log's own marks (work-log-tools.tsx) draw from the same two classes.
+export const FIND_HIT = "rounded-sm box-decoration-clone bg-amber-300/70 text-inherit dark:bg-amber-500/40";
+export const FIND_CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outline-amber-600 dark:bg-amber-400";
 
 /** Literal text with find hits marked. Still text nodes — `<mark>` is structure, never parsed markup. */
 function Hit({ text }: { text: string }) {
@@ -35,7 +36,7 @@ function Hit({ text }: { text: string }) {
     <>
       {pieces.map((piece, i) =>
         piece.hit ? (
-          <mark key={i} aria-current={current || undefined} className={cn(HIT, current && CURRENT_HIT)}>
+          <mark key={i} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>
             {piece.text}
           </mark>
         ) : (
