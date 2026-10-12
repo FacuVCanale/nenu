@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { ChatFilesBrowser } from "./chat-files-browser";
+import { SEGMENT_TRACK, segmentClass } from "./dock-tile";
 
 const fetchHistory = vi.fn();
 vi.mock("@/lib/api", async (original) => ({
@@ -91,6 +92,19 @@ it("opens the project tree without scanning older conversation pages", async () 
   expect(screen.getByRole("button", { name: "Project" })).toHaveAttribute("aria-pressed", "true");
   await screen.findByText("Empty folder");
   expect(fetchHistory).not.toHaveBeenCalled();
+});
+
+// One segmented control in the app: the chosen list is the docks' neutral tile, never the accent.
+it("picks a list with the app's neutral segmented control", async () => {
+  render(<ChatFilesBrowser paneId="w1:p1" history={available([])} />);
+  await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+  const group = screen.getByRole("group", { name: "File type" });
+  expect(group).toHaveClass(...SEGMENT_TRACK.split(" "));
+  const project = within(group).getByRole("button", { name: "Project" });
+  expect(project).toHaveAttribute("aria-pressed", "true");
+  expect(project).toHaveClass(...segmentClass(true).split(" "));
+  expect(within(group).getByRole("button", { name: "Artifacts" })).toHaveClass(...segmentClass(false).split(" "));
+  for (const button of within(group).getAllByRole("button")) expect(button.className).not.toMatch(/primary/);
 });
 
 it("sorts by latest mention and filters file names and extensions", async () => {
