@@ -1,7 +1,7 @@
+import { useRef, type KeyboardEvent } from "react";
 import { Moon, MonitorSmartphone, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { Card } from "@/components/ui/card";
 import { useTheme } from "@/hooks/use-theme";
 import type { Theme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
@@ -17,59 +17,60 @@ const OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: LucideIcon }> 
   { value: "dark", label: "Dark", icon: Moon },
 ];
 
-/** The icon names the CURRENT mode, not the next one — so the button reads as a status display you
- *  can also press. Tapping advances System → Light → Dark → System. */
-export function themeIcon(theme: Theme): LucideIcon {
-  return OPTIONS.find((o) => o.value === theme)?.icon ?? MonitorSmartphone;
-}
+const STEP: Partial<Record<string, number>> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
 
-/** Settings card. Mirrors the icon/title/description shape of the other rows. */
+/** A segmented control: a neutral thumb slides under the selected option. The accent stays for
+ *  focus and on-states, so a setting never reads as the page's call to action. One tab stop; the
+ *  arrow keys move the selection, as a radio group's do. */
 export function ThemeControl() {
   const { theme, setTheme } = useTheme();
-  const Icon = themeIcon(theme);
+  const radios = useRef<Array<HTMLButtonElement | null>>([]);
+  const index = Math.max(0, OPTIONS.findIndex((o) => o.value === theme));
+
+  function onKeyDown(event: KeyboardEvent) {
+    const step = STEP[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const next = (index + step + OPTIONS.length) % OPTIONS.length;
+    setTheme(OPTIONS[next]!.value);
+    radios.current[next]?.focus();
+  }
 
   return (
-    <Card className="gap-0 py-0">
-      <div className="flex items-center justify-between gap-4 p-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-          <div className="min-w-0">
-            <div className="font-medium">Appearance</div>
-            <p className="text-sm text-muted-foreground">Follow your phone, or pin one.</p>
-          </div>
-        </div>
-      </div>
-
-      <div
-        role="radiogroup"
-        aria-label="Appearance"
-        className="flex gap-1 border-t border-border/60 p-2"
-      >
-        {OPTIONS.map((option) => {
-          const selected = option.value === theme;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => setTheme(option.value)}
-              className={cn(
-                // min-h-11 = 44px, the iOS/Android comfort target rather than the 24px AA floor.
-                "flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-                // Selected is a filled pill, not a tint: `bg-secondary` on a white card is 1.09:1,
-                // which leaves the selection carried entirely by the label weight.
-                selected
-                  ? "bg-primary font-medium text-primary-foreground"
-                  : "text-muted-foreground active:bg-muted",
-              )}
-            >
-              <option.icon className="size-4 shrink-0" />
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </Card>
+    <div
+      role="radiogroup"
+      aria-label="Appearance"
+      onKeyDown={onKeyDown}
+      className="relative grid h-9 grid-cols-3 rounded-md bg-muted p-0.5 coarse:h-11"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0.5 left-0.5 w-[calc((100%-4px)/3)] rounded-sm bg-card shadow-[0_1px_2px_rgb(0_0_0/0.12)] transition-transform duration-200 ease-out motion-reduce:transition-none dark:bg-input"
+        style={{ transform: `translateX(${index * 100}%)` }}
+      />
+      {OPTIONS.map((option, i) => {
+        const selected = i === index;
+        return (
+          <button
+            key={option.value}
+            ref={(el) => {
+              radios.current[i] = el;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => setTheme(option.value)}
+            className={cn(
+              "relative flex select-none items-center justify-center gap-1.5 rounded-sm text-subhead transition-colors duration-150 ease-out motion-reduce:transition-none",
+              selected ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <option.icon aria-hidden="true" className="size-4 shrink-0" />
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
