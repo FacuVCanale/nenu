@@ -118,4 +118,11 @@ describe("useAgentTransitions", () => {
       description: "Nenu", background: true, to: "/pane/one",
     });
   });
+
+  it("falls back to Agent when the pane has no name at all", () => {
+    const view = (status: AgentStatus) => agent("one", status, { agent: "" });
+    const { update } = setup([view("working")]);
+    act(() => update([view("blocked")]));
+    expect(notify.mock.calls[0]?.[0]).toBe("Agent needs your input");
+  });
 });
