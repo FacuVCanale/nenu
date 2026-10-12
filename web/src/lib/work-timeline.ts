@@ -158,14 +158,19 @@ export interface LiveStep {
 
 export function liveStep(turn: WorkTurn): LiveStep | null {
   if (!turn.active) return null;
-  const entry = turn.activity.at(-1);
-  const index = entry ? entry.parts.findLastIndex((part) => part.kind !== "image") : -1;
-  const part = entry?.parts[index];
-  const at = { ...(validTime(entry?.ts) ? { since: entry!.ts } : {}), entry: entry?.uuid, index };
-  if (part?.kind === "tool" && !part.result) {
+  const at = (entry: TranscriptEntry, index: number) => ({ ...(validTime(entry.ts) ? { since: entry.ts } : {}), entry: entry.uuid, index });
+  // Parallel calls finish in any order, so the latest call still waiting for its result is the one
+  // in progress, wherever it sits; only with none does the turn's last part say what happens now.
+  for (const entry of turn.activity.toReversed()) {
+    const index = entry.parts.findLastIndex((part) => part.kind === "tool" && !part.result);
+    const part = entry.parts[index];
+    if (part?.kind !== "tool") continue;
     const step = describeTool(part.name);
-    return { kind: step.kind, verb: step.doing, target: part.summary, format: step.target, ...at };
+    return { kind: step.kind, verb: step.doing, target: part.summary, format: step.target, ...at(entry, index) };
   }
-  if (part?.kind === "thinking") return { kind: "thinking", verb: "Thinking", target: firstLine(part.text), format: "thought", ...at };
+  const last = turn.activity.at(-1);
+  const index = last ? last.parts.findLastIndex((part) => part.kind !== "image") : -1;
+  const part = last?.parts[index];
+  if (last && part?.kind === "thinking") return { kind: "thinking", verb: "Thinking", target: firstLine(part.text), format: "thought", ...at(last, index) };
   return { kind: "working", verb: "Working", target: "", format: "text" };
 }
