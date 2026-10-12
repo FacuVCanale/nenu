@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { useState } from "react";
 import type { ComponentProps } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -2505,5 +2505,31 @@ describe("Composer — placeholder", () => {
   it("keeps the lock copy over the caller's placeholder", () => {
     renderComposer({ placeholder: "Steer this thread…", readOnly: true });
     expect(screen.getByPlaceholderText(/read-only — device not authorised/i)).toBeDisabled();
+  });
+
+  // The same lock can come from four places, and the box is where the operator looks first, so it
+  // names the one that holds: a refused sign-in is not an unauthorised device, and Herdr being down is
+  // not a reconnecting network.
+  it.each([
+    ["access was refused", { readOnly: true, lockReason: "refused" }, "Sign in again to reply", true],
+    ["the device is read-only", { readOnly: true, lockReason: "read-only" }, "Read-only — device not authorised", true],
+    ["Herdr isn't responding", { disconnected: true, lockReason: "herdr" }, "Herdr isn't responding. Drafts are kept.", false],
+    ["Nenu is reconnecting", { disconnected: true, lockReason: "offline" }, "Write a draft while reconnecting…", false],
+    ["the pane is gone", { gone: true, lockReason: "herdr" }, "Pane is gone", true],
+  ] as const)("names the real reason when %s", (_name, props, placeholder, disabled) => {
+    renderComposer(props);
+    const box = screen.getByPlaceholderText(placeholder);
+    if (disabled) expect(box).toBeDisabled();
+    else expect(box).toBeEnabled();
+  });
+
+  it("draws no + and no Send where nothing can be written, and keeps both while a draft can wait", () => {
+    renderComposer({ readOnly: true });
+    expect(screen.queryByRole("button", { name: "Message shortcuts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    cleanup();
+    renderComposer({ disconnected: true });
+    expect(screen.getByRole("button", { name: "Message shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 });
