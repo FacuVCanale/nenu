@@ -1446,8 +1446,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               spellCheck={direct.active || noEcho ? false : undefined}
               autoComplete={noEcho ? "off" : undefined}
               // While a password prompt is recognised the draft is a secret the pane never took: it is
-              // masked on screen as well as kept out of the store (noticeNoEcho).
-              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", lockedOut && "pl-3.5", noEcho !== null && !direct.active && "composer-input-secret")}
+              // masked on screen as well as kept out of the store (noticeNoEcho). A box nothing can be
+              // written into keeps its reason at full strength: the well already says it is off.
+              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", lockedOut && "pl-3.5 disabled:opacity-100", noEcho !== null && !direct.active && "composer-input-secret")}
               disabled={gone || readOnly}
               rows={1}
             />
