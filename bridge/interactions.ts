@@ -332,9 +332,11 @@ function promptContext(p: PromptModel): { context?: string; steps?: InteractionS
   // question is not the subject. One Codex question is no progress to show.
   let steps: InteractionStep[] | undefined;
   const subject = rows.filter((l) => {
-    const header = p.family === "select" ? headerChips(l) ?? codexProgress(l) : null;
-    if (header && (header.length > 1 || headerChips(l))) steps = header;
-    return !header && compact(l) !== compact(p.question);
+    const chips = p.family === "select" ? headerChips(l) : null;
+    const progress = p.family === "select" && !chips ? codexProgress(l) : null;
+    if (chips) steps = chips;
+    else if (progress && progress.length > 1) steps = progress;
+    return !chips && !progress && compact(l) !== compact(p.question);
   });
   return { ...(subject.length ? { context: subject.join("\n") } : {}), ...(steps ? { steps } : {}) };
 }
