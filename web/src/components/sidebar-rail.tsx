@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
 import { House, Inbox, PanelLeft, Plus, Search, Settings } from "lucide-react";
@@ -66,33 +66,27 @@ function liveliest(panes: readonly AgentView[]): AgentStatus | undefined {
 /** How long a hover rests before an item's name shows. While one shows, and briefly after, the next one shows at once. */
 const TIP_DELAY_MS = 300;
 const TIP_WARM_MS = 400;
+/** How long a name takes to fade out; it stays mounted until then. Matches the .rail-tip exit in shell.css. */
+const TIP_EXIT_MS = 120;
 
 /**
  * The name of the rail item under the pointer or keyboard focus, drawn to the rail's right. The rail
- * scrolls, so the label is portalled out of it and placed from the item's box. Escape dismisses it.
+ * scrolls, so the label is portalled out of it and placed from the item's box. As WCAG 1.4.13 asks of
+ * content shown on hover, the pointer can rest on the label, and Escape closes it wherever focus is.
  */
 function useRailTip() {
-  const [tip, setTip] = useState<{ label: string; left: number; top: number } | null>(null);
+  const [tip, setTip] = useState<{ label: string; left: number; top: number; leaving?: boolean } | null>(null);
   const shown = useRef<HTMLElement | null>(null);
   const pending = useRef<HTMLElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const exit = useRef<ReturnType<typeof setTimeout>>(undefined);
   const warmUntil = useRef(0);
   // Focus names an item only after a key press, as :focus-visible would: a click already shows it on hover.
   const keyboard = useRef(false);
-  useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => { if (!event.metaKey && !event.ctrlKey && !event.altKey) keyboard.current = true; };
-    const onPointer = () => { keyboard.current = false; };
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("pointerdown", onPointer, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("pointerdown", onPointer, true);
-      clearTimeout(timer.current);
-    };
-  }, []);
 
   const show = (item: HTMLElement) => {
     clearTimeout(timer.current);
+    clearTimeout(exit.current);
     pending.current = null;
     shown.current = item;
     const box = item.getBoundingClientRect();
@@ -101,15 +95,35 @@ function useRailTip() {
   const hide = () => {
     clearTimeout(timer.current);
     pending.current = null;
-    if (shown.current) warmUntil.current = performance.now() + TIP_WARM_MS;
+    if (!shown.current) return;
+    warmUntil.current = performance.now() + TIP_WARM_MS;
     shown.current = null;
-    setTip(null);
+    setTip((last) => last && { ...last, leaving: true });
+    exit.current = setTimeout(() => setTip(null), TIP_EXIT_MS);
   };
   const itemOf = (target: EventTarget | null) => (target instanceof Element ? target.closest<HTMLElement>("[data-rail-tip]") : null);
+
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") hide();
+      else if (!event.metaKey && !event.ctrlKey && !event.altKey) keyboard.current = true;
+    };
+    const onPointer = () => { keyboard.current = false; };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer, true);
+      clearTimeout(timer.current);
+      clearTimeout(exit.current);
+    };
+  }, []);
 
   const handlers = {
     onPointerOver(event: PointerEvent) {
       if (event.pointerType === "touch") return;
+      // On the label itself (it is portalled, but its events still reach the rail): keep it up to be read.
+      if (event.target instanceof Element && event.target.closest(".rail-tip")) return void clearTimeout(timer.current);
       const item = itemOf(event.target);
       // Back on the item already named, from the gap: keep its label, cancelling the hide the gap armed.
       if (item && item === shown.current) return void clearTimeout(timer.current);
@@ -129,13 +143,10 @@ function useRailTip() {
     onBlur(event: FocusEvent) {
       if (!itemOf(event.relatedTarget)) hide();
     },
-    onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && shown.current) hide();
-    },
     onScroll: hide,
   };
   const element = tip && createPortal(
-    <div role="tooltip" aria-hidden className="rail-tip" style={{ left: tip.left, top: tip.top }}>{tip.label}</div>,
+    <div role="tooltip" aria-hidden className="rail-tip" data-leaving={tip.leaving || undefined} style={{ left: tip.left, top: tip.top }}>{tip.label}</div>,
     document.body,
   );
   return { handlers, element };
