@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { http, HttpResponse } from "msw";
@@ -29,6 +29,7 @@ function setup(path: string) {
   const router = createMemoryRouter([{
     id: ROOT_ROUTE_ID, path: "/", loader: () => data, element: <Outlet />,
     children: [
+      { index: true, element: <p>HOME</p> },
       { path: "project/:projectSlug", element: <ProjectRoute /> },
       { path: "project/:projectSlug/node/:nodeId", element: <NodeRoute /> },
       { path: "pane/:paneId", element: <p>PANE</p> },
@@ -82,9 +83,26 @@ it("offers a live node's chat without jumping to it, and closes an open one afte
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "t-4" }));
 });
 
-it("says so when the node is not in the project", async () => {
-  setup("/project/hub/node/t-9");
-  expect(await screen.findByText("This node is not in the project any more.")).toBeInTheDocument();
+it("says a node is gone and offers its project or Home", async () => {
+  const { router, user } = setup("/project/hub/node/t-9");
+  const main = within(await screen.findByRole("main"));
+  expect(main.getByRole("heading", { name: "Thread not found" })).toBeInTheDocument();
+  expect(main.getByText("Hub no longer lists it.")).toBeInTheDocument();
+  expect(main.getByRole("link", { name: "Go to Home" })).toBeInTheDocument();
+  await user.click(main.getByRole("link", { name: "Open Hub" }));
+  expect(router.state.location.pathname).toBe("/project/hub");
+});
+
+it("says a project is not in this Herdr session and offers Home or another look", async () => {
+  for (const path of ["/project/nope", "/project/nope/node/t-1"]) {
+    const { router, user } = setup(path);
+    const main = within(await screen.findByRole("main"));
+    expect(main.getByRole("heading", { name: "Project not found" })).toBeInTheDocument();
+    expect(main.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    await user.click(main.getByRole("link", { name: "Go to Home" }));
+    expect(router.state.location.pathname).toBe("/");
+    cleanup();
+  }
 });
 
 it("goes back one level, to the node's parent or its project, and names the node in the bar", async () => {
