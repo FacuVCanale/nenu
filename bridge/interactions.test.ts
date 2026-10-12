@@ -171,6 +171,25 @@ describe("where a question sits in its set", () => {
     ]);
   });
 
+  test("a wizard read without its colours marks the first unanswered question as the one on screen", () => {
+    const i = detect("claude--wizard-q2.txt");
+    const plain = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", fixture("claude--wizard-q2.txt").replace(/\x1b\[[0-9;]*m/g, ""))!, 0, [], 0).interaction;
+    expect(plain.steps?.find((s) => s.current)?.label).toBe("Scope");
+    expect(i.steps?.find((s) => s.current)?.label).toBe("Scope");
+  });
+
+  test("a wizard's review serves its answers and marks no question as on screen", () => {
+    const i = detect("claude--wizard-submit.txt");
+    expect(i.answers).toEqual([
+      { question: "Which focus area should we work on?", answer: "UI" },
+      { question: "What scope should this work have?", answer: "Medium" },
+      { question: "How should we approach the work?", answer: "Plan first" },
+    ]);
+    expect(i.steps?.some((s) => s.current)).toBe(false);
+    const unanswered = detect("claude--wizard-submit-unanswered.txt");
+    expect(unanswered.steps?.some((s) => s.current)).toBe(false);
+  });
+
   test("a permission keeps its subject and has no steps", () => {
     const i = detect("claude--permission-bash.txt");
     expect(i.steps).toBeUndefined();
