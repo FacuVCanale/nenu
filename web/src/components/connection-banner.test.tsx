@@ -37,7 +37,8 @@ it("keeps repeated brief signal losses quiet", () => {
 it("shows one notice for a sustained outage, with Retry and without Reload", () => {
   const h = renderBanner({ error: true });
   act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
-  expect(screen.getByRole("status")).toHaveTextContent("Connection is unstable. Retrying…");
+  expect(screen.getByRole("status")).toHaveTextContent("Can’t reach Nenu. Retrying…");
+  expect(screen.getByRole("status")).not.toHaveTextContent(/unstable/);
   expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
   expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
   h.close();
@@ -59,10 +60,22 @@ it("keeps the notice stable until successful reads remain stable, without a Conn
   h.close();
 });
 
+it("says which host it cannot reach when nothing ever loaded, and promises no snapshot", () => {
+  const h = renderBanner({ bridge: undefined, error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS - 1));
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  act(() => vi.advanceTimersByTime(1));
+  const notice = screen.getByRole("status");
+  expect(notice).toHaveTextContent(`Can’t reach Nenu at ${window.location.host}.`);
+  expect(notice).not.toHaveTextContent(/unstable|snapshot|Last synced/);
+  h.close();
+});
+
 it("names Herdr only when the snapshot reports Herdr unavailable", () => {
   const h = renderBanner({ bridge: "disconnected" });
   act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
   expect(screen.getByRole("status")).toHaveTextContent("Herdr is unavailable. Retrying…");
+  expect(screen.getByRole("status")).not.toHaveTextContent(/Can.t reach Nenu/);
   h.close();
 });
 
@@ -83,7 +96,7 @@ it("Retry refreshes data without reloading the page", async () => {
 
 it("shows access refusal immediately with the real sign-in escape", () => {
   const h = renderBanner({ authError: true });
-  expect(screen.getByRole("alert")).toHaveTextContent("Access refused. This is not a connection problem.");
+  expect(screen.getByRole("alert")).toHaveTextContent("Access refused. Sign in again. This is not a network problem.");
   expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/");
   expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
