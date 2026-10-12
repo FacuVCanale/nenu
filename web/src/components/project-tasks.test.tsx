@@ -103,13 +103,24 @@ it("hands the keyboard to the first row Show more brought, even when the button 
 });
 
 describe("closing is never a check", () => {
-  /** A phone or tablet: the pointer is coarse, so there is no hover to reveal a row's actions. */
+  /** A device by its media features: a query matches when one of its comma-separated parts matches every feature it names. */
   const original = window.matchMedia;
-  function touchScreen() {
-    window.matchMedia = ((query: string) => ({ matches: query === "(pointer: coarse)", media: query, onchange: null, addEventListener: () => {},
+  function device(features: Record<string, string>) {
+    const matches = (query: string) => query.split(",").some((part) => [...part.matchAll(/\(([\w-]+):\s*([\w-]+)\)/g)].every(([, name, value]) => features[name!] === value));
+    window.matchMedia = ((query: string) => ({ matches: matches(query), media: query, onchange: null, addEventListener: () => {},
       removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
   }
+  /** A phone or tablet: the pointer is coarse, so there is no hover to reveal a row's actions. */
+  const touchScreen = () => device({ hover: "none", pointer: "coarse" });
   afterEach(() => { window.matchMedia = original; });
+
+  // A pen or a TV remote points finely and cannot hover: a word that waits for hover would never show.
+  it("gives a screen that cannot hover the ⋯, whatever its pointer", () => {
+    device({ hover: "none", pointer: "fine" });
+    setup();
+    expect(screen.getByRole("button", { name: "Build actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close Build" })).not.toBeInTheDocument();
+  });
 
   it("names Close on an open row on a desk, and keeps the check for resolved work", async () => {
     const { user } = setup();
