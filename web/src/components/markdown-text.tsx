@@ -17,13 +17,17 @@ import { IMAGE_EDGE } from "./message-images";
 // types in, headings a step or a weight above it. This is a reading view inside a terminal-ish app,
 // not a document viewer, so there is no separate prose theme.
 
-// The active find query, threaded via context rather than a prop drilled through every nested span —
+// The active find, threaded via context rather than a prop drilled through every nested span —
 // highlighting is a cross-cutting display concern, and the AST walk is already recursive.
-const QueryContext = createContext("");
+const FindContext = createContext({ query: "", current: false });
+
+// Every hit wears the work log's amber; the current match's go solid, so "2/7" can be found on screen.
+const HIT = "rounded-sm box-decoration-clone bg-amber-300/70 text-inherit dark:bg-amber-500/40";
+const CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outline-amber-600 dark:bg-amber-400";
 
 /** Literal text with find hits marked. Still text nodes — `<mark>` is structure, never parsed markup. */
 function Hit({ text }: { text: string }) {
-  const query = useContext(QueryContext);
+  const { query, current } = useContext(FindContext);
   if (query.trim() === "") return <>{text}</>;
   const pieces = splitHighlight(text, query);
   if (pieces.length === 1 && !pieces[0]!.hit) return <>{text}</>;
@@ -31,7 +35,7 @@ function Hit({ text }: { text: string }) {
     <>
       {pieces.map((piece, i) =>
         piece.hit ? (
-          <mark key={i} className="rounded-sm bg-amber-300/70 text-inherit dark:bg-amber-500/40">
+          <mark key={i} aria-current={current || undefined} className={cn(HIT, current && CURRENT_HIT)}>
             {piece.text}
           </mark>
         ) : (
@@ -230,20 +234,24 @@ export function MarkdownText({
   text,
   className,
   query = "",
+  current = false,
 }: {
   text: string;
   className?: string;
   /** Active find query — occurrences render as marks. Empty disables highlighting entirely. */
   query?: string;
+  /** This text is find's current match: its hits take a solid fill the other matches don't. */
+  current?: boolean;
 }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
+  const find = useMemo(() => ({ query, current }), [query, current]);
   return (
-    <QueryContext.Provider value={query}>
+    <FindContext.Provider value={find}>
       <div className={cn("space-y-2 text-body break-words", className)}>
         {blocks.map((block, i) => (
           <Block key={i} block={block} />
         ))}
       </div>
-    </QueryContext.Provider>
+    </FindContext.Provider>
   );
 }
