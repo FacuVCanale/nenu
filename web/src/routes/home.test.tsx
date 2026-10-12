@@ -6,7 +6,6 @@ import { HomeRoute } from "./home";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
 import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
-import { clockTime } from "@/lib/format";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";

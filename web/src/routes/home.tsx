@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
 import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
-import { lockReasonOf } from "@/components/question-card";
+import { lockReasonOf, type LockReason } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
@@ -15,8 +15,7 @@ import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue, isDefiniteRefusal } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
-import { useConnectionHealth } from "@/lib/connection-health";
-import { greeting, homeHeadline, needsYouItems, outageHeadline, recentChats, reviewQueue, runningWorkflows, type Outage } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -25,20 +24,17 @@ import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from 
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-// Whether Home has drawn a live herd since the page opened. Until then the shared connection anchor
-// (lib/connection-health.ts) only marks when the page loaded, so it cannot date the herd on screen.
-let sawLive = false;
-
 // Home answers "what needs me now", top to bottom: one sentence, a composer that reaches a
 // coordinator or starts a thread, what needs you (answered in place), the chats that moved last, what
 // is ready to review and the workflows still running. Projects and workspaces live in the sidebar
 // (Browse on a phone), so Home never repeats them. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
-// When the link fails, a brief failure changes nothing on screen (the quiet retry). A sustained one
-// names what is unreachable, Nenu or Herdr, dates the herd it last saw and greys those lists out; a
-// refusal says so at once. A first load that never reached Nenu has no herd to show, so the whole
-// body says that instead.
+// When the link fails, the connection banner (root.tsx) is the one place that names the problem and
+// dates the herd. Home keeps saying what the work is: a brief failure changes nothing on screen (the
+// quiet retry), a sustained one or a refusal greys the lists out so nothing reads live, and a composer
+// that cannot send says what it waits for. A first load that never reached Nenu has no herd to show,
+// so the body only says what will be here.
 export function HomeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const navigation = useContext(WorkbenchNavigationContext);
@@ -48,16 +44,14 @@ export function HomeRoute() {
   const interactions = useInteractions(data.session, live);
   const activity = useHomeActivity(live ? data.agents : [], data.session);
   const lost = useConnectionLost(isConnecting(data));
-  const anchor = useConnectionHealth();
   const opening = useOpeningPath();
-  useEffect(() => { if (live) sawLive = true; }, [live]);
-
-  const outage: Outage | null = data.authError ? "refused" : !lost ? null : data.error ? "nenu" : "herdr";
+  // The herd on screen is not live: a refusal at once, an outage once it is sustained.
+  const stale = data.authError || lost;
   // `bridge` is only unknown when no snapshot was ever read: there is no herd to grey out.
   if (data.bridge === undefined) {
     return <ColumnPage data={data} title="Home">
       <h1 className="sr-only">Home</h1>
-      <HomeUnreachable refused={outage === "refused"} lost={lost} />
+      <HomeUnreachable refused={data.authError} lost={lost} />
     </ColumnPage>;
   }
 
@@ -71,9 +65,7 @@ export function HomeRoute() {
   const reviews = reviewQueue(data.projects, data.pullRequests);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
-  // The cached herd carries its own date; Herdr's outage is dated by the last live read, once there was one.
-  const { title, detail } = outage ? outageHeadline(outage, data.lastSeenAt ?? (sawLive ? anchor : undefined), data.agents.length)
-    : homeHeadline(counts, data.agents.length);
+  const { title, detail } = homeHeadline(counts, data.agents.length);
 
   // On a phone the date sits right under the header, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
@@ -87,7 +79,7 @@ export function HomeRoute() {
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
       <div className="flex flex-col">
-        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} outage={outage} />
+        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
         <Reveal>{live && !data.agents.length && (
           <div className="pt-6 lg:pt-7">
             <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />
@@ -95,7 +87,7 @@ export function HomeRoute() {
         )}</Reveal>
       </div>
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
-      <div className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
+      <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         {calm
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
@@ -114,6 +106,9 @@ export function HomeRoute() {
     </div>
   </ColumnPage>;
 }
+
+/** What unlocks the composer, said as what to do: "<verb> to start an agent". */
+const LOCKED_VERB: Record<LockReason, string> = { "read-only": "Use an authorised device", refused: "Sign in again", offline: "Reconnect", herdr: "Reconnect" };
 
 /** Where the composer sends: a project's coordinator, a new thread in a workspace, or a new workspace. */
 type Target = { kind: "new" } | { kind: "workspace"; workspaceId: string; label: string } | { kind: "project"; project: ProjectView; coordinator: AgentView };
@@ -159,7 +154,7 @@ class Unavailable extends Error {}
  * fails keeps the draft and says why, with the coordinator one tap away. A workspace or "New
  * workspace" opens the new-chat sheet with the message filled in, to pick agent and folder.
  */
-function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean; outage: Outage | null }) {
+function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean }) {
   const [message, setMessage] = useState("");
   const [choice, setChoice] = useState<string | null>(readTarget);
   const [asking, setAsking] = useState(false);
@@ -180,7 +175,9 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
   const label = target.kind === "project" ? target.project.name : target.kind === "workspace" ? target.label : "New workspace";
   const action = target.kind === "project" ? `reach ${target.project.name}'s coordinator` : "start an agent";
   const busyChoice = target.kind === "project" ? busyChoiceFor(target.coordinator.agent) : null;
-  const placeholder = outage === "refused" ? `Sign in again to ${action}` : outage ? `Reconnect to ${action}`
+  // A locked box says what it waits for, from the moment it locks; the banner says what went wrong.
+  const lock = disabled ? lockReasonOf({ ...data, readOnly: isReadOnly(data.device) }) : undefined;
+  const placeholder = lock ? `${LOCKED_VERB[lock]} to ${action}`
     : target.kind === "project" ? `Ask ${target.project.name}'s coordinator…` : "Describe a task…";
 
   async function send(mode: DeliveryMode) {
