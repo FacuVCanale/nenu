@@ -248,7 +248,8 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
         {/* The one header: the title at the start, the chevron back before it on a sheet with steps,
             the ✕ at the end. Both buttons reach 44px on a touch screen and hang into the 16px gutter,
             so the title starts where the rows below do. A long title (a confirmation naming a long
-            tab) wraps to a second line rather than losing its question mark. */}
+            tab) wraps whole rather than losing its question mark; the title's padding makes one line
+            as tall as the buttons, so they stay beside its first line. */}
         <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-md">
           {/* Grab handle — pull down (from anywhere at the top) to dismiss. From 640 px a sheet may
               float as a dialog (its owner's or the desk's), where a handle promises a pull that
@@ -256,13 +257,13 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
           <div className="flex justify-center pt-2 pb-1 sm:hidden">
             <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
           </div>
-          <div className="flex items-center gap-1 px-4 pb-2 sm:pt-3">
+          <div className="flex items-start gap-1 px-4 pb-2 sm:pt-3">
             {header.back && (
               <Button variant="ghost" size="icon" className="-ml-2 coarse:-ml-3" onClick={header.back} aria-label="Back">
                 <ChevronLeft className="size-5" />
               </Button>
             )}
-            <h2 ref={headingRef} id={header.title ? titleId : undefined} tabIndex={-1} className="line-clamp-2 min-w-0 flex-1 text-title [overflow-wrap:anywhere] outline-none">
+            <h2 ref={headingRef} id={header.title ? titleId : undefined} tabIndex={-1} className="min-w-0 flex-1 py-1 text-title [overflow-wrap:anywhere] outline-none coarse:py-2">
               {header.title}
             </h2>
             <Button variant="ghost" size="icon" className="-mr-2 coarse:-mr-3" onClick={onClose} aria-label="Close">

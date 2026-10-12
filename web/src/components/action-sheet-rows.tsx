@@ -49,6 +49,7 @@ export function ActionRow({
  * the question as the sheet's title (it names the tab or pane, so the name shows once), what it takes
  * with it, the destructive button and Cancel. Cancel ends up where the row was, and the destructive
  * button ignores taps for its first {@link CONFIRM_SETTLE_MS}, so a double tap on the row closes nothing.
+ * Unlike rename it draws no chevron: Cancel is the way back, and the safe choice focus lands on.
  */
 export function ConfirmView({
   title,
