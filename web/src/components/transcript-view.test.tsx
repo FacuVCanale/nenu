@@ -845,3 +845,34 @@ describe("TranscriptView — the current find match", () => {
     expect(container.querySelectorAll("mark").length).toBeGreaterThan(marks.length);
   });
 });
+
+describe("TranscriptView — copying a message", () => {
+  afterEach(() => Reflect.deleteProperty(navigator, "clipboard"));
+
+  // 0.65.0 had no Copy on a message: the only way out was a long-press selection.
+  it("copies the agent's message as the Markdown it wrote, and says Copied", async () => {
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(
+      <TranscriptView
+        entries={[
+          turn({ uuid: "u1", role: "user", parts: [{ kind: "text", text: "compare them" }] }),
+          turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "**B** wins." }, { kind: "text", text: "| A | B |\n|---|---|\n| 1 | 2 |" }] }),
+        ]}
+      />,
+    );
+    const message = screen.getByText("wins.", { exact: false }).closest("[data-speaker]")!;
+    await userEvent.click(within(message as HTMLElement).getByRole("button", { name: "Copy message" }));
+    expect(await within(message as HTMLElement).findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("**B** wins.\n\n| A | B |\n|---|---|\n| 1 | 2 |");
+    // Your own message is yours already.
+    const yours = screen.getByText("compare them").closest("[data-speaker]")!;
+    expect(within(yours as HTMLElement).queryByRole("button", { name: /^Copy/ })).toBeNull();
+  });
+
+  it("leaves the agent's message selectable as text", () => {
+    render(<TranscriptView entries={[turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "Select me." }] })]} />);
+    expect(screen.getByText("Select me.").closest("[data-speaker]")).toHaveClass("select-text");
+  });
+});
+
