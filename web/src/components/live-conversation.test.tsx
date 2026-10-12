@@ -258,6 +258,26 @@ describe("LiveConversation", () => {
     now.mockRestore();
   });
 
+  // T22: the two ways back looked the same. New messages say how many; tool calls are not messages.
+  it("counts the messages that arrived while the reader was away", () => {
+    const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const view = (history: PaneHistoryResponse) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>;
+    const { container, rerender } = render(view(initial));
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1000, client: 100 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    box.top = 300;
+    fireEvent.scroll(scroller);
+    expect(screen.getByRole("button", { name: "Scroll to latest" })).not.toHaveTextContent(/\S/);
+
+    rerender(view({ ...initial, entries: [...fixtureTranscript,
+      { uuid: "n1", ts: "", role: "user", parts: [{ kind: "text", text: "Open the PR." }] },
+      { uuid: "n2", ts: "", role: "assistant", parts: [{ kind: "tool", name: "Bash", summary: "gh pr create" }] },
+      { uuid: "n3", ts: "", role: "assistant", parts: [{ kind: "text", text: "Opened." }] },
+    ] }));
+    expect(screen.getByRole("button", { name: "Scroll to latest" })).toHaveTextContent("2 new");
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
