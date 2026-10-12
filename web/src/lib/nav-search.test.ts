@@ -66,6 +66,30 @@ describe("navigation search", () => {
     expect(navSearch(source, "claw")[0]!.hits[0]).toMatchObject({ kind: "workspace", key: "workspace:w9", place: { place: "2 tabs", tab: null } });
   });
 
+  it("finds an agent by its kind, its folder or its terminal's title, below the agents whose name matches", () => {
+    const source = {
+      agents: [
+        pane("fix", { paneLabel: "Fix login", agent: "codex", cwd: "/home/me/shop-api", terminalTitle: "vim auth.ts", lastActiveAt: 60 }),
+        pane("cx", { paneLabel: "Codex", agent: "codex", lastActiveAt: 40 }),
+        pane("cl", { paneLabel: "Claude", agent: "claude", lastActiveAt: 50 }),
+      ],
+      shellPanes: [], projects: [],
+    };
+    expect(groups("codex", source)).toEqual([["Chats", ["Codex", "Fix login"], 0]]);
+    expect(groups("shop-api", source)).toEqual([["Chats", ["Fix login"], 0]]);
+    expect(groups("auth.ts", source)).toEqual([["Chats", ["Fix login"], 0]]);
+    // The kind is a whole word: a partial name does not list every agent of that kind.
+    expect(groups("cod", source)).toEqual([["Chats", ["Codex"], 0]]);
+  });
+
+  it("leads with the group holding the best match, so the first row picked is the closest name", () => {
+    const source = {
+      agents: [pane("c", { cwd: "/srv/billing", lastActiveAt: 90 }), pane("bill", { paneLabel: "Billing fix", lastActiveAt: 10 })],
+      shellPanes: [], projects: [project],
+    };
+    expect(groups("billing", source)).toEqual([["Chats", ["Billing fix"], 0], ["Projects", ["Hub coordinator"], 0]]);
+  });
+
   it("finds nothing without a query", () => {
     expect(navSearch(herd, "  ")).toEqual([]);
   });
