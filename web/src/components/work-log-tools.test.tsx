@@ -110,11 +110,18 @@ it("shows the image a read tool opened as a thumbnail, folded or open", async ()
 describe("ThinkingStep", () => {
   it("previews the thought's first line on one row and opens the whole of it", async () => {
     render(<ThinkingStep text={"Compare the two implementations.\nThen keep the smaller one."} query="" />);
-    const row = screen.getByRole("button", { name: "Thinking", expanded: false });
+    // Its name carries the words it shows, so VoiceOver reads them and Voice Control finds the row by them.
+    const row = screen.getByRole("button", { name: "Thinking: Compare the two implementations.", expanded: false });
     expect(row).toHaveTextContent("Compare the two implementations.");
     expect(row).not.toHaveTextContent("Then keep the smaller one.");
     await userEvent.click(row);
     expect(screen.getByText(/Then keep the smaller one\./)).toBeInTheDocument();
+  });
+
+  it("tells two thoughts apart by name, and says when one was cut short", () => {
+    render(<><ThinkingStep text="First look at the hook." query="" /><ThinkingStep text={"Then the chip.\nAnd more."} truncated query="" /></>);
+    expect(screen.getByRole("button", { name: "Thinking: First look at the hook." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Thinking: Then the chip. · truncated" })).toBeInTheDocument();
   });
 
   it("previews a bold title without its asterisks", () => {

@@ -573,7 +573,7 @@ describe("TranscriptView — the work timeline", () => {
     // The failure shows on the folded line, before anything is opened.
     expect(fold).toHaveTextContent("1 failed");
     await userEvent.click(fold);
-    expect(screen.getByRole("button", { name: "Thinking" })).toHaveTextContent("The inset is counted twice.");
+    expect(screen.getByRole("button", { name: "Thinking: The inset is counted twice." })).toHaveTextContent("The inset is counted twice.");
     expect(screen.getByRole("button", { name: /^Searched safe-area-inset-bottom/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent("index.css");
     expect(screen.queryByText(/tool calls?/)).not.toBeInTheDocument();
