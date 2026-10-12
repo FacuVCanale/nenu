@@ -57,10 +57,17 @@ describe("history header", () => {
     expect(screen.queryByRole("button", { name: "Find in history" })).not.toBeInTheDocument();
   });
 
-  it("goes back to its pane with the one back link every page shares, and no second close", async () => {
+  // jsdom applies no media queries, so each control's breakpoint is read off the class that hides it;
+  // the bench captures (redesign-shots/system-coherence) show the two widths.
+  it("goes back to its pane with one control at each width: the shared back on a phone, a close on the desk", async () => {
     setup("w1:idle", { entries: turns(4), total: 4 }, [pane("w1:idle", { paneLabel: "Idle Claude" })]);
     const bar = await header();
-    expect(bar.getByRole("link", { name: "Back to Idle Claude" })).toHaveAttribute("href", "/pane/w1%3Aidle");
+    const back = bar.getByRole("link", { name: "Back to Idle Claude" });
+    const close = bar.getByRole("link", { name: "Close history" });
+    expect(back).toHaveAttribute("href", "/pane/w1%3Aidle");
+    expect(close).toHaveAttribute("href", "/pane/w1%3Aidle");
+    expect(back).toHaveClass("lg:hidden");
+    expect(close.closest(".max-lg\\:hidden")).not.toBeNull();
     expect(bar.queryByRole("button", { name: /^(Back|Close history)$/ })).not.toBeInTheDocument();
     // Titled like every other bar: the screen's name, then whose it is.
     expect(bar.getByRole("heading", { level: 1, name: "History" })).toBeInTheDocument();
