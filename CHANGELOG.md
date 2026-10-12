@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.64.3] - 2026-10-12
+
+### Fixed
+- A question from the agent is the chat's last item, inside its scroll: the conversation scrolls over it, options are compact (Recommended as a small tag) and the secondary actions are a quiet row. (#63)
+- System notices, other sessions' messages, hook feedback, interruptions and compaction summaries read as one grey expandable line, and a loaded skill as "Skill · name" under your message, never as your bubble or a big System block (Claude and Codex). (#64)
+
 ## [0.64.2] - 2026-10-11
 
 ### Fixed
