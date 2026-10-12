@@ -1061,7 +1061,7 @@ export function AgentChat({
               {titleLabel}
             </button>
           ) : <span className={TITLE_SHAPE}>{titleLabel}</span>}</h1> : (
-            <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : "Pane not found"}</h1>
+            <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : connecting ? "Pane" : "Pane not found"}</h1>
           )}
         </AppHeader>}
         {/* A project's overlay (its Threads and PRs) brings its own tabs, so only the header stays above
