@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { AnswerOutcome, Interaction } from "@/lib/types";
@@ -596,6 +596,44 @@ describe("QuestionCard", () => {
       } finally {
         tall.mockRestore();
         short.mockRestore();
+      }
+    });
+
+    // A rotation or a narrower window re-wraps the descriptions: the card must measure again, so it
+    // never answers with a clamped meaning and never stays read-only once the whole text fits.
+    it("measures again when the card's width changes, both ways", () => {
+      const observers: ResizeObserverCallback[] = [];
+      vi.stubGlobal("ResizeObserver", class {
+        cb: ResizeObserverCallback;
+        constructor(cb: ResizeObserverCallback) { this.cb = cb; }
+        observe() { observers.push(this.cb); }
+        unobserve() {}
+        disconnect() { observers.splice(observers.indexOf(this.cb), 1); }
+      });
+      let width = 700;
+      let scroll = 18;
+      const wide = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+      const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(() => scroll);
+      const box = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(36);
+      const resize = () => act(() => { for (const cb of [...observers]) cb([], {} as ResizeObserver); });
+      try {
+        setup({ compact: true, interaction: described });
+        expect(within(screen.getByRole("group", { name: "Answers" })).getByRole("button", { name: /Apple/ })).toBeVisible();
+        width = 340;
+        scroll = 60;
+        resize();
+        expect(screen.queryByRole("button", { name: /Apple/ })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Answer in thread" })).toBeVisible();
+        width = 700;
+        scroll = 18;
+        resize();
+        expect(within(screen.getByRole("group", { name: "Answers" })).getByRole("button", { name: /Apple/ })).toBeVisible();
+        expect(screen.queryByRole("button", { name: "Answer in thread" })).not.toBeInTheDocument();
+      } finally {
+        wide.mockRestore();
+        tall.mockRestore();
+        box.mockRestore();
+        vi.unstubAllGlobals();
       }
     });
 
