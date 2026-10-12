@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PaneStrip } from "./pane-strip";
-import type { AgentView } from "@/lib/types";
+import type { AgentView, ProjectView } from "@/lib/types";
 
 function pane(
   paneId: string,
@@ -64,6 +64,51 @@ describe("PaneStrip", () => {
     expect(screen.getByText("auth-refactor")).toBeInTheDocument();
     expect(screen.getByText("deploy")).toBeInTheDocument();
     expect(screen.queryByText("ignored")).toBeNull();
+  });
+
+  it("names a pill once, without the pane id Herdr gave it", () => {
+    render(
+      <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} />,
+    );
+    expect(screen.getByRole("button", { name: "claude" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "codex" })).toBeInTheDocument();
+    expect(screen.queryByText(/p1|p2/)).toBeNull();
+  });
+
+  it("numbers panes that share a name, and only those", () => {
+    render(
+      <PaneStrip
+        panes={[
+          pane("w1:p1", "claude", "agent", { paneLabel: "Payments adapter" }),
+          pane("w1:p2", "claude", "agent", { paneLabel: "deploy" }),
+          pane("w1:p3", "claude", "agent", { paneLabel: "Payments adapter" }),
+        ]}
+        currentPaneId="w1:p2"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "idlePayments adapter · 1",
+      "idledeploy",
+      "idlePayments adapter · 2",
+    ]);
+  });
+
+  it("calls a project's thread by its title, as the rest of Nenu does", () => {
+    const projects: ProjectView[] = [{
+      slug: "awam", name: "Awam", status: "active",
+      threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
+    }];
+    render(
+      <PaneStrip
+        panes={[pane("w1:p1", "claude", "agent", { paneLabel: "Blocked Claude" }), pane("w1:p2", "codex")]}
+        projects={projects}
+        currentPaneId="w1:p2"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Panel depósito/ })).toBeInTheDocument();
+    expect(screen.queryByText("Blocked Claude")).toBeNull();
   });
 
   it("fires onSelect with the pane id when a pane is tapped", async () => {
