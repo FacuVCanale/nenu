@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -247,6 +247,26 @@ describe("the sidebar", () => {
     expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual(["panel depoAWAM, needs you"]);
     await user.click(needsYou);
     expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+  });
+
+  it("brings the tree back to where it was scrolled after Needs you or a search", async () => {
+    const user = open();
+    const scroller = document.querySelector<HTMLElement>(".nav-scroll")!;
+    const scrollTo = (top: number) => { scroller.scrollTop = top; fireEvent.scroll(scroller); };
+    scrollTo(300);
+
+    await user.click(screen.getByRole("button", { name: "Needs you, 1" }));
+    // The shorter list starts at its own top; scrolling it is not the tree's place.
+    scrollTo(0);
+    await user.click(screen.getByRole("button", { name: "Needs you, 1" }));
+    expect(scroller.scrollTop).toBe(300);
+
+    await user.click(screen.getByRole("button", { name: /^Search/ }));
+    await user.type(screen.getByRole("searchbox"), "panel");
+    scrollTo(40);
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+    expect(scroller.scrollTop).toBe(300);
   });
 
   it("lists open work most urgent first with coordinators ahead, and History as a closed grey tree of node details", async () => {
