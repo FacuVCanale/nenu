@@ -176,6 +176,16 @@ describe("PaneStrip", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it("marks the open pill, and only it, as opening its actions when they are wired", () => {
+    render(
+      <PaneStrip panes={[pane("w1:p1", "claude"), pane("w1:p2", "codex")]} currentPaneId="w1:p1" onSelect={vi.fn()} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: /claude/ });
+    expect(open).toHaveAttribute("aria-haspopup", "dialog");
+    expect(open.querySelector("[data-chip-actions]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /codex/ }).querySelector("[data-chip-actions]")).toBeNull();
+  });
+
   it("still navigates on a tap of an INACTIVE pill even when actions are wired", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

@@ -148,6 +148,22 @@ describe("TabStrip — long-press actions", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  // Nothing used to say the open tab had actions; it now carries a chevron and says it opens a dialog.
+  it("marks the open tab, and only it, as opening its actions when they are wired", () => {
+    const { rerender } = render(
+      <TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    const open = screen.getByRole("button", { name: "Tab 1" });
+    expect(open).toHaveAttribute("aria-haspopup", "dialog");
+    expect(open.querySelector("[data-chip-actions]")).not.toBeNull();
+    const other = screen.getByRole("button", { name: "Tab 2" });
+    expect(other).not.toHaveAttribute("aria-haspopup");
+    expect(other.querySelector("[data-chip-actions]")).toBeNull();
+
+    rerender(<TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Tab 1" }).querySelector("[data-chip-actions]")).toBeNull();
+  });
+
   it("still switches on a tap of a non-selected tab even with actions wired", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
