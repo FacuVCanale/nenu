@@ -584,6 +584,23 @@ describe("Composer — a refused send is said beside the draft", () => {
     expect(sends).toHaveLength(1);
   });
 
+  // A quick reply is not the draft under the notice, so the notice says which message it was, and it
+  // can be put away without touching the draft.
+  it("names the quick reply it refused, and goes away on its ✕ with the draft untouched", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "my own draft");
+    await user.click(control("Quick replies"));
+    await user.click(screen.getByRole("button", { name: "yes" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    expect(within(sendNotice()).getByText("yes")).toBeVisible();
+    await user.click(within(sendNotice()).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(box).toHaveValue("my own draft");
+  });
+
   it("goes away on the next edit, which is the operator taking it from there", async () => {
     const user = userEvent.setup();
     serveSend((body) => refusal(body, "verify", VERIFY, false));
