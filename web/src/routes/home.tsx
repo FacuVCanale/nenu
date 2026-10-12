@@ -4,7 +4,7 @@ import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, RunningWorkCard, SendNotice } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, HomeStarters, HomeUnreachable, RecentChats, Reveal, RunningWorkCard, SendNotice } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
@@ -82,8 +82,14 @@ export function HomeRoute() {
         <h1 className="text-large-title text-balance">{title}</h1>
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}
       </div>
-      <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} outage={outage} />
-      {live && !data.agents.length && <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />}
+      <div className="flex flex-col">
+        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} outage={outage} />
+        <Reveal>{live && !data.agents.length && (
+          <div className="pt-6 lg:pt-7">
+            <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />
+          </div>
+        )}</Reveal>
+      </div>
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
       <div data-stale={outage ? "" : undefined} className={cn("flex flex-col gap-6 lg:gap-7", outage && "text-muted-foreground grayscale")}>
         {calm
@@ -225,7 +231,7 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
 
   const locked = disabled || busy;
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col">
       <form className="flex flex-col rounded-xl border border-input bg-card focus-within:border-ring/70"
         onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <textarea value={message} rows={1} disabled={locked} placeholder={placeholder} enterKeyHint={target.kind === "project" ? "send" : "go"}
@@ -268,14 +274,17 @@ function HomeComposer({ data, projects, disabled, outage }: { data: HomeData; pr
         <BusySendSheet open={asking} name={`${target.project.name}'s coordinator`} choice={busyChoice}
           onPick={(mode) => void send(mode)} onCancel={() => setAsking(false)} />
       )}
-      {sent?.tone === "ok" && (
-        <p role="status" className="flex items-center gap-2 text-footnote text-muted-foreground">
-          <Check aria-hidden className="size-3.5 shrink-0 text-status-done" />
-          {sent.text}
-          <Link to={panePath(sent.paneId, data.session)} className="inline-flex items-center font-medium text-foreground underline-offset-2 hover:underline coarse:min-h-11">Open</Link>
-        </p>
-      )}
-      {sent?.tone === "error" && <SendNotice title={sent.title} detail={sent.detail} to={panePath(sent.paneId, data.session)} />}
+      <Reveal>{sent && (
+        <div className="pt-2">
+          {sent.tone === "ok" ? (
+            <p role="status" className="flex items-center gap-2 text-footnote text-muted-foreground">
+              <Check aria-hidden className="size-3.5 shrink-0 text-status-done" />
+              {sent.text}
+              <Link to={panePath(sent.paneId, data.session)} className="inline-flex items-center font-medium text-foreground underline-offset-2 hover:underline coarse:min-h-11">Open</Link>
+            </p>
+          ) : <SendNotice title={sent.title} detail={sent.detail} to={panePath(sent.paneId, data.session)} />}
+        </div>
+      )}</Reveal>
     </div>
   );
 }

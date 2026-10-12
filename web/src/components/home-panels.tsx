@@ -54,6 +54,25 @@ export function BusyLabel({ busy, children }: { busy: boolean; children: ReactNo
   );
 }
 
+/**
+ * Grows a block into the column and back out instead of landing in one frame and shoving what is
+ * below: rows and opacity over 200ms, opacity alone under reduced motion. Closing keeps the last
+ * content on screen until it has collapsed. Content present at mount is simply there.
+ */
+export function Reveal({ children }: { children: ReactNode }) {
+  const open = children !== null && children !== undefined && children !== false;
+  const [last, setLast] = useState<ReactNode>(children);
+  if (open && last !== children) setLast(children);
+  return (
+    <div aria-hidden={!open || undefined} inert={!open}
+      onTransitionEnd={(event) => { if (!open && event.target === event.currentTarget) setLast(null); }}
+      className={cn("grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-opacity motion-reduce:duration-100",
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
+      <div className="min-h-0 overflow-hidden">{open ? children : last}</div>
+    </div>
+  );
+}
+
 /** A Home section's heading: its name, how many, and an optional note at the far end. */
 export function HomeHeading({ id, label, count, note }: { id: string; label: string; count?: number; note?: ReactNode }) {
   return (
