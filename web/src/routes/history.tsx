@@ -267,7 +267,7 @@ export function HistoryRoute() {
             title={empty.title}
             className="h-full justify-center"
             action={
-              <Button onClick={() => (gone ? navigate(homePath(session)) : back())} className="max-w-[min(20rem,80vw)]">
+              <Button size="lg" onClick={() => (gone ? navigate(homePath(session)) : back())} className="max-w-[min(20rem,80vw)]">
                 <span className="truncate">{gone ? "Back to Home" : `Back to ${name ?? "the pane"}`}</span>
               </Button>
             }

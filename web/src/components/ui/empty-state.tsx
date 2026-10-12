@@ -1,25 +1,30 @@
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 interface EmptyStateProps {
-  icon?: LucideIcon;
+  /** An icon, or a picture where the screen has none of the app's chrome to say whose it is (the crash). */
+  icon?: LucideIcon | ReactElement;
   /** What is missing or empty, as a sentence. */
   title: string;
   /** Why, or what happens next. */
   children?: ReactNode;
-  /** The one way forward: a single button or link, 44px tall on touch. */
+  /**
+   * The way forward: the shared Button (or a link wearing buttonVariants) at size lg, ink, so every
+   * empty and error page offers it the same way. A second, outline one only where a page needs two.
+   */
   action?: ReactNode;
   className?: string;
 }
 
-// A not-found or empty screen: an icon, what is missing, why, and one way forward. Replaces the bare
-// sentence that left a dead end.
+// A not-found, empty or error screen: an icon, what is missing, why, and one way forward. Every such
+// page in the app is this one, so the title size and the action read the same everywhere.
 export function EmptyState({ icon: Icon, title, children, action, className }: EmptyStateProps) {
   return (
     <div data-slot="empty-state" className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
-      {Icon && <Icon aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />}
+      {isValidElement(Icon) ? <div className="mb-3">{Icon}</div>
+        : Icon && <Icon aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />}
       <h2 className="text-headline text-balance">{title}</h2>
       {children && <p className="mt-1 max-w-sm text-subhead text-muted-foreground text-pretty">{children}</p>}
       {action && <div className="mt-6">{action}</div>}

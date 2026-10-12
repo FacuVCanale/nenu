@@ -196,27 +196,25 @@ function Crash({ error }: { error: unknown }) {
     }
   }
   return (
-    <main className="flex min-h-[100dvh] flex-col items-center justify-center px-6 py-12 text-center">
+    <main className="flex min-h-[100dvh] flex-col justify-center">
       {/* The one screen without the app's chrome, so the mark says whose it is. */}
-      <img src="/nenu-mark.png" alt="" className="nenu-mark mb-4 size-12" />
-      <h1 className="text-title text-balance">Nenu hit a problem</h1>
-      <p className="mt-2 max-w-sm text-subhead text-muted-foreground text-pretty">
+      <EmptyState icon={<img src="/nenu-mark.png" alt="" className="nenu-mark size-12" />} title="Nenu hit a problem" className="pb-0"
+        action={<div className="flex flex-wrap justify-center gap-3">
+          <Button size="lg" onClick={() => {
+            // Reload home, but stay in the session you were in (read from the live URL, since the
+            // router context may be the throwing one). Primary → plain "/".
+            const session = normalizeSession(new URLSearchParams(window.location.search).get(SESSION_PARAM));
+            window.location.assign(homePath(session));
+          }}>
+            <RotateCw aria-hidden="true" />Reload
+          </Button>
+          <Button size="lg" variant="outline" onClick={() => void copy()}>
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy details"}
+          </Button>
+        </div>}>
         Reply drafts stay saved on this device. Reload to try again.
-      </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Button size="lg" onClick={() => {
-          // Reload home, but stay in the session you were in (read from the live URL, since the
-          // router context may be the throwing one). Primary → plain "/".
-          const session = normalizeSession(new URLSearchParams(window.location.search).get(SESSION_PARAM));
-          window.location.assign(homePath(session));
-        }}>
-          <RotateCw aria-hidden="true" />Reload
-        </Button>
-        <Button size="lg" variant="outline" onClick={() => void copy()}>
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy details"}
-        </Button>
-      </div>
-      <details ref={disclosure} className="mt-8 w-full max-w-md text-left">
+      </EmptyState>
+      <details ref={disclosure} className="mx-auto mt-8 mb-12 w-full max-w-md px-6 text-left">
         <summary className="mx-auto w-fit cursor-pointer rounded-md px-2 py-1 text-footnote text-muted-foreground coarse:min-h-11 coarse:content-center">Technical details</summary>
         <pre className="mt-3 max-h-60 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-footnote whitespace-pre-wrap break-words text-muted-foreground">{details}</pre>
       </details>
