@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { MarkdownText } from "./markdown-text";
@@ -57,5 +58,87 @@ describe("inline code", () => {
     for (const control of [screen.getByRole("button", { name: "index.css" }), screen.getByRole("button", { name: "las notas del rediseño" }), screen.getByRole("link", { name: "la guía" })]) {
       expect(control).not.toHaveClass("break-all");
     }
+  });
+});
+
+describe("code blocks", () => {
+  const SOURCE = "export function ComposerShell() {\n  return <div className=\"workbench-composer\" />;\n}";
+  const BLOCK = "Así queda:\n\n```tsx\n" + SOURCE + "\n```";
+  const writeText = vi.fn<(text: string) => Promise<void>>();
+  beforeEach(() => {
+    writeText.mockReset().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  it("names its language and copies its exact text with one tap", async () => {
+    const { container } = render(<MarkdownText text={BLOCK} />);
+    expect(screen.getByText("tsx")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(SOURCE);
+    expect(container.querySelector("pre")).toHaveTextContent(SOURCE.replace(/\s+/g, " "));
+  });
+
+  it("says so when the clipboard refuses, and offers Copy again", async () => {
+    vi.useFakeTimers();
+    try {
+      writeText.mockRejectedValue(new DOMException("denied", "NotAllowedError"));
+      render(<MarkdownText text={BLOCK} />);
+      fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+      await act(async () => {});
+      expect(screen.getByRole("button", { name: "Copy failed" })).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(2500));
+      expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("copies even a block with no language, and keeps its header controls in touch reach", () => {
+    render(<MarkdownText text={"```\nbun run test\n```"} />);
+    const copy = screen.getByRole("button", { name: "Copy" });
+    const wrap = screen.getByRole("button", { name: "Wrap" });
+    for (const control of [copy, wrap]) expect(control).toHaveClass("hit-area");
+    fireEvent.click(copy);
+    expect(writeText).toHaveBeenCalledWith("bun run test");
+  });
+
+  it("wraps long lines on request instead of scrolling them", () => {
+    const { container } = render(<MarkdownText text={BLOCK} />);
+    const wrap = screen.getByRole("button", { name: "Wrap" });
+    const pre = container.querySelector("pre")!;
+    expect(wrap).toHaveAttribute("aria-pressed", "false");
+    expect(pre).toHaveClass("whitespace-pre");
+    fireEvent.click(wrap);
+    expect(wrap).toHaveAttribute("aria-pressed", "true");
+    expect(pre).toHaveClass("whitespace-pre-wrap");
+    expect(pre).not.toHaveClass("whitespace-pre");
+  });
+
+  it("fades its right edge only while code is hidden past it", () => {
+    const sizes = { scrollWidth: 986, clientWidth: 352, scrollLeft: 0 };
+    const spies = (Object.keys(sizes) as (keyof typeof sizes)[]).map((key) =>
+      vi.spyOn(HTMLElement.prototype, key, "get").mockImplementation(() => sizes[key]));
+    try {
+      const { container } = render(<MarkdownText text={BLOCK} />);
+      const pre = container.querySelector("pre")!;
+      expect(pre).toHaveAttribute("data-clipped");
+      sizes.scrollLeft = 634;
+      fireEvent.scroll(pre);
+      expect(pre).not.toHaveAttribute("data-clipped");
+      sizes.scrollLeft = 300;
+      fireEvent.scroll(pre);
+      expect(pre).toHaveAttribute("data-clipped");
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
+  it("does not fade a block that fits", () => {
+    const { container } = render(<MarkdownText text={"```sh\nls\n```"} />);
+    expect(container.querySelector("pre")).not.toHaveAttribute("data-clipped");
   });
 });
