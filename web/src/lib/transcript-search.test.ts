@@ -19,6 +19,12 @@ const entry = (over: Partial<TranscriptEntry> = {}): TranscriptEntry => ({
 });
 
 describe("searchableText", () => {
+  // A question's line in the work log shows the question it asks, so find counts what it marks there.
+  it("covers the question a call asks, which its line shows", () => {
+    const asked = entry({ parts: [{ kind: "tool", name: "AskUserQuestion", summary: "", questions: [{ title: "Which source?", options: ["Web"] }] }] });
+    expect(matchingEntries([asked], "source")).toEqual([0]);
+  });
+
   it("covers prose and tool summaries — the surface you can actually see", () => {
     const e = entry({
       parts: [
