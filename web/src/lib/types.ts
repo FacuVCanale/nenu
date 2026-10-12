@@ -336,6 +336,8 @@ export interface PaneReadResponse {
 export type TranscriptPart =
   | { kind: "text"; text: string; truncated?: boolean }
   | { kind: "thinking"; text: string; truncated?: boolean }
+  /** Injected text drawn as one quiet line; `text` shows only when expanded. Mirrors bridge/journal/types.ts. */
+  | { kind: "context"; label: string; text: string; truncated?: boolean }
   | {
       kind: "tool";
       name: string;
