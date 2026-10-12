@@ -52,13 +52,18 @@
 /* History: everything resolved, in grey, behind one row that opens and closes in place. */
 .task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; }
 @media (hover: hover) { .task-history-toggle:hover { background: var(--workbench-row-hover); } }
+/* A page of History fades up as it arrives, never all at once. */
+@keyframes task-row-in { from { opacity: 0; transform: translateY(4px); } }
+.task-history > li { animation: task-row-in 180ms ease-out both; }
 /* The next page of History, its words lined up with the rows' titles. */
 .task-history-more { margin-top: 0; padding-left: 26px; }
 .task-fold > svg, .task-history-toggle > svg { transition: transform 150ms ease-out; }
 .task-fold[aria-expanded="true"] > svg, .task-history-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
 }
 
+@keyframes task-row-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
+  .task-history > li { animation: task-row-fade 120ms ease-out both; }
   .task-fold > svg, .task-history-toggle > svg, .task-actions, .task-action, .project-segment, .panel-tab { transition: none; }
 }
 

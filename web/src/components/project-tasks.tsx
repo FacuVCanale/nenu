@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, XCircle } from "lucide-react";
 
 import { TaskRow } from "@/components/node-row";
@@ -162,6 +162,15 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   });
   const hidden = tree.history.length - historyLimit;
   const [folds, setFolds] = useState<Record<string, boolean>>({});
+  // Show more hands focus to the first row it brought: the last page takes the button with it.
+  const historyList = useRef<HTMLUListElement>(null);
+  const firstShown = useRef<number | null>(null);
+  useEffect(() => {
+    if (firstShown.current === null) return;
+    historyList.current?.children[firstShown.current]?.querySelector<HTMLElement>(".task-main")?.focus();
+    firstShown.current = null;
+  }, [historyLimit]);
+  const showMore = () => { firstShown.current = historyLimit; setHistoryLimit(historyLimit + HISTORY_PAGE); };
 
   const branch = (node: OrgNode): ReactNode => {
     const { thread, state } = node;
@@ -187,8 +196,8 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
         <ChevronRight aria-hidden className="size-3.5" />History · {historyCount(tree.resolved)}
       </button>
       {historyShown && <>
-        <ul className="task-list mb-2" aria-label="History">{tree.history.slice(0, historyLimit).map(branch)}</ul>
-        {hidden > 0 && <button type="button" className="task-history-toggle task-history-more" onClick={() => setHistoryLimit(historyLimit + HISTORY_PAGE)}>
+        <ul ref={historyList} className="task-list task-history mb-2" aria-label="History">{tree.history.slice(0, historyLimit).map(branch)}</ul>
+        {hidden > 0 && <button type="button" className="task-history-toggle task-history-more" onClick={showMore}>
           Show {Math.min(HISTORY_PAGE, hidden)} more
         </button>}
       </>}
