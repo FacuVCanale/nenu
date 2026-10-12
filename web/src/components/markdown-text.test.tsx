@@ -37,18 +37,24 @@ describe("inline code", () => {
   const code = (container: HTMLElement, text: string) =>
     [...container.querySelectorAll("code")].find((el) => el.textContent === text)!;
 
-  it("keeps a short identifier on one line, moving it down whole instead of splitting it", () => {
+  // A short span sits in an inline box capped at the line: it moves down whole when it does not fit
+  // what is left of the line, and breaks inside itself only when it is wider than a whole line (page
+  // zoom narrows the bubble to about 194px on a 390px phone at 150%). Nothing may forbid that break.
+  it("moves a short identifier down whole, and splits it only when it is wider than the line", () => {
     const { container } = render(<MarkdownText text="porque `workbench-composer` usa `--page-gutter` a los costados" />);
     for (const token of ["workbench-composer", "--page-gutter"]) {
-      expect(code(container, token)).toHaveClass("whitespace-nowrap");
+      const whole = code(container, token).closest(".inline-block");
+      expect(whole).toHaveClass("max-w-full", "[overflow-wrap:anywhere]");
       expect(code(container, token)).not.toHaveClass("break-all");
     }
+    expect(container.querySelector(".whitespace-nowrap")).toBeNull();
   });
 
   it("lets a span longer than any line wrap where it must, never at every letter", () => {
     const { container } = render(<MarkdownText text="sale de un solo lugar (`max(env(safe-area-inset-bottom), 8px)`)" />);
     const span = code(container, "max(env(safe-area-inset-bottom), 8px)");
     expect(span).toHaveClass("[overflow-wrap:anywhere]");
+    expect(span.closest(".inline-block")).toBeNull();
     expect(span).not.toHaveClass("whitespace-nowrap");
     expect(span).not.toHaveClass("break-all");
   });
@@ -59,7 +65,8 @@ describe("inline code", () => {
         <MarkdownText text="Saqué el padding en `index.css`, ver [las notas del rediseño](docs/notas.md) y [la guía](https://example.com/guide)." />
       </FilePreviewContext.Provider>,
     );
-    expect(screen.getByRole("button", { name: "index.css" })).toHaveClass("whitespace-nowrap");
+    expect(screen.getByRole("button", { name: "index.css" })).toHaveClass("inline-block", "max-w-full", "[overflow-wrap:anywhere]");
+    expect(screen.getByRole("button", { name: "index.css" })).not.toHaveClass("whitespace-nowrap");
     for (const control of [screen.getByRole("button", { name: "index.css" }), screen.getByRole("button", { name: "las notas del rediseño" }), screen.getByRole("link", { name: "la guía" })]) {
       expect(control).not.toHaveClass("break-all");
     }
