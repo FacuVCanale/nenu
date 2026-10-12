@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
 import { HomeRoute } from "./home";
+import { ConnectionBanner } from "@/components/connection-banner";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
 import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
@@ -583,31 +584,34 @@ describe("a first load that never reached Nenu", () => {
     expect(main.queryByText(/snapshot/)).not.toBeInTheDocument();
   });
 
-  it("names the host it can't reach once the outage is sustained, with a Retry", async () => {
+  /** Home under the app's connection banner, as RootLayout draws it. */
+  async function underBanner(value: HomeData) {
+    function Layout() {
+      const d = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+      return <><ConnectionBanner bridge={d.bridge} error={d.error} authError={d.authError} /><WorkbenchShell data={d}><Outlet /></WorkbenchShell></>;
+    }
+    const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => value, element: <Layout />, children: [{ path: "/", element: <HomeRoute /> }] }], { initialEntries: ["/"] });
+    render(<RouterProvider router={router} />);
+    await screen.findByRole("heading", { level: 1, name: "Home" });
+    return within(document.querySelector("main")!);
+  }
+
+  it("leaves the problem and its one Retry to the banner once the outage is sustained", async () => {
     sustained();
-    const { main } = await setup(never);
-    expect(main.getByRole("heading", { name: `Can't reach Nenu at ${location.host}` })).toBeInTheDocument();
-    expect(main.getByText("Nenu keeps trying. Check this device's network or VPN.")).toBeVisible();
-    expect(screen.getByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
-    expect(main.getByRole("button", { name: "Retry" })).toBeEnabled();
+    const main = await underBanner(never);
+    expect(screen.getAllByRole("button", { name: "Retry" })).toHaveLength(1);
+    expect(screen.getAllByText(/Can.t reach Nenu/)).toHaveLength(1);
+    expect(main.queryByRole("button")).not.toBeInTheDocument();
+    expect(main.getByRole("heading", { name: "Nothing to show yet" })).toBeInTheDocument();
+    expect(main.getByText("Your threads, questions and reviews show up here once Nenu answers.")).toBeVisible();
   });
 
-  it("keeps Retry in reach while a poll hangs, and marks only the retry it started", async () => {
-    sustained();
-    const { stall, user, main } = await setup(never);
-    stall();
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
-    const retry = main.getByRole("button", { name: "Retry" });
-    expect(retry).toBeEnabled();
-    expect(retry).not.toHaveAttribute("aria-busy");
-    await user.click(retry);
-    expect(retry).toHaveAttribute("aria-busy", "true");
-  });
-
-  it("says access was refused rather than blaming the connection", async () => {
-    const { main } = await setup({ ...never, authError: true });
-    expect(main.getByRole("heading", { name: "Access refused" })).toBeInTheDocument();
-    expect(main.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
+  it("leaves a refusal and its one Sign in to the banner", async () => {
+    const main = await underBanner({ ...never, authError: true });
+    expect(screen.getAllByRole("link", { name: "Sign in" })).toHaveLength(1);
+    expect(screen.getAllByText(/Access refused/)).toHaveLength(1);
+    expect(main.queryByRole("link")).not.toBeInTheDocument();
+    expect(main.getByText("Your threads, questions and reviews show up here once you sign in again.")).toBeVisible();
   });
 });
 
