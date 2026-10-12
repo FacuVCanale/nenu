@@ -227,8 +227,11 @@ it("reaches the + menu's rows from the keyboard and hands focus back to the + on
   plus.focus();
   await user.keyboard("{Enter}");
   const menu = screen.getByRole("dialog", { name: "Message shortcuts" });
-  await user.tab();
+  // The menu takes focus on its first row and Tab walks the rest; leaving it is Escape.
   expect(within(menu).getByRole("button", { name: "Photo" })).toHaveFocus();
+  await user.tab();
+  expect(within(menu).getByRole("button", { name: "Quick replies" })).toHaveFocus();
+  expect(menu).toBeVisible();
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
   expect(plus).toHaveFocus();

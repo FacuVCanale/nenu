@@ -1134,6 +1134,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The menu hangs from the box's leading column, which spans the box's full height: anchored there,
   // it opens above the box's top edge however tall the draft has grown, and never over the draft.
   const menuAnchorRef = useRef<HTMLDivElement>(null);
+  const plusRef = useRef<HTMLButtonElement>(null);
+  const menuRowsRef = useRef<HTMLDivElement>(null);
+  // A lock or another pane takes the menu down; unlocking must not bring it back by itself.
+  useEffect(() => setMenuOpen(false), [lockedOut, paneId, session]);
+  // Open, the menu holds focus on its first row, as a dialog does, so the rows are a Tab away.
+  useEffect(() => {
+    if (menuOpen) menuRowsRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+  }, [menuOpen]);
+  function toggleMenu() {
+    // On a phone the keyboard goes down and the menu gets the screen, as in Messages. Safari on iOS
+    // does not focus a tapped button, so the draft is let go here rather than by the tap.
+    if (!menuOpen) inputRef.current?.blur();
+    setMenuOpen(!menuOpen);
+  }
+  function closeMenu(returnFocus: boolean) {
+    setMenuOpen(false);
+    if (returnFocus) plusRef.current?.focus({ preventScroll: true });
+  }
 
   const [dragging, setDragging] = useState(false);
   const dropHandlers = locked || direct.active ? {} : {
@@ -1327,12 +1345,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
-              {/* Taking focus is deliberate: on a phone the keyboard goes down and the menu gets the
-                  screen, as Messages does; a row that needs the keyboard (Type) focuses the draft. */}
-              <button type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
-                onClick={() => setMenuOpen(!menuOpen)}>
+              <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
+                onClick={toggleMenu}>
                 <Plus aria-hidden="true" className="size-5" />
               </button>
+              {/* Right after the + in the document, so Shift+Tab from the first row is the + again. It
+                  is fixed to the viewport, so where it sits here changes nothing on screen. */}
+              <WorkbenchPopover open={menuOpen} onDismiss={(reason) => closeMenu(reason !== "outside")} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+                {/* A row that needs the keyboard (Type) focuses the draft itself; the rest leave focus
+                    on the + they were opened from. */}
+                <div ref={menuRowsRef}><ActionGroups groups={menuGroups} onRun={(run) => { closeMenu(true); run(); }} /></div>
+              </WorkbenchPopover>
             </div>}
             <ChatInput
               ref={inputRef}
@@ -1446,9 +1469,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           </div>
         </div>
-        <WorkbenchPopover open={menuOpen && !lockedOut} onDismiss={() => setMenuOpen(false)} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
-          <ActionGroups groups={menuGroups} onRun={(run) => { setMenuOpen(false); run(); }} />
-        </WorkbenchPopover>
         {(modelControl || processesControl) && (
           <div role="group" aria-label="Message tools" className="composer-meta">
             {modelControl && <div className="flex min-w-0 items-center">{modelControl}</div>}
