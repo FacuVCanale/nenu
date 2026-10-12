@@ -143,16 +143,24 @@ function CoordinatorRow({ thread, panes, currentPaneId, onOpenPane, onOpenNode }
     onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} />;
 }
 
+/** History rows drawn at a time: a long-running project resolves a hundred nodes. */
+const HISTORY_PAGE = 20;
+
 /**
  * The open tree and History of a set of nodes, the body of every organization view. History is
- * grey behind one row that starts closed, each resolved coordinator folded over the threads it ran;
- * what holds the pane on screen opens by itself.
+ * grey behind one row that starts closed, each resolved coordinator folded over the threads it ran,
+ * and draws twenty rows at a time; what holds the pane on screen opens by itself.
  */
 export function OrgTreeList({ project, threads, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }: OrgTreeProps) {
   const tree = orgTree(threads);
   const onScreen = (node: OrgNode) => currentPaneId !== undefined && node.thread.paneId === currentPaneId;
   const [closing, setClosing] = useState<OrgNode | null>(null);
   const [historyShown, setHistoryShown] = useState(() => tree.history.some((node) => holds(node, onScreen)));
+  const [historyLimit, setHistoryLimit] = useState(() => {
+    const held = tree.history.findIndex((node) => holds(node, onScreen));
+    return Math.max(HISTORY_PAGE, Math.ceil((held + 1) / HISTORY_PAGE) * HISTORY_PAGE);
+  });
+  const hidden = tree.history.length - historyLimit;
   const [folds, setFolds] = useState<Record<string, boolean>>({});
 
   const branch = (node: OrgNode): ReactNode => {
@@ -178,7 +186,12 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
       <button type="button" className="task-history-toggle" aria-expanded={historyShown} onClick={() => setHistoryShown(!historyShown)}>
         <ChevronRight aria-hidden className="size-3.5" />History · {historyCount(tree.resolved)}
       </button>
-      {historyShown && <ul className="task-list mb-2" aria-label="History">{tree.history.map(branch)}</ul>}
+      {historyShown && <>
+        <ul className="task-list mb-2" aria-label="History">{tree.history.slice(0, historyLimit).map(branch)}</ul>
+        {hidden > 0 && <button type="button" className="task-history-toggle task-history-more" onClick={() => setHistoryLimit(historyLimit + HISTORY_PAGE)}>
+          Show {Math.min(HISTORY_PAGE, hidden)} more
+        </button>}
+      </>}
     </>}
     {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No threads yet.</p>}
     <CloseNodeDialog project={project} node={closing} session={session} onCancel={() => setClosing(null)}
