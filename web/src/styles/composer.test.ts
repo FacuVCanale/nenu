@@ -18,8 +18,9 @@ describe("the composer", () => {
   });
 
   // Measured on the bench: the model chip's 44px reach rose 4px into the box and took the bottom of
-  // the +'s, which then reached 40px. Below the meta row there is only the home indicator's inset.
+  // the +'s, which then reached 40px. Rising 4px still took 2px of it on a coarse tablet, where the +
+  // sits 2px lower in its box (44x42 at 820px). Below the meta row there is only the home indicator's inset.
   it("grows the meta row's touch targets down, away from the + above them", () => {
-    expect(declarations(css, ".composer-meta .hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ top: "-4px", transform: "translateX(-50%)" });
+    expect(declarations(css, ".composer-meta .hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ top: "-2px", transform: "translateX(-50%)" });
   });
 });
