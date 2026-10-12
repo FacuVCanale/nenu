@@ -238,6 +238,8 @@ interface SendFailure {
   delivered: boolean;
   /** One more line of what to do, when the error alone does not say it. */
   hint?: string;
+  /** The pre-flight refused it, so Send's slot offers Type anyway for as long as that stays armed. */
+  overridable?: boolean;
   /** What Try again sends: the message, when it is still where it was (the box, or a quick reply). */
   retry: { text: string; isDraft: boolean } | null;
 }
@@ -849,14 +851,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // but the adapter can only report what it can see, so the user gets a deliberate override —
         // the same two-tap shape as the destructive-send confirm. The second tap skips the pre-flight
         // ONLY; the type-then-verify guard still runs, so Enter is never fired blind either way.
-        forceConfirm.confirm("force");
+        // Armed, never toggled: a Try again refused the same way offers it again.
+        forceConfirm.arm("force");
         setDeliveryPhase(null);
         // A password prompt gets the notice AND keeps the override: the notice explains the screen and
         // offers the control that works, the override stays for the case where the detection is wrong.
         noticeNoEcho(res.noEcho !== undefined ? { prompt: res.noEcho, typed: false } : null);
         failSend(started, res.error, res.noEcho !== undefined);
         // The password notice is the one explanation of a no-echo refusal; a toast would repeat it.
-        if (res.noEcho === undefined) refused(res.error, false, t, isDraft, "To type it regardless, tap Type anyway.");
+        if (res.noEcho === undefined) refused(res.error, false, t, isDraft, true);
         return false;
       } else {
         // "stalled" = the text went into the pane but was never seen in the input box, so NO submit
@@ -896,12 +899,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   /** Say a refused send above the box. Try again is offered only while resending cannot type a
    *  second copy, and only when the message is still where the operator left it. */
-  function refused(error: string, delivered: boolean, text: string, isDraft: boolean, hint?: string) {
+  function refused(error: string, delivered: boolean, text: string, isDraft: boolean, overridable = false) {
     const inPlace = !isDraft || draftMessage() === text;
     setFailure({
       error,
       delivered,
-      hint: hint ?? (delivered ? "Check the terminal before sending again." : undefined),
+      hint: delivered ? "Check the terminal before sending again." : undefined,
+      overridable,
       retry: !delivered && inPlace ? { text, isDraft } : null,
     });
   }
@@ -1255,6 +1259,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   }
             }
             onDismiss={() => noticeNoEcho(null)}
+            overrideOffered={forcingSend}
           />
         )}
         {/* Armed indicator for direct typing. In the same in-flow slot as the "You sent:" strip,
@@ -1297,6 +1302,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           >
             <p>{failure.error}</p>
             {failure.hint && <p className="mt-1">{failure.hint}</p>}
+            {/* Said only while the override is there to tap: it lapses long before the notice does. */}
+            {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
           </ComposerNotice>
         )}
         {/* Stop lives on the row above the box for the whole turn, and never in the Send slot: a draft

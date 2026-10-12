@@ -16,6 +16,8 @@ interface NoEchoNoticeProps {
    *  the mode can't be armed at all — a gone pane, a read-only device, the idle pause. */
   onUseType: (() => void) | null;
   onDismiss: () => void;
+  /** Send's slot is offering "Type anyway?" right now; it lapses, and then this stops naming it. */
+  overrideOffered: boolean;
 }
 
 // The one thing #103 was missing: a sentence, at the moment of the refusal, that names the screen and
@@ -36,7 +38,7 @@ interface NoEchoNoticeProps {
 // `useDirectTyping` refuses to arm at all while a draft is present, which means the failed attempt
 // blocks the remedy. Clearing on the way through fixes both: it is the one path where the draft is
 // known to be a secret, and dropping it is what the operator wanted anyway.
-export function NoEchoNotice({ prompt, typed, onUseType, onDismiss }: NoEchoNoticeProps) {
+export function NoEchoNotice({ prompt, typed, onUseType, onDismiss, overrideOffered }: NoEchoNoticeProps) {
   return (
     <ComposerNotice
       icon={KeyRound}
@@ -62,7 +64,7 @@ export function NoEchoNotice({ prompt, typed, onUseType, onDismiss }: NoEchoNoti
             : "Nothing was typed. This view isn't live, so the keys that would work can't be sent from here."
           : typed
             ? "What you typed is already in the pane. It couldn't be confirmed, so it wasn't submitted. Press Enter in Type, and don't send it again."
-            : "It shows nothing as you type, so Send can't confirm it. Type sends your keys straight through, Enter included. Type anyway still types this draft."}
+            : `It shows nothing as you type, so Send can't confirm it. Type sends your keys straight through, Enter included.${overrideOffered ? " Type anyway still types this draft." : ""}`}
       </p>
     </ComposerNotice>
   );

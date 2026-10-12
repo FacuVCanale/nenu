@@ -27,6 +27,18 @@ describe("usePendingConfirm", () => {
     expect(result.current.pending).toBeNull();
   });
 
+  it("re-arms with arm() without ever firing, and restarts the timer", () => {
+    const { result } = renderHook(() => usePendingConfirm(3000));
+    act(() => result.current.arm("force"));
+    act(() => vi.advanceTimersByTime(2000));
+    act(() => result.current.arm("force"));
+    expect(result.current.pending).toBe("force");
+    act(() => vi.advanceTimersByTime(2000));
+    expect(result.current.pending).toBe("force");
+    act(() => vi.advanceTimersByTime(1000));
+    expect(result.current.pending).toBeNull();
+  });
+
   it("auto-disarms after the timeout", () => {
     const { result } = renderHook(() => usePendingConfirm(3000));
     act(() => {
