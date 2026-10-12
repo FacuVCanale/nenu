@@ -14,7 +14,7 @@ import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
 /** A name's words as upper-case letters: split at spaces, punctuation and a lower-to-upper case change. */
 function words(name: string): string[][] {
   const found = name.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return (found.length ? found : [name.trim().charAt(0) || "?"]).map((word) => Array.from(word.toUpperCase()));
+  return (found.length ? found : [Array.from(name.trim())[0] ?? "?"]).map((word) => Array.from(word.toUpperCase()));
 }
 
 /** A tile's codes, best first: word initials, then a later word's first two letters, then the first word's letters. */
