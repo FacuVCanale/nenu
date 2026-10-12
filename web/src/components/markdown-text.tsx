@@ -4,14 +4,16 @@ import { parseMarkdown, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
+import { cn } from "@/lib/utils";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
 // NODE — there is no `dangerouslySetInnerHTML` here and there must never be one. That is the repo's
 // XSS boundary (CLAUDE.md §"Security posture"): the parser decides *structure*, never markup, so a
 // transcript containing `<script>` renders those characters and nothing executes.
 //
-// Sizing/colour deliberately track the surrounding transcript styles rather than introducing a
-// prose theme — this is a reading view inside a terminal-ish app, not a document viewer.
+// Sizes come from the app's type scale (index.css): prose in the body step, the size the composer
+// types in, headings a step or a weight above it. This is a reading view inside a terminal-ish app,
+// not a document viewer, so there is no separate prose theme.
 
 // The active find query, threaded via context rather than a prop drilled through every nested span —
 // highlighting is a cross-cutting display concern, and the AST walk is already recursive.
@@ -115,9 +117,8 @@ const Spans = ({ spans }: { spans: MdSpan[] }) => (
 );
 
 const HEADING_CLASS: Record<number, string> = {
-  1: "text-base font-semibold",
-  2: "text-[0.95rem] font-semibold",
-  3: "text-sm font-semibold",
+  1: "text-headline font-semibold",
+  2: "text-headline font-semibold",
 };
 
 const ALIGN_CLASS: Record<string, string> = {
@@ -129,10 +130,11 @@ const ALIGN_CLASS: Record<string, string> = {
 function Block({ block }: { block: MdBlock }) {
   switch (block.kind) {
     case "heading": {
-      // Levels 4-6 are rare in agent prose and don't earn another size step on a phone.
-      const cls = HEADING_CLASS[block.level] ?? "text-sm font-semibold";
+      // Levels 3-6 keep the body size and stand out by weight: another size step costs a phone
+      // a line for a heading agents rarely nest that deep.
+      const cls = HEADING_CLASS[block.level] ?? "text-body font-semibold";
       return (
-        <div className={`${cls} mt-1 leading-snug`}>
+        <div className={`${cls} mt-1`}>
           <Spans spans={block.spans} />
         </div>
       );
@@ -202,7 +204,7 @@ function Block({ block }: { block: MdBlock }) {
       return <hr className="border-border" />;
     default:
       return (
-        <p className="leading-relaxed">
+        <p>
           <Spans spans={block.spans} />
         </p>
       );
@@ -226,7 +228,7 @@ export function MarkdownText({
   const blocks = useMemo(() => parseMarkdown(text), [text]);
   return (
     <QueryContext.Provider value={query}>
-      <div className={`space-y-2 text-sm break-words ${className ?? ""}`}>
+      <div className={cn("space-y-2 text-body break-words", className)}>
         {blocks.map((block, i) => (
           <Block key={i} block={block} />
         ))}
