@@ -466,6 +466,40 @@ describe("Composer — send", () => {
   });
 });
 
+// A toast floats mid-screen over the transcript. Where the screen already says it (the bubble's
+// "Sent", the armed strip), the toast only covers what the operator is reading.
+describe("Composer — no toast repeats what the screen shows", () => {
+  it("says nothing on a verified send: the cleared box and the bubble say it", async () => {
+    const user = userEvent.setup();
+    serveSend();
+    const props = renderComposerWithStatus();
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "looks good");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+  });
+
+  it("arms and disarms Type into terminal without a toast, the strip says which mode is on", async () => {
+    renderComposerWithStatus();
+    fireEvent.click(control(/^type into terminal$/i));
+    expect(screen.getByText(/typing into terminal/i)).toBeVisible();
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+    fireEvent.click(screen.getByRole("button", { name: "Stop typing into terminal" }));
+    expect(screen.queryByText(/typing into terminal/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("status")).toHaveTextContent("");
+  });
+
+  it("keeps the toast for what nothing on screen says: a send Nenu could not verify", async () => {
+    const user = userEvent.setup();
+    serveSend();
+    const props = renderComposerWithStatus({ agent: "pi" });
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "hello pi");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("status")).toHaveTextContent(/sent, not verified/i);
+  });
+});
+
 describe("Composer — typing into the terminal", () => {
   /** The entry point: the named "Type into terminal" row in the ⋯ menu, beside Keys. */
   function startDirectTyping() {
@@ -711,7 +745,9 @@ describe("Composer — typing into the terminal", () => {
     expect(keyCalls.flat()).not.toContain("Enter");
     expect(replyCalls).toBe(0);
     expect(box).toHaveValue("");
-    expect(screen.getByTestId("status")).toHaveTextContent(/typing into the terminal/i);
+    // The armed strip says it; a toast repeating it would cover the transcript.
+    expect(screen.getByText(/typing into terminal/i)).toBeVisible();
+    expect(screen.getByTestId("status")).toHaveTextContent("");
   });
 
   it("sends a swiped/IME-composed word once when composition commits", async () => {
