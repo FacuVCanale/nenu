@@ -40,7 +40,8 @@ export function PaneStrip({
   onRenamed,
   onClosed,
 }: PaneStripProps) {
-  const [sheetPane, setSheetPane] = useState<AgentView | null>(null);
+  // The pane whose actions are open, with the name its pill shows, which the sheet repeats.
+  const [sheet, setSheet] = useState<{ pane: AgentView; name: string } | null>(null);
   // Actions need both callbacks wired (revalidate on rename, refresh on close); without them the
   // pills stay plain tap-to-switch — long-press is inert.
   const actionsEnabled = !!onRenamed && !!onClosed;
@@ -51,29 +52,33 @@ export function PaneStrip({
   return (
     <>
       <ChipStrip band="panes" activeKey={currentPaneId} lead={<span className="hidden sm:inline"><SectionLabel>Panes</SectionLabel></span>}>
-        {panes.map((p) => (
-          <Chip
-            key={p.paneId}
-            label={names.get(p.paneId)!.name}
-            tag={names.get(p.paneId)!.tag}
-            active={p.paneId === currentPaneId}
-            status={p.kind === "shell" ? undefined : p.status}
-            icon={p.kind === "shell" ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" /> : undefined}
-            onClick={() => onSelect(p.paneId)}
-            onLongPress={actionsEnabled ? () => setSheetPane(p) : undefined}
-            // A tap on the open pill would be a dead re-navigate; it opens the same sheet instead,
-            // except on a read-only device, whose sheet holds only a note.
-            onTapActive={actionsEnabled && !readOnly ? () => setSheetPane(p) : undefined}
-          />
-        ))}
+        {panes.map((p) => {
+          const { name, tag } = names.get(p.paneId)!;
+          const open = () => setSheet({ pane: p, name: tag ? `${name} · ${tag}` : name });
+          return (
+            <Chip
+              key={p.paneId}
+              label={name}
+              tag={tag}
+              active={p.paneId === currentPaneId}
+              status={p.kind === "shell" ? undefined : p.status}
+              icon={p.kind === "shell" ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" /> : undefined}
+              onClick={() => onSelect(p.paneId)}
+              onLongPress={actionsEnabled ? open : undefined}
+              // A tap on the open pill would be a dead re-navigate; it opens the same sheet instead,
+              // except on a read-only device, whose sheet holds only a note.
+              onTapActive={actionsEnabled && !readOnly ? open : undefined}
+            />
+          );
+        })}
       </ChipStrip>
 
       {actionsEnabled && (
         <PaneActionsSheet
-          open={sheetPane !== null}
-          onClose={() => setSheetPane(null)}
-          pane={sheetPane}
-          projects={projects}
+          open={sheet !== null}
+          onClose={() => setSheet(null)}
+          pane={sheet?.pane ?? null}
+          name={sheet?.name ?? ""}
           session={session}
           readOnly={readOnly}
           onRenamed={onRenamed}

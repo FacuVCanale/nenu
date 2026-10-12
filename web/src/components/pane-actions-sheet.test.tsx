@@ -31,6 +31,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof PaneActionsS
     open: true,
     onClose: vi.fn(),
     pane: agent,
+    name: "claude",
     onRenamed: vi.fn(),
     onClosed: vi.fn(),
     ...overrides,
@@ -178,12 +179,12 @@ describe("PaneActionsSheet — rename", () => {
 
   it("resets back to the action list when the sheet reopens, even mid-rename", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this pane")).toBeInTheDocument();
 
-    rerender(<PaneActionsSheet open={false} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
-    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    rerender(<PaneActionsSheet open={false} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -192,11 +193,11 @@ describe("PaneActionsSheet — rename", () => {
   it("resets back to the action list when the target pane changes, even mid-rename", async () => {
     const user = userEvent.setup();
     const other: AgentView = { ...agent, paneId: "w1:p2" };
-    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    const { rerender } = render(<PaneActionsSheet open={true} onClose={vi.fn()} pane={agent} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this pane")).toBeInTheDocument();
 
-    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={other} onRenamed={vi.fn()} onClosed={vi.fn()} />);
+    rerender(<PaneActionsSheet open={true} onClose={vi.fn()} pane={other} name="claude" onRenamed={vi.fn()} onClosed={vi.fn()} />);
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -266,7 +267,7 @@ describe("PaneActionsSheet — close", () => {
 
   it("says a shell's programs stop, not an agent", async () => {
     const user = userEvent.setup();
-    renderSheet({ pane: { ...agent, kind: "shell", agent: "shell", paneLabel: "dev server" } });
+    renderSheet({ pane: { ...agent, kind: "shell", agent: "shell", paneLabel: "dev server" }, name: "dev server" });
     await user.click(screen.getByRole("button", { name: "Close pane" }));
     expect(screen.getByRole("heading", { name: "Close “dev server”?" })).toBeInTheDocument();
     expect(screen.getByText("Anything running in this shell stops. This can't be undone.")).toBeInTheDocument();

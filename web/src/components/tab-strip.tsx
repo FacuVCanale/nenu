@@ -42,7 +42,8 @@ export function TabStrip({
   onRenamed,
   onClosed,
 }: TabStripProps) {
-  const [sheetTab, setSheetTab] = useState<TabView | null>(null);
+  // The tab whose actions are open, with the name its chip shows, which the sheet repeats.
+  const [sheet, setSheet] = useState<{ tab: TabView; name: string } | null>(null);
   // Actions need both callbacks wired (revalidate on rename, fall back on close); without them the
   // chips stay plain tap-to-switch — long-press is inert.
   const actionsEnabled = !!onRenamed && !!onClosed;
@@ -65,18 +66,19 @@ export function TabStrip({
           // What's going on in there (blocked / ready / working / idle); nothing for a tab with no agent,
           // since empty is not idle.
           const status = worstTriage(agents.filter((a) => a.tabId === t.tabId));
+          const name = tabName(t.label, index + 1);
           return (
             <Chip
               key={t.tabId}
-              label={tabName(t.label, index + 1)}
+              label={name}
               active={selected === t.tabId}
               focused={t.focused}
               status={status && TRIAGE_STATUS[status]}
               onClick={() => onSelect(t.tabId)}
               // Long-press, or a tap on the open tab, opens its actions when the parent wired them. A
               // read-only device's sheet holds only a note, so the open tab doesn't offer it.
-              onLongPress={actionsEnabled ? () => setSheetTab(t) : undefined}
-              onTapActive={actionsEnabled && !readOnly ? () => setSheetTab(t) : undefined}
+              onLongPress={actionsEnabled ? () => setSheet({ tab: t, name }) : undefined}
+              onTapActive={actionsEnabled && !readOnly ? () => setSheet({ tab: t, name }) : undefined}
             />
           );
         })}
@@ -84,9 +86,10 @@ export function TabStrip({
 
       {actionsEnabled && (
         <TabActionsSheet
-          open={sheetTab !== null}
-          onClose={() => setSheetTab(null)}
-          tab={sheetTab}
+          open={sheet !== null}
+          onClose={() => setSheet(null)}
+          tab={sheet?.tab ?? null}
+          name={sheet?.name ?? ""}
           session={session}
           readOnly={readOnly}
           onRenamed={onRenamed}

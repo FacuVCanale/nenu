@@ -30,6 +30,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof TabActionsSh
     open: true,
     onClose: vi.fn(),
     tab,
+    name: "Tab 1",
     onRenamed: vi.fn(),
     onClosed: vi.fn(),
     ...overrides,
@@ -153,16 +154,16 @@ describe("TabActionsSheet — rename", () => {
   it("resets back to the action list when the sheet reopens, even mid-rename", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this tab")).toBeInTheDocument();
 
     rerender(
-      <TabActionsSheet open={false} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={false} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
     rerender(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
 
     expect(screen.queryByPlaceholderText("name this tab")).toBeNull();
@@ -173,13 +174,13 @@ describe("TabActionsSheet — rename", () => {
     const user = userEvent.setup();
     const other: TabView = { ...tab, tabId: "w1:t2", label: "2" };
     const { rerender } = render(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={tab} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
     await user.click(screen.getByRole("button", { name: "Rename" }));
     expect(screen.getByPlaceholderText("name this tab")).toBeInTheDocument();
 
     rerender(
-      <TabActionsSheet open={true} onClose={vi.fn()} tab={other} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+      <TabActionsSheet open={true} onClose={vi.fn()} tab={other} name="Tab 1" onRenamed={vi.fn()} onClosed={vi.fn()} />,
     );
 
     expect(screen.queryByPlaceholderText("name this tab")).toBeNull();
@@ -217,7 +218,7 @@ describe("TabActionsSheet — close", () => {
 
   it("names a lone pane in the singular", async () => {
     const user = userEvent.setup();
-    renderSheet({ tab: { ...tab, label: "review", paneCount: 1 } });
+    renderSheet({ tab: { ...tab, label: "review", paneCount: 1 }, name: "review" });
     await user.click(screen.getByRole("button", { name: "Close tab" }));
     expect(screen.getByRole("heading", { name: "Close “review”?" })).toBeInTheDocument();
     expect(screen.getByText("Its pane closes, and anything running in it stops. This can't be undone.")).toBeInTheDocument();

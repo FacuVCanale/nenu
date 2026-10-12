@@ -4,7 +4,6 @@ import { Pencil, XCircle } from "lucide-react";
 import { BottomSheet } from "@/components/ui/sheet";
 import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
 import * as api from "@/lib/api";
-import { tabName } from "@/lib/spaces";
 import { setStatus } from "@/lib/status";
 import type { TabView } from "@/lib/types";
 
@@ -13,6 +12,8 @@ interface TabActionsSheetProps {
   onClose: () => void;
   /** The tab these actions target. Null while nothing is selected (sheet closed). */
   tab: TabView | null;
+  /** What the strip calls the tab: the sheet's title and its close confirmation say the same. */
+  name: string;
   /** Session scope for the rename/close writes (undefined = primary). */
   session?: string;
   /** This device isn't authorised to write — show a read-only note instead of the actions. */
@@ -38,6 +39,7 @@ export function TabActionsSheet({
   open,
   onClose,
   tab,
+  name,
   session,
   readOnly = false,
   onRenamed,
@@ -114,7 +116,7 @@ export function TabActionsSheet({
         : "This can't be undone.";
 
   return (
-    <BottomSheet open={open} onClose={onClose} title={tab ? `Tab ${tab.label}` : "Tab"}>
+    <BottomSheet open={open} onClose={onClose} title={name}>
       {readOnly ? (
         <p className="py-2 text-sm text-muted-foreground">
           Read-only — this device isn't authorised to rename or close tabs.
@@ -135,7 +137,7 @@ export function TabActionsSheet({
         </div>
       ) : mode === "confirm" ? (
         <ConfirmView
-          title={`Close “${tab ? tabName(tab.label, tab.number) : "tab"}”?`}
+          title={`Close “${name}”?`}
           message={consequence}
           confirmLabel="Close tab"
           busy={closing}

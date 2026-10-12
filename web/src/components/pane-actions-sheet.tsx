@@ -4,17 +4,17 @@ import { Pencil, XCircle } from "lucide-react";
 import { BottomSheet } from "@/components/ui/sheet";
 import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
 import * as api from "@/lib/api";
-import { displayName } from "@/lib/display-name";
 import { setStatus } from "@/lib/status";
-import type { AgentView, ProjectView } from "@/lib/types";
+import type { AgentView } from "@/lib/types";
 
 interface PaneActionsSheetProps {
   open: boolean;
   onClose: () => void;
   /** The pane these actions target. Null while nothing is selected (sheet closed). */
   pane: AgentView | null;
-  /** So the sheet names a project's thread by its title, as the strip does. */
-  projects?: readonly ProjectView[];
+  /** What the strip calls the pane, its number included when two share a name: the sheet's title
+   *  and its close confirmation say the same. */
+  name: string;
   /** Session scope for the rename/close writes (undefined = primary). */
   session?: string;
   /** This device isn't authorised to write — show a read-only note instead of the actions. */
@@ -40,7 +40,7 @@ export function PaneActionsSheet({
   open,
   onClose,
   pane,
-  projects,
+  name,
   session,
   readOnly = false,
   onRenamed,
@@ -104,8 +104,6 @@ export function PaneActionsSheet({
       setClosing(false);
     }
   }
-
-  const name = pane ? displayName(pane, projects) : "Pane";
 
   return (
     <BottomSheet open={open} onClose={onClose} title={name}>
