@@ -1,4 +1,4 @@
-import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -7,7 +7,7 @@ import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
-import { atTail, useEditShift } from "@/hooks/use-auto-scroll";
+import { atTail, isTextField, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest, scrollToLatestIsPill } from "@/components/ui/chat/scroll-to-latest";
@@ -51,6 +51,22 @@ function stopCap(el: HTMLElement): number | null {
   if (!stop) return null;
   const cap = el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN;
   return cap < el.scrollHeight - el.clientHeight ? cap : null;
+}
+
+/** How far a finger moves before a touch is a drag, not a tap. */
+const TAP_SLOP = 10;
+/** A drag down this far on the thread closes the phone keyboard. */
+const DISMISS_DRAG = 32;
+const CONTROL = "button, a[href], input, textarea, select, label, summary, [role='button'], [contenteditable]";
+
+/**
+ * Close the phone keyboard by blurring the field that holds it, unless the touch landed in that
+ * field. The draft stays in the box. iOS keeps the keyboard up over a tap on plain text, so the
+ * thread does it, as Messages does.
+ */
+function dismissKeyboard(target: EventTarget): void {
+  const field = document.activeElement;
+  if (isTextField(field) && !(target instanceof Node && field.contains(target))) field.blur();
 }
 
 /** A message as a reader counts one: someone's words or images, not a tool call or a note. */
@@ -271,6 +287,31 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     return () => observer.disconnect();
   }, [pin]);
 
+  // A tap on the thread's text, or a drag down of DISMISS_DRAG px, closes the keyboard. A tap on a
+  // control stays the control's; a drag up or sideways (a code block) is only scrolling.
+  const touch = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const onTouchStart = (event: ReactTouchEvent) => {
+    const point = event.touches[0];
+    touch.current = point && event.touches.length === 1 ? { x: point.clientX, y: point.clientY, moved: false } : null;
+  };
+  const onTouchMove = (event: ReactTouchEvent) => {
+    const start = touch.current;
+    const point = event.touches[0];
+    if (!start || !point) return;
+    const dx = point.clientX - start.x;
+    const dy = point.clientY - start.y;
+    if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) start.moved = true;
+    if (dy >= DISMISS_DRAG && dy > Math.abs(dx)) {
+      dismissKeyboard(event.target);
+      touch.current = null;
+    }
+  };
+  const onTouchEnd = (event: ReactTouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    if (start && !start.moved && !(event.target instanceof Element && event.target.closest(CONTROL))) dismissKeyboard(event.target);
+  };
+
   const onWorkToggle = useCallback((target: HTMLElement) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -382,7 +423,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} onScroll={onScroll} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
+        <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
           <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && "flex min-h-full flex-col justify-center",
             skeletonShown && entries.length > 0 && "animate-in fade-in duration-150 motion-reduce:animate-none")}>
             {entries.length > 0 ? <>
