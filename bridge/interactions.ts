@@ -11,7 +11,7 @@ import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/pr
 import { WIZARD_BACK_KEYS, WIZARD_CANCEL_KEYS, WIZARD_NEXT_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
 import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "../web/src/lib/typed-text.ts";
 import type { PaneRead } from "./herdr-client.ts";
-import { PERSISTENT, permissionSubject, promptSubjectText, stripKeyHint, terminalOnly } from "./interaction-subject.ts";
+import { PERSISTENT, permissionSubject, promptSubjectText, questionRow, stripKeyHint, terminalOnly } from "./interaction-subject.ts";
 import type {
   AgentView,
   AnswerOutcome,
@@ -319,7 +319,7 @@ function codexProgress(row: string): InteractionStep[] | null {
  */
 function promptContext(p: PromptModel): { context?: string; steps?: InteractionStep[] } {
   const lines = p.signature.split("\n");
-  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const q = questionRow(lines, p.question);
   if (q < 0) return {};
   const first = p.options[0] ? lines.findIndex((l, i) => i > q && l.includes(p.options[0]!.label)) : -1;
   let top = q;
@@ -346,7 +346,7 @@ function promptContext(p: PromptModel): { context?: string; steps?: InteractionS
  */
 function planTail(p: PromptModel): string {
   const lines = p.signature.split("\n");
-  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const q = questionRow(lines, p.question);
   const rows = lines.slice(0, Math.max(q, 0)).map((l) => l.trim()).filter((l) => l && !/^[─━▔═╌]+$/.test(l));
   return rows.slice(-PLAN_TAIL_ROWS).join("\n");
 }
@@ -885,7 +885,7 @@ const AMEND_FIELD: Record<string, AmendField | undefined> = {
 /** The rows straight above a prompt's question, which move with it when a growing field re-flows the screen. */
 function promptHead(p: PromptModel): string {
   const lines = p.signature.split("\n");
-  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const q = questionRow(lines, p.question);
   return q < 0 ? "" : lines.slice(Math.max(0, q - HEAD_ROWS), q + 1).join("\n");
 }
 
