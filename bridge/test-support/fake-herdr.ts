@@ -203,7 +203,8 @@ export class FakeHerdr {
 
   /**
    * Reorder a tab within its workspace, as `tab.move` does: `insertIndex` counts the workspace's tabs
-   * before this one is taken out and is clamped at the end, so its own index or the next is a no-op.
+   * before this one is taken out, so its own index or the next is a no-op, and past the count is an
+   * error (Herdr 0.9.3; HERDR_API.md "Move methods").
    */
   moveTab(tabId: string, insertIndex: number): void {
     const workspaceId = [...this.panes.values()].find((p) => p.tabId === tabId)?.workspaceId;
@@ -212,7 +213,8 @@ export class FakeHerdr {
     const slots = this.tabOrder.flatMap((id, i) => (inWorkspace(id) ? [i] : []));
     const order = slots.map((i) => this.tabOrder[i]!);
     const from = order.indexOf(tabId);
-    const gap = Math.max(0, Math.min(order.length, Math.trunc(insertIndex)));
+    const gap = Math.trunc(insertIndex);
+    if (!(gap >= 0 && gap <= order.length)) throw new FakeError("tab_move_failed", `insert_index ${insertIndex} is out of bounds`);
     order.splice(from, 1);
     order.splice(gap > from ? gap - 1 : gap, 0, tabId);
     slots.forEach((slot, i) => { this.tabOrder[slot] = order[i]!; });

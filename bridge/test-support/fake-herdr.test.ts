@@ -148,7 +148,8 @@ describe("FakeHerdr", () => {
     await client.moveTab("w1:t3", 3);
     expect(await order()).toEqual(["w1:t1#1", "w1:t2#2", "w2:t1#1", "w1:t3#3"]);
     await expect(client.moveTab("w9:t1", 0)).rejects.toThrow("tab_not_found");
-    expect(fake.writes().map((c) => c.method)).toEqual(["tab.move", "tab.move", "tab.move", "tab.move"]);
+    await expect(client.moveTab("w1:t1", 4)).rejects.toThrow("tab_move_failed");
+    expect(fake.writes().map((c) => c.method)).toEqual(["tab.move", "tab.move", "tab.move", "tab.move", "tab.move"]);
   });
 
   test("rejects a method it does not implement the way Herdr rejects an unknown variant", async () => {
