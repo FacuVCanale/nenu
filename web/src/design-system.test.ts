@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+import { META_COLOR } from "./hooks/use-theme";
+
 // The design tokens' contracts that fail silently: a text tone mixed with transparent (it measured
 // 3.16:1 in light), a browser chrome colour that drifts from the page, type sizes that ignore the
 // browser's text size, and the loading strip drawn under the iPhone's status bar. The bench measures
@@ -73,6 +75,11 @@ describe("chrome", () => {
     expect(html).toContain(`<meta name="theme-color" content="${light}" media="(prefers-color-scheme: light)" />`);
     expect(html).toContain(`<meta name="theme-color" content="${dark}" media="(prefers-color-scheme: dark)" />`);
     expect(html).toMatch(new RegExp(`\\.boot-splash \\{[^}]*background: light-dark\\(${light}, ${dark}\\)`));
+  });
+
+  it("keeps the browser bar on the page's background after load, when useTheme rewrites the metas", () => {
+    const [light, dark] = themed("background");
+    expect(META_COLOR).toEqual({ light, dark });
   });
 
   it("gives every header the status bar's surface, mixed from the page background", () => {
