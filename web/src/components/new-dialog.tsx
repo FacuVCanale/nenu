@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { AppWindow, ChevronLeft, ChevronRight, Folder, FolderGit2, FolderPlus, MessageCircle, Sparkles, X, type LucideIcon } from "lucide-react";
 import { useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
@@ -48,6 +48,7 @@ export interface NewPreset {
 /** The workspace a quick chat opens in, created on the first one. */
 export const SCRATCH = "scratch";
 const DESKTOP = "(min-width: 1024px)";
+const matches = (query: string) => typeof window.matchMedia === "function" && window.matchMedia(query).matches;
 
 function titleOf(kind: NewKind, role: NodeRole): string {
   switch (kind) {
@@ -106,10 +107,12 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   const [role, setRole] = useState<NodeRole>(preset.role ?? "worker");
   const [kind, setKind] = useState<NewKind | null>(() => {
     if (preset.kind) return preset.kind;
-    if (typeof window.matchMedia !== "function" || !window.matchMedia(DESKTOP).matches) return null;
+    if (!matches(DESKTOP)) return null;
     return context.project ? "thread" : context.workspaceId ? "tab" : "workspace";
   });
   const [browsing, setBrowsing] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const body = useRef<HTMLElement>(null);
   useHoldReload("new-dialog", true);
 
   const readOnly = isReadOnly(data?.device);
@@ -121,6 +124,14 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   const shown = kind === "tab" && !workspace ? null : kind === "thread" && !current ? null : kind;
   const title = browsing ? "Choose a folder" : shown ? titleOf(shown, role) : "New";
   const back = browsing ? () => setBrowsing(false) : shown ? () => choose(null) : null;
+  const step = browsing ? "folder" : shown ?? "list";
+
+  // Each step takes focus as it opens, since the control that opened it is hidden or gone by then. A
+  // desk lands in the step's field to type; a phone on its title, so no keyboard pops up unasked.
+  useEffect(() => {
+    const field = matches("(pointer: fine)") ? body.current?.querySelector<HTMLElement>("[data-autofocus]") : null;
+    (field ?? heading.current)?.focus({ preventScroll: true });
+  }, [step]);
 
   function choose(next: NewKind | null) {
     setBrowsing(false);
@@ -177,7 +188,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
                 <ChevronLeft className="size-5" />
               </Button>
             ) : <span className="lg:hidden" />}
-            <h2 className="truncate text-center text-headline lg:flex-1 lg:text-left">{title}</h2>
+            <h2 ref={heading} tabIndex={-1} className="truncate text-center text-headline outline-none lg:flex-1 lg:text-left">{title}</h2>
             <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose} className="max-lg:size-11">
               <X className="size-5 lg:size-4" />
             </Button>
@@ -192,7 +203,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
           </p>
         </nav>
 
-        <section aria-label={title} className={cn("flex min-w-0 flex-1 flex-col px-4 pt-3 lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:px-5 lg:pt-1 lg:pb-4", !shown && "max-lg:hidden")}>
+        <section ref={body} aria-label={title} className={cn("flex min-w-0 flex-1 flex-col px-4 pt-3 lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:px-5 lg:pt-1 lg:pb-4", !shown && "max-lg:hidden")}>
           {shown === "thread" && current && (
             <ThreadPane projects={projects} current={current} onProject={setProject} role={role} onRole={setRole} readOnly={readOnly}
               session={data?.session} onStarted={() => threadStarted(current.slug)} />
@@ -360,7 +371,7 @@ function ProjectPane({ data, readOnly, browsing, onBrowsing, onDone }: {
   return (
     <form className="flex flex-1 flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <Field label="Name">
-        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Wholesale dashboard" />
+        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Wholesale dashboard" data-autofocus />
       </Field>
       <Field label="Goal">
         {/* Organizations keeps the goal on one line, so a line break becomes a space. */}
@@ -434,7 +445,7 @@ function QuickChatPane({ data, readOnly, message: preset = "", onDone }: { data:
     <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <Segmented label="Agent" options={SPAWN_AGENTS.filter((a) => a.id !== "shell")} value={agent} onChange={(id) => setAgent(id as typeof agent)} />
       <textarea aria-label="Message" value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
-        placeholder="Ask anything" className={textField} />
+        placeholder="Ask anything" className={textField} data-autofocus />
       <p className="text-footnote text-muted-foreground">
         Opens in the <span className="font-medium text-foreground">{SCRATCH}</span> workspace on <code>~</code>
         {scratch ? "." : ", which is created the first time."}

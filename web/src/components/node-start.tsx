@@ -123,7 +123,7 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, readO
     <form className="flex flex-col gap-3" onSubmit={(event) => void submit(event)}>
       {onRole && roles.length > 1 && <Segmented label="Role" options={ROLES.filter((option) => roles.includes(option.id))} value={role} onChange={onRole} />}
       <Field label="Title">
-        <input className={inputField} value={form.title} required onChange={set("title")} />
+        <input className={inputField} value={form.title} required onChange={set("title")} data-autofocus />
       </Field>
       {parents.length > 0 && <Field label="Parent">
         <select className={selectField} value={form.parent} onChange={set("parent")}>

@@ -186,6 +186,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
           rows={3}
           placeholder={`First message (optional), sent when ${agentLabel(agent)} is ready`}
           className={textField}
+          data-autofocus
         />
       )}
 
