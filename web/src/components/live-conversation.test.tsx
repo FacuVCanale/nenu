@@ -286,7 +286,8 @@ describe("LiveConversation", () => {
     expect(skeleton.querySelectorAll("[data-skeleton-turn]")).toHaveLength(3);
     expect(container.querySelector(".animate-spin")).toBeNull();
 
-    rerender(view({ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false }, false));
+    // The bridge names the session with its first page, which remounts the scoped list.
+    rerender(view({ paneId: "w1:p1", available: true, sessionKey: "codex:work", entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false }, false));
     expect(screen.queryByRole("status", { name: "Loading conversation…" })).not.toBeInTheDocument();
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
   });

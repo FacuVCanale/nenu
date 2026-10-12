@@ -112,8 +112,6 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
 function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
-  // The first turns fade in over the skeleton they replace, instead of swapping in at once.
-  const [skeletonShown, setSkeletonShown] = useState(false);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState(false);
@@ -410,7 +408,6 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const skeleton = empty && loading;
   // A conversation the operator can link: one card, centred, instead of a sentence over a form.
   const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
-  useEffect(() => { if (skeleton) setSkeletonShown(true); }, [skeleton]);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
 
@@ -424,8 +421,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       )}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && "flex min-h-full flex-col justify-center",
-            skeletonShown && entries.length > 0 && "animate-in fade-in duration-150 motion-reduce:animate-none")}>
+          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && "flex min-h-full flex-col justify-center")}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
