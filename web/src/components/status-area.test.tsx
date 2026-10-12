@@ -77,16 +77,16 @@ describe("workbench notifications", () => {
   });
 
   it("shortens the exit to an opacity fade under reduced motion", () => {
-    const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+    vi.stubGlobal("matchMedia", (query: string) => ({
       matches: query.includes("prefers-reduced-motion"), media: query, onchange: null,
       addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }) as MediaQueryList);
+    }));
     render(<StatusArea />);
     act(() => setStatus("Tab closed", "info"));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
     act(() => vi.advanceTimersByTime(TOAST_EXIT_REDUCED_MS));
     expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
-    matchMedia.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it("a newer notice replaces one that is still leaving", () => {
