@@ -512,14 +512,15 @@ describe("journal media", () => {
     const later = await screen.findByRole("button", { name: "later.html: file not found" });
     expect(later).toHaveTextContent("Not found");
     await userEvent.click(screen.getByRole("button", { name: "Open canvas.template.html" }));
-    expect(await screen.findByText("/repo/assets/canvas.template.html")).toBeInTheDocument();
+    // The line under the name is the folder; its tooltip is the whole path the preview opened.
+    expect(await screen.findByTitle("/repo/assets/canvas.template.html")).toHaveTextContent("/repo/assets");
     await userEvent.click(screen.getByRole("button", { name: "Close document" }));
     // A tap on a missing card asks again, and opens once the agent has written the file.
     await userEvent.click(later);
-    expect(screen.queryByText("/repo/later.html")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("/repo/later.html")).not.toBeInTheDocument();
     written = true;
     await userEvent.click(later);
-    expect(await screen.findByText("/repo/later.html")).toBeInTheDocument();
+    expect(await screen.findByTitle("/repo/later.html")).toBeInTheDocument();
   });
 
   it("renders a local Markdown image in place and keeps it out of the media list below", () => {
