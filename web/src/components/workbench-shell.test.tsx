@@ -249,6 +249,24 @@ it("can reopen the mobile workspace drawer after navigation and Escape", async (
   expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
 });
 
+it("keeps the Browse sheet on the tapped row, marked as opening, until its chat is on screen", async () => {
+  let land!: () => void;
+  const landed = new Promise<null>((resolve) => { land = () => resolve(null); });
+  const element = <WorkbenchShell data={data}><span>Screen</span></WorkbenchShell>;
+  const router = createMemoryRouter([{ path: "/pane/:paneId", element, loader: () => landed }, { path: "*", element }], { initialEntries: ["/?s=work"] });
+  render(<RouterProvider router={router} />);
+  const user = userEvent.setup();
+  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
+  const row = within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("link", { name: /^Nenu/ });
+  await user.click(row);
+  // A slow read leaves the sheet up, with the tapped row saying it is on its way.
+  expect(await within(row).findByText("Opening")).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Navigation" })).toContainElement(row);
+  land();
+  await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument());
+  expect(router.state.location.pathname).toBe("/pane/w%3A1%3Ap2");
+});
+
 function desktop() {
   const matchMedia = window.matchMedia;
   window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
