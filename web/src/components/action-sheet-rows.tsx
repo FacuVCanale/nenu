@@ -151,9 +151,11 @@ export function RenameView({
             onClick={onSave}
             disabled={saving || !canSave}
             aria-busy={saving || undefined}
-            className="h-11 justify-self-end rounded-md px-2 text-headline disabled:not-aria-busy:text-disabled-foreground"
+            className="relative h-11 justify-self-end rounded-md px-2 text-headline disabled:not-aria-busy:text-disabled-foreground"
           >
-            Save
+            {/* While saving a spinner stands in for the word, which keeps the button's width and name. */}
+            <span className={cn(saving && "opacity-0")}>Save</span>
+            {saving && <Loader2 aria-hidden="true" className="absolute inset-0 m-auto size-4 animate-spin" />}
           </button>
         </div>
       </div>
