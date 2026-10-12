@@ -78,6 +78,21 @@ describe("ConnectConversation", () => {
     expect(screen.getByRole("textbox", { name: "Session ID" })).toHaveFocus();
   });
 
+  // Both buttons wait while either action runs; only the one that runs says it is busy.
+  it("says busy only on the button whose action runs", async () => {
+    const user = userEvent.setup();
+    vi.mocked(connectConversation).mockReturnValue(new Promise(() => {}));
+    render(<ConnectConversation paneId="w2:codex" disabled={false} onConnected={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Enter a session ID" }));
+    await user.type(screen.getByRole("textbox", { name: "Session ID" }), ID);
+    await user.click(screen.getByRole("button", { name: "Connect history" }));
+
+    expect(screen.getByRole("button", { name: "Connect history" })).toHaveAttribute("aria-busy", "true");
+    const find = screen.getByRole("button", { name: "Find Codex conversations" });
+    expect(find).toBeDisabled();
+    expect(find).not.toHaveAttribute("aria-busy");
+  });
+
   it("says when no conversation runs here instead of an empty list", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConversations).mockResolvedValue({ conversations: [] });
