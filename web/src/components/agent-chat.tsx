@@ -164,10 +164,11 @@ export interface DockedChat {
 // route loader (`text`); polling revalidates it. Replies/keys are confirmed via the header status
 // line (`setStatus`), then a revalidation pulls the fresh output.
 //
-// This shell owns the pane frame: the header (the find bar takes it over while find is open), the
-// terminal mirror (freeze, find highlighting, load-older scrollback), and the way back. The composer cluster — draft, send, keys, quick actions, slash-commands, image
-// upload, display prefs, and the find-in-output trigger — lives in <Composer>; it reaches back here
-// only to re-follow the tail after a send, focus on a mirror tap, and open find (which freezes the tail).
+// This shell owns the pane frame: the chrome (header, strips; the find bar takes the header over while
+// find is open), the terminal mirror (freeze, find highlighting, load-older scrollback), and the way
+// back. The composer cluster — draft, send, keys, quick actions, slash-commands, image upload and
+// display prefs — lives in <Composer>; it reaches back here only to re-follow the tail after a send,
+// focus on a mirror tap, and hand over its view controls for the ⋯ menu.
 export function AgentChat({
   paneId,
   session,
@@ -481,12 +482,10 @@ export function AgentChat({
   }
   // Find searches what is on screen: the conversation, or the terminal mirror.
   const findSubject = showConversation ? "chat" : "terminal";
-  // The list centres the current hit when it moves to it; this runs after that (a parent's effect
-  // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
-  const chatRef = useRef<HTMLDivElement>(null);
   // The chrome's height, as --chat-chrome-height on the chat: on a phone the thread scrolls under the
   // chrome and starts below it (styles/chat.css). Set straight on the element, so a strip stepping
   // aside for the keyboard re-measures without a render.
+  const chatRef = useRef<HTMLDivElement>(null);
   const chromeRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const chrome = chromeRef.current;
@@ -499,6 +498,8 @@ export function AgentChat({
     observer.observe(chrome);
     return () => observer.disconnect();
   }, []);
+  // The list centres the current hit when it moves to it; this runs after that (a parent's effect
+  // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
   useEffect(() => {
     const root = chatRef.current;
     if (!findOpen || matchCount === 0 || !root) return;
@@ -1035,9 +1036,9 @@ export function AgentChat({
           {/* The screen's heading: the pane's name over its place. A project's title opens the
               project's page; any other opens the navigation on a phone. A subagent's view names the
               subagent and what it is. */}
-          {subagent ? <h1 className="flex min-w-0 flex-1 flex-col px-1">
-            <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{subagentView!.name}</span>
-            <span className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={subagentView!} harness={subagentHarness} /></span>
+          {subagentView ? <h1 className="flex min-w-0 flex-1 flex-col px-1">
+            <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{subagentView.name}</span>
+            <span className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={subagentView} harness={subagentHarness} /></span>
           </h1> : agent ? <h1 className="flex min-w-0 flex-1">{project ? (
             <button
               type="button"
