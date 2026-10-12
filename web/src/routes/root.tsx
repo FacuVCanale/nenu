@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
+import { useMemo, useState } from "react";
+import { isRouteErrorResponse, Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
+import { Check, Copy, House, Inbox, Layers, RotateCw, Search, WifiOff } from "lucide-react";
 
 import { usePolling } from "@/hooks/use-polling";
 import { useLiveEvents } from "@/hooks/use-live-events";
@@ -9,8 +10,9 @@ import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
-import { ConnectionBanner } from "@/components/connection-banner";
-import { DogGallop } from "@/components/dog-gallop";
+import { cantReachNenu, ConnectionBanner } from "@/components/connection-banner";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { NewAgentHost } from "@/components/new-agent-sheet";
 import { StatusArea } from "@/components/status-area";
 import { WorkbenchShell } from "@/components/workbench-shell";
@@ -19,6 +21,9 @@ import { homePath } from "@/lib/nav";
 import { SESSION_PARAM, normalizeSession } from "@/lib/session";
 import { PANE_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { paneDisplayName } from "@/lib/types";
+import { buildLabel } from "@/lib/build";
+import { cn } from "@/lib/utils";
+import { NotFound } from "@/routes/not-found";
 
 /**
  * The "last seen" stamp the ONE connection surface should show — the stamp of the data actually on
@@ -91,68 +96,120 @@ export function RootLayout() {
 }
 
 // Shown once, on the very first load, while the snapshot loader resolves (SPA hydration). This is the
-// router's HydrateFallback, so it stays mounted until the FIRST loader run settles — and over a dead
-// tailnet that initial fetch can hang well past its timeout (or forever on a WebView without
-// AbortSignal.timeout). Left as-is, a PWA reopened while the host is unreachable would gallop the dog
-// on "Connecting to the herd…" indefinitely, with no way to retry. So once we've been stuck here for
-// CONNECTION_LOST_MS (the same wall-clock threshold as the in-app prompt — `connecting` is trivially
-// true the whole time we're mounted), the splash escalates to an honest, actionable "Not connected"
-// state: the dog rests, the copy says we can't reach Nenu, and a Retry re-runs the loaders from
-// scratch (a full reload clears most transient failures). Below the threshold it's unchanged.
+// router's HydrateFallback, so it stays mounted until the FIRST loader run settles. It draws the app's
+// own frame (sidebar, header, tab bar) with placeholder rows, so the app lands without a jump, and it
+// names the host it is reaching rather than promising a herd it has not seen.
+//
+// Over a dead tailnet that initial fetch can hang well past its timeout (or forever on a WebView
+// without AbortSignal.timeout). So once stuck here for CONNECTION_LOST_MS (the same wall-clock
+// threshold as the in-app notice; `connecting` is trivially true while mounted) the body says it
+// cannot reach the host and offers Retry, which reloads: a full reload clears most transient failures.
 export function BootSplash() {
   const stuck = useConnectionLost(true);
-  if (!stuck) {
-    return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-3 text-muted-foreground">
-        <DogGallop running size="4rem" label="Loading" />
-        <span className="text-sm">Connecting to the herd…</span>
-      </div>
-    );
-  }
   return (
-    <div className="flex h-[100dvh] flex-col items-center justify-center gap-3 p-6 text-center">
-      {/* Rest = the static app icon, muted (grayscale + dimmed) to read asleep — NOT a gallop
-          rest-frame, whose full-stretch mid-stride pose looks frozen mid-run. The "Not connected"
-          copy below carries the accessible meaning, so the icon is decorative. */}
-      <img src="/nenu-mark.png" alt="" className="nenu-mark size-16 opacity-40 grayscale" />
-      <p className="font-medium text-foreground">Not connected</p>
-      <p className="max-w-xs text-sm text-muted-foreground">
-        Can&rsquo;t reach Nenu — check your connection to the host, then try again.
-      </p>
-      <button
-        type="button"
-        onClick={() => window.location.reload()}
-        className="text-sm underline underline-offset-4"
-      >
-        Retry
-      </button>
+    <div className="app-viewport flex flex-col">
+      <div className="workbench-shell">
+        <aside className="workbench-sidebar" aria-hidden="true">
+          <div className="workbench-brand-row">
+            <span className="workbench-brand"><img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" /><span>Nenu</span></span>
+          </div>
+          <div className="nav-top">{[64, 52, 72, 44].map((width) => <Bone key={width} className="my-2 ml-2.5 h-3.5" width={`${width}%`} />)}</div>
+        </aside>
+        <div className="workbench-main">
+          <header className="workbench-app-header flex shrink-0 items-center border-b border-border/60" aria-hidden="true">
+            <span className="grid size-11 shrink-0 place-items-center lg:hidden"><img src="/nenu-mark.png" alt="" className="nenu-mark size-6" /></span>
+            <Bone className="h-4" width="120px" />
+          </header>
+          <main className="page-body">
+            <div className="page-column">
+              {stuck ? (
+                <EmptyState icon={WifiOff} title={cantReachNenu()}
+                  action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
+                  Nenu keeps trying. Check that this device can reach the host.
+                </EmptyState>
+              ) : (
+                <>
+                  <p role="status" className="text-footnote text-muted-foreground">Connecting to {window.location.host}&hellip;</p>
+                  <div className="mt-4 flex flex-col gap-3" aria-hidden="true">
+                    {[0, 1, 2].map((row) => <Bone key={row} className="h-14 rounded-lg" />)}
+                  </div>
+                </>
+              )}
+            </div>
+          </main>
+          <nav className="bottom-tab-bar" aria-hidden="true">
+            {BOOT_TABS.map(({ label, Icon }) => <span key={label} className="bottom-tab"><Icon size={22} strokeWidth={1.6} />{label}</span>)}
+          </nav>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Last-resort recovery screen for a render-phase error or a loader throw — a full reload re-runs the
-// loaders from scratch, which clears most transient failures.
+// The phone's tab bar as it will arrive, drawn inert, so the bottom edge does not move on hand-off.
+const BOOT_TABS = [
+  { label: "Home", Icon: House },
+  { label: "Needs you", Icon: Inbox },
+  { label: "Browse", Icon: Layers },
+  { label: "Search", Icon: Search },
+] as const;
+
+/** A placeholder bar. Still under reduced motion; the caption beside it is the live signal. */
+function Bone({ className, width }: { className?: string; width?: string }) {
+  return <span className={cn("block rounded-md bg-muted motion-safe:animate-pulse", className)} style={width ? { width } : undefined} />;
+}
+
+// Last-resort recovery screen for a render-phase error or a loader throw. A 404 is not a crash: it
+// gets the not-found screen. Anything else says plainly that Nenu, not the operator, hit a problem,
+// keeps the raw exception behind a disclosure (it means nothing to the operator and everything to a
+// bug report), and reloads Home, which re-runs the loaders from scratch and clears most failures.
 export function RootError() {
   const error = useRouteError();
-  const message = error instanceof Error ? error.message : "Unknown error";
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return <main className="flex min-h-[100dvh] flex-col justify-center"><NotFound /></main>;
+  }
+  return <Crash error={error} />;
+}
+
+function Crash({ error }: { error: unknown }) {
+  const [copied, setCopied] = useState(false);
+  const message = error instanceof Error ? error.message
+    : isRouteErrorResponse(error) ? `${error.status} ${error.statusText}`.trim() : String(error ?? "Unknown error");
+  const stack = error instanceof Error && error.stack && error.stack !== message ? error.stack : null;
+  const details = [message, stack, `Build ${buildLabel()}`, `Path ${window.location.pathname}`].filter(Boolean).join("\n\n");
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(details);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
   return (
-    <div className="flex h-[100dvh] flex-col items-center justify-center gap-3 p-6 text-center">
-      <p className="font-medium text-destructive">Something went wrong</p>
-      <p className="max-w-xs text-sm text-muted-foreground">{message}</p>
-      <button
-        type="button"
-        onClick={() => {
+    <main className="flex min-h-[100dvh] flex-col items-center justify-center px-6 py-12 text-center">
+      {/* The one screen without the app's chrome, so the mark says whose it is. */}
+      <img src="/nenu-mark.png" alt="" className="nenu-mark mb-4 size-12" />
+      <h1 className="text-title text-balance">Nenu hit a problem</h1>
+      <p className="mt-2 max-w-sm text-subhead text-muted-foreground text-pretty">
+        Reply drafts stay saved on this device. Reload to try again.
+      </p>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <Button size="lg" onClick={() => {
           // Reload home, but stay in the session you were in (read from the live URL, since the
           // router context may be the throwing one). Primary → plain "/".
-          const session = normalizeSession(
-            new URLSearchParams(window.location.search).get(SESSION_PARAM),
-          );
+          const session = normalizeSession(new URLSearchParams(window.location.search).get(SESSION_PARAM));
           window.location.assign(homePath(session));
-        }}
-        className="text-sm underline underline-offset-4"
-      >
-        Reload
-      </button>
-    </div>
+        }}>
+          <RotateCw aria-hidden="true" />Reload
+        </Button>
+        <Button size="lg" variant="outline" onClick={() => void copy()}>
+          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy details"}
+        </Button>
+      </div>
+      <details className="mt-8 w-full max-w-md text-left">
+        <summary className="mx-auto w-fit cursor-pointer rounded-md px-2 py-1 text-footnote text-muted-foreground coarse:py-3">Technical details</summary>
+        <pre className="mt-3 max-h-60 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-footnote whitespace-pre-wrap break-words text-muted-foreground">{details}</pre>
+      </details>
+    </main>
   );
 }

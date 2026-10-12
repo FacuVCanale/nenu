@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, type RouteObject } from "react-router";
 
 import { BootSplash, RootError, RootLayout } from "@/routes/root";
 import { HomeRoute } from "@/routes/home";
@@ -8,6 +8,7 @@ import { HistoryRoute } from "@/routes/history";
 import { SettingsRoute } from "@/routes/settings";
 import { NodeRoute } from "@/routes/node";
 import { ProjectRoute } from "@/routes/project";
+import { NotFoundRoute } from "@/routes/not-found";
 import { historyLoader, rootLoader, paneLoader, PANE_ROUTE_ID, ROOT_ROUTE_ID } from "@/lib/loaders";
 
 // We don't use view transitions. React Router persists an "applied view transitions" map to
@@ -23,9 +24,7 @@ try {
   // sessionStorage access can throw in locked-down / private contexts — ignore.
 }
 
-// Created once at module scope so the idle-lock in App can unmount/remount RouterProvider without
-// losing the current location (the router instance retains it; loaders re-run fresh on remount).
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   {
     id: ROOT_ROUTE_ID,
     path: "/",
@@ -54,6 +53,12 @@ export const router = createBrowserRouter([
         // navigation; the view pages back through it with direct api calls.
         shouldRevalidate: () => false,
       },
+      // Anything else is a link to nothing: answered inside the app, never by the crash screen.
+      { path: "*", element: <NotFoundRoute /> },
     ],
   },
-]);
+];
+
+// Created once at module scope so the idle-lock in App can unmount/remount RouterProvider without
+// losing the current location (the router instance retains it; loaders re-run fresh on remount).
+export const router = createBrowserRouter(routes);

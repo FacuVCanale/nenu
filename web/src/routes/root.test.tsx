@@ -65,11 +65,11 @@ describe("RootError", () => {
   });
 
   it("copies the message, the stack and the build for a bug report", async () => {
-    const writeText = vi.fn(() => Promise.resolve());
+    const writeText = vi.fn((_text: string) => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const router = crash({ element: <Boom /> });
     await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Copy details" })); });
-    const copied = writeText.mock.calls[0]?.[0] as string;
+    const copied = writeText.mock.calls[0]?.[0] ?? "";
     expect(copied).toContain("Cannot read properties of undefined (reading 'charAt')");
     expect(copied).toContain("Boom");
     expect(copied).toContain(BUILD.version);
