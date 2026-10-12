@@ -77,6 +77,19 @@ describe("SessionSwitcher — sheet + selection", () => {
     expect(sheet.getByRole("button", { name: /crashed/ })).toBeDisabled();
   });
 
+  it("lists sessions as the navigation lists panes: sentence case, their state in words, the open one filled", async () => {
+    const user = userEvent.setup();
+    renderSwitcher([primary, demo, downSession], undefined);
+    await user.click(screen.getByRole("button", { name: /switch session/i }));
+
+    const sheet = within(screen.getByRole("dialog", { name: "Sessions" }));
+    const open = sheet.getByRole("button", { name: /default/ });
+    expect(open).toHaveTextContent("Primary · 1 needs you · 1 working");
+    expect(open).toHaveAttribute("aria-current", "page");
+    expect(sheet.getByRole("button", { name: /collie-demo/ })).toHaveTextContent("1 working");
+    expect(sheet.getByRole("button", { name: /crashed/ })).toHaveTextContent("Unreachable");
+  });
+
   it("navigates to a named session with ?s= on select", async () => {
     const user = userEvent.setup();
     const router = renderSwitcher([primary, demo], undefined);
