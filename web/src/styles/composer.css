@@ -1,6 +1,10 @@
 /* The composer under a chat. */
-/* The home indicator's inset IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
-.workbench-composer { width: calc(100% - 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
+/* Below a desk the box bleeds 8px into the page gutter (16px on a phone, 32px from 640), as the
+   strips' pills do: its + and Send sit on the column the prose starts on, and the draft keeps the
+   width the full gutter took (a four-line draft wrapped to five under the keyboard). The queue
+   strip's padding counts on these 8px below a desk. The home indicator's inset IS the composer's
+   bottom gap, as in a native chat; 8px only where there is none. */
+.workbench-composer { width: calc(100% - 2 * var(--page-gutter) + 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
 /* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
 .composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
@@ -42,11 +46,15 @@
 /* Stop at the end of the row above the box, right edge on Send's, for the whole turn. */
 .composer-working { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 40px; padding: 0 7px 4px 12px; }
 .composer-stop { height: 32px; padding: 0 12px; border-radius: 9999px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
-.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: 13px; color: var(--muted-foreground); }
-.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: var(--text-footnote); color: var(--muted-foreground); }
+.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; cursor: pointer; }
 .composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
 @media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
 .composer-quiet:disabled { opacity: 0.5; cursor: default; }
+/* The meta row's targets reach down into the home indicator's inset, not up into the box, where the
+   + needs its own 44px: its reach ends 1px above the box's edge on a phone and 1px below it from 768px,
+   where the lead's padding is 4px. */
+@media (pointer: coarse) { .composer-meta .hit-area::before { top: -2px; transform: translateX(-50%); } }
 .workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 
 /* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -91,6 +91,31 @@ it("opens the project tree without scanning older conversation pages", async () 
   expect(screen.getByRole("button", { name: "Project" })).toHaveAttribute("aria-pressed", "true");
   await screen.findByText("Empty folder");
   expect(fetchHistory).not.toHaveBeenCalled();
+});
+
+// One segmented control in the app: the chosen list is pressed and neutral, never an accent. jsdom
+// paints nothing, so the bench measures the neutral tile (redesign-shots/labels-type-reach).
+it("picks a list with a neutral segmented control", async () => {
+  render(<ChatFilesBrowser paneId="w1:p1" history={available([])} />);
+  await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+  const group = screen.getByRole("group", { name: "File type" });
+  expect(within(group).getByRole("button", { name: "Project" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(group).getByRole("button", { name: "Artifacts" })).toHaveAttribute("aria-pressed", "false");
+  for (const button of within(group).getAllByRole("button")) expect(button.className).not.toMatch(/\b(?:bg|border|text)-(?:primary|ring|accent)\b/);
+});
+
+// Four names share a phone's width. At the docks' subhead step "Artifacts" ran over "Project" on a
+// 320px phone and a three-digit Files count did at 375 (bench, r2/seg.ts). The footnote step is the
+// size of an iOS segmented control; past it (a four-digit count, larger browser text) a name ends in
+// an ellipsis inside its own segment instead of running over the next one.
+it("fits the four list names to a narrow phone, ending a name that cannot fit inside its segment", async () => {
+  render(<ChatFilesBrowser paneId="w1:p1" history={available([])} />);
+  await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+  for (const button of within(screen.getByRole("group", { name: "File type" })).getAllByRole("button")) {
+    expect(button).toHaveClass("text-footnote");
+    expect(button).not.toHaveClass("text-subhead");
+    expect(button.firstElementChild).toHaveClass("truncate");
+  }
 });
 
 it("sorts by latest mention and filters file names and extensions", async () => {
