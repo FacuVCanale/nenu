@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import { Terminal } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useNavigation } from "react-router";
+import { LoaderCircle, Terminal } from "lucide-react";
 
 import { StatusDot } from "@/components/status-badge";
 import type { DisplayPlace } from "@/lib/display-name";
@@ -41,4 +42,32 @@ export function PlaceText({ place, query }: { place: DisplayPlace; query?: strin
     <span className="nav-place"><Highlight text={place.place} query={query} /></span>
     {place.tab && <>{TITLE_SEP}<span className="nav-place-tab"><Highlight text={place.tab} query={query} /></span></>}
   </>;
+}
+
+/** How long a row's route may load before the row says so; a fast link never flickers. */
+export const OPENING_DELAY_MS = 120;
+
+/** Whether the route `to` names has been loading for longer than {@link OPENING_DELAY_MS}. */
+function useOpening(to: string): boolean {
+  const navigation = useNavigation();
+  const opening = navigation.state === "loading" && navigation.location.pathname === to.split("?")[0];
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    if (!opening) return;
+    const timer = setTimeout(() => setLate(true), OPENING_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      setLate(false);
+    };
+  }, [opening]);
+  return opening && late;
+}
+
+/**
+ * A row's mark, or a spinner in its place while the row's destination loads, so a tap over a slow
+ * link shows at the row that was tapped instead of leaving the old screen looking idle.
+ */
+export function OpeningMark({ to, children }: { to: string; children: ReactNode }) {
+  if (!useOpening(to)) return children;
+  return <span data-pending className="nav-opening"><LoaderCircle aria-hidden size={14} className="animate-spin motion-reduce:animate-none" /><span className="sr-only">Opening</span></span>;
 }

@@ -2,7 +2,7 @@ import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ChevronRight, LayoutGrid } from "lucide-react";
 
-import { PaneMark, RowBody } from "@/components/nav-rows";
+import { OpeningMark, PaneMark, RowBody } from "@/components/nav-rows";
 import { StatusDot } from "@/components/status-badge";
 import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
@@ -16,7 +16,7 @@ const STATUS_WORD: Partial<Record<AgentStatus, string>> = { blocked: "needs you"
 const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-status-blocked", working: "text-status-working", done: "text-status-done" };
 
 /** The herd as Herdr holds it: each workspace, its tabs, and a tab's panes when it has several. */
-export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false, startFolded = false }: {
+export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, empty = null, compact = false, startFolded = false }: {
   /** With the projects, so a pane is called what every other view calls it (lib/display-name.ts). */
   source: Herd & { projects?: readonly ProjectView[] };
   session?: string;
@@ -24,7 +24,6 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
   /** Explicit fold per workspace id; an untouched one follows {@link defaultOpen}. */
   expanded: Record<string, boolean>;
   onExpand: (workspaceId: string, open: boolean) => void;
-  onNavigate?: () => void;
   /** Shown instead when nothing is left to list. */
   empty?: ReactNode;
   /** The sidebar's one-line workspace rows: the name opens the workspace's pane, the chevron folds its panes. */
@@ -38,11 +37,11 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
       session={session} currentPaneId={currentPaneId} projects={source.projects}
       open={expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length))}
-      onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} compact={compact} />
+      onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} compact={compact} />
   ));
 }
 
-function WorkspaceSection({ branch, href, session, currentPaneId, projects, open, onToggle, onNavigate, compact }: {
+function WorkspaceSection({ branch, href, session, currentPaneId, projects, open, onToggle, compact }: {
   branch: WorkspaceBranch;
   projects?: readonly ProjectView[];
   /** Where the workspace's name opens (see workspacePath). */
@@ -51,7 +50,6 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
   currentPaneId?: string;
   open: boolean;
   onToggle: (open: boolean) => void;
-  onNavigate?: () => void;
   compact: boolean;
 }) {
   const bodyId = useId();
@@ -65,8 +63,8 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
             onClick={() => onToggle(!open)}>
             <ChevronRight aria-hidden size={14} />
           </button>
-          <Link className="nav-row" to={href} onClick={onNavigate} aria-current={branch.current ? "true" : undefined}>
-            <LayoutGrid aria-hidden size={14} />
+          <Link className="nav-row" to={href} aria-current={branch.current ? "true" : undefined}>
+            <OpeningMark to={href}><LayoutGrid aria-hidden size={14} /></OpeningMark>
             <span className="nav-row-text">{name}</span>
             {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
             {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
@@ -82,13 +80,13 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
             <span className="nav-ws-meta"><WorkspaceSummary counts={counts} tabs={branch.tabs.length} /></span>
           </span>
         </button>
-        <Link className="nav-ws-open" to={href} onClick={onNavigate} aria-label={`Open workspace ${name}`}>
+        <Link className="nav-ws-open" to={href} aria-label={`Open workspace ${name}`}>
           <LayoutGrid aria-hidden size={15} />
         </Link>
       </div>}
       {open && (
         <div id={bodyId} className="nav-ws-body">
-          {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} projects={projects} session={session} currentPaneId={currentPaneId} onNavigate={onNavigate} />)}
+          {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} projects={projects} session={session} currentPaneId={currentPaneId} />)}
           {branch.tabs.length === 0 && <p className="nav-empty">No panes yet</p>}
         </div>
       )}
@@ -119,31 +117,30 @@ function WorkspaceSummary({ counts, tabs }: { counts: WorkspaceBranch["counts"];
  * A tab's panes, each named after its agent as the chat it opens is. A one-pane tab is that pane's
  * row, the tab named at its end while nothing more urgent sits there; a split tab heads its rows.
  */
-function TabRows({ tab, projects, session, currentPaneId, onNavigate }: {
+function TabRows({ tab, projects, session, currentPaneId }: {
   tab: TabBranch;
   projects?: readonly ProjectView[];
   session?: string;
   currentPaneId?: string;
-  onNavigate?: () => void;
 }) {
   if (tab.panes.length === 1) {
     const pane = tab.panes[0]!;
     const name = displayName(pane, projects);
     return <PaneRow pane={pane} title={name} note={tab.label === name ? undefined : tab.label} session={session}
-      current={pane.paneId === currentPaneId} onNavigate={onNavigate} />;
+      current={pane.paneId === currentPaneId} />;
   }
   return (
     <div role="group" aria-label={tab.label}>
       <div className="nav-tab-label"><span className="nav-row-text">{tab.label}</span><span className="nav-count">{tab.panes.length} panes</span></div>
       {tab.panes.map((pane) => (
         <PaneRow key={pane.paneId} nested pane={pane} title={displayName(pane, projects)} session={session}
-          current={pane.paneId === currentPaneId} onNavigate={onNavigate} />
+          current={pane.paneId === currentPaneId} />
       ))}
     </div>
   );
 }
 
-function PaneRow({ pane, title, note, session, current, nested, onNavigate }: {
+function PaneRow({ pane, title, note, session, current, nested }: {
   pane: AgentView;
   title: string;
   /** Said at the end when no state word is. */
@@ -151,13 +148,12 @@ function PaneRow({ pane, title, note, session, current, nested, onNavigate }: {
   session?: string;
   current: boolean;
   nested?: boolean;
-  onNavigate?: () => void;
 }) {
   const word = pane.kind === "shell" ? undefined : STATUS_WORD[pane.status];
+  const to = panePath(pane.paneId, session);
   return (
-    <Link className={cn("nav-pane", nested && "nav-pane-nested")} to={panePath(pane.paneId, session)} onClick={onNavigate}
-      aria-current={current ? "page" : undefined}>
-      <RowBody mark={<PaneMark pane={pane} />} title={title} end={<>
+    <Link className={cn("nav-pane", nested && "nav-pane-nested")} to={to} aria-current={current ? "page" : undefined}>
+      <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={title} end={<>
         {word ? <span className={cn("nav-pane-status", STATUS_TEXT[pane.status])}>{word}</span>
           : note && <span className="nav-row-note"><span className="sr-only">, </span>{note}</span>}
         {pane.kind !== "shell" && !word && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
