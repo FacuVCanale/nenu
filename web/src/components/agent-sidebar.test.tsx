@@ -1,9 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ThreadSidebar } from "./agent-sidebar";
 import { fixtureAgents } from "@/test/handlers";
-import type { AgentView } from "@/lib/types";
+import type { AgentView, ProjectView } from "@/lib/types";
 
 const idleAgent: AgentView = {
   paneId: "w3:p1",
@@ -23,31 +23,46 @@ describe("ThreadSidebar", () => {
     expect(screen.getByText("No agents running.")).toBeInTheDocument();
   });
 
-  it("groups agents into the same triage sections the dashboard uses", () => {
+  it("groups panes into Needs you, This workspace and Recent, headed in sentence case", () => {
     render(
-      <ThreadSidebar agents={[...fixtureAgents, idleAgent]} currentPaneId="" onSelect={vi.fn()} />,
+      <ThreadSidebar agents={[...fixtureAgents, idleAgent]} currentPaneId="w2:p1" onSelect={vi.fn()} />,
     );
-    // blocked → Needs you, working → Working, idle → Recent (lib/triage.ts)
-    expect(screen.getByText("Needs you")).toBeInTheDocument();
-    expect(screen.getByText("Working")).toBeInTheDocument();
-    expect(screen.getByText("Recent")).toBeInTheDocument();
+    const headings = screen.getAllByRole("heading").map((heading) => heading.textContent);
+    expect(headings).toEqual(["Needs you1", "This workspace1", "Recent1"]);
+    // The blocked agent leads, wherever it lives; the open pane sits in its own workspace's section.
+    expect(within(screen.getByRole("region", { name: "Needs you" })).getByRole("button")).toHaveTextContent("webapp");
+    expect(within(screen.getByRole("region", { name: "This workspace" })).getByRole("button")).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("region", { name: "Recent" })).getByRole("button")).toHaveTextContent("sandbox");
   });
 
   it("omits groups that have no members", () => {
-    // Only a blocked agent → no Working / Recent headers.
+    // Only a blocked agent → no This workspace / Recent headers.
     render(<ThreadSidebar agents={[fixtureAgents[0]!]} currentPaneId="" onSelect={vi.fn()} />);
-    expect(screen.getByText("Needs you")).toBeInTheDocument();
-    expect(screen.queryByText("Working")).toBeNull();
-    expect(screen.queryByText("Recent")).toBeNull();
+    expect(screen.getByRole("heading", { name: /^Needs you/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^This workspace/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Recent/ })).toBeNull();
+  });
+
+  it("names each pane as every other view does, where it lives under it, with no logo or monospace", () => {
+    const named: AgentView = { ...idleAgent, paneId: "w3:p9", paneLabel: "Fix login", tabLabel: "auth" };
+    const worker: AgentView = { ...idleAgent, paneId: "w3:p8", paneLabel: "raw label" };
+    const projects: ProjectView[] = [{
+      slug: "hub", name: "Hub", status: "active",
+      threads: [{ id: "t1", title: "Checkout", parentId: "root", role: "worker", status: "open", paneId: "w3:p8" }],
+    }];
+    const { container } = render(<ThreadSidebar agents={[named, worker]} projects={projects} currentPaneId="" onSelect={vi.fn()} />);
+    const rows = screen.getAllByRole("button").map((row) => [row.querySelector(".nav-pane-title")?.textContent, row.querySelector(".nav-pane-detail")?.textContent]);
+    expect(rows).toEqual([["Fix login", "sandbox · auth"], ["Checkout", "Hub"]]);
+    expect(container.querySelector(".font-mono")).toBeNull();
+    expect(container.querySelector("img, [data-agent-icon]")).toBeNull();
   });
 
   it("marks the current pane with aria-current='page'", () => {
     render(<ThreadSidebar agents={fixtureAgents} currentPaneId="w2:p1" onSelect={vi.fn()} />);
     const current = screen.getByRole("button", { current: "page" });
-    // w2:p1 lives in the "collie" workspace. The row is titled by where the work IS, not by which
-    // agent is doing it — "codex" is carried by the avatar (see paneTitle).
-    expect(current).toHaveTextContent("collie");
-    expect(current).not.toHaveTextContent("codex");
+    // Unnamed, the pane goes by its agent, as its header does; where it lives is the line under it.
+    expect(current.querySelector(".nav-pane-title")).toHaveTextContent("codex");
+    expect(current.querySelector(".nav-pane-detail")).toHaveTextContent("collie");
   });
 
   it("does not mark any pane current when the id matches nothing", () => {
@@ -105,20 +120,6 @@ describe("ThreadSidebar", () => {
     expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
   });
 
-  it("gives each section a status-colored bullet from the shared group palette", () => {
-    const { container } = render(
-      <ThreadSidebar
-        agents={[...fixtureAgents, idleAgent]}
-        shellPanes={[shellPane]}
-        currentPaneId=""
-        onSelect={vi.fn()}
-      />,
-    );
-    // One dot per section, colored by the same status palette the badges use.
-    for (const cls of ["bg-status-blocked", "bg-status-working", "bg-status-idle", "bg-status-unknown"]) {
-      expect(container.getElementsByClassName(cls).length).toBeGreaterThan(0);
-    }
-  });
 });
 
 // The "Switch pane" sheet sees the WHOLE herd, so it has the dashboard's original problem: the two
@@ -153,7 +154,7 @@ describe("ThreadSidebar — folding the long tails", () => {
       "aria-expanded",
       "false",
     );
-    expect(screen.getByText("(12)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /shells/i })).toHaveTextContent("12");
     // The agents you came for are still there.
     expect(screen.getByText("webapp")).toBeInTheDocument();
   });
@@ -211,7 +212,7 @@ describe("ThreadSidebar — folding the long tails", () => {
       <ThreadSidebar
         agents={fixtureAgents}
         shellPanes={manyShells}
-        currentPaneId=""
+        currentPaneId="w2:p1"
         onSelect={vi.fn()}
         recentOpen
         onRecentOpenChange={vi.fn()}
@@ -219,7 +220,7 @@ describe("ThreadSidebar — folding the long tails", () => {
         onShellsOpenChange={vi.fn()}
       />,
     );
-    // fixtureAgents are blocked + working; only Shells should be expandable here.
+    // fixtureAgents are blocked + the open pane's workspace; only Shells should be expandable here.
     const expandable = screen.getAllByRole("button", { expanded: true }).map((b) => b.textContent);
     expect(expandable).toHaveLength(1);
     expect(expandable[0]).toMatch(/shells/i);
