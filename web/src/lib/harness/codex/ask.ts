@@ -3,17 +3,17 @@
 // tool's own auto-added "None of the above" row), and a `tab to add notes | enter to submit …`
 // footer. Digits confirm directly: a digit answers the CURRENT question, advancing a
 // multi-question set and submitting on the last one (live-probed 2026-08-22 on 1-question and
-// 2-question calls; ASK_NOTES.md). The notes flow stays in the terminal: when the notes box is
-// focused the footer flips to `tab or esc to clear notes …` and this detector refuses — a digit
-// would type into the box. Esc interrupts the WHOLE conversation and is never emitted. Pure;
+// 2-question calls; ASK_NOTES.md). When the notes box is focused the footer flips to `tab or esc to
+// clear notes …` and a digit would type into the box, so that state is the same question with its
+// box as a focused `free-text` feedback row: every button locks and the composer stays refused,
+// instead of the dialog vanishing. Esc interrupts the WHOLE conversation and is never emitted. Pure;
 // no pane access.
 //
 // Notes (2026-10-10, Codex 0.160.1, PROBES_2026_10_NOTES.md): `Down`/`Up` move `›`, `tab` opens a
 // `› Add notes` box under the options for the pointed row, typed text replaces that placeholder, and
 // Enter submits the pointed option with `user_note: <text>`. Only the row whose own description
 // advertises notes (`None of the above … notes (tab)`) on a single-question card was walked, so only
-// it is marked `amend`. `detectAskNotes` reads the open box for the bridge's read-back; the buttons
-// view still refuses that state, because a digit there types into the box.
+// it is marked `amend`. `detectAskNotes` reads the open box for the bridge's read-back.
 
 import type { StyledLine } from "../../blocks";
 import type { PromptModel, PromptOption } from "../prompt-model";
@@ -47,17 +47,17 @@ export function detectAskRegion(lines: StyledLine[]): AskRegion | null {
   let fi = end;
   if (/^\s*esc to interrupt$/.test(texts[fi] ?? "")) fi--;
   if (fi < 0) return null;
-  // The notes-focused state is explicitly refused rather than merely unrecognized, so the
-  // refusal survives layout drift in the rows above.
-  if (NOTES_FOOTER.test(texts[fi]!)) return null;
-  if (!FOOTER.test(texts[fi]!)) return null;
+  const notes = NOTES_FOOTER.test(texts[fi]!) ? openNotes(texts, fi) : null;
+  if (notes === null && !FOOTER.test(texts[fi]!)) return null;
 
-  // One blank row separates the footer from the option run. Descriptions may wrap.
-  const bottom = skipBlanksUp(texts, fi - 1);
+  // One blank row separates the footer (or the open notes box) from the option run. Descriptions may wrap.
+  const bottom = skipBlanksUp(texts, (notes?.box ?? fi) - 1);
   if (bottom < 0) return null;
   if (NOTES_BOX.test(texts[bottom]!)) return null;
   const card = parseCard(texts, bottom);
   if (card === null) return null;
+  // The box belongs to the pointed row; without one it is no box this grammar walked.
+  if (notes && card.pointer === undefined) return null;
   const signature = regionSignature(lines, card.header, end + 1);
   if (signature === "") return null;
 
@@ -76,8 +76,18 @@ export function detectAskRegion(lines: StyledLine[]): AskRegion | null {
       coreSignature: card.question,
       signature,
       ...(card.pointer !== undefined ? { pointer: card.pointer } : {}),
+      ...(notes ? { feedback: { key: "Tab", focused: true, text: notes.text, purpose: "free-text" as const, row: card.pointer! } } : {}),
     },
   };
+}
+
+/** The open notes box over a `tab or esc to clear notes` footer at row `fi`: its row and what it holds. */
+function openNotes(texts: string[], fi: number): { box: number; text: string } | null {
+  const box = skipBlanksUp(texts, fi - 1);
+  const notes = box < 0 ? null : NOTES_ROW.exec(texts[box]!);
+  if (notes === null) return null;
+  const text = notes[1]!.trim();
+  return { box, text: text === NOTES_PLACEHOLDER ? "" : text };
 }
 
 /** The open notes box at the tail: the card's question, the row it annotates and what it holds. */
@@ -94,14 +104,12 @@ export function detectAskNotes(lines: StyledLine[]): AskNotes | null {
   const texts = lines.map((l) => rstrip(lineText(l)));
   const fi = lastNonBlankIndex(texts);
   if (fi < 0 || !NOTES_FOOTER.test(texts[fi]!)) return null;
-  const box = skipBlanksUp(texts, fi - 1);
-  const notes = box < 0 ? null : NOTES_ROW.exec(texts[box]!);
+  const notes = openNotes(texts, fi);
   if (notes === null) return null;
-  const bottom = skipBlanksUp(texts, box - 1);
+  const bottom = skipBlanksUp(texts, notes.box - 1);
   const card = bottom < 0 ? null : parseCard(texts, bottom);
   if (card === null || card.pointer === undefined) return null;
-  const text = notes[1]!.trim();
-  return { question: card.question, row: card.pointer, text: text === NOTES_PLACEHOLDER ? "" : text };
+  return { question: card.question, row: card.pointer, text: notes.text };
 }
 
 interface Card {
