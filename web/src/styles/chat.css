@@ -1,18 +1,48 @@
-/* A chat's own chrome: the header's menu and the context meter. */
-.workbench-context-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px; border-radius: var(--radius-md); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); cursor: pointer; }
-.workbench-context-trigger:hover { background: var(--accent); }
-
+/* A chat's own chrome: the header with its menu, the strips and their notes, and what scrolls under them. */
 .workbench-chat-menu { width: 44px; height: 44px; flex-shrink: 0; justify-content: center; margin-inline: 0; padding: 0; }
 .workbench-chat-menu > span { width: 28px; height: 28px; background: transparent; box-shadow: none; }
 .workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
 
-/* Touch: every target reaches 44px. */
-@media (max-width: 1023px), (pointer: coarse) {
-  .workbench-context-trigger { min-height: 44px; }
-}
-
 @media (pointer: coarse) {
   .workbench-menu-item { min-height: 44px; }
+}
+
+/* The chat's chrome (components/agent-chat): the header, the read-only note, the tab and pane strips
+   and a spawn's status, one stack. On a desk it sits above the thread. On a phone it is one bar of
+   the chrome material the thread scrolls under, as a native chat's bar is, so a line slides under it
+   instead of being cut at the strip's edge. agent-chat measures it into --chat-chrome-height. The
+   blur sits on a pseudo-element: on the stack itself it would make the stack the containing block of
+   the fixed menus and sheets that open from it. */
+.chat-chrome { position: relative; z-index: 20; display: flex; flex-shrink: 0; flex-direction: column; }
+
+@media (max-width: 1023px) {
+  .chat-chrome { position: absolute; inset-inline: 0; top: 0; }
+  .chat-chrome::before { content: ""; position: absolute; inset: 0; z-index: -1; border-bottom: 1px solid var(--border); background: var(--chrome); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+  /* One material: the bands inside draw none of their own, and the stack draws the one hairline. */
+  .chat-chrome .workbench-app-header, .chat-chrome .strip { border-bottom-color: transparent; background: transparent; }
+
+  /* What scrolls under the chrome starts below it, and scrolls a target into view below it too. The
+     live conversation's scroller is drawn by live-conversation.tsx; styles/chat.test.tsx checks this
+     selector still reaches it. */
+  .chat-thread section[aria-label="Live conversation"] > .relative > .overflow-y-auto { padding-top: calc(var(--chat-chrome-height, 0px) + 1.5rem); scroll-padding-top: var(--chat-chrome-height, 0px); }
+  .chat-thread section[aria-label="Live conversation"] > [role="status"] { margin-top: var(--chat-chrome-height, 0px); }
+  /* The list's own fade stood in for the chrome's edge; the chrome is that edge now. */
+  .chat-thread section[aria-label="Live conversation"] > .relative > [aria-hidden].absolute.top-0 { display: none; }
+  .chat-scroll-under { padding-top: calc(var(--chat-chrome-height, 0px) + 0.75rem); scroll-padding-top: var(--chat-chrome-height, 0px); }
+  /* A view that does not scroll under the chrome starts below it. */
+  .chat-below-chrome { padding-top: var(--chat-chrome-height, 0px); }
+
+  /* Following stops a question's box a little under the list's top edge, which is under the chrome
+     here. The box reaches up by the chrome's height, so the card's first line lands below the bar,
+     and the card stays where it was; taps on the lines it reaches over go through. */
+  .chat-follow-stop { padding-top: var(--chat-chrome-height, 0px); margin-top: calc(1.25rem - var(--chat-chrome-height, 0px)); pointer-events: none; }
+  .chat-follow-stop > * { pointer-events: auto; }
+}
+
+/* A desk's terminal view: the mirror runs the pane's full width, so the composer does too, both on
+   the page gutter, and their left edges line up (T38). */
+@media (min-width: 1024px) {
+  .workbench-chat[data-view="terminal"] .workbench-composer { max-width: none; }
 }
 
 /* Display's Chat text (hooks/use-display-prefs.ts puts the choice on the root). The step is taken

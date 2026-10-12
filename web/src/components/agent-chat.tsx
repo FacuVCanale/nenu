@@ -419,7 +419,7 @@ export function AgentChat({
   // over it scrolls the thread, and following lands on its first line (`data-follow-stop`).
   const threadFooter = useMemo(() => !showCard ? conversationFooter : <>
     {conversationFooter}
-    <div data-follow-stop className="mt-5">
+    <div data-follow-stop className="chat-follow-stop mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
         readOnly={cardReadOnly} lockReason={lock} refused={refused} onOpen={() => setRawTerminal(true)}
         onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
@@ -484,6 +484,21 @@ export function AgentChat({
   // The list centres the current hit when it moves to it; this runs after that (a parent's effect
   // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
   const chatRef = useRef<HTMLDivElement>(null);
+  // The chrome's height, as --chat-chrome-height on the chat: on a phone the thread scrolls under the
+  // chrome and starts below it (styles/chat.css). Set straight on the element, so a strip stepping
+  // aside for the keyboard re-measures without a render.
+  const chromeRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const chrome = chromeRef.current;
+    const root = chatRef.current;
+    if (!chrome || !root) return;
+    const measure = () => root.style.setProperty("--chat-chrome-height", `${Math.round(chrome.getBoundingClientRect().height)}px`);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(chrome);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const root = chatRef.current;
     if (!findOpen || matchCount === 0 || !root) return;
@@ -808,7 +823,7 @@ export function AgentChat({
   // memoised transcript around it) alone; the block itself arrives through InlineDialog.
   const conversationFooterWithDialog = useMemo(() => !dialogInline ? threadFooter : <>
     {threadFooter}
-    <div data-follow-stop className="mt-5"><InlineDialogSlot /></div>
+    <div data-follow-stop className="chat-follow-stop mt-5"><InlineDialogSlot /></div>
   </>, [dialogInline, threadFooter]);
   const dialogInThread = (showCard && cardCovers) || dialogInline;
 
@@ -985,76 +1000,75 @@ export function AgentChat({
   return (
     <div
       ref={chatRef}
-      className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
+      className="workbench-chat relative flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
       data-keyboard-open={keyboardOpen || undefined}
+      data-view={showConversation ? "chat" : "terminal"}
     >
-      {/* Header — the SAME AppHeader shell the dashboard and space mount, so the Nenu mark is
-          identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
-          slots: the title as the center, the pane's tools as the right cluster, and the find bar as
-          the full-row takeover while searching. */}
-      {docked ? docked.header({ terminal: !showConversation, canToggle: conversationCapable, setTerminal: (terminal) => { setSubagent(null); setRawTerminal(terminal); },
-        find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
-        bridge={bridge}
-        error={error}
-        back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : { label: "Home", onClick: onBack }}
-        override={subagent ? undefined : findBar}
-        rightLead={
-          subagent ? undefined : agent ? (
-            <>
-              {headerAction}
-              {sessionTools}
-              {desktop && conversationCapable && (
-                <button
-                  type="button"
-                  onClick={toggleRawTerminal}
-                  aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                  aria-pressed={prefs.rawTerminal}
-                  title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
-                >
-                  {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
-                </button>
-              )}
-              {actionsMenu}
-            </>
-          ) : headerAction
-        }
-      >
-        {/* The screen's heading: the pane's name over its place. A project's title opens the
-            project's page; any other opens the navigation on a phone. A subagent's view names the
-            subagent and what it is. */}
-        {subagent ? <h1 className="flex min-w-0 flex-1 flex-col px-1">
-          <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{subagentView!.name}</span>
-          <span className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={subagentView!} harness={subagentHarness} /></span>
-        </h1> : agent ? <h1 className="flex min-w-0 flex-1">{project ? (
-          <button
-            type="button"
-            onClick={() => openProject(project.slug)}
-            aria-label={`Open ${project.name} overview`}
-            className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
-          >
-            {titleLabel}
-          </button>
-        ) : opensNavigation ? (
-          <button
-            type="button"
-            data-chat-title
-            aria-haspopup="dialog"
-            aria-expanded={navigation.open}
-            onClick={navigation.onOpen}
-            className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
-          >
-            {titleLabel}
-          </button>
-        ) : <span className={TITLE_SHAPE}>{titleLabel}</span>}</h1> : (
-          <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : "Pane not found"}</h1>
-        )}
-      </AppHeader>}
-      {overlay}
-
-      <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
-      {/* Content region below the header — the mirror inside is the scroller. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* The chrome: the header, the read-only note, the strips and a spawn's status, one stack. On a
+          phone it is a translucent bar the thread scrolls under (styles/chat.css). */}
+      <div ref={chromeRef} data-chat-chrome className="chat-chrome">
+        {/* Header — the SAME AppHeader shell the dashboard and space mount, so the Nenu mark is
+            identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
+            slots: the title as the center, the pane's tools as the right cluster, and the find bar as
+            the full-row takeover while searching. */}
+        {docked ? docked.header({ terminal: !showConversation, canToggle: conversationCapable, setTerminal: (terminal) => { setSubagent(null); setRawTerminal(terminal); },
+          find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
+          bridge={bridge}
+          error={error}
+          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : { label: "Home", onClick: onBack }}
+          override={subagent ? undefined : findBar}
+          rightLead={
+            subagent ? undefined : agent ? (
+              <>
+                {headerAction}
+                {sessionTools}
+                {desktop && conversationCapable && (
+                  <button
+                    type="button"
+                    onClick={toggleRawTerminal}
+                    aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
+                    aria-pressed={prefs.rawTerminal}
+                    title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
+                  >
+                    {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
+                  </button>
+                )}
+                {actionsMenu}
+              </>
+            ) : headerAction
+          }
+        >
+          {/* The screen's heading: the pane's name over its place. A project's title opens the
+              project's page; any other opens the navigation on a phone. A subagent's view names the
+              subagent and what it is. */}
+          {subagent ? <h1 className="flex min-w-0 flex-1 flex-col px-1">
+            <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{subagentView!.name}</span>
+            <span className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={subagentView!} harness={subagentHarness} /></span>
+          </h1> : agent ? <h1 className="flex min-w-0 flex-1">{project ? (
+            <button
+              type="button"
+              onClick={() => openProject(project.slug)}
+              aria-label={`Open ${project.name} overview`}
+              className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
+            >
+              {titleLabel}
+            </button>
+          ) : opensNavigation ? (
+            <button
+              type="button"
+              data-chat-title
+              aria-haspopup="dialog"
+              aria-expanded={navigation.open}
+              onClick={navigation.onOpen}
+              className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
+            >
+              {titleLabel}
+            </button>
+          ) : <span className={TITLE_SHAPE}>{titleLabel}</span>}</h1> : (
+            <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : "Pane not found"}</h1>
+          )}
+        </AppHeader>}
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 
@@ -1101,17 +1115,20 @@ export function AgentChat({
         <SpawnStatus paneId={paneId} />
         {isShell && !spawning && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
 
+      </div>
+      {overlay && <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col">{overlay}</div>}
+
+      <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
+      {/* Content region below the header — the mirror inside is the scroller. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Terminal mirror — tapping it focuses the composer so you can start typing right away
             (unless you're selecting text to copy, which the tap must not collapse). */}
         {/* min-w-0 only — do NOT set overflow-x-hidden here: that forces overflow-y to `auto` (CSS
             quirk) and makes this wrapper a second vertical scroller competing with ChatMessageList. */}
-        {/* border-t like the strips above it: every band in this stack draws its own TOP edge, so
-            whichever one ends up last still has a boundary under it. Without this the pane row ran
-            straight into terminal output — the chrome and the mirror read as one surface. Drawing it
-            here rather than as a border-b on PaneStrip covers the case where that strip is absent
-            (a tab holding a single pane), which is the common one. */}
+        {/* border-t: on a desk the chrome's bands draw no edge of their own, so the view under them
+            draws it. On a phone the chrome draws its own hairline and these slide under it. */}
         {gone ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto border-t border-border/40">
+          <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto border-t border-border/40">
             <PaneGone closed={closed !== undefined} unsure={connecting}
               next={next && { paneId: next.paneId, name: displayName(next, projects) }}
               onOpen={switchTo} onHome={onBack} />
@@ -1119,7 +1136,7 @@ export function AgentChat({
         ) : subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent}
           harness={subagentHarness} ownHeader={Boolean(docked)} onMain={() => setSubagent(null)}
           onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
-          <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
+          <div className="chat-thread min-h-0 min-w-0 flex-1 border-t border-border/40">
             <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
@@ -1134,7 +1151,7 @@ export function AgentChat({
             dep={display}
             onAtBottomChange={setFollowing}
             hasNew={hasNew}
-            className="px-2 py-3"
+            className="chat-scroll-under px-2 py-3 lg:px-(--page-gutter)"
           >
             {display ? (
               <>

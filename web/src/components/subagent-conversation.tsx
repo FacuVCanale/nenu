@@ -179,7 +179,7 @@ export function SubagentConversation({
       </div>}
       {/* The list takes what the bars leave: at full height it pushed the footer out and the whole chat scrolled. */}
       <div className="min-h-0 flex-1">
-      <ChatMessageList dep={page} className="px-(--page-gutter) py-3">
+      <ChatMessageList dep={page} className="chat-scroll-under px-(--page-gutter) py-3">
       <div className="mx-auto w-full max-w-(--chat-column)">
         {failed && (
           <div
