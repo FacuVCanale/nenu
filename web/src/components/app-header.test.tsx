@@ -48,13 +48,6 @@ describe("AppHeader — the one shared header shell", () => {
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
-  it("runs the caller's onHome when the mark is tapped outside the workbench", async () => {
-    const onHome = vi.fn();
-    renderHeader(<AppHeader bridge="connected" error={false} onHome={onHome} />);
-    await userEvent.click(screen.getByRole("button", { name: "Nenu home" }));
-    expect(onHome).toHaveBeenCalledOnce();
-  });
-
   it("uses the shell drawer as the single mobile navigation control", async () => {
     const onOpen = vi.fn();
     renderHeader(
@@ -90,7 +83,6 @@ describe("AppHeader — the one shared header shell", () => {
       <AppHeader
         bridge="connected"
         error
-        onHome={() => {}}
         rightLead={<span>working</span>}
         override={<div>FINDBAR</div>}
       >
@@ -130,13 +122,6 @@ describe("AppHeader — the phone's leading control", () => {
   it("takes an explicit back with its destination and name", () => {
     renderAt("/project/awam/node/t-1", <AppHeader bridge="connected" error={false} title="Rediseño" back={{ to: "/project/awam", label: "AWAM" }} />);
     expect(screen.getByRole("link", { name: "Back to AWAM" })).toHaveAttribute("href", "/project/awam");
-  });
-
-  it("goes back through an older caller's onHome, which names its own destination", async () => {
-    const onHome = vi.fn();
-    renderAt("/pane/p1/history", <AppHeader bridge="connected" error={false} onHome={onHome}><span>History</span></AppHeader>);
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(onHome).toHaveBeenCalledOnce();
   });
 
   it("keeps the mark on Home, opening navigation, and leaves the bar without a title", async () => {
@@ -206,7 +191,7 @@ describe("AppHeader — the dog keys on trouble/lost, not the first not-live fra
   afterEach(() => vi.useRealTimers());
 
   it("stays static through brief signal losses and becomes muted only for a sustained outage", () => {
-    const { container } = renderHeader(<AppHeader bridge="connected" error onHome={() => {}} />);
+    const { container } = renderHeader(<AppHeader bridge="connected" error />);
     // A single not-live frame is NOT trouble yet: the mark stays the static, full-color icon.
     expect(container.querySelector(".dog-gallop")).toBeNull();
     expect(container.querySelector("img")).toHaveAttribute("src", "/nenu-mark.png");
