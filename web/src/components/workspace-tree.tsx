@@ -14,9 +14,8 @@ const STATUS_WORD: Partial<Record<AgentStatus, string>> = { blocked: "needs you"
 const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-status-blocked", working: "text-status-working", done: "text-status-done" };
 
 /** The herd as Herdr holds it: each workspace, its tabs, and a tab's panes when it has several. */
-export function WorkspaceTree({ source, query, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false, startFolded = false }: {
+export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false, startFolded = false }: {
   source: Herd;
-  query: string;
   session?: string;
   currentPaneId?: string;
   /** Explicit fold per workspace id; an untouched one follows {@link defaultOpen}. */
@@ -30,25 +29,23 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   /** An untouched workspace starts folded instead of following {@link defaultOpen}. */
   startFolded?: boolean;
 }) {
-  const searching = query.trim() !== "";
-  const branches = workspaceTree(source, query, currentPaneId);
+  const branches = workspaceTree(source, "", currentPaneId);
   if (branches.length === 0) return empty;
   return branches.map((branch) => (
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
       session={session} currentPaneId={currentPaneId}
-      open={searching || (expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length)))} searching={searching}
+      open={expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length))}
       onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} compact={compact} />
   ));
 }
 
-function WorkspaceSection({ branch, href, session, currentPaneId, open, searching, onToggle, onNavigate, compact }: {
+function WorkspaceSection({ branch, href, session, currentPaneId, open, onToggle, onNavigate, compact }: {
   branch: WorkspaceBranch;
   /** Where the workspace's name opens (see workspacePath). */
   href: string;
   session?: string;
   currentPaneId?: string;
   open: boolean;
-  searching: boolean;
   onToggle: (open: boolean) => void;
   onNavigate?: () => void;
   compact: boolean;
@@ -61,7 +58,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, open, searchin
       {compact ? (
         <div className="nav-project">
           <button type="button" className="nav-disclosure" aria-label={`${name} panes`} aria-expanded={open} aria-controls={open ? bodyId : undefined}
-            disabled={searching} onClick={() => onToggle(!open)}>
+            onClick={() => onToggle(!open)}>
             <ChevronRight aria-hidden size={14} />
           </button>
           <Link className="nav-row" to={href} onClick={onNavigate} aria-current={branch.current ? "true" : undefined}>
@@ -73,7 +70,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, open, searchin
           </Link>
         </div>
       ) : <div className="nav-ws-head">
-        <button type="button" className="nav-ws-toggle" aria-expanded={open} aria-controls={open ? bodyId : undefined} disabled={searching}
+        <button type="button" className="nav-ws-toggle" aria-expanded={open} aria-controls={open ? bodyId : undefined}
           onClick={() => onToggle(!open)}>
           <ChevronRight aria-hidden size={15} className="nav-ws-chevron" />
           <span className="nav-ws-title">

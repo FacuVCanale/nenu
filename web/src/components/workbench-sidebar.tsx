@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
 
@@ -6,17 +6,20 @@ import { NavRow } from "@/components/chat-groups";
 import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { StatusDot } from "@/components/status-badge";
+import { Highlight, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
-import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
+import { workspaceTree } from "@/lib/workspace-tree";
+import { displayName } from "@/lib/display-name";
+import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import { STATE_LABEL, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { chatMatches, isOpenThread, jumpTargets, matches, paneTitle, projectForPane, projectGroups, type ProjectGroup } from "@/lib/projects";
+import { isOpenThread, paneTitle, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 /** What the sidebar lists: the whole tree, or only what is waiting on the operator. */
@@ -48,11 +51,16 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 }) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState(0);
   const [mode, setMode] = useState<SidebarMode>("browse");
   const searchBox = useRef<HTMLInputElement>(null);
+  const listId = useId();
   const navigate = useNavigate();
   const attention = needsYou(data);
   const phone = variant !== "sidebar";
+  const results = searching ? navSearch(data, query) : [];
+  const hits = results.flatMap((group) => group.hits);
+  const selected = Math.min(picked, hits.length - 1);
 
   const target = request?.target;
   useEffect(() => {
@@ -72,13 +80,22 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
     setSearching(false);
   }
 
-  /** Enter opens the project or chat that matches and moved last, the way ⌘K, a few letters and Enter jump. */
-  function openFirstMatch() {
-    const first = query.trim() ? jumpTargets(data.agents, data.projects, query)[0] : undefined;
-    if (!first) return;
-    navigate(first.kind === "project" ? projectPath(first.id, data.session) : panePath(first.id, data.session));
+  /** Enter opens the picked result, the first one until an arrow moves the pick. */
+  function openPicked() {
+    const hit = hits[selected];
+    if (!hit) return;
+    navigate(hitPath(hit, data.session));
     closeSearch();
     onNavigate?.();
+  }
+
+  function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") { event.stopPropagation(); closeSearch(); }
+    if (event.key === "Enter" && !event.nativeEvent.isComposing) openPicked();
+    if ((event.key === "ArrowDown" || event.key === "ArrowUp") && hits.length > 0) {
+      event.preventDefault();
+      setPicked(Math.max(0, Math.min(hits.length - 1, selected + (event.key === "ArrowDown" ? 1 : -1))));
+    }
   }
 
   return (
@@ -91,12 +108,11 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
           <label className="nav-row nav-search">
             <Search aria-hidden size={16} />
             <input ref={searchBox} type="search" autoFocus value={query} placeholder="Search" aria-label="Search projects and chats"
-              onChange={(event) => setQuery(event.target.value)}
+              aria-controls={hits.length ? listId : undefined} aria-autocomplete="list"
+              aria-activedescendant={hits.length ? optionId(listId, selected) : undefined}
+              onChange={(event) => { setQuery(event.target.value); setPicked(0); }}
               onBlur={() => { if (!query.trim()) closeSearch(); }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") { event.stopPropagation(); closeSearch(); }
-                if (event.key === "Enter" && !event.nativeEvent.isComposing) openFirstMatch();
-              }} />
+              onKeyDown={onSearchKey} />
           </label>
         ) : !phone && (
           <button type="button" className="nav-row" onClick={() => { setMode("browse"); setSearching(true); }} aria-keyshortcuts="Meta+K">
@@ -111,11 +127,14 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
       </div>}
 
       <div className="nav-scroll">
-        {mode === "needs-you"
+        {query.trim()
+          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} session={data.session} onPick={setPicked}
+              onNavigate={() => { closeSearch(); onNavigate?.(); }} />
+          : mode === "needs-you"
           ? <NeedsYouList data={data} panes={attention} onNavigate={onNavigate} />
           : <>
-            {variant === "drawer" && !query.trim() && <DrawerSections data={data} onNavigate={onNavigate} />}
-            <SidebarTree data={data} query={query} onNavigate={onNavigate} folded={phone} />
+            {variant === "drawer" && <DrawerSections data={data} onNavigate={onNavigate} />}
+            <SidebarTree data={data} onNavigate={onNavigate} folded={phone} />
           </>}
       </div>
 
@@ -125,6 +144,65 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
       </div>
     </nav>
   );
+}
+
+const optionId = (listId: string, index: number) => `${listId}-${index}`;
+
+/** Where a search result opens: a project's page, a node's chat (or its detail when it runs nowhere), a pane's chat. */
+function hitPath(hit: SearchHit, session?: string): string {
+  if (hit.kind === "project") return projectPath(hit.project.slug, session);
+  if (hit.kind === "node") return hit.thread.paneId ? panePath(hit.thread.paneId, session) : nodePath(hit.project.slug, hit.thread.id, session);
+  return panePath(hit.pane.paneId, session);
+}
+
+/** The search's matches as one list: Projects, then Chats, each row named as everywhere else with the match in semibold. */
+function SearchResults({ groups, query, listId, selected, session, onPick, onNavigate }: {
+  groups: SearchGroup[];
+  query: string;
+  listId: string;
+  selected: number;
+  session?: string;
+  onPick: (index: number) => void;
+  onNavigate: () => void;
+}) {
+  useEffect(() => {
+    document.getElementById(optionId(listId, selected))?.scrollIntoView?.({ block: "nearest" });
+  }, [listId, selected]);
+  if (groups.length === 0) return <p className="nav-empty">No matches for “{query.trim()}”</p>;
+  let index = 0;
+  return (
+    <div role="listbox" id={listId} aria-label="Search results" className="nav-results">
+      {groups.map((group) => (
+        <div key={group.label} role="group" aria-label={group.label} className="nav-group">
+          <div className="nav-label" aria-hidden>
+            {group.label}{group.more > 0 && <span className="nav-label-end">{group.hits.length} of {group.hits.length + group.more}</span>}
+          </div>
+          {group.hits.map((hit) => {
+            const at = index++;
+            return (
+              <Link key={hit.key} id={optionId(listId, at)} role="option" aria-selected={at === selected} className="nav-pane nav-result"
+                to={hitPath(hit, session)} onClick={onNavigate} onMouseMove={() => { if (at !== selected) onPick(at); }}>
+                <RowBody mark={<HitMark hit={hit} />} title={<Highlight text={hit.title} query={query} />}
+                  detail={<PlaceText place={hit.place} query={query} />} end={<span className="sr-only">, {hitState(hit)}</span>} />
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HitMark({ hit }: { hit: SearchHit }) {
+  if (hit.kind === "project") return <span className="nav-avatar" aria-hidden>{hit.project.name.trim().charAt(0).toUpperCase() || "P"}</span>;
+  if (hit.kind === "node") return <NodeDot state={hit.state} />;
+  return <PaneMark pane={hit.pane} />;
+}
+
+function hitState(hit: SearchHit): string {
+  if (hit.kind === "project") return "project";
+  if (hit.kind === "node") return STATE_LABEL[hit.state].toLowerCase();
+  return hit.pane.kind === "shell" ? "shell" : STATUS_LABEL[hit.pane.status];
 }
 
 /** Agent panes waiting on the operator, the same set the Home headline and the rail's dot count. */
@@ -189,51 +267,34 @@ function ChatRow({ chat, now, session, onNavigate }: { chat: DrawerChat; now: nu
  * project and workspace starts closed, and what the operator opens there lasts while the sheet does,
  * so the next open is compact again and the desk's remembered folds stay the desk's.
  */
-function SidebarTree({ data, query, onNavigate, folded = false }: { data: HomeData; query: string; onNavigate?: () => void; folded?: boolean }) {
+function SidebarTree({ data, onNavigate, folded = false }: { data: HomeData; onNavigate?: () => void; folded?: boolean }) {
   const { paneId, projectSlug } = useParams();
   const { prefs, setExpanded, setWorkspaceOpen } = useSidebarPrefs({ persist: !folded });
-  const searching = query.trim() !== "";
-  const groups = sidebarProjects(data, query);
-  const loose = looseWorkspaces(data);
+  const projects = data.projects ?? [];
+  const loose = { ...data, ...looseWorkspaces(data) };
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
   useRevealProject(folded ? undefined : currentProject, setExpanded);
-  const workspaces = <WorkspaceTree compact source={{ ...data, ...loose }} query={query} session={data.session} currentPaneId={paneId}
-    expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} startFolded={folded} />;
-  const hasWorkspaces = workspaceTree({ ...data, ...loose }, query, paneId).length > 0;
+  const hasWorkspaces = workspaceTree(loose, "", paneId).length > 0;
 
   return <>
-    {groups.length > 0 && (
+    {projects.length > 0 && (
       <section aria-label="Projects" className="nav-group">
         <h3 className="nav-label">Projects</h3>
-        {groups.map((group) => (
-          <ProjectSection key={group.project.slug} group={group} data={data} open={searching || (prefs.expanded[group.project.slug] ?? !folded)}
-            searching={searching} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} panes={group.panes} />
+        {projects.map((project) => (
+          <ProjectSection key={project.slug} project={project} data={data} open={prefs.expanded[project.slug] ?? !folded}
+            expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} panes={projectPanes(data, project)} />
         ))}
       </section>
     )}
     {hasWorkspaces && (
       <section aria-label="Workspaces" className="nav-group">
         <h3 className="nav-label">Workspaces</h3>
-        {workspaces}
+        <WorkspaceTree compact source={loose} session={data.session} currentPaneId={paneId}
+          expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} startFolded={folded} />
       </section>
     )}
-    {groups.length === 0 && !hasWorkspaces && <Empty query={query} />}
+    {projects.length === 0 && !hasWorkspaces && <Empty />}
   </>;
-}
-
-/**
- * The project groups matching the query, each with the panes in its workspaces outside every thread.
- * The sidebar has no "Other chats", so a project also shows up when only one of those panes matches.
- */
-function sidebarProjects(data: HomeData, query: string): Array<ProjectGroup & { panes: AgentView[] }> {
-  const groups = projectGroups(data.projects, query);
-  return (data.projects ?? []).flatMap((project) => {
-    const group = groups.find((match) => match.project === project);
-    const whole = matches(query, project.name, project.slug, project.goal);
-    const panes = projectPanes(data, project).filter((pane) => whole || chatMatches(pane, query) || matches(query, paneSubject(pane)));
-    if (group) return [{ ...group, panes }];
-    return panes.length ? [{ project, coordinator: false, threads: [], panes }] : [];
-  });
 }
 
 /**
@@ -293,39 +354,37 @@ interface TreeFolds {
 
 const STATE_WORD: Partial<Record<NodeState, string>> = { needs: "needs you", review: "review" };
 
-function ProjectSection({ group, data, open, searching, expanded, onExpand, onNavigate, panes = [] }: TreeFolds & {
-  group: ProjectGroup;
+function ProjectSection({ project, data, open, expanded, onExpand, onNavigate, panes = [] }: TreeFolds & {
+  project: ProjectView;
   data: HomeData;
   open: boolean;
-  searching: boolean;
   onNavigate?: () => void;
   /** The project's workspace panes outside every thread, listed after its threads. */
   panes?: AgentView[];
 }) {
   const { paneId, projectSlug, nodeId } = useParams();
   const listId = useId();
-  const { project, coordinator } = group;
   const session = data.session;
   const status = project.coordinator?.liveStatus;
   const openCount = project.threads.filter(isOpenThread).length;
-  const tree = orgTree(group.threads);
+  const tree = orgTree(project.threads);
   const isCurrent = (node: OrgNode) => (node.thread.paneId !== undefined && node.thread.paneId === paneId) || (projectSlug === project.slug && nodeId === node.thread.id);
-  // Open coordinators start open and resolved ones folded; a search or the node on screen opens them.
+  // Open coordinators start open and resolved ones folded; the node on screen opens them.
   const branch = (node: OrgNode, depth: number): ReactNode => {
     const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
       onNavigate={onNavigate} fold={fold} />;
     if (node.children.length === 0) return row();
     const key = `${project.slug}/${node.thread.id}`;
-    const nodeOpen = searching || (expanded[key] ?? (node.state !== "resolved" || node.children.some((child) => holds(child, isCurrent))));
+    const nodeOpen = expanded[key] ?? (node.state !== "resolved" || node.children.some((child) => holds(child, isCurrent)));
     return (
       <div key={node.thread.id} role="group" aria-label={node.thread.title}>
-        {row({ open: nodeOpen, disabled: searching, onToggle: () => onExpand(key, !nodeOpen) })}
+        {row({ open: nodeOpen, onToggle: () => onExpand(key, !nodeOpen) })}
         {nodeOpen && node.children.map((child) => branch(child, depth + 1))}
       </div>
     );
   };
   const historyKey = `${project.slug}/history`;
-  const historyOpen = searching || (expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent)));
+  const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
   return (
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
@@ -338,13 +397,13 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
           {openCount > 0 && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
         </Link>
         <button type="button" className="nav-disclosure nav-disclosure-end" aria-label={`${project.name} tasks`} aria-expanded={open} aria-controls={listId}
-          disabled={searching} onClick={() => onExpand(project.slug, !open)}>
+          onClick={() => onExpand(project.slug, !open)}>
           <ChevronRight aria-hidden size={14} />
         </button>
       </div>
       {open && (
         <div id={listId}>
-          {coordinator && project.coordinator && (
+          {project.coordinator && (
             <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(project.coordinator.paneId, session)} onClick={onNavigate}
               aria-current={project.coordinator.paneId === paneId ? "page" : undefined}>
               <Bot aria-hidden size={14} />
@@ -360,13 +419,13 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)} onClick={onNavigate}
               aria-current={pane.paneId === paneId ? "page" : undefined}>
               {pane.kind === "shell" ? <Terminal aria-hidden size={14} /> : <StatusDot status={pane.status} surface="bg-transparent" className="size-2" />}
-              <span className="nav-row-text">{paneSubject(pane)}</span>
+              <span className="nav-row-text">{displayName(pane, data.projects)}</span>
               {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
               <span className="nav-row-note">{pane.kind === "shell" ? "shell" : pane.agent}</span>
             </Link>
           ))}
           {tree.history.length > 0 && <>
-            <button type="button" className="nav-row nav-row-nested nav-history" aria-expanded={historyOpen} disabled={searching}
+            <button type="button" className="nav-row nav-row-nested nav-history" aria-expanded={historyOpen}
               title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
               <ChevronRight aria-hidden size={14} />History <span className="nav-count">{tree.resolved.coordinators + tree.resolved.threads}</span>
             </button>
@@ -389,7 +448,6 @@ const depthStyle = (depth: number) => ({ "--nav-depth": depth }) as CSSPropertie
 
 interface ThreadRowFold {
   open: boolean;
-  disabled: boolean;
   onToggle: () => void;
 }
 
@@ -411,7 +469,7 @@ function ThreadRow({ node, depth, slug, session, current, onNavigate, fold }: {
     <div className="nav-thread">
       {fold && (
         <button type="button" className="nav-disclosure" style={depthStyle(depth)} aria-label={`${thread.title} threads`} aria-expanded={fold.open}
-          disabled={fold.disabled} onClick={fold.onToggle}>
+          onClick={fold.onToggle}>
           <ChevronRight aria-hidden size={13} />
         </button>
       )}
@@ -428,6 +486,6 @@ function ThreadRow({ node, depth, slug, session, current, onNavigate, fold }: {
   );
 }
 
-function Empty({ query }: { query: string }) {
-  return <p className="nav-empty">{query.trim() ? "No matching projects or chats" : "Your agent chats will appear here."}</p>;
+function Empty() {
+  return <p className="nav-empty">Your agent chats will appear here.</p>;
 }

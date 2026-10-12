@@ -102,6 +102,14 @@
 /* The phone's Needs you and Recent: a chat a row, where it lives under its name, its age on the right. */
 .nav-chat-time { flex-shrink: 0; color: var(--subtle-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
 .nav-group > .nav-label > .nav-count { margin-left: 0; color: inherit; font-size: inherit; }
+/* Search: one flat list of what matched, the pick filled like the current row, the match in semibold. */
+.nav-result[aria-selected="true"] { background: var(--workbench-row-selected); }
+.nav-match { background: none; color: inherit; font-weight: 600; }
+.nav-label-end { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* Where a pane lives: the place gives up its width before the tab, which tells rows apart. */
+.nav-pane-detail:has(> .nav-place) { display: flex; min-width: 0; white-space: pre; }
+.nav-place { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nav-place-tab { flex-shrink: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; }
 .workbench-sidebar .nav-label:first-child { padding-top: 10px; }
 }
 
