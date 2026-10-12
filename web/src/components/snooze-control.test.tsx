@@ -50,6 +50,24 @@ describe("SnoozeControl", () => {
     expect(revalidate).toHaveBeenCalled();
   });
 
+  test("says so when the pause could not be saved, and clears that on the next try", async () => {
+    server.use(http.post("/api/notifications/snooze", () => new HttpResponse(null, { status: 500 })));
+    const user = userEvent.setup();
+    render(<SnoozeControl snoozedUntil={null} />);
+    const menu = screen.getByRole("combobox", { name: "Do not disturb" });
+
+    await user.selectOptions(menu, "For 1 hour");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save. Try again.");
+    expect(revalidate).not.toHaveBeenCalled();
+    expect(menu).toBeEnabled();
+
+    server.resetHandlers();
+    server.use(http.post("/api/notifications/snooze", () => HttpResponse.json({ snoozedUntil: null })));
+    await user.selectOptions(menu, "For 30 minutes");
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   describe("until the morning", () => {
     afterEach(() => vi.useRealTimers());
     const eight = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
