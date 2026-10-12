@@ -144,6 +144,15 @@ it("opens from New on the list, and closes from its header", async () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+it("starts over when New is asked for again over an open flow", async () => {
+  setup({ host: true });
+  onTestFinished(() => { openNewAgent(null); openNewDialog(false); });
+  act(() => openNewAgent({ kind: "tab", workspaceId: "w:1" }));
+  expect(await screen.findByRole("dialog", { name: "New tab" })).toBeInTheDocument();
+  act(() => openNewDialog());
+  expect(await screen.findByRole("dialog", { name: "New" })).toBeInTheDocument();
+});
+
 it("opens a tab with the chosen agent in the workspace on screen, then opens its pane", async () => {
   const { user, router, onClose } = setup();
   await user.click(await screen.findByRole("button", { name: /^Here in/ }));
