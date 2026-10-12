@@ -61,7 +61,7 @@ export function CommandPalette({
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="Agent commands" className="max-h-[85dvh]">
+    <BottomSheet open={open} onClose={onClose} title="Agent commands" desktop="dialog">
       {agent && (
         <div className="mb-3 flex items-center gap-2">
           <AgentIcon agent={agent} className="size-6" />
@@ -72,6 +72,7 @@ export function CommandPalette({
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
+          data-autofocus
           inputMode="search"
           autoComplete="off"
           autoCapitalize="off"
@@ -80,7 +81,7 @@ export function CommandPalette({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Search ${all.length} commands…`}
-          className="h-11 w-full rounded-md border border-input bg-transparent pl-9 pr-3 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring"
+          className="h-11 w-full rounded-md border border-input bg-transparent pl-9 pr-3 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
 
