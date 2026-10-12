@@ -592,12 +592,13 @@ function NoteButton({ locked, textId, className, onClick }: { locked: boolean; t
   );
 }
 
-const PILL = "inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium transition-colors active:scale-[0.99]";
+// Touch targets reach 44 px on a coarse pointer (direction.md); a mouse keeps the denser 40.
+const PILL = "inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium transition-colors active:scale-[0.99]";
 const DECISION = "inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-base font-medium transition-colors active:scale-[0.99]";
 const LIST_ROW = "flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left text-base transition-colors hover:bg-muted/50 active:bg-muted";
 const OUTLINED = "border border-border bg-transparent text-muted-foreground disabled:text-muted-foreground/70";
 const NEUTRAL = "border border-border bg-secondary text-foreground";
-const SECONDARY = "inline-flex min-h-10 items-center gap-1.5 rounded-lg px-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";
+const SECONDARY = "inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-1.5 rounded-lg px-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";
 /** A control that cannot fire: muted, never a faded fill that reads as highlighted. */
 const DISABLED = "border border-transparent bg-muted text-muted-foreground cursor-not-allowed";
 /** The tapped option a refusal is about, until the next tap. */
