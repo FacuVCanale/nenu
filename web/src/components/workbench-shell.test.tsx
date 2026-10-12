@@ -439,7 +439,7 @@ it("folds every workspace to two letters no other tile shares, and names it on h
   expect(tiles[6]).toHaveFocus();
   expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("client-bravo-portal");
   await user.keyboard("{Escape}");
-  expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument());
   expect(tiles[6]).toHaveFocus();
 });
 
@@ -465,4 +465,23 @@ it("keeps a rail item's name up when the pointer slips into the gap and back", a
   fireEvent.pointerOver(tile);
   act(() => vi.advanceTimersByTime(250));
   expect(railName()).toHaveTextContent("client-alpha-portal");
+});
+
+it("keeps a rail item's name up while the pointer rests on it, to read it", async () => {
+  const { nav } = await railNamed();
+  // Out of the tile, over the rail's edge and onto the name itself.
+  fireEvent.pointerOver(nav);
+  fireEvent.pointerOver(railName()!);
+  act(() => vi.advanceTimersByTime(250));
+  expect(railName()).toHaveTextContent("client-alpha-portal");
+});
+
+it("closes a rail item's name on Escape wherever focus is, fading it out before it goes", async () => {
+  await railNamed();
+  const draft = screen.getByRole("textbox", { name: "Draft" });
+  draft.focus();
+  fireEvent.keyDown(draft, { key: "Escape" });
+  expect(railName()).toBeInTheDocument();
+  act(() => vi.advanceTimersByTime(150));
+  expect(railName()).not.toBeInTheDocument();
 });
