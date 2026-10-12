@@ -8,7 +8,7 @@ import { multiSelectIdentity, type MultiSelectModel } from "../web/src/lib/harne
 import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { previewStructureEqual, type PreviewSelectModel } from "../web/src/lib/harness/preview-model.ts";
 import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/prompt-model.ts";
-import { WIZARD_CANCEL_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
+import { WIZARD_BACK_KEYS, WIZARD_CANCEL_KEYS, WIZARD_NEXT_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
 import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "../web/src/lib/typed-text.ts";
 import type { PaneRead } from "./herdr-client.ts";
 import { PERSISTENT, permissionSubject, promptSubjectText, stripKeyHint, terminalOnly } from "./interaction-subject.ts";
@@ -79,6 +79,7 @@ interface Described {
   answers?: InteractionAnswer[];
   subject?: InteractionSubject;
   terminalOnly?: string[];
+  incomplete?: true;
   choices: Draft[];
 }
 
@@ -165,24 +166,31 @@ function describe(dialog: Dialog, agent: string): Described {
       const w = dialog.model;
       if (w.phase === "review") {
         const answers = w.answers.map(({ question, answer }) => ({ question, answer }));
-        return { ...review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps), ...(answers.length ? { answers } : {}) };
+        return { ...review(agent, "wizard", w.incomplete, answers, w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n")), ...stepsOf(w.steps) };
       }
+      const served = stepsOf(w.steps, true);
       return {
-        kind: "wizard", family: agent, question: w.question, ...stepsOf(w.steps, true),
-        choices: w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
+        kind: "wizard", family: agent, question: w.question, ...served,
+        choices: [
+          ...w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
+          ...stepNav(served.steps, true),
+        ],
       };
     }
     case "multi-select": {
       const m = dialog.model;
-      if (m.phase === "review") return review(agent, "multi-select");
+      if (m.phase === "review") return review(agent, "multi-select", m.incomplete, reviewAnswers(m.regionSignature));
       const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
+      const served = stepsOf(m.steps, true);
       return {
-        kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps, true),
+        kind: "multi-select", family: agent, question: m.question, ...served,
         choices: [
           ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
           ...(textRow !== null ? [pick("Type something", { type: "typeSomething", n: textRow }, {}, true)] : []),
           pick(m.advanceLabel, { type: "advance" }, { role: "primary" }),
           ...(m.escape ? [pick(m.escape.label, keys([String(m.escape.n)]), { role: "deny" })] : []),
+          // Its own advance row is the step forward.
+          ...stepNav(served.steps, false),
         ],
       };
     }
@@ -196,11 +204,47 @@ function describe(dialog: Dialog, agent: string): Described {
   }
 }
 
-function review(agent: string, kind: "wizard" | "multi-select", context?: string): Described {
+function review(agent: string, kind: "wizard" | "multi-select", incomplete: boolean, answers: InteractionAnswer[], context?: string): Described {
   return {
     kind, family: agent, question: "Review your answers", ...(context ? { context } : {}),
-    choices: [pick("Submit answers", keys(WIZARD_SUBMIT_KEYS), { role: "primary" }), pick("Cancel", keys(WIZARD_CANCEL_KEYS), { role: "deny" })],
+    ...(answers.length ? { answers } : {}), ...(incomplete ? { incomplete: true as const } : {}),
+    choices: [
+      pick("Submit answers", keys(WIZARD_SUBMIT_KEYS), { role: "primary" }),
+      pick("Cancel", keys(WIZARD_CANCEL_KEYS), { role: "deny" }),
+      // A wizard's review sits after its last question; a lone multi-select's review has no Back measured.
+      ...(kind === "wizard" ? [pick("Back", keys(WIZARD_BACK_KEYS), { role: "nav" })] : []),
+    ],
   };
+}
+
+/**
+ * Back and Next across a wizard's questions: the Left/Right its footer advertises (ADR 0009), only
+ * where they lead somewhere. Left clamps on the first question, so there is no Back there.
+ */
+function stepNav(steps: InteractionStep[] | undefined, next: boolean): Draft[] {
+  if (!steps || steps.length < 2) return [];
+  const at = steps.findIndex((s) => s.current);
+  return [
+    ...(at > 0 ? [pick("Back", keys(WIZARD_BACK_KEYS), { role: "nav" })] : []),
+    ...(next ? [pick("Next", keys(WIZARD_NEXT_KEYS), { role: "nav" })] : []),
+  ];
+}
+
+/** A multi-select review's echo: `● <question>` over `→ <answer>`, wrapped rows joined. */
+function reviewAnswers(region: string): InteractionAnswer[] {
+  const answers: InteractionAnswer[] = [];
+  let open: InteractionAnswer | null = null;
+  for (const row of region.split("\n").map((r) => r.trim())) {
+    if (row.startsWith("●")) open = { question: row.replace(/^●\s*/, ""), answer: "" };
+    else if (open && row.startsWith("→")) {
+      open.answer = row.replace(/^→\s*/, "");
+      answers.push(open);
+    } else if (open && row && !/^ready to submit/i.test(row) && !/^(?:❯\s*)?\d+\./.test(row)) {
+      if (open.answer) open.answer += ` ${row}`;
+      else open.question += ` ${row}`;
+    }
+  }
+  return answers;
 }
 
 function describePrompt(p: PromptModel, agent: string): Described {
@@ -260,6 +304,14 @@ function headerChips(row: string): InteractionStep[] | null {
   return chips.length ? chips : null;
 }
 
+/** Codex's `Question 2/3 (1 unanswered)` as steps; it names no question, so each is "Question n". */
+function codexProgress(row: string): InteractionStep[] | null {
+  const m = /^Question (\d+)\/(\d+) \((\d+) unanswered\)$/.exec(row);
+  if (!m) return null;
+  const [at, of, open] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return Array.from({ length: of }, (_, k) => ({ label: `Question ${k + 1}`, answered: k + 1 < at && k < of - open, current: k + 1 === at }));
+}
+
 /**
  * The detail of a question or plan from its literal region: the rows under the dialog's top rule and
  * above the question, plus the rows between the question and the first option. Bounded, so a long plan
@@ -276,12 +328,13 @@ function promptContext(p: PromptModel): { context?: string; steps?: InteractionS
   const rows = [...lines.slice(top, q), ...(first > q ? lines.slice(q + 1, first) : [])]
     .map((l) => l.replace(/^[\s│┃]+|[\s│┃]+$/g, ""))
     .filter((l) => l && !/^[─━▔═╌]+$/.test(l));
-  // A select question's header chip names it, and a repeat of the question is not the subject.
+  // A select question's header chip (or Codex's "Question 1/2") names it, and a repeat of the
+  // question is not the subject. One Codex question is no progress to show.
   let steps: InteractionStep[] | undefined;
   const subject = rows.filter((l) => {
-    const chips = p.family === "select" ? headerChips(l) : null;
-    if (chips) steps = chips;
-    return !chips && compact(l) !== compact(p.question);
+    const header = p.family === "select" ? headerChips(l) ?? codexProgress(l) : null;
+    if (header && (header.length > 1 || headerChips(l))) steps = header;
+    return !header && compact(l) !== compact(p.question);
   });
   return { ...(subject.length ? { context: subject.join("\n") } : {}), ...(steps ? { steps } : {}) };
 }
@@ -365,6 +418,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     ...(context ? { context } : {}),
     ...(base.steps ? { steps: base.steps } : {}),
     ...(base.answers ? { answers: base.answers } : {}),
+    ...(base.incomplete ? { incomplete: true as const } : {}),
     ...(subject ? { subject } : {}),
     ...(base.terminalOnly ? { terminalOnly: base.terminalOnly } : {}),
     options: choices.map((c) => c.option),
@@ -372,7 +426,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     revision,
     ...(kept.length ? { hints: kept } : {}),
     detectedAt: now,
-    detailComplete: base.kind === "permission" && detail !== undefined,
+    detailComplete: (base.kind === "permission" || base.kind === "plan") && detail !== undefined,
     ...(typing(dialog) ? { typing: true as const } : {}),
   };
   return { interaction, dialog, choices };
@@ -591,7 +645,7 @@ export class Interactions {
       return { status: 502, outcome: { ok: false, error: `herdr read failed: ${(err as Error).message}` } };
     }
     const detection = this.store(session, pane, read, this.panes.get(paneKey(session, pane.paneId))?.detection?.interaction.hints ?? []);
-    if (!detection || detection.interaction.signature !== body.signature) return changed("The dialog changed. Look again before answering.");
+    if (!detection || detection.interaction.signature !== body.signature) return changed("The question changed in the terminal. Nothing was sent.");
     const choice = detection.choices[body.optionIndex];
     if (!choice) return { status: 400, outcome: { ok: false, error: "unknown option" } };
     if (choice.option.role === "persistent" && body.confirm !== true) {
@@ -666,7 +720,7 @@ export class Interactions {
       sentKeys.push(key);
       if (key === "Enter") return sent(sentKeys);
     }
-    return changed();
+    return { status: 409, outcome: { ok: false, error: `Couldn't reach ${tapped.advanceLabel} in the terminal. Nothing was submitted.`, code: "not_reached" } };
   }
 
   /** Preview question: the digit moves the pointer; Enter only once the pointer is verified there. */
@@ -854,7 +908,7 @@ function sameQuestionRows(a: MultiSelectModel, b: MultiSelectModel, rows: number
 }
 
 const sent = (keys: string[]): AnswerResult => ({ status: 200, outcome: { ok: true }, keys });
-const changed = (error = "The dialog changed. Look again before answering."): AnswerResult =>
+const changed = (error = "The question changed in the terminal. Nothing was submitted."): AnswerResult =>
   ({ status: 409, outcome: { ok: false, error, code: "interaction_changed" } });
 const failed = (error: string): AnswerResult => ({ status: 409, outcome: { ok: false, error } });
 const unsupported = (): AnswerResult =>

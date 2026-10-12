@@ -604,8 +604,8 @@ export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction
 
 // ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
 
-/** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply. */
-export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
+/** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply; `nav` steps between a wizard's questions. */
+export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText" | "nav";
 
 export interface InteractionOption {
   index: number;
@@ -674,6 +674,8 @@ export interface Interaction {
   subject?: InteractionSubject;
   /** Options the screen shows that no answer here can press (Codex's and Grok's "don't ask again"). */
   terminalOnly?: string[];
+  /** A review with a question left unanswered: Submit sends what `answers` holds and nothing more. */
+  incomplete?: true;
   options: InteractionOption[];
   /** Identity of the dialog on screen; an answer with another signature comes back `interaction_changed`. */
   signature: string;
@@ -697,7 +699,7 @@ export interface AnswerRequest {
 
 export type AnswerOutcome =
   | { ok: true }
-  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" };
+  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" | "not_reached" };
 
 // ── Guarded send (mirrors bridge/types.ts) ─────────────────────────────────────────────────────────
 
