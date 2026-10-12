@@ -1,5 +1,6 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
+import { clockTime } from "./format";
+import { greeting, homeHeadline, needsYouItems, outageHeadline, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -35,6 +36,20 @@ describe("headline", () => {
     expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9).detail).toBe("3 working");
     expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9).detail).toBeNull();
     expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9).detail).toBeNull();
+  });
+
+  it("names what is unreachable in an outage, and dates the herd on screen when it can", () => {
+    const at = new Date(2026, 9, 7, 14, 0).getTime();
+    expect(outageHeadline("herdr", at, 3)).toEqual({ title: "Can't reach Herdr", detail: `Last synced ${clockTime(at)}` });
+    expect(outageHeadline("nenu", at, 0)).toEqual({ title: "Can't reach Nenu", detail: `Last synced ${clockTime(at)}` });
+    expect(outageHeadline("refused", at, 3)).toEqual({ title: "Access refused", detail: `Last synced ${clockTime(at)}` });
+  });
+
+  it("vouches for an undated herd only when there is one on screen", () => {
+    expect(outageHeadline("herdr", undefined, 3).detail).toBe("Showing the last herd Nenu saw");
+    expect(outageHeadline("herdr", undefined, 0).detail).toBe("Nenu keeps trying.");
+    expect(outageHeadline("nenu", undefined, 0).detail).toBe("Nenu keeps trying.");
+    expect(outageHeadline("refused", undefined, 0).detail).toBeNull();
   });
 
   it("greets by the local hour", () => {
