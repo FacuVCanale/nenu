@@ -160,6 +160,15 @@ describe.each(CARDS)("%s", (_name, make, listed) => {
   });
 });
 
+// A screen reader hears the same name for the same Claude dialog, in the thread card and in the mirror.
+it("names a permission's pressable list Answers in the card and in the mirror block", () => {
+  for (const name of ["thread permission", "prompt-select (mirror)"]) {
+    const card = renderCard(CARDS.find(([n]) => n === name)![1]);
+    expect(card.querySelector("[data-option-list]"), name).toHaveAttribute("aria-label", "Answers");
+    card.remove();
+  }
+});
+
 describe("a choice that is selected", () => {
   const SELECTED = "bg-[var(--workbench-row-selected)]";
 
