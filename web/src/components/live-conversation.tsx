@@ -69,6 +69,25 @@ const UNAVAILABLE_COPY = {
   "no-log": "Waiting for the first conversation entry…",
 };
 
+/**
+ * The thread's shape while its first page loads: an answer, a message of yours, an answer, at the
+ * foot of the list where the tail will land, so the turns replace it without a jump.
+ */
+function TranscriptSkeleton() {
+  const lines = (widths: string[]) => (
+    <div data-skeleton-turn className="space-y-3 px-0.5 py-1.5">
+      {widths.map((width) => <div key={width} className="h-3 rounded-full bg-muted" style={{ width }} />)}
+    </div>
+  );
+  return (
+    <div role="status" aria-label="Loading conversation…" data-slot="transcript-skeleton" className="flex flex-col gap-6 animate-pulse motion-reduce:animate-none">
+      {lines(["92%", "64%"])}
+      <div data-skeleton-turn className="flex justify-end"><div className="h-16 w-3/5 rounded-xl rounded-br-md bg-muted" /></div>
+      {lines(["96%", "88%", "52%"])}
+    </div>
+  );
+}
+
 /** Scope pagination to a pane/session without remounting the surrounding live composer. */
 export const LiveConversation = memo(function LiveConversation(props: LiveConversationProps) {
   return <ScopedConversation key={JSON.stringify([props.paneId, props.session, props.history?.available ? props.history.sessionKey : null])} {...props} />;
@@ -77,6 +96,8 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
 function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
+  // The first turns fade in over the skeleton they replace, instead of swapping in at once.
+  const [skeletonShown, setSkeletonShown] = useState(false);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState(false);
@@ -341,9 +362,12 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   }
 
   let emptyCopy = "Waiting for the first conversation entry…";
-  if (loading) emptyCopy = "Loading conversation…";
-  else if (shown && !shown.available) emptyCopy = UNAVAILABLE_COPY[shown.reason];
+  if (shown && !shown.available) emptyCopy = UNAVAILABLE_COPY[shown.reason];
   else if (error) emptyCopy = "Your draft is safe. Retry to load the conversation.";
+  const empty = entries.length === 0 && localSends.length === 0;
+  // The skeleton and the turns sit at the list's foot, where the tail will land.
+  const skeleton = empty && loading;
+  useEffect(() => { if (skeleton) setSkeletonShown(true); }, [skeleton]);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
 
@@ -357,7 +381,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       )}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={onScroll} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
-          <div ref={contentRef} className="mx-auto w-full max-w-(--chat-column)">
+          <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end",
+            skeletonShown && entries.length > 0 && "animate-in fade-in duration-150 motion-reduce:animate-none")}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
@@ -373,8 +398,12 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               <PendingTurns sends={localSends} actions={localSendActions} />
               {startingLabel}
               {footer}
-            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
-              {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
+            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : skeleton ? <>
+              <TranscriptSkeleton />
+              {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
+              {footer}
+            </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+              <MessageSquare className="size-5" />
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && recovery}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
