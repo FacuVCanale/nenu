@@ -136,11 +136,12 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
 
   // Following lands on the newest line, except that a question at the tail taller than the list is
   // read from its first line: the view never passes that line, and a reader already further down
-  // inside the question stays where they are.
+  // inside the question stays where they are. While the operator types in the question (its reply
+  // box sits at its foot) the bottom wins again, so the phone keyboard never hides the box.
   const pin = useCallback((el: HTMLElement) => {
     const bottom = el.scrollHeight - el.clientHeight;
     const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
-    const cap = stop ? el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN : bottom;
+    const cap = stop && !stop.contains(document.activeElement) ? el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN : bottom;
     el.scrollTo({ top: cap < bottom ? Math.max(cap, Math.min(el.scrollTop, bottom)) : bottom, behavior: "auto" });
     lastTop.current = el.scrollTop;
   }, []);

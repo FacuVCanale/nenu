@@ -235,7 +235,7 @@ export function QuestionCard({
       {!compact && (escapes.length > 0 || (notable && !writing) || (inTerminal.length > 0 && onKeys) || onOpen) && (
         <div data-secondary-actions className="-mx-1.5 -mb-1.5 flex flex-wrap items-center">
           {escapes.map((option) => (
-            <button key={option.index} type="button" data-role={option.role} disabled={locked} onClick={() => press(option)} className={SECONDARY}>
+            <button key={option.index} type="button" data-role={option.role} disabled={rowProps(option).disabled} onClick={() => press(option)} className={SECONDARY}>
               {busy === option.index && <Loader2 aria-label="Sending" className="size-3.5 animate-spin" />}{option.label}
             </button>
           ))}

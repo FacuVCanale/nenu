@@ -261,6 +261,14 @@ describe("QuestionCard", () => {
       expect(onAnswer).toHaveBeenCalledWith(persistent.options[1], { text: "only here", confirm: true });
     });
 
+    it("never drops a typed note into a question's escape", async () => {
+      const noted: Interaction = { ...question, options: [{ ...question.options[0]!, acceptsText: true }, question.options[3]!] };
+      const { user } = setup({ interaction: noted });
+      await user.click(screen.getByRole("button", { name: "Add a note…" }));
+      await user.type(screen.getByRole("textbox"), "why");
+      expect(screen.getByRole("button", { name: "Chat about this" })).toBeDisabled();
+    });
+
     it("offers no note where no answer accepts text", () => {
       setup({ interaction: permission });
       expect(screen.queryByRole("button", { name: "Add a note…" })).not.toBeInTheDocument();
