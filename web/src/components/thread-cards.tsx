@@ -62,7 +62,7 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
             {actions && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {mergeable && <button type="button" className="h-11 rounded-md bg-foreground px-3 text-[13px] font-medium text-background lg:h-8"
-                  onClick={() => setMerging(thread)}>Merge it</button>}
+                  aria-label={`Merge ${thread.title}`} onClick={() => setMerging(thread)}>Merge</button>}
                 {state === "needs" && thread.paneId && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>Answer</button>}
                 <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>View thread</button>
               </div>

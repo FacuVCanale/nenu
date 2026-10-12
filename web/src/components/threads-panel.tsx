@@ -51,7 +51,8 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
         return (
           <li key={thread.id} className="task-row">
             <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>{body}</button>
-            {!readOnly && canMerge(project, thread) && <Button type="button" size="sm" className="mr-1 self-center" aria-label={`Merge ${thread.title}`}
+            {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
+            {!readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
               onClick={() => setMerging(thread)}>Merge</Button>}
           </li>
         );
