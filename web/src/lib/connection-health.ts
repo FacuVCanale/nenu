@@ -13,10 +13,10 @@ import { useSyncExternalStore } from "react";
 // "reconnecting…" for far longer. Anchoring every consumer on this shared store fixes that by
 // construction.
 //
-// Anchor semantics: `lastLiveAt` is the wall-clock of the last PROVABLY LIVE moment — stamped when a
+// Anchor semantics: `liveAnchorAt` is the wall-clock of the last PROVABLY LIVE moment — stamped when a
 // snapshot/pane fetch returns genuinely live data (see lib/api.ts; a 304 counts as live). `lastWakeAt`
 // is stamped when the tab returns to the foreground. Escalation measures a flat CONNECTION_LOST_MS of
-// no live data from `max(lastLiveAt, lastWakeAt)`: anchoring on the last SUCCESS means device delays
+// no live data from `max(liveAnchorAt, lastWakeAt)`: anchoring on the last SUCCESS means device delays
 // (a 10s fetch timeout, a poll gap) can no longer stack BEFORE the clock starts, and the wake anchor
 // gives a phone waking from sleep a fresh grace window instead of an instant red flash while its first
 // poll is still in flight.
@@ -27,7 +27,7 @@ import { useSyncExternalStore } from "react";
 // "reconnecting…" for another full window, even though nothing had changed — a dishonest de-escalation.
 // So we LATCH the escalated state: `latchLost()` is called the moment a real connecting consumer
 // observes `lost` (see use-connection-lost), and while latched `effectiveAnchor()` DROPS the wake grace
-// (measures from `lastLiveAt` alone). Red therefore stays red across backgrounding until the connection
+// (measures from `liveAnchorAt` alone). Red therefore stays red across backgrounding until the connection
 // proves itself — the latch clears ONLY when `markLive()` stamps a genuine live poll, at which point the
 // live stamp and the latch clear together and everything recovers as before. The latch is coupled to a
 // consumer actually crossing the threshold (not merely the wall-clock going stale) because the anchor
@@ -46,9 +46,12 @@ export const CONNECTION_LOST_MS = 15_000;
 export const TROUBLE_MS = 4_000;
 
 // Both initialise to module-load time (app open), so a dead cold start escalates ~CONNECTION_LOST_MS
-// after open (the BootSplash case) — the first successful poll then advances `lastLiveAt` for real.
-let lastLiveAt = Date.now();
+// after open (the BootSplash case) — the first successful poll then advances `liveAnchorAt` for real.
+let liveAnchorAt = Date.now();
 let lastWakeAt = Date.now();
+// The same live stamp without the page-load default: when the herd on screen was last live, which a
+// page that never read one live cannot say. It dates an outage; it never drives escalation.
+let provenLiveAt: number | undefined;
 // Sticky-escalation latch — set once a real connecting consumer OBSERVES the lost condition (see
 // latchLost + use-connection-lost) and cleared ONLY by a provably-live poll (markLive). While latched,
 // effectiveAnchor() drops the wake grace, so backgrounding + returning MID-OUTAGE can no longer
@@ -68,7 +71,8 @@ function emit() {
  * the live stamp and the latch clear together and every consumer de-escalates at once.
  */
 export function markLive(): void {
-  lastLiveAt = Date.now();
+  liveAnchorAt = Date.now();
+  provenLiveAt = liveAnchorAt;
   lostLatched = false;
   emit();
 }
@@ -102,22 +106,27 @@ export function isLostLatched(): boolean {
   return lostLatched;
 }
 
+/** When a read last came back live on this page; undefined until one has. */
+export function lastLiveAt(): number | undefined {
+  return provenLiveAt;
+}
+
 /** The most recent provably-live anchor — the later of the last live poll and the last wake. */
 export function lastHealthyAt(): number {
-  return Math.max(lastLiveAt, lastWakeAt);
+  return Math.max(liveAnchorAt, lastWakeAt);
 }
 
 /**
- * The anchor escalation is measured from. NOT latched → `max(lastLiveAt, lastWakeAt)`: a wake grants a
+ * The anchor escalation is measured from. NOT latched → `max(liveAnchorAt, lastWakeAt)`: a wake grants a
  * fresh grace window so a phone resuming from sleep on a HEALTHY network never flashes red while its
- * first poll is still in flight. LATCHED → `lastLiveAt` alone (wake grace dropped): once we've
+ * first poll is still in flight. LATCHED → `liveAnchorAt` alone (wake grace dropped): once we've
  * escalated, a wake can no longer reset the countdown, so an already-red outage that is still failing
- * stays red across app switches. Safe because `lostLatched` implies `lastLiveAt` is already at least
+ * stays red across app switches. Safe because `lostLatched` implies `liveAnchorAt` is already at least
  * CONNECTION_LOST_MS stale — markLive is the only thing that freshens it, and markLive also clears the
  * latch — so dropping the wake grace can never manufacture a false escalation.
  */
 export function effectiveAnchor(): number {
-  return lostLatched ? lastLiveAt : lastHealthyAt();
+  return lostLatched ? liveAnchorAt : lastHealthyAt();
 }
 
 export function subscribeHealth(cb: () => void): () => void {
@@ -143,9 +152,10 @@ if (typeof document !== "undefined") {
   });
 }
 
-/** Test helper — reset both anchors (defaults to now) AND clear the sticky latch between cases. */
+/** Test helper — reset both anchors (defaults to now), forget the last live read and clear the sticky latch. */
 export function __resetConnectionHealth(now = Date.now()): void {
-  lastLiveAt = now;
+  liveAnchorAt = now;
   lastWakeAt = now;
+  provenLiveAt = undefined;
   lostLatched = false;
 }

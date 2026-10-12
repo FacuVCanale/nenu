@@ -10,8 +10,10 @@ import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
+import { isConnecting } from "@/lib/connection";
+import { lastLiveAt } from "@/lib/connection-health";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
-import { cantReachNenu, ConnectionBanner } from "@/components/connection-banner";
+import { ConnectionBanner, linkPhrase } from "@/components/connection-banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NewAgentHost } from "@/components/new-agent-sheet";
@@ -40,10 +42,14 @@ import { NotFound } from "@/routes/not-found";
  * A stale pane with NO text is not a case: nothing old is on screen, so the herd's stamp is the
  * honest one. Live pane data likewise falls through — the pane is current, and the banner is then
  * describing whatever the snapshot is doing.
+ *
+ * A herd with no stamp of its own while the link is down came from this page's own reads (Herdr down
+ * still answers with the last herd the bridge saw), so it is as old as the last read that came back
+ * live, `liveAt`. A page that never had one dates nothing.
  */
-export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined): number | undefined {
+export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined, liveAt?: number): number | undefined {
   if (pane?.error && pane.text) return pane.lastSeenAt;
-  return home.lastSeenAt;
+  return home.lastSeenAt ?? (isConnecting(home) ? liveAt : undefined);
 }
 
 // The data root: owns the snapshot loader, drives polling, and fans the herd out to the child
@@ -87,7 +93,7 @@ export function RootLayout() {
         bridge={data.bridge}
         error={data.error}
         authError={data.authError}
-        lastSeenAt={shownLastSeenAt(data, pane)}
+        lastSeenAt={shownLastSeenAt(data, pane, lastLiveAt())}
       />
       <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session} panes={paneRoots}><Outlet /></FilePreviewProvider></WorkbenchShell>
       <NewAgentHost />
@@ -126,7 +132,7 @@ export function BootSplash() {
           <main className="page-body">
             <div className="page-column">
               {stuck ? (
-                <EmptyState icon={WifiOff} title={cantReachNenu()}
+                <EmptyState icon={WifiOff} title={linkPhrase("nenu", window.location.host)}
                   action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
                   Nenu keeps trying. Check that this device can reach the host.
                 </EmptyState>

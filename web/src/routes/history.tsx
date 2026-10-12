@@ -3,6 +3,7 @@ import { useLoaderData, useNavigate, useParams, useRouteLoaderData } from "react
 import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search, X } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
+import { linkPhrase, linkProblemOf, type LinkProblem } from "@/components/connection-banner";
 import { Button } from "@/components/ui/button";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,9 +33,9 @@ import type { TranscriptEntry } from "@/lib/types";
 
 /**
  * Why there's nothing to read, in the user's terms. Each is an ordinary state, not an error. `name`
- * may be "this pane", so it never starts a sentence; `offline` is why the snapshot can't be trusted.
+ * may be "this pane", so it never starts a sentence; `problem` is why the snapshot can't be trusted.
  */
-function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, offline: string | undefined) {
+function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, problem: LinkProblem | null) {
   switch (reason) {
     case "disabled":
       return { title: "History is off", body: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT)." };
@@ -45,7 +46,8 @@ function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: 
     case "no-log":
       return { title: "No transcript yet", body: `There's no transcript for ${name} yet.` };
     case "error":
-      return { title: "Couldn't read the transcript", body: offline ? `${offline} Open History again once it's back.` : "Go back and open History again." };
+      return { title: "Couldn't read the transcript", body: !problem ? "Go back and open History again."
+        : `${linkPhrase(problem)}. ${problem === "refused" ? "Sign in again, then open History." : "Open History again once it's back."}` };
   }
 }
 
@@ -71,8 +73,8 @@ export function HistoryRoute() {
   const name = pane ? displayName(pane, root.projects) : undefined;
   // Only a healthy snapshot can say the pane is gone, the guard DetailRoute closes a pane on. A failed
   // read or a disconnected Herdr leaves a live pane out too, and is said in the connection banner's words.
-  const offline = root.error ? "Nenu can't reach its bridge right now." : root.bridge !== "connected" ? "Herdr is unavailable right now." : undefined;
-  const gone = !pane && !offline;
+  const problem = linkProblemOf(root);
+  const gone = !pane && !problem;
 
   // Pages walked back beyond the first request (only reachable on a log longer than HISTORY_PAGE_SIZE).
   const [older, setOlder] = useState<TranscriptEntry[]>([]);
@@ -207,7 +209,7 @@ export function HistoryRoute() {
   const total = Math.max(data.total, entries.length);
   const empty = gone
     ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
-    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", pane?.kind === "shell", offline);
+    : unavailableCopy(data.unavailable ?? "no-log", name ?? "this pane", pane?.kind === "shell", problem);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

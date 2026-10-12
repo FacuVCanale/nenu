@@ -41,9 +41,25 @@ export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: Conne
   return <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />;
 }
 
-/** What the boot splash and the banner say when the bridge has never answered on this page. */
-export function cantReachNenu(host = window.location.host): string {
-  return `Can’t reach Nenu at ${host}`;
+/** What is wrong with the link: Nenu turned this device away, Nenu does not answer, or Herdr does not. */
+export type LinkProblem = "refused" | "nenu" | "herdr";
+
+/** The problem a snapshot's state implies, or null while the link is live. */
+export function linkProblemOf({ bridge, error, authError }: { bridge: BridgeStatus | undefined; error: boolean; authError: boolean }): LinkProblem | null {
+  if (authError) return "refused";
+  if (error || bridge === undefined) return "nenu";
+  return bridge === "disconnected" ? "herdr" : null;
+}
+
+const LINK_PHRASE: Record<LinkProblem, string> = { refused: "Access refused", nenu: "Can’t reach Nenu", herdr: "Herdr isn’t responding" };
+
+/**
+ * The one phrase for each problem. The banner is the surface that names it; anything else that has to
+ * refer to it (History, the boot splash) quotes this, so a problem is never worded two ways. `host` is
+ * for a page that never reached Nenu, where the address is the useful fact.
+ */
+export function linkPhrase(problem: LinkProblem, host?: string): string {
+  return problem === "nenu" && host ? `${LINK_PHRASE.nenu} at ${host}` : LINK_PHRASE[problem];
 }
 
 // A neutral row in the flow, never over content: up to two lines so the fact the operator needs (what
@@ -69,7 +85,7 @@ function AuthErrorBanner() {
     <div role="alert" aria-live="polite" className={BANNER}>
       <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive" />
       <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
-        <span className="font-medium text-foreground">Access refused.</span> Sign in again. Not a network problem.
+        <span className="font-medium text-foreground">{linkPhrase("refused")}.</span> Sign in again. Not a network problem.
       </p>
       <a href={PROXY_AUTH_PATH} className={cn(buttonVariants({ size: "sm" }), "shrink-0 no-underline")}>
         <LogIn aria-hidden="true" className="size-4" />
@@ -103,9 +119,8 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
   // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,
   // so there is nothing cached to promise and the host is the useful fact. Once reads answer again the
   // notice waits out the quiet interval saying only what is still true, never "Connected".
-  const headline = !connecting ? "Connection is unstable."
-    : bridge === "disconnected" ? "Herdr is unavailable."
-    : bridge === undefined ? `${cantReachNenu()}.` : "Can’t reach Nenu.";
+  const problem = linkProblemOf({ bridge, error, authError: false });
+  const headline = problem ? `${linkPhrase(problem, bridge === undefined ? window.location.host : undefined)}.` : "Connection is unstable.";
   async function retry() {
     setRetrying(true);
     try { await revalidator.revalidate(); } finally { setRetrying(false); }
