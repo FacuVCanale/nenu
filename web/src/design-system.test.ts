@@ -13,13 +13,14 @@ const src = import.meta.dirname;
 const read = (path: string) => readFileSync(resolve(src, path), "utf8");
 const indexCss = read("index.css");
 
-function stylesheets(dir: string): string[] {
+function filesEndingIn(dir: string, ext: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return stylesheets(path);
-    return entry.name.endsWith(".css") ? [path] : [];
+    if (entry.isDirectory()) return filesEndingIn(path, ext);
+    return entry.name.endsWith(ext) && !entry.name.includes(".test.") ? [path] : [];
   });
 }
+const stylesheets = (dir: string) => filesEndingIn(dir, ".css");
 
 /** `--name: light-dark(<light>, <dark>)` from index.css, as the two hex halves. */
 function themed(name: string): [string, string] {
@@ -95,5 +96,18 @@ describe("chrome", () => {
 
   it("keeps one focus ring: a 2px outline 2px out", () => {
     expect(indexCss).toMatch(/:focus-visible \{\s*outline: 2px solid var\(--ring\);\s*outline-offset: 2px;/);
+  });
+
+  it("never lets a control that styles its own focus drop the ring without drawing one", () => {
+    // The shared ring lives in @layer base, so a focus-visible:outline-none utility beats it. A
+    // control that restyles its focus (a tint, a border) and drops the outline must draw a ring, or a
+    // keyboard user tabbing to it sees nothing: the busy-send rows' tint measured 1.09:1 on the card.
+    const offenders = filesEndingIn(src, ".tsx").flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(/"([^"\n]*)"|`([^`]*)`/g)]
+        .map((m) => m[1] ?? m[2]!)
+        .filter((classes) => /\boutline-none\b/.test(classes) && /\bfocus-visible:(?!outline)/.test(classes) && !/\bfocus-visible:ring/.test(classes))
+        .map((classes) => `${relative(src, file)}: ${classes}`),
+    );
+    expect(offenders).toEqual([]);
   });
 });
