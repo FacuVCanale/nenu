@@ -1,31 +1,41 @@
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // Shared building blocks for the long-press action sheets — pane AND tab — so the two stay visually
-// and behaviourally identical (the user's ask: "they should be the same"). The plain action row, the
-// two-tap destructive row, and the rename view are authored ONCE here; each sheet owns its own
-// state/handlers and just composes these, differing only in domain semantics (which RPC, whether a
-// blank clears, the blast-radius wording). A label rendered here is user text going only into an
-// <input> value / text node — never markup — so it stays within the pane-output XSS boundary.
+// and behaviourally identical (the user's ask: "they should be the same"). The action row, the close
+// confirmation and the rename view are authored ONCE here; each sheet owns its own state/handlers and
+// just composes these, differing only in domain semantics (which RPC, whether a blank clears, what a
+// close takes with it). A label rendered here is user text going only into an <input> value / text
+// node — never markup — so it stays within the pane-output XSS boundary.
 
-/** A plain (non-destructive) action row: leading icon + label. Used for "Rename". */
+/** How long a confirmation ignores taps once it shows: the second tap of a quick double tap on the
+ *  row that opened it lands here, and must close nothing. */
+const CONFIRM_SETTLE_MS = 500;
+
+/** An action row: leading icon + label, 44px on a touch screen. A destructive one (Close) is red
+ *  from the first render, and only opens its confirmation. */
 export function ActionRow({
   icon,
   label,
   onClick,
+  destructive = false,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  destructive?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-accent active:bg-muted"
+      className={cn(
+        "flex min-h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-subhead font-medium transition-colors coarse:min-h-11",
+        destructive ? "text-destructive hover:bg-destructive/10 active:bg-destructive/15" : "hover:bg-accent active:bg-muted",
+      )}
     >
       {icon}
       {label}
@@ -34,43 +44,53 @@ export function ActionRow({
 }
 
 /**
- * The destructive close row: destructive-styled from the very first render (not just once armed) and
- * two-tap confirmed — the first tap arms (row flips to `confirmLabel`), the second fires `onClick`.
- * The `armed` / `closing` flags + the three labels are owned by the caller (its usePendingConfirm +
- * closing state), so the arm→confirm→spinner choreography looks and behaves the same on both sheets.
+ * The confirmation a destructive row opens in place of the action list, as an iOS action sheet asks:
+ * the question, what it takes with it, the destructive button and Cancel. Cancel ends up where the
+ * row was, and the destructive button ignores taps for its first {@link CONFIRM_SETTLE_MS}, so a
+ * double tap on the row closes nothing.
  */
-export function DestructiveActionRow({
-  icon,
-  label,
+export function ConfirmView({
+  title,
+  message,
   confirmLabel,
-  closingLabel,
-  armed,
-  closing,
-  onClick,
+  busy,
+  onConfirm,
+  onCancel,
 }: {
-  icon: ReactNode;
-  label: string;
+  title: string;
+  message: string;
   confirmLabel: string;
-  closingLabel: string;
-  armed: boolean;
-  closing: boolean;
-  onClick: () => void;
+  /** The close is in flight: the button keeps its label, shows a spinner and says it is busy. */
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
 }) {
+  const [shownAt] = useState(() => performance.now());
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  // The row that opened this is gone; keep a keyboard user's focus in the sheet, on the safe choice.
+  useEffect(() => cancelRef.current?.focus({ preventScroll: true }), []);
+
+  function confirm() {
+    if (performance.now() - shownAt < CONFIRM_SETTLE_MS) return;
+    onConfirm();
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={closing}
-      className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:opacity-60",
-        armed
-          ? "bg-destructive text-destructive-foreground"
-          : "text-destructive hover:bg-destructive/10 active:bg-destructive/15",
-      )}
-    >
-      {closing ? <Loader2 className="size-4 shrink-0 animate-spin" /> : icon}
-      {closing ? closingLabel : armed ? confirmLabel : label}
-    </button>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-headline">{title}</h2>
+        <p className="text-subhead text-muted-foreground">{message}</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Button variant="destructive" size="lg" className="w-full" onClick={confirm} disabled={busy} aria-busy={busy || undefined}>
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {confirmLabel}
+        </Button>
+        <Button ref={cancelRef} variant="secondary" size="lg" className="w-full" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }
 

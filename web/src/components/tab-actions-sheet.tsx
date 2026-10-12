@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Pencil, XCircle } from "lucide-react";
 
 import { BottomSheet } from "@/components/ui/sheet";
-import { ActionRow, DestructiveActionRow, RenameView } from "@/components/action-sheet-rows";
-import { usePendingConfirm } from "@/hooks/use-pending-confirm";
+import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
 import * as api from "@/lib/api";
+import { tabName } from "@/lib/spaces";
 import { setStatus } from "@/lib/status";
 import type { TabView } from "@/lib/types";
 
@@ -24,15 +24,15 @@ interface TabActionsSheetProps {
   onClosed: (tabId: string) => void;
 }
 
-type Mode = "actions" | "rename";
+type Mode = "actions" | "rename" | "confirm";
 
-// Long-press actions for a single tab — the SAME structure as the pane sheet (the user asked for
-// them to match): opens on an action-list view (Rename / Close tab), with rename tucked behind its
-// own tap so opening the sheet never shoves a keyboard-triggering input at you. Shares the action
-// rows + rename view (action-sheet-rows) with the pane sheet so the two can't drift. Two differences
-// from a pane, both live-verified: a tab label can't be cleared (herdr stores "" literally and
-// rejects null), so a blank field can't be saved; and closing a tab kills EVERY pane inside it, so
-// the confirm names the blast radius. The label is user text rendered only into an <input> value /
+// Actions for a single tab — the SAME structure as the pane sheet (the user asked for them to
+// match): opens on an action-list view (Rename / Close tab), with rename tucked behind its own tap
+// so opening the sheet never shoves a keyboard-triggering input at you, and Close asking first.
+// Shares the action rows, confirmation and rename view (action-sheet-rows) with the pane sheet so
+// the two can't drift. Two differences from a pane, both live-verified: a tab label can't be cleared
+// (herdr stores "" literally and rejects null), so a blank field can't be saved; and closing a tab
+// kills EVERY pane inside it, so the confirmation names the blast radius. The label is user text rendered only into an <input> value /
 // text node — never markup. Both actions are writes, so under read-only they're replaced by a note.
 export function TabActionsSheet({
   open,
@@ -47,7 +47,6 @@ export function TabActionsSheet({
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
-  const { pending, confirm, reset } = usePendingConfirm();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset to the action list — and reprefill the label — whenever the sheet opens on a (new) tab, AND
@@ -57,7 +56,6 @@ export function TabActionsSheet({
     setMode("actions");
     if (!open) return;
     setLabel(tab?.label ?? "");
-    reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tab?.tabId]);
 
@@ -87,10 +85,8 @@ export function TabActionsSheet({
     }
   }
 
-  // Two-tap: the first tap arms (row flips to the blast-radius confirm), the second closes.
-  async function requestClose() {
+  async function close() {
     if (!tab || closing) return;
-    if (!confirm(tab.tabId)) return;
     setClosing(true);
     try {
       const res = await api.closeTab(tab.tabId, session);
@@ -107,12 +103,15 @@ export function TabActionsSheet({
     }
   }
 
-  const confirming = !!tab && pending === tab.tabId;
-  // Closing a tab kills every pane in it — name the blast radius on the confirm so it's honest. The
-  // count rides on the tab record (snapshot `pane_count`); fall back to a plain confirm if it's 0.
+  // Closing a tab kills every pane in it, so the confirmation names the blast radius. The count rides
+  // on the tab record (snapshot `pane_count`); with none known it only says it can't be undone.
   const paneCount = tab?.paneCount ?? 0;
-  const confirmLabel =
-    paneCount > 0 ? `Tap again to close ${paneCount} pane${paneCount === 1 ? "" : "s"}` : "Tap again to close";
+  const consequence =
+    paneCount > 1
+      ? `Its ${paneCount} panes close, and anything running in them stops. This can't be undone.`
+      : paneCount === 1
+        ? "Its pane closes, and anything running in it stops. This can't be undone."
+        : "This can't be undone.";
 
   return (
     <BottomSheet open={open} onClose={onClose} title={tab ? `Tab ${tab.label}` : "Tab"}>
@@ -127,16 +126,22 @@ export function TabActionsSheet({
             label="Rename"
             onClick={() => setMode("rename")}
           />
-          <DestructiveActionRow
+          <ActionRow
             icon={<XCircle className="size-4 shrink-0" />}
             label="Close tab"
-            confirmLabel={confirmLabel}
-            closingLabel="Closing…"
-            armed={confirming}
-            closing={closing}
-            onClick={() => void requestClose()}
+            destructive
+            onClick={() => setMode("confirm")}
           />
         </div>
+      ) : mode === "confirm" ? (
+        <ConfirmView
+          title={`Close “${tab ? tabName(tab.label, tab.number) : "tab"}”?`}
+          message={consequence}
+          confirmLabel="Close tab"
+          busy={closing}
+          onConfirm={() => void close()}
+          onCancel={() => setMode("actions")}
+        />
       ) : (
         <RenameView
           inputRef={inputRef}
