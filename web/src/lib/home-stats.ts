@@ -3,6 +3,7 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
 import { nodeState } from "./org-tree";
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
+import { clockTime } from "./format";
 import { byRecency, chatRecency, isOpenThread } from "./projects";
 import { isUnseen } from "./triage";
 import type { AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
@@ -31,6 +32,21 @@ export function homeHeadline(counts: HomeCounts, total: number): HomeHeadline {
   if (review) return { title: `${plural(review, "pull request")} ready to review`, detail: rest(working > 0 && `${working} working`) };
   if (working) return { title: `${plural(working, "agent")} at work`, detail: null };
   return { title: total ? "All quiet" : "What should we work on?", detail: null };
+}
+
+/** Why Home cannot vouch for the herd on screen: Nenu does not answer, Herdr does not, or this device was turned away. */
+export type Outage = "nenu" | "herdr" | "refused";
+const OUTAGE_TITLE: Record<Outage, string> = { nenu: "Can't reach Nenu", herdr: "Can't reach Herdr", refused: "Access refused" };
+
+/**
+ * An outage's headline: what is unreachable, then when the herd on screen was last synced. Undated,
+ * it only says a herd is the last one seen when there is one to show.
+ */
+export function outageHeadline(outage: Outage, syncedAt: number | undefined, herd: number): HomeHeadline {
+  const detail = syncedAt !== undefined ? `Last synced ${clockTime(syncedAt)}`
+    : herd > 0 ? "Showing the last herd Nenu saw"
+    : outage === "refused" ? null : "Nenu keeps trying.";
+  return { title: OUTAGE_TITLE[outage], detail };
 }
 
 export function greeting(now: number): string {

@@ -16,8 +16,7 @@ import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue, isDefiniteRefusal } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
 import { useConnectionHealth } from "@/lib/connection-health";
-import { clockTime } from "@/lib/format";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, outageHeadline, recentChats, reviewQueue, runningWorkflows, type Outage } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -25,10 +24,6 @@ import { turnRunning } from "@/lib/turn";
 import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
-
-/** Why Home cannot vouch for the herd on screen, once that is worth saying. */
-type Outage = "nenu" | "herdr" | "refused";
-const OUTAGE_TITLE: Record<Outage, string> = { nenu: "Can't reach Nenu", herdr: "Can't reach Herdr", refused: "Access refused" };
 
 // Whether Home has drawn a live herd since the page opened. Until then the shared connection anchor
 // (lib/connection-health.ts) only marks when the page loaded, so it cannot date the herd on screen.
@@ -72,11 +67,9 @@ export function HomeRoute() {
   const reviews = reviewQueue(data.projects, data.pullRequests);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
-  const headline = homeHeadline(counts, data.agents.length);
   // The cached herd carries its own date; Herdr's outage is dated by the last live read, once there was one.
-  const syncedAt = data.lastSeenAt ?? (sawLive ? anchor : undefined);
-  const title = outage ? OUTAGE_TITLE[outage] : headline.title;
-  const detail = outage ? (syncedAt === undefined ? "Showing the last herd Nenu saw" : `Last synced ${clockTime(syncedAt)}`) : headline.detail;
+  const { title, detail } = outage ? outageHeadline(outage, data.lastSeenAt ?? (sawLive ? anchor : undefined), data.agents.length)
+    : homeHeadline(counts, data.agents.length);
 
   // On a phone the date sits right under the header, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
