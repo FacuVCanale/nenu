@@ -341,15 +341,33 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenLastCalledWith(stepping.options[5], {});
   });
 
-  it("counts what a multi-select's Submit sends, and quiets it with nothing ticked", () => {
+  it("counts what a multi-select's Submit sends", () => {
     setup({ interaction: multi });
-    expect(screen.getByRole("button", { name: "Submit 1" })).toHaveAttribute("data-role", "primary");
+    const submit = screen.getByRole("button", { name: "Submit 1" });
+    expect(submit).toHaveAttribute("data-role", "primary");
+    expect(submit).not.toHaveAttribute("data-quiet");
+  });
+
+  it("on a wizard's checkbox step, Next says how many are ticked, never a number that reads as a question", () => {
+    // claude--wizard-multiselect-checked: question 1 of 2, its advance row is Next.
+    const step: Interaction = { ...multi, steps: [{ label: "Pizza", answered: false, current: true }, { label: "Sides", answered: false, current: false }],
+      options: [multi.options[0]!, multi.options[1]!, { index: 2, label: "Next", role: "primary" }] };
+    setup({ interaction: step });
+    expect(screen.getByText("1 of 2")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Next · 1 selected" })).toHaveAttribute("data-role", "primary");
+  });
+
+  it("on a wizard's checkbox step with nothing ticked, Next says so and stays quiet", () => {
+    const step: Interaction = { ...multi, steps: [{ label: "Pizza", answered: false, current: true }, { label: "Sides", answered: false, current: false }],
+      options: [multi.options[0]!, { ...multi.options[1]!, checked: false }, { index: 2, label: "Next", role: "primary" }] };
+    setup({ interaction: step });
+    expect(screen.getByRole("button", { name: "Next · none selected" })).toHaveAttribute("data-quiet", "true");
+    expect(screen.queryByText(/without answers/)).not.toBeInTheDocument();
   });
 
   it("offers Submit without answers as a quiet action when nothing is ticked", () => {
     setup({ interaction: { ...multi, options: [{ ...multi.options[0]! }, { ...multi.options[1]!, checked: false }, multi.options[2]!] } });
-    const submit = screen.getByRole("button", { name: "Submit without answers" });
-    expect(submit).not.toHaveClass("bg-foreground");
+    expect(screen.getByRole("button", { name: "Submit without answers" })).toHaveAttribute("data-quiet", "true");
   });
 
   describe("a note on an answer that accepts text (Tab-amend, Codex notes)", () => {
