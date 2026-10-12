@@ -62,7 +62,7 @@ export function PrBar({ project, thread, session, readOnly, onChanged }: {
   const flag = (key: Flag, label: string) => {
     const on = Boolean(thread[key]);
     return (
-      <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-footnote">
+      <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-footnote coarse:min-h-11">
         <input type="checkbox" className="size-4 accent-primary" checked={on} disabled={readOnly || saving !== null}
           onChange={() => void toggle(key, !on)} />
         {label}
