@@ -37,8 +37,9 @@ export interface NewAgentValues {
   permission: string;
 }
 
+// Its own colour and weight: a Field's label is muted and medium, and a control inherits both.
 export const inputField =
-  "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring coarse:h-11";
+  "h-10 w-full rounded-lg border border-border bg-background px-3 text-body font-normal text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring coarse:h-11";
 
 export const selectField = cn(inputField, "appearance-auto");
 /** A text area grows from its rows, not the input's height. */
@@ -136,7 +137,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
   const parent = shown === "~" ? "~" : shown.slice(0, -baseName(shown).length - 1) || "/";
   if (browsing) {
     return (
-      <Suspense fallback={<p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<p className="px-2 py-3 text-subhead text-muted-foreground">Loading…</p>}>
         <DirPicker
           home={home}
           shortcuts={suggestDirs([cwd], liveDirs, recent)}
@@ -190,9 +191,9 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
         />
       )}
 
-      {readOnly && <p className="text-sm text-muted-foreground">Read-only: this device is not authorised to create.</p>}
+      {readOnly && <p className="text-subhead text-muted-foreground">Read-only: this device is not authorised to create.</p>}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-subhead text-destructive">
           {error}
         </p>
       )}

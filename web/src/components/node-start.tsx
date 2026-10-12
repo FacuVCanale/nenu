@@ -148,7 +148,7 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, readO
         <textarea className={cn(textField, "min-h-32 resize-y")} value={form.task} required onChange={set("task")} />
       </Field>
       {options.kind === "error" && <p className="text-footnote text-muted-foreground">Profiles and templates are unavailable: {options.message}</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-subhead text-destructive">{error}</p>}
       <Button type="submit" className="mt-1 h-11" disabled={submitting || readOnly} aria-busy={submitting || undefined}>
         {submitting ? "Starting…" : `Create ${ROLE_NOUN[role]}`}
       </Button>

@@ -17,7 +17,7 @@ interface DirPickerProps {
 
 type Listing = { state: "loading" } | { state: "ready"; dirs: HomeDirs } | { state: "error" };
 
-const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-sm active:bg-accent hover:bg-accent/60";
+const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-body active:bg-accent hover:bg-accent/60";
 
 /**
  * Browse folders under home: tap to go in, type to filter or to give any path, "Use" to choose. The
@@ -79,7 +79,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
         className="h-10 w-full rounded-lg border border-border bg-background px-3 font-mono text-code outline-none focus-visible:ring-2 focus-visible:ring-ring coarse:h-11"
       />
 
-      <nav aria-label="Breadcrumb" className="-mx-1 flex items-center overflow-x-auto px-1 text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav aria-label="Breadcrumb" className="-mx-1 flex items-center overflow-x-auto px-1 text-subhead [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {crumbs(shown).map((c, i, all) => (
           <span key={c.query} className="flex shrink-0 items-center">
             {i > 0 && <ChevronRight className="size-3.5 text-subtle-foreground" aria-hidden />}
@@ -119,9 +119,9 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
 
       <section aria-label="Folders" className="flex-1">
         {showShortcuts && <h3 className="px-2 pt-2 pb-1 text-footnote font-medium text-muted-foreground">In {shown === "~" ? "Home" : baseName(shown)}</h3>}
-        {listing.state === "loading" && <p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>}
-        {listing.state === "error" && <p className="px-2 py-3 text-sm text-muted-foreground">Can't list this folder. You can still use the path as typed.</p>}
-        {dirs && matches.length === 0 && <p className="px-2 py-3 text-sm text-muted-foreground">{filter ? `No folder starts with “${filter}”.` : "No folders here."}</p>}
+        {listing.state === "loading" && <p className="px-2 py-3 text-subhead text-muted-foreground">Loading…</p>}
+        {listing.state === "error" && <p className="px-2 py-3 text-subhead text-muted-foreground">Can't list this folder. You can still use the path as typed.</p>}
+        {dirs && matches.length === 0 && <p className="px-2 py-3 text-subhead text-muted-foreground">{filter ? `No folder starts with “${filter}”.` : "No folders here."}</p>}
         <ul>
           {matches.map((name) => (
             <li key={name}>
