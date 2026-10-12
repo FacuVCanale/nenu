@@ -1,7 +1,10 @@
 /* The composer under a chat. */
-/* On the page gutter, the column the header, the prose and the cards share. The home indicator's inset
-   IS the composer's bottom gap, as in a native chat; 8px only where there is none. */
-.workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
+/* On a phone the box bleeds 8px into the 16px gutter, as the strips' pills do: its + and Send sit on
+   the column the prose starts on, and the draft keeps the width the full gutter took (a four-line
+   draft wrapped to five under the keyboard). The queue strip's padding counts on these 8px below a
+   desk. The home indicator's inset IS the composer's bottom gap, as in a native chat; 8px only where
+   there is none. */
+.workbench-composer { width: calc(100% - 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
 /* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
 .composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
@@ -70,7 +73,7 @@
 }
 
 @media (min-width: 1024px) {
-  .workbench-composer { margin-bottom: max(env(safe-area-inset-bottom), 16px); }
+  .workbench-composer { width: calc(100% - 2 * var(--page-gutter)); margin-bottom: max(env(safe-area-inset-bottom), 16px); }
   .workbench-composer > button[aria-label="Switch pane"] { display: none; }
   .workbench-telemetry > button, .workbench-telemetry > details > summary { min-height: 30px; }
 }
