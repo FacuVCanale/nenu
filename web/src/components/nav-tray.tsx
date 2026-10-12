@@ -60,7 +60,8 @@ interface ModifierKey {
 const MODIFIER_KEYS: readonly ModifierKey[] = [
   { m: "ctrl", label: "Ctrl", aria: "Ctrl" },
   { m: "alt", glyph: <Option className="size-3.5" />, label: "Opt", aria: "Option (Alt)" },
-  { m: "shift", glyph: "⇧", label: "Shift", aria: "⇧ Shift" },
+  // In its own element: a bare "⇧" beside the label text would merge into one flex item and lose the gap.
+  { m: "shift", glyph: <span aria-hidden="true">⇧</span>, label: "Shift", aria: "⇧ Shift" },
   { m: "cmd", glyph: <Command className="size-3.5" />, label: "Cmd", aria: "Command" },
 ];
 
