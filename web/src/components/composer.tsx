@@ -840,8 +840,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // offers the control that works, the override stays for the case where the detection is wrong.
         noticeNoEcho(res.noEcho !== undefined ? { prompt: res.noEcho, typed: false } : null);
         failSend(started, res.error, res.noEcho !== undefined);
-        if (res.noEcho !== undefined) setStatus(`${res.error} Tap Send again to type anyway.`, "error");
-        else refused(res.error, false, t, isDraft, "To type it regardless, tap Type anyway.");
+        // The password notice is the one explanation of a no-echo refusal; a toast would repeat it.
+        if (res.noEcho === undefined) refused(res.error, false, t, isDraft, "To type it regardless, tap Type anyway.");
         return false;
       } else {
         // "stalled" = the text went into the pane but was never seen in the input box, so NO submit
@@ -857,8 +857,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         const delivered = res.status === "stalled" || res.textDelivered === true;
         failSend(started, res.error, secret, delivered);
         setDeliveryPhase(null);
-        if (secret) setStatus(res.error, "error");
-        else refused(res.error, delivered, t, isDraft);
+        if (!secret) refused(res.error, delivered, t, isDraft);
         return false;
       }
     } catch (e) {
@@ -1351,9 +1350,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                           ? nativeWorkbench && queue.page?.available ? "Message for after you answer…" : "Answer the agent first…"
                           : placeholder ?? "Type a reply…"
               }
-              autoCorrect={direct.active ? "off" : undefined}
-              spellCheck={direct.active ? false : undefined}
-              className="composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm"
+              autoCorrect={direct.active || noEcho ? "off" : undefined}
+              spellCheck={direct.active || noEcho ? false : undefined}
+              autoComplete={noEcho ? "off" : undefined}
+              // While a password prompt is recognised the draft is a secret the pane never took: it is
+              // masked on screen as well as kept out of the store (noticeNoEcho).
+              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", noEcho !== null && !direct.active && "composer-input-secret")}
               disabled={gone || readOnly}
               rows={1}
             />
