@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
 
 import { AppHeader, SettingsGear, type HeaderBack } from "@/components/app-header";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
@@ -25,10 +25,18 @@ export function ColumnPage({ data, title, back, bodyClassName, children }: {
       <AppHeader bridge={data.bridge} error={data.error} title={title} titleHidden={headingInView} back={back}
         rightTrail={<SettingsGear session={data.session} />} />
       <ReadOnlyBanner device={data.device} />
-      <main ref={body} className={cn("page-body", bodyClassName)}>
-        <div className="page-column">{children}</div>
-      </main>
+      <PageBody ref={body} className={bodyClassName}>{children}</PageBody>
     </div>
+  );
+}
+
+/** The page's scroller and its one column, centred in the content area as Settings and the chat are. The
+ *  boot splash draws it too, so the page the app lands on does not move. */
+export function PageBody({ ref, className, children }: { ref?: Ref<HTMLElement>; className?: string; children: ReactNode }) {
+  return (
+    <main ref={ref} className={cn("page-body", className)}>
+      <div className="page-column mx-auto">{children}</div>
+    </main>
   );
 }
 

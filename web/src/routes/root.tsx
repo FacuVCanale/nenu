@@ -13,6 +13,7 @@ import { useSelfUpdate } from "@/lib/self-update";
 import { isConnecting } from "@/lib/connection";
 import { lastLiveAt } from "@/lib/connection-health";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
+import { PageBody } from "@/components/column-page";
 import { ConnectionBanner, linkPhrase } from "@/components/connection-banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -129,23 +130,21 @@ export function BootSplash() {
             <span className="grid size-11 shrink-0 place-items-center lg:hidden"><img src="/nenu-mark.png" alt="" className="nenu-mark size-6" /></span>
             <Bone className="h-4" width="120px" />
           </header>
-          <main className="page-body">
-            <div className="page-column">
-              {stuck ? (
-                <EmptyState icon={WifiOff} title={linkPhrase("nenu", window.location.host)}
-                  action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
-                  Nenu keeps trying. Check that this device can reach the host.
-                </EmptyState>
-              ) : (
-                <>
-                  <p role="status" className="text-footnote text-muted-foreground">Connecting to {window.location.host}&hellip;</p>
-                  <div className="mt-4 flex flex-col gap-3" aria-hidden="true">
-                    {[0, 1, 2].map((row) => <Bone key={row} className="h-14 rounded-lg" />)}
-                  </div>
-                </>
-              )}
-            </div>
-          </main>
+          <PageBody>
+            {stuck ? (
+              <EmptyState icon={WifiOff} title={linkPhrase("nenu", window.location.host)}
+                action={<Button size="lg" onClick={() => window.location.reload()}>Retry</Button>}>
+                Nenu keeps trying. Check that this device can reach the host.
+              </EmptyState>
+            ) : (
+              <>
+                <p role="status" className="text-footnote text-muted-foreground">Connecting to {window.location.host}&hellip;</p>
+                <div className="mt-4 flex flex-col gap-3" aria-hidden="true">
+                  {[0, 1, 2].map((row) => <Bone key={row} className="h-14 rounded-lg" />)}
+                </div>
+              </>
+            )}
+          </PageBody>
           {/* The app's own tab bar, so it does not change on hand-off; inert until there is a herd to open. */}
           <div inert className="contents">
             <BottomTabBar active={pathname === "/" ? "home" : null} homeTo={homePath(session)} attention={0}
