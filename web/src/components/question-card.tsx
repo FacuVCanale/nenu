@@ -28,6 +28,8 @@ export const CONFIRM_MS = 5_000;
 const ANSWER_KINDS = new Set<InteractionKind>(["question", "wizard", "multi-select"]);
 /** Rows of a command or file preview shown before "Show all": the thread's own scroll reads the rest. */
 const SUBJECT_ROWS = 8;
+/** A multi-select's advance that sends the answers, as opposed to a wizard step's Next. */
+const SUBMIT = /^submit\b/i;
 /** The agent's own marker for the option it suggests; the card shows it as a badge. */
 const RECOMMENDED = /\s*\(recommended\)\s*$/i;
 
@@ -214,10 +216,12 @@ export function QuestionCard({
       {!compact && <MessageSquareText aria-hidden className="size-4 shrink-0" />}{replyLabel(option)}
     </button>
   );
-  // A multi-select's advance says how much it sends; a review with a gap says it sends it anyway.
+  // A multi-select's advance says how much it sends; a review with a gap says it sends it anyway. A
+  // wizard step's Next only moves on, so its count reads as a selection, never as a question number.
   const decisionLabel = (option: InteractionOption): ReactNode => {
     if (option.role === "primary" && i.incomplete) return "Submit anyway";
     if (option.role === "primary" && i.kind === "multi-select" && !i.answers) {
+      if (!SUBMIT.test(option.label)) return <>{option.label} · <span className="tabular-nums">{ticked || "none"}</span> selected</>;
       return ticked ? <>{option.label}{" "}<span className="tabular-nums">{ticked}</span></> : `${option.label} without answers`;
     }
     return undefined;
@@ -672,7 +676,7 @@ function DecisionButton({ option, armed, busy, failed, disabled, onPress, label,
   const dim = disabled && !busy;
   const tone = quiet && option.role === "primary" ? "neutral" : option.role;
   return (
-    <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined}
+    <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined} data-quiet={quiet || undefined}
       aria-label={armed ? `Confirm: ${option.label}` : undefined}
       className={cn(DECISION, "w-full lg:w-auto", dim ? DISABLED : toneClass(tone), failed && FAILED)}>
       <span className="flex min-w-0 flex-1 flex-col py-1.5">
