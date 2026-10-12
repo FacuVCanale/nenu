@@ -40,6 +40,14 @@ function Hit({ text }: { text: string }) {
   );
 }
 
+const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone";
+// A code span this short stays on one line: it moves down whole instead of splitting
+// `workbench-composer` at its hyphen or `--page-gutter` after its dashes. Twenty-four monospace
+// characters at the body size measure about 210px, under the narrowest column prose sits in (a bubble
+// on a 390px phone, about 270px). A longer span wraps where it has to, and breaks inside a word only
+// when that one word is wider than the line.
+const WHOLE_CODE_CHARS = 24;
+
 // Emphasis and links hold child spans (agents nest them — ``**`sha`**`` is routine), so this recurses
 // through <Spans>. `code` is the leaf.
 function Span({ span }: { span: MdSpan }) {
@@ -48,7 +56,7 @@ function Span({ span }: { span: MdSpan }) {
     case "image":
       return <InlineImage path={span.path} alt={span.alt} />;
     case "file":
-      return openFile ? <button type="button" className="text-primary underline underline-offset-2 break-all text-left" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
+      return openFile ? <button type="button" className="text-left text-primary underline underline-offset-2 [overflow-wrap:anywhere]" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
     case "bold":
       return (
         <strong className="font-semibold">
@@ -63,9 +71,10 @@ function Span({ span }: { span: MdSpan }) {
       );
     case "code": {
       const path = localFilePath(span.text);
-      if (path && openFile) return <button type="button" className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-primary underline underline-offset-2 break-all text-left" onClick={() => openFile(path)}><Hit text={span.text} /></button>;
+      const look = cn(INLINE_CODE, span.text.length <= WHOLE_CODE_CHARS ? "whitespace-nowrap" : "[overflow-wrap:anywhere]");
+      if (path && openFile) return <button type="button" className={cn(look, "text-left text-primary underline underline-offset-2")} onClick={() => openFile(path)}><Hit text={span.text} /></button>;
       return (
-        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] break-all">
+        <code className={look}>
           <Hit text={span.text} />
         </code>
       );
@@ -78,7 +87,7 @@ function Span({ span }: { span: MdSpan }) {
           href={span.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary underline underline-offset-2 break-all"
+          className="text-primary underline underline-offset-2 [overflow-wrap:anywhere]"
         >
           <LinkLabel spans={span.spans} />
         </a>
