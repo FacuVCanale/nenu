@@ -210,9 +210,13 @@ export function AgentChat({
   // so a mis-detected/mis-rendered dialog can always be driven by hand with the keys pad.
   const grammarsOn = !prefs.rawTerminal;
   const isShell = agent?.kind === "shell";
-  // This device isn't allowlisted to type into agents: the backend rejects every write, so the
-  // composer drops to read-only (and shows a banner). The mirror still polls (reading is fine).
+  // This device isn't allowlisted to type into agents, or a proxy refused this session: the backend
+  // rejects every write, so the composer drops to read-only. The mirror still polls (reading is fine).
   const readOnly = authError || isReadOnly(device);
+  // Why writing is paused, in the words the question card uses too: a refused sign-in is not a device
+  // that was never authorised, and a silent Herdr is not a lost network.
+  const lock = lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
+  const refusedWrite = lock === "refused" ? "Access refused. Sign in again." : "Read-only — device not authorised";
 
   // Drawers/sheets are mutually exclusive — at most one open. A single value makes that invariant
   // unrepresentable to violate.
@@ -414,7 +418,6 @@ export function AgentChat({
   const cardCovers = interaction !== undefined && interaction.kind !== "menu" && !liveBlocks.some((b) => b.kind === "preview-select");
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   const cardReadOnly = readOnly || gone || connecting;
-  const cardLock = lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
   const refused = interaction && interactions.refusalFor(interaction);
   const { answer } = interactions;
   const { revalidate } = revalidator;
@@ -425,7 +428,7 @@ export function AgentChat({
     {conversationFooter}
     <div data-follow-stop className="mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
-        readOnly={cardReadOnly} lockReason={cardLock} refused={refused} onOpen={() => setRawTerminal(true)}
+        readOnly={cardReadOnly} lockReason={lock} refused={refused} onOpen={() => setRawTerminal(true)}
         onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
         onAnswer={async (option, extra) => {
           const outcome = await answer(interaction!, option, extra);
@@ -437,7 +440,7 @@ export function AgentChat({
           return outcome;
         }} />
     </div>
-  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, cardLock, refused, setRawTerminal, answer, revalidate, refreshConversation]);
+  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, answer, revalidate, refreshConversation]);
   // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
   // (lib/live-events.ts). Leaving the pane restores the default.
   const mirrorShown = !showConversation || dialogPresent;
@@ -564,7 +567,7 @@ export function AgentChat({
   const handlePromptAction = useCallback(
     async (action: PromptBlockAction, prompt: PromptModel) => {
       if (readOnly) {
-        setStatus("Read-only — device not authorised", "error");
+        setStatus(refusedWrite, "error");
         return false;
       }
       const base = {
@@ -597,7 +600,7 @@ export function AgentChat({
       // what someone just thumb-typed. Option taps ignore it.
       return result.status === "sent";
     },
-    [readOnly, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
   );
 
   // Tap a wizard control (an option digit, step navigation, or the review step's submit/cancel).
@@ -609,7 +612,7 @@ export function AgentChat({
   const handleWizardAction = useCallback(
     async (keys: string[], wizard: WizardModel) => {
       if (readOnly) {
-        setStatus("Read-only — device not authorised", "error");
+        setStatus(refusedWrite, "error");
         return;
       }
       const result = await submitWizardKeys({
@@ -633,7 +636,7 @@ export function AgentChat({
         setStatus(result.error || "Send failed", "error");
       }
     },
-    [readOnly, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
   );
 
   // Tap a preview-dialog control (point at an option, choose the pointed one, the note add/edit/remove,
@@ -645,7 +648,7 @@ export function AgentChat({
   const handlePreviewAction = useCallback(
     async (action: PreviewBlockAction, preview: PreviewSelectModel) => {
       if (readOnly) {
-        setStatus("Read-only — device not authorised", "error");
+        setStatus(refusedWrite, "error");
         return;
       }
       const base = {
@@ -683,7 +686,7 @@ export function AgentChat({
         revalidator.revalidate();
       }
     },
-    [readOnly, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
   );
 
   // Tap a multi-select control (toggle a checkbox, Submit, the "Chat about this" escape, or the
@@ -694,7 +697,7 @@ export function AgentChat({
   const handleMultiSelectAction = useCallback(
     async (action: MultiSelectIntent, multi: MultiSelectModel) => {
       if (readOnly) {
-        setStatus("Read-only — device not authorised", "error");
+        setStatus(refusedWrite, "error");
         return;
       }
       const result = await submitMultiSelectIntent({
@@ -718,7 +721,7 @@ export function AgentChat({
         setStatus(result.error || "Send failed", "error");
       }
     },
-    [readOnly, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
   );
 
   // Tap a generic-menu control (a footer-named key like Enter/s/Esc, or an arrow). Same guard-first
@@ -729,7 +732,7 @@ export function AgentChat({
   const handleMenuAction = useCallback(
     async (action: MenuBlockAction, menu: MenuModel) => {
       if (readOnly) {
-        setStatus("Read-only — device not authorised", "error");
+        setStatus(refusedWrite, "error");
         return;
       }
       const result = await submitMenuKeys({
@@ -775,7 +778,7 @@ export function AgentChat({
         setStatus(result.error || "Send failed", "error");
       }
     },
-    [readOnly, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator, localModel.released,
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator, localModel.released,
       liveModelBlock, modelPresent, modelSource.observe, modelSource.isCurrent, panels.modelCompleted],
   );
 
@@ -1238,6 +1241,7 @@ export function AgentChat({
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
+            lockReason={lock}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             processesControl={processesControl}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
