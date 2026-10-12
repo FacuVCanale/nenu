@@ -85,7 +85,58 @@ it("keeps the dialog open with the bridge's reason when closing fails", async ()
 it("offers no close or new thread on a read-only device", () => {
   setup({ readOnly: true });
   expect(screen.queryByRole("button", { name: "Close Build" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Build actions" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "New thread" })).not.toBeInTheDocument();
+});
+
+describe("closing is never a check", () => {
+  /** A phone or tablet: the pointer is coarse, so there is no hover to reveal a row's actions. */
+  const original = window.matchMedia;
+  function touchScreen() {
+    window.matchMedia = ((query: string) => ({ matches: query === "(pointer: coarse)", media: query, onchange: null, addEventListener: () => {},
+      removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+  }
+  afterEach(() => { window.matchMedia = original; });
+
+  it("names Close on an open row on a desk, and keeps the check for resolved work", async () => {
+    const { user } = setup();
+    const close = screen.getByRole("button", { name: "Close Build" });
+    expect(close).toHaveTextContent("Close");
+    expect(close.querySelector(".lucide-check")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^History/ }));
+    expect(screen.getByRole("button", { name: /^Audit/ }).querySelector(".lucide-check")).not.toBeNull();
+  });
+
+  it("closes from the row's ⋯ on a touch screen, and still asks first", async () => {
+    touchScreen();
+    let posted: unknown;
+    server.use(http.post("/api/org/node/resolve", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true }); }));
+    const { user, onOpenPane } = setup();
+    expect(screen.queryByRole("button", { name: "Close Build" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Build actions" }));
+    const sheet = screen.getByRole("dialog", { name: "Build" });
+    await user.click(within(sheet).getByRole("button", { name: "Open chat" }));
+    expect(onOpenPane).toHaveBeenCalledWith("a");
+    expect(screen.queryByRole("dialog", { name: "Build" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Build actions" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Build" })).getByRole("button", { name: "Close thread…" }));
+    expect(screen.queryByRole("dialog", { name: "Build" })).not.toBeInTheDocument();
+    const confirm = screen.getByRole("dialog", { name: "Close this thread?" });
+    expect(posted).toBeUndefined();
+    await user.click(within(confirm).getByRole("button", { name: "Close thread" }));
+    await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T1" }));
+  });
+
+  it("replaces the project coordinator from its ⋯ on a touch screen", async () => {
+    touchScreen();
+    server.use(http.get("/api/org/start-options", () => HttpResponse.json({ ok: true, templates: [], profiles: ["claude", "codex"] })));
+    const { user } = setup({ project: { ...project, nodeActions: true } });
+    await user.click(screen.getByRole("button", { name: "Coordinator actions" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Coordinator" })).getByRole("button", { name: "Replace coordinator…" }));
+    expect(screen.getByRole("dialog", { name: "Replace the coordinator?" })).toBeInTheDocument();
+  });
 });
 
 describe("one organization, the way Herdr Organizations draws it", () => {
