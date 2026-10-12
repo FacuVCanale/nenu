@@ -170,6 +170,8 @@ describe("a coordinator under the project", () => {
     expect(own.closest("li")).toHaveAttribute("aria-current", "true");
 
     // A thread it runs lists the same coordinator above its siblings, one tap from its chat.
+    // The stub draws the strip beside the overlay, so the segmented control shows twice here.
+    await user.click(screen.getAllByRole("tab", { name: "Chat" })[0]!);
     await router.navigate("/pane/worker");
     await user.click(await screen.findByRole("button", { name: "Threads, 1 open" }));
     const lead = screen.getByRole("button", { name: /^Coordinator/ });

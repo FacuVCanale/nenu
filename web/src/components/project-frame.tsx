@@ -55,7 +55,7 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
   const subtitle = parent
     ? `Coordinator under ${project.name} · ${threads.length} ${threads.length === 1 ? "thread" : "threads"}`
     : project.goal;
-  return { coordinating, threads, siblings, coordinatorPane: live ? coordinatorPane : undefined, panelTitle, subtitle };
+  return { coordinating, threads, siblings, coordinator: parent, coordinatorPane: live ? coordinatorPane : undefined, panelTitle, subtitle };
 }
 
 /**
@@ -157,7 +157,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
-  const tasks = <ProjectTasks project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
+  const tasks = <ProjectTasks project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
@@ -192,7 +192,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
       )}
       {panelShown && (
         <aside className="flex min-h-0 w-[400px] shrink-0 flex-col border-l border-border" aria-label="Project">
-          <ThreadsPanel project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle}
+          <ThreadsPanel project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle}
             activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
             onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }}
             onOpenNode={openNode} onChanged={refresh}

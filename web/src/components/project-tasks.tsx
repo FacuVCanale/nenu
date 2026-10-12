@@ -108,6 +108,8 @@ interface OrgTreeProps {
 interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
   /** The nodes to list; the whole project when omitted. */
   threads?: readonly ProjectThreadView[];
+  /** The coordinator under the project that runs them; the project's own coordinator when omitted. */
+  coordinator?: ProjectThreadView;
   /** Heading and its second line; the project's name and goal by default. */
   title?: string;
   subtitle?: ReactNode;
@@ -116,18 +118,29 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
 /**
  * A project's organization: its coordinator, the open work as a tree (coordinators first, the most
  * urgent first) and one grey History of everything resolved. Every node opens its chat or its
- * detail; an open one can be closed and the coordinator replaced.
+ * detail; an open one can be closed and the coordinator replaced. Under a coordinator below the
+ * project, that coordinator heads the list instead of the project's own.
  */
-export function ProjectTasks({ threads, title, subtitle, ...tree }: ProjectTasksProps) {
-  const { project, panes, session, currentPaneId, readOnly, onOpenPane, onChanged } = tree;
+export function ProjectTasks({ threads, coordinator, title, subtitle, ...tree }: ProjectTasksProps) {
+  const { project, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged } = tree;
   return (
     <div className="project-tasks">
       <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"} />
-      <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />
+      {coordinator
+        ? <ul className="task-list mb-2"><CoordinatorRow thread={coordinator} panes={panes} currentPaneId={currentPaneId} onOpenPane={onOpenPane} onOpenNode={onOpenNode} /></ul>
+        : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />}
       <OrgTreeList {...tree} threads={threads ?? project.threads} />
       {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={() => void onChanged()} /></div>}
     </div>
   );
+}
+
+/** A coordinator under the project, heading the work it runs; "You're here" when its chat is the one on screen. */
+function CoordinatorRow({ thread, panes, currentPaneId, onOpenPane, onOpenNode }: Pick<OrgTreeProps, "panes" | "currentPaneId" | "onOpenPane" | "onOpenNode"> & { thread: ProjectThreadView }) {
+  const here = thread.paneId !== undefined && thread.paneId === currentPaneId;
+  const detail = [here && "You're here", thread.agent, threadDetail(thread, panes)].filter(Boolean).join(" · ");
+  return <TaskRow state={nodeState(thread)} title="Coordinator" detail={detail} current={here} opens={thread.paneId ? "chat" : "details"}
+    onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} />;
 }
 
 /**
