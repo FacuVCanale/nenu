@@ -68,3 +68,48 @@
   @starting-style { .file-preview-panel { opacity: 0; } }
   .file-preview-backdrop[data-leaving] .file-preview-panel { opacity: 0; }
 }
+
+/* The image viewer: the picture alone on black, edge to edge, dark under either theme as a photo
+   app is. The scrim is its own layer so a pull down can fade it while the picture follows the finger. */
+.file-preview-backdrop--image { padding: 0; background: transparent; }
+.file-preview-panel--image { width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; box-shadow: none; color-scheme: dark; color: var(--foreground); }
+.file-preview-backdrop--image .file-preview-panel--image { translate: none; }
+@starting-style { .file-preview-backdrop--image .file-preview-panel--image { opacity: 1; translate: none; } }
+.file-preview-backdrop--image[data-leaving] .file-preview-panel--image { opacity: 0; translate: none; }
+
+.image-viewer { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.image-viewer-scrim { position: absolute; inset: 0; background: #000; }
+.image-viewer-stage { position: absolute; inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; overscroll-behavior: contain; }
+.image-viewer-track, .image-viewer-slot, .image-viewer-zoom { position: absolute; inset: 0; }
+.image-viewer-zoom { display: flex; align-items: center; justify-content: center; transform-origin: 50% 50%; will-change: transform; }
+.image-viewer-zoom > img { max-width: 100%; max-height: 100%; object-fit: contain; -webkit-user-drag: none; }
+@media (min-width: 640px) { .image-viewer-zoom { padding: 72px; } }
+.image-viewer-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 72px 16px; }
+.image-viewer-error > * { max-width: 36rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); }
+
+.image-viewer-bar { position: absolute; inset-inline: 0; display: flex; align-items: center; gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right)); background: color-mix(in oklab, #000 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%); transition: opacity 200ms ease-out, visibility 0s; }
+.image-viewer-top { top: 0; justify-content: space-between; min-height: calc(48px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+.image-viewer-bottom { bottom: 0; justify-content: center; gap: 16px; min-height: calc(48px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+.image-viewer-title { position: absolute; inset-inline: 96px; bottom: 0; height: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: var(--text-headline); line-height: 48px; font-weight: 600; letter-spacing: -0.01em; pointer-events: none; }
+.image-viewer-actions { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
+.image-viewer-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-md); transition: background-color 120ms ease-out, scale 120ms ease-out; }
+@media (hover: hover) and (pointer: fine) { .image-viewer-action:hover { background: rgb(255 255 255 / 12%); } }
+.image-viewer-action:active { scale: 0.96; }
+.image-viewer-count { min-width: 4.5rem; text-align: center; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); font-variant-numeric: tabular-nums; }
+.image-viewer[data-chrome="hidden"] .image-viewer-bar, .image-viewer[data-gesture] .image-viewer-bar { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 200ms ease-out, visibility 0s linear 200ms; }
+@media (max-width: 639px) { .image-viewer .preview-close { display: none; } }
+
+/* Entry: the black fades up and the picture settles from 96%. Reduced motion keeps the fade only. */
+@media (prefers-reduced-motion: no-preference) {
+  .image-viewer-scrim { transition: opacity 200ms ease-out; }
+  .image-viewer-zoom > img { transition: opacity 200ms ease-out, scale 200ms ease-out; }
+  @starting-style {
+    .image-viewer-scrim { opacity: 0; }
+    .image-viewer-zoom > img { opacity: 0; scale: 0.96; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .image-viewer-scrim, .image-viewer-zoom > img { transition: opacity 120ms ease-out; }
+  @starting-style { .image-viewer-scrim, .image-viewer-zoom > img { opacity: 0; } }
+  .image-viewer-bar { transition: opacity 120ms ease-out, visibility 0s; }
+}

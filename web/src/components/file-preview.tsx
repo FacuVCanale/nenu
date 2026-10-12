@@ -1,17 +1,19 @@
 import { lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe, ImageIcon, Loader2, MoreHorizontal, RefreshCw, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe, Loader2, MoreHorizontal, RefreshCw, X } from "lucide-react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchArtifactMetadata, fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
 import { displayPath } from "@/lib/display-path";
 import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
 import { FilePreviewContext } from "@/lib/file-preview-context";
+import { IMAGE_EXTENSION } from "@/lib/message-images";
 import { useHoldReload } from "@/lib/reload-guard";
 import { cn } from "@/lib/utils";
 import { ActionGroups } from "./conversation-actions";
 import { MarkdownText } from "./markdown-text";
 import { HtmlViewer } from "./html-viewer";
 import { FileUnavailable, type FileFailure } from "./file-unavailable";
+import { ImageViewer, type ViewerImage } from "./image-viewer";
 import { WorkbenchPopover } from "./ui/workbench-popover";
 import type { PreviewItem } from "./file-preview-provider";
 import "./file-preview.css";
@@ -20,6 +22,8 @@ const PdfPreview = lazy(() => import("./pdf-preview"));
 type DocumentData = { kind: "video"; url: string } | { kind: "pdf"; bytes: ArrayBuffer; url: string } | { kind: "image"; url: string } | { kind: "text"; text: string; markdown: boolean; url: string };
 
 const isHtml = (item: PreviewItem | undefined) => item?.kind === "file" && /\.html?$/i.test(item.path);
+/** Pictures open in the black viewer; SVG stays a document (CLAUDE.md, ADR 0059). */
+const isImage = (item: PreviewItem | undefined) => item?.kind === "journal" || (item?.kind === "file" && IMAGE_EXTENSION.test(item.path));
 const keyOf = (item: PreviewItem | undefined) => item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${item?.path ?? ""}`;
 const fileName = (path: string) => path.split("/").pop() || "Document";
 
@@ -115,6 +119,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const titleRef = useRef<HTMLHeadingElement>(null);
   const whereRef = useRef<HTMLParagraphElement>(null);
   const exit = useRef(0);
+  const probe = useRef<AbortController | null>(null);
   const narrow = useMediaQuery("(max-width: 639px)");
   const openFile = useContext(FilePreviewContext);
   const itemKey = keyOf(item);
@@ -127,6 +132,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const openRelated = openFile ? (target: string) => openFile(target.startsWith("/") ? target : filePath.slice(0, filePath.lastIndexOf("/") + 1) + target) : null;
   const name = item?.kind === "journal" ? item.label : fileName(filePath);
   const html = isHtml(item);
+  const image = isImage(item);
   // The pane this item is read through: the open one, unless the operator chose the pane whose
   // folder holds it. The choice belongs to one item, so stepping the gallery drops it.
   const [from, setFrom] = useState<{ itemKey: string; paneId: string } | null>(null);
@@ -152,8 +158,8 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     const controller = new AbortController();
     let url: string | undefined;
     setError(null); setData(null);
-    if (!item || html) return;
-    if (item.kind === "journal") { setData({ kind: "image", url: journalImageUrl(paneId, item.entry, item.index, session) }); return; }
+    // HTML loads in its frame and a picture in its <img>, each by its own request.
+    if (!item || html || image) return;
     if (/\.(mp4|m4v|mov|webm)$/i.test(filePath)) { setData({ kind: "video", url: paneFileUrl(source, filePath, session) }); return; }
     void (async () => {
       const response = await fetchPaneFile(source, filePath, session, controller.signal);
@@ -170,9 +176,9 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
         if (!controller.signal.aborted) setData({ kind: "text", text, markdown: /\.(md|markdown)$/i.test(filePath), url });
       } else throw new Error("This file type cannot be previewed.");
     })().catch((cause: unknown) => { if (!controller.signal.aborted) fail(cause); });
-    return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
+    return () => { controller.abort(); probe.current?.abort(); if (url) URL.revokeObjectURL(url); };
     // itemKey and filePath name the item; the object itself is rebuilt on every render of a one-file preview.
-  }, [paneId, source, session, itemKey, filePath, html, attempt]);
+  }, [paneId, source, session, itemKey, filePath, html, image, attempt]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -192,12 +198,26 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     exit.current = window.setTimeout(onClose, ms);
   };
 
+  /** An <img> that will not load says nothing of why: the file read answers that. */
+  const imageFailed = () => {
+    if (item?.kind !== "file") return setError({ message: "Could not load this image.", outside: false });
+    const key = itemKey;
+    probe.current?.abort();
+    probe.current = new AbortController();
+    fetchPaneFile(source, filePath, session, probe.current.signal).then((response) => {
+      void response.body?.cancel();
+      if (shown.current === key) setError({ message: "Could not load this image.", outside: false });
+    }, (cause: unknown) => { if (shown.current === key && !probe.current?.signal.aborted) fail(cause); });
+  };
+
   const copyPath = async () => {
     try { await navigator.clipboard.writeText(filePath); setCopied(true); } catch { setCopied(false); }
   };
 
   const step = (by: number) => setIndex((current) => (current + by + list.length) % list.length);
-  const downloadUrl = error ? undefined : data?.url ?? (html ? paneFileUrl(source, filePath, session) : undefined);
+  const imageUrl = (entry: PreviewItem, target = entry.kind === "file" ? entry.path : "", through = paneId) =>
+    entry.kind === "journal" ? journalImageUrl(paneId, entry.entry, entry.index, session) : paneFileUrl(through, target, session);
+  const downloadUrl = error ? undefined : image && item ? imageUrl(item, filePath, source) : data?.url ?? (html ? paneFileUrl(source, filePath, session) : undefined);
   const failure = error && <FileUnavailable failure={error} path={filePath} paneId={source} session={session} owner={owner} onRetry={() => setAttempt((value) => value + 1)}
     onOpenFrom={(paneId) => setFrom({ itemKey, paneId })} />;
 
@@ -220,16 +240,24 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     }
   };
 
+  const gallery: (ViewerImage | null)[] = image ? list.map((entry, i) => !isImage(entry) ? null : {
+    key: keyOf(entry),
+    src: i === at ? imageUrl(entry, filePath, source) : imageUrl(entry),
+    label: entry.kind === "journal" ? entry.label : fileName(entry.path),
+  }) : [];
   const cwd = panes.find((pane) => pane.paneId === source)?.cwd;
   const title = useFitted(titleRef, heading, name, (max) => shortName(name, max), narrow ? 21 : 80);
   const fullWhere = whereLine(filePath, cwd, name, sourceLabel, Infinity);
   const where = useFitted(whereRef, heading, fullWhere, (max) => whereLine(filePath, cwd, name, sourceLabel, max), narrow ? 28 : 96);
-  const Icon = html ? Globe : item?.kind === "journal" ? ImageIcon : FileText;
+  const Icon = html ? Globe : FileText;
 
-  return createPortal(<div className="file-preview-backdrop" data-leaving={leaving ? "" : undefined}
+  return createPortal(<div className={cn("file-preview-backdrop", image && "file-preview-backdrop--image")} data-leaving={leaving ? "" : undefined}
     onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label={name} tabIndex={-1} onKeyDown={onKeyDown}
-      className={cn("file-preview-panel", html && "file-preview-panel--full")}>
+      className={cn("file-preview-panel", html && "file-preview-panel--full", image && "file-preview-panel--image")}>
+      {image ? <ImageViewer images={gallery} index={at} name={name} downloadUrl={downloadUrl} error={failure || undefined}
+        onStep={step} onClose={close} onDismissed={onClose} onImageError={imageFailed} />
+      : <>
         <header className="file-preview-header">
           <button type="button" className="preview-done" onClick={close}><ChevronLeft className="size-6" aria-hidden="true" />Done</button>
           <Icon className="file-preview-kind size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -260,6 +288,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
           <span aria-live="polite" className="min-w-28 text-center text-sm">{name} <span className="text-muted-foreground">· {at + 1} of {list.length}</span></span>
           <button type="button" aria-label="Next" onClick={() => step(1)} className="file-preview-action"><ChevronRight className="size-5" /></button>
         </nav>}
+      </>}
     </div>
   </div>, document.body);
 }
@@ -272,6 +301,7 @@ function DocumentContent({ data, name, openRelated, onError }: { data: DocumentD
     case "video":
       return <video src={data.url} controls playsInline preload="metadata" aria-label={name} className="max-h-full w-full" onError={() => onError("Could not play this video. Download it to open in another player.")} />;
     case "image":
+      // A picture under a name without an image extension: the bridge's type says what it is.
       return <img src={data.url} alt={name} decoding="async" className="mx-auto h-auto max-w-full" onError={() => onError("Could not load this image.")} />;
     case "text":
       if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{data.text}</pre>;
