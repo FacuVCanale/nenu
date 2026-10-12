@@ -1,10 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
 import { HomeRoute } from "./home";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
+import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
+import { clockTime } from "@/lib/format";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";
@@ -12,6 +14,8 @@ import { server } from "@/test/setup";
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
 const openNewAgent = vi.fn();
 vi.mock("@/lib/spawn", async (original) => ({ ...(await original<typeof import("@/lib/spawn")>()), openNewAgent: (target: unknown) => openNewAgent(target) }));
+const openNewDialog = vi.fn();
+vi.mock("@/components/new-agent-sheet", async (original) => ({ ...(await original<typeof import("@/components/new-agent-sheet")>()), openNewDialog: () => openNewDialog() }));
 
 beforeEach(() => localStorage.clear());
 
@@ -54,19 +58,44 @@ const projectData: HomeData = {
   projects: [hub],
 };
 
-async function setup(value = data) {
-  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => value, element: <WorkbenchShell data={value}><Outlet /></WorkbenchShell>, children: [
+function Shell() {
+  const value = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  return <WorkbenchShell data={value}><Outlet /></WorkbenchShell>;
+}
+
+async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<unknown> } = {}) {
+  let current: HomeData | Promise<HomeData> = value;
+  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell />, children: [
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
-    { path: "/pane/:paneId", element: <p>Pane opened</p> },
+    { path: "/pane/:paneId", element: <p>Pane opened</p>, ...(paneLoader ? { loader: paneLoader } : {}) },
     { path: "/project/:projectSlug", element: <p>Project page</p> },
   ] }], { initialEntries: ["/?s=work"] });
   render(<RouterProvider router={router} />);
-  await screen.findByRole("heading", { level: 1 });
-  return { router, user: userEvent.setup(), main: within(document.querySelector("main")!) };
+  await screen.findAllByRole("heading");
+  /** The next poll returns `next`. */
+  const update = async (next: HomeData) => {
+    current = next;
+    await act(() => router.revalidate());
+  };
+  /** The next poll hangs, as a read to a host that drops packets does until its timeout. */
+  const stall = () => {
+    current = new Promise<HomeData>(() => {});
+    void router.revalidate();
+  };
+  return { router, update, stall, user: userEvent.setup(), main: within(document.querySelector("main")!) };
 }
 
-const headline = () => screen.getByRole("heading", { level: 1 }).querySelector(".max-sm\\:hidden")?.textContent;
+/** The connection has not been live for longer than the sustained-outage threshold. */
+const sustained = () => {
+  const since = Date.now() - CONNECTION_LOST_MS - 5_000;
+  __resetConnectionHealth(since);
+  return since;
+};
+
+const headline = () => screen.getByRole("heading", { level: 1 }).textContent;
+/** The line under the headline: the facts the headline leaves out. */
+const subline = () => screen.getByRole("heading", { level: 1 }).nextElementSibling?.textContent;
 
 it("answers a dialog in place from Needs you", async () => {
   const answers: unknown[] = [];
@@ -99,18 +128,45 @@ it("offers a blocked pane with no readable dialog as a row into its thread", asy
 it("opens the shared new-agent flow from the composer, carrying what was typed", async () => {
   const { user, main } = await setup({ ...data, agents: [], workspaces: [] });
   expect(screen.getByRole("heading", { level: 1, name: "What should we work on?" })).toBeInTheDocument();
-  expect(screen.getByText(/Describe a task to start your first agent/)).toBeInTheDocument();
-  await user.click(main.getByRole("button", { name: "New chat" }));
+  await user.click(main.getByRole("button", { name: "Start" }));
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace" });
-  await user.type(main.getByRole("textbox", { name: "First message for a new chat" }), "Audit the auth flow{Enter}");
+  await user.type(main.getByRole("textbox", { name: "Task for a new agent" }), "Audit the auth flow{Enter}");
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace", message: "Audit the auth flow" });
-  expect(main.getByRole("textbox", { name: "First message for a new chat" })).toHaveValue("");
+  expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveValue("");
+});
+
+it("orients an empty herd: two ways to start an agent, and where else agents come from", async () => {
+  const { user, main } = await setup({ ...data, agents: [], workspaces: [] });
+  const starters = within(main.getByRole("region", { name: "Get started" }));
+  await user.click(starters.getByRole("button", { name: /^Start an agent in a folder/ }));
+  expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace" });
+  await user.click(starters.getByRole("button", { name: /^Start a project or a quick chat/ }));
+  expect(openNewDialog).toHaveBeenCalledTimes(1);
+  expect(main.getByText("Agents you start in Herdr show up here too.")).toBeVisible();
+});
+
+it("offers no starters once the herd has agents", async () => {
+  const { main } = await setup();
+  expect(main.queryByRole("region", { name: "Get started" })).not.toBeInTheDocument();
+});
+
+it("calls the one action by one verb: describe a task, in a place, then Start", async () => {
+  const { user, main } = await setup();
+  const box = main.getByRole("textbox", { name: "Task for a new agent" });
+  expect(box).toHaveAttribute("placeholder", "Describe a task…");
+  // What the chip shows, leaving out the native select's option list.
+  const chip = () => [...main.getByRole("combobox", { name: "Send to" }).closest("label")!.children]
+    .filter((el) => el.tagName !== "SELECT").map((el) => el.textContent).join(" ").replace(/\s+/g, " ").trim();
+  expect(chip()).toBe("In: New workspace");
+  expect(main.getByRole("button", { name: "Start" })).toBeEnabled();
+  await user.selectOptions(main.getByRole("combobox", { name: "Send to" }), "workspace:w1");
+  expect(chip()).toBe("In: Nenu");
 });
 
 it("starts a thread in a chosen workspace", async () => {
   const { user, main } = await setup();
   await user.selectOptions(main.getByRole("combobox", { name: "Send to" }), "workspace:w1");
-  await user.type(main.getByRole("textbox", { name: "First message for a new chat" }), "Fix the flaky test{Enter}");
+  await user.type(main.getByRole("textbox", { name: "Task for a new agent" }), "Fix the flaky test{Enter}");
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "tab", workspaceId: "w1", message: "Fix the flaky test" });
 });
 
@@ -136,15 +192,89 @@ describe("a project's coordinator", () => {
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", scope: "s1", action: "add", text: "Start phase two", deliveryMode: "asap" })]);
   });
 
-  it("asks whether to steer or queue while it works", async () => {
-    const posts = queue((body) => [{ id: body.id, text: body.text, state: "queued", createdAt: 1, revision: 1, deliveryMode: body.deliveryMode }]);
-    const working = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1" ? { ...a, status: "working" as const } : a) };
+  const working = { ...projectData, agents: projectData.agents.map((a) => a.paneId === "c1" ? { ...a, status: "working" as const } : a) };
+  const queued = (body: Record<string, unknown>) => [{ id: body.id, text: body.text, state: "queued", createdAt: 1, revision: 1, deliveryMode: body.deliveryMode }];
+
+  it("asks in an action sheet whether it reads the message now or after this turn, each time", async () => {
+    const posts = queue(queued);
     const { user, main } = await setup(working);
-    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Also the landing{Enter}");
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Also the landing{Enter}");
     expect(posts).toEqual([]);
-    await user.click(main.getByRole("button", { name: "Queue for later" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Hub's coordinator is working" }));
+    expect(sheet.getByText("When should it read this?")).toBeVisible();
+    // The rows say what the coordinator's CLI does with each choice (ADR 0056).
+    expect(sheet.getByRole("button", { name: /^Send now/ })).toHaveTextContent(/Steers this turn/);
+    expect(sheet.getByRole("button", { name: /^Send after this turn/ })).toHaveTextContent(/runs as the next turn/);
+    await user.click(sheet.getByRole("button", { name: /^Send after this turn/ }));
     expect(await main.findByText("Queued for Hub's coordinator.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "afterTurn" })]);
+    // The choice is made at every send, never remembered.
+    await user.type(box, "And the footer{Enter}");
+    await user.click(within(await screen.findByRole("dialog", { name: "Hub's coordinator is working" })).getByRole("button", { name: /^Send now/ }));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    // Codex reads "now" as a steer into the running turn.
+    expect(posts[1]).toEqual(expect.objectContaining({ pane: "c1", text: "And the footer", deliveryMode: "steer" }));
+  });
+
+  it("asks nothing of a busy coordinator whose CLI has no measured choice, and queues it after the turn", async () => {
+    const posts = queue(queued);
+    const pi = { ...working, agents: working.agents.map((a) => a.paneId === "c1" ? { ...a, agent: "pi" } : a) };
+    const { user, main } = await setup(pi);
+    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Also the landing{Enter}");
+    expect(await main.findByText("Queued for Hub's coordinator.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "afterTurn" })]);
+  });
+
+  it("keeps the draft when the busy choice is cancelled", async () => {
+    const posts = queue(queued);
+    const { user, main } = await setup(working);
+    await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Not yet{Enter}");
+    await user.click(within(await screen.findByRole("dialog", { name: "Hub's coordinator is working" })).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(main.getByRole("textbox", { name: "Message for Hub's coordinator" })).toHaveValue("Not yet");
+    expect(posts).toEqual([]);
+  });
+
+  it("says in a card why a send failed, keeps the draft and offers the coordinator in one tap", async () => {
+    server.use(http.get("/api/pane/:pane/queue", () => HttpResponse.json({ available: false, messages: [] })));
+    const { user, router, main } = await setup(projectData);
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Start phase two{Enter}");
+    const notice = within(await main.findByRole("alert"));
+    expect(notice.getByText("Hub's coordinator can't take messages from Home")).toBeVisible();
+    expect(notice.getByText(/Your message is still in the box/)).toBeVisible();
+    expect(box).toHaveValue("Start phase two");
+    await user.click(notice.getByRole("link", { name: "Open coordinator" }));
+    expect(router.state.location.pathname).toBe("/pane/c1");
+  });
+
+  it("says a send whose answer was lost may already be queued, and resends it as the same row", async () => {
+    const posts: Array<Record<string, unknown>> = [];
+    let lose = true;
+    server.use(
+      http.get("/api/pane/:pane/queue", () => HttpResponse.json({ available: true, scope: "s1", messages: [] })),
+      http.post("/api/pane/:pane/queue", async ({ request }) => {
+        posts.push(await request.json() as Record<string, unknown>);
+        return lose ? HttpResponse.error() : HttpResponse.json({ available: true, scope: "s1", messages: [] });
+      }),
+    );
+    const { user, main } = await setup(projectData);
+    const box = main.getByRole("textbox", { name: "Message for Hub's coordinator" });
+    await user.type(box, "Start phase two{Enter}");
+    const notice = within(await main.findByRole("alert"));
+    expect(notice.getByText("Not sure it reached Hub's coordinator")).toBeVisible();
+    expect(notice.getByText(/it may already be in the coordinator's queue/)).toBeVisible();
+    expect(notice.queryByText(/still in the box/)).not.toBeInTheDocument();
+    expect(box).toHaveValue("Start phase two");
+    // The same text again is the same row to the bridge, which keeps one copy.
+    lose = false;
+    await user.type(box, "{Enter}");
+    expect(await main.findByText("Sent to Hub's coordinator.")).toBeInTheDocument();
+    expect(posts).toHaveLength(2);
+    expect(posts[1]!.id).toBe(posts[0]!.id);
   });
 
   it("sends at once while only background work runs, as the terminal does", async () => {
@@ -155,14 +285,15 @@ describe("a project's coordinator", () => {
     const { user, main } = await setup(waiting);
     await user.type(main.getByRole("textbox", { name: "Message for Hub's coordinator" }), "Status?{Enter}");
     expect(await main.findByText("Sent to Hub's coordinator.")).toBeInTheDocument();
-    expect(main.queryByRole("button", { name: "Queue for later" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(posts).toEqual([expect.objectContaining({ pane: "c1", deliveryMode: "asap" })]);
   });
 });
 
 it("lists pull requests ready to review with their diff and checks", async () => {
   const { user, router, main } = await setup(projectData);
-  expect(headline()).toBe("1 thread needs you, 1 is ready to review");
+  expect(headline()).toBe("1 thread needs you");
+  expect(subline()).toBe("1 to review · 1 working");
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
   expect(review.getByText("Mobile panel")).toBeInTheDocument();
   expect(review.getByText("#1342")).toBeInTheDocument();
@@ -193,10 +324,12 @@ describe("Recent", () => {
     expect(recent.getAllByRole("link").map((link) => link.getAttribute("href")))
       .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work", "/pane/w1%3Ap1?s=work"]);
     // Each row reads as one sentence: title, "New", state, place, tab, how long ago.
-    for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Coordinator", "Idle", "Hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
+    for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Hub coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
       expect(recent.getByRole("link", { name: new RegExp(`^${parts.join(",\\s*")}$`) })).toBeInTheDocument();
     }
-    expect(recent.getByText("1 working now")).toBeInTheDocument();
+    // How many are working is the headline's to say ("1 working" under it), not Recent's again.
+    expect(subline()).toMatch(/1 working/);
+    expect(recent.queryByText(/working now/)).not.toBeInTheDocument();
     await user.click(recent.getByRole("link", { name: /^Landing/ }));
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
   });
@@ -209,6 +342,43 @@ describe("Recent", () => {
     await user.click(recent.getByRole("button", { name: "Show all 8" }));
     expect(recent.getAllByRole("listitem")).toHaveLength(8);
   });
+});
+
+it("marks the tapped row as opening while a slow pane read holds the navigation", async () => {
+  let release!: () => void;
+  const read = new Promise<null>((resolve) => { release = () => resolve(null); });
+  const { user, main } = await setup(data, { paneLoader: () => read });
+  const row = within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ });
+  const tapped = performance.now();
+  await user.click(row);
+  // A fast read never flashes a spinner; a slow one shows on the row that was tapped.
+  expect(row).not.toHaveAttribute("aria-busy");
+  await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
+  expect(performance.now() - tapped).toBeGreaterThanOrEqual(120);
+  expect(within(main.getByRole("region", { name: /^Needs you/ })).getByRole("link")).not.toHaveAttribute("aria-busy");
+  release();
+  expect(await screen.findByText("Pane opened")).toBeInTheDocument();
+});
+
+it("waits its own 120ms again when the same row is tapped a second time", async () => {
+  const { user, router, main } = await setup(data, { paneLoader: () => new Promise(() => {}) });
+  const row = () => within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ });
+  await user.click(row());
+  await waitFor(() => expect(row()).toHaveAttribute("aria-busy", "true"));
+  // Back on Home before the read came back (the tab bar's Home, or a redirect), then the same row again.
+  await act(() => router.navigate("/?s=work"));
+  const tapped = performance.now();
+  await user.click(row());
+  expect(row()).not.toHaveAttribute("aria-busy");
+  await waitFor(() => expect(row()).toHaveAttribute("aria-busy", "true"));
+  expect(performance.now() - tapped).toBeGreaterThanOrEqual(120);
+});
+
+it("marks a Needs you row as opening too", async () => {
+  const { user, main } = await setup(data, { paneLoader: () => new Promise(() => {}) });
+  const row = within(main.getByRole("region", { name: /^Needs you/ })).getByRole("link", { name: /^Review changes/ });
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
 });
 
 it("leaves projects and workspaces to the sidebar instead of repeating them", async () => {
@@ -285,7 +455,8 @@ it("lists the pull requests agents opened outside Organizations and reviews them
     pr(1698, { title: "Abandoned carts", paneIds: ["w1:p1"], checks: { passed: 2, failed: 1, pending: 0 }, diff: { additions: 3752, deletions: 154 } }),
     pr(1696, { title: "Publish products", review: "approved", checks: { passed: 4, failed: 0, pending: 0 } }),
   ] });
-  expect(headline()).toBe("1 thread needs you, 3 are ready to review");
+  expect(headline()).toBe("1 thread needs you");
+  expect(subline()).toBe("3 to review");
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
   expect(review.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual(["Review Publish products", "Review Abandoned carts", "Review Email campaigns"]);
   expect(review.getByText("#1698")).toBeInTheDocument();
@@ -319,16 +490,115 @@ it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one 
 
 it("does not claim an empty live herd or allow creation from stale disconnected data", async () => {
   const { main } = await setup({ ...data, error: true, agents: [], workspaces: [] });
-  expect(screen.getByText(/Showing your last workspace snapshot/)).toBeInTheDocument();
-  expect(main.getByRole("button", { name: "New chat" })).toBeDisabled();
-  expect(main.getByRole("textbox", { name: "First message for a new chat" })).toBeDisabled();
-  expect(screen.queryByText(/Describe a task to start your first agent/)).not.toBeInTheDocument();
+  expect(main.getByRole("button", { name: "Start" })).toBeDisabled();
+  expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeDisabled();
+  expect(main.queryByRole("region", { name: "Get started" })).not.toBeInTheDocument();
+});
+
+describe("an outage", () => {
+  it("stays quiet through a brief failure: the same headline and lists", async () => {
+    const { update, main } = await setup();
+    await update({ ...data, error: true });
+    expect(headline()).toBe("1 thread needs you");
+    expect(main.queryByText(/Can't reach|Last synced|Showing the last herd/)).not.toBeInTheDocument();
+    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+  });
+
+  // Known gap, pinned so it turns red the day it is fixed: a failed snapshot read makes canCreate
+  // (lib/types.ts, read by workbench-shell.tsx) false at once, so the composer greys out with no reason
+  // given, although only a sustained outage should block it. Both files are outside Home.
+  it.fails("known gap: keeps the composer usable through a brief failure", async () => {
+    const { update, main } = await setup();
+    await update({ ...data, error: true });
+    expect(main.getByRole("textbox", { name: "Task for a new agent" })).toBeEnabled();
+  });
+
+  it("says Herdr can't be reached once it is sustained, with when the herd on screen was synced", async () => {
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
+    const { update, main } = await setup();
+    const needs = within(main.getByRole("region", { name: /^Needs you/ }));
+    await needs.findByRole("button", { name: "Yes" });
+    const since = sustained();
+    await update({ ...data, bridge: "disconnected" });
+    expect(headline()).toBe("Can't reach Herdr");
+    expect(subline()).toBe(`Last synced ${clockTime(since)}`);
+    // The herd stays to look at and open; what it cannot vouch for is paused.
+    expect(await needs.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    expect(needs.getByRole("button", { name: "Yes" })).toBeDisabled();
+    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+    expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
+  });
+
+  it("says Nenu can't be reached when the bridge stops answering, dated by the cached herd", async () => {
+    sustained();
+    const at = Date.now() - 3 * 60_000;
+    await setup({ ...data, error: true, lastSeenAt: at });
+    expect(headline()).toBe("Can't reach Nenu");
+    expect(subline()).toBe(`Last synced ${clockTime(at)}`);
+  });
+
+  it("says access was refused at once, without waiting for an outage, and asks to sign in", async () => {
+    await setup({ ...data, error: true, authError: true });
+    expect(headline()).toBe("Access refused");
+    expect(screen.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Sign in again to start an agent");
+  });
+
+  it("tells each Needs you card the real reason answers are paused", async () => {
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
+    const { update, main } = await setup();
+    await main.findByText("Do you want to proceed?");
+    await update({ ...data, bridge: "disconnected" });
+    expect(await main.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    await update({ ...data, error: true });
+    expect(await main.findByText("Answers are paused until Nenu reconnects.")).toBeVisible();
+    await update({ ...data, error: true, authError: true });
+    expect(await main.findByText("Sign in again to answer.")).toBeVisible();
+  });
+});
+
+describe("a first load that never reached Nenu", () => {
+  const never: HomeData = { ...data, error: true, bridge: undefined, agents: [], workspaces: [], projects: [] };
+
+  it("says it is connecting while it retries quietly, with nothing to start", async () => {
+    const { main } = await setup(never);
+    expect(main.getByRole("heading", { name: "Connecting to Nenu…" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
+    expect(main.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(main.queryByText(/snapshot/)).not.toBeInTheDocument();
+  });
+
+  it("names the host it can't reach once the outage is sustained, with a Retry", async () => {
+    sustained();
+    const { main } = await setup(never);
+    expect(main.getByRole("heading", { name: `Can't reach Nenu at ${location.host}` })).toBeInTheDocument();
+    expect(main.getByText("Nenu keeps trying. Check this device's network or VPN.")).toBeVisible();
+    expect(screen.getByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
+    expect(main.getByRole("button", { name: "Retry" })).toBeEnabled();
+  });
+
+  it("keeps Retry in reach while a poll hangs, and marks only the retry it started", async () => {
+    sustained();
+    const { stall, user, main } = await setup(never);
+    stall();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    const retry = main.getByRole("button", { name: "Retry" });
+    expect(retry).toBeEnabled();
+    expect(retry).not.toHaveAttribute("aria-busy");
+    await user.click(retry);
+    expect(retry).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("says access was refused rather than blaming the connection", async () => {
+    const { main } = await setup({ ...never, authError: true });
+    expect(main.getByRole("heading", { name: "Access refused" })).toBeInTheDocument();
+    expect(main.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
+  });
 });
 
 it("keeps existing threads navigable while answering and creating are read-only", async () => {
   server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
   const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
-  expect(main.getByRole("button", { name: "New chat" })).toBeDisabled();
+  expect(main.getByRole("button", { name: "Start" })).toBeDisabled();
   const needs = within(main.getByRole("region", { name: /^Needs you/ }));
   // The card says why, and lists what the agent offers with nothing to press.
   expect(await needs.findByText("Read-only on this device. Answer from an authorised one.")).toBeVisible();

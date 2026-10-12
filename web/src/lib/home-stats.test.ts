@@ -1,5 +1,6 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
+import { clockTime } from "./format";
+import { greeting, homeHeadline, needsYouItems, outageHeadline, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -20,19 +21,35 @@ const project: ProjectView = {
 };
 
 describe("headline", () => {
-  it("names what needs you and what is ready, never a list", () => {
-    expect(homeHeadline({ needs: 2, review: 2, working: 5 }, 9)).toBe("2 threads need you, 2 are ready to review");
-    expect(homeHeadline({ needs: 1, review: 0, working: 5 }, 9)).toBe("1 thread needs you");
-    expect(homeHeadline({ needs: 0, review: 1, working: 0 }, 9)).toBe("1 pull request ready to review");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9)).toBe("2 agents at work");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9)).toBe("All quiet");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 0)).toBe("What should we work on?");
+  it("leads with the one fact that needs you most, as a sentence with its noun", () => {
+    expect(homeHeadline({ needs: 2, review: 2, working: 5 }, 9).title).toBe("2 threads need you");
+    expect(homeHeadline({ needs: 1, review: 0, working: 5 }, 9).title).toBe("1 thread needs you");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9).title).toBe("1 pull request ready to review");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9).title).toBe("2 agents at work");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9).title).toBe("All quiet");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 0).title).toBe("What should we work on?");
   });
 
-  it("keeps the phone's to two facts", () => {
-    expect(homeHeadline({ needs: 2, review: 0, working: 5 }, 9, true)).toBe("2 need you · 5 working");
-    expect(homeHeadline({ needs: 1, review: 3, working: 5 }, 9, true)).toBe("1 needs you · 3 to review");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 1, true)).toBe("All quiet");
+  it("puts the rest on a second line, and leaves it out when there is nothing else", () => {
+    expect(homeHeadline({ needs: 1, review: 3, working: 5 }, 9).detail).toBe("3 to review · 5 working");
+    expect(homeHeadline({ needs: 2, review: 0, working: 1 }, 9).detail).toBe("1 working");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9).detail).toBe("3 working");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9).detail).toBeNull();
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9).detail).toBeNull();
+  });
+
+  it("names what is unreachable in an outage, and dates the herd on screen when it can", () => {
+    const at = new Date(2026, 9, 7, 14, 0).getTime();
+    expect(outageHeadline("herdr", at, 3)).toEqual({ title: "Can't reach Herdr", detail: `Last synced ${clockTime(at)}` });
+    expect(outageHeadline("nenu", at, 0)).toEqual({ title: "Can't reach Nenu", detail: `Last synced ${clockTime(at)}` });
+    expect(outageHeadline("refused", at, 3)).toEqual({ title: "Access refused", detail: `Last synced ${clockTime(at)}` });
+  });
+
+  it("vouches for an undated herd only when there is one on screen", () => {
+    expect(outageHeadline("herdr", undefined, 3).detail).toBe("Showing the last herd Nenu saw");
+    expect(outageHeadline("herdr", undefined, 0).detail).toBe("Nenu keeps trying.");
+    expect(outageHeadline("nenu", undefined, 0).detail).toBe("Nenu keeps trying.");
+    expect(outageHeadline("refused", undefined, 0).detail).toBeNull();
   });
 
   it("greets by the local hour", () => {
@@ -138,10 +155,11 @@ describe("recent chats", () => {
       .toEqual(["worker", "chat-old", "coord", "chat-quiet"]);
   });
 
-  it("names a project's pane by its thread and project, a loose chat by its workspace and tab", () => {
+  it("names a pane as every other view does: a thread by its title and project, a loose chat by its workspace and tab", () => {
     const [worker, old, coord] = recentChats(panes, [project], new Set(["chat-asks"]));
     expect(worker).toMatchObject({ title: "Build", place: "Hub", tab: null, at: NOW - 2 * MIN, unseen: true });
     expect(old).toMatchObject({ title: "Changelog", place: "nenu", tab: "docs", at: NOW - 20 * MIN, unseen: false });
-    expect(coord).toMatchObject({ title: "Coordinator", place: "Hub" });
+    // The coordinator goes by its project's name in every view, never a bare "Coordinator".
+    expect(coord).toMatchObject({ title: "Hub coordinator", place: "nenu" });
   });
 });
