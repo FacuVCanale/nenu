@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { isRouteErrorResponse, Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
-import { Check, Copy, House, Inbox, Layers, Plus, RotateCw, Search, WifiOff } from "lucide-react";
+import { isRouteErrorResponse, Outlet, useLoaderData, useLocation, useParams, useRouteError, useRouteLoaderData } from "react-router";
+import { Check, Copy, RotateCw, WifiOff } from "lucide-react";
 
 import { usePolling } from "@/hooks/use-polling";
 import { useLiveEvents } from "@/hooks/use-live-events";
@@ -10,6 +10,7 @@ import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
+import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { cantReachNenu, ConnectionBanner } from "@/components/connection-banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,7 +19,7 @@ import { StatusArea } from "@/components/status-area";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import { FilePreviewProvider } from "@/components/file-preview-provider";
 import { homePath } from "@/lib/nav";
-import { SESSION_PARAM, normalizeSession } from "@/lib/session";
+import { SESSION_PARAM, normalizeSession, useSession } from "@/lib/session";
 import { PANE_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { paneDisplayName } from "@/lib/types";
 import { buildLabel } from "@/lib/build";
@@ -106,6 +107,8 @@ export function RootLayout() {
 // cannot reach the host and offers Retry, which reloads: a full reload clears most transient failures.
 export function BootSplash() {
   const stuck = useConnectionLost(true);
+  const { pathname } = useLocation();
+  const session = useSession();
   return (
     <div className="app-viewport flex flex-col">
       <div className="workbench-shell">
@@ -137,25 +140,18 @@ export function BootSplash() {
               )}
             </div>
           </main>
-          <nav className="bottom-tab-bar" aria-hidden="true">
-            {BOOT_TABS.map(({ label, Icon }) => label === "New"
-              ? <span key={label} className="bottom-tab-new opacity-40"><Icon size={22} strokeWidth={2} /></span>
-              : <span key={label} className="bottom-tab"><Icon size={22} strokeWidth={1.6} />{label}</span>)}
-          </nav>
+          {/* The app's own tab bar, so it does not change on hand-off; inert until there is a herd to open. */}
+          <div inert className="contents">
+            <BottomTabBar active={pathname === "/" ? "home" : null} homeTo={homePath(session)} attention={0}
+              onNeedsYou={noop} onBrowse={noop} onSearch={noop} />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// The phone's tab bar as it will arrive, drawn inert, so the bottom edge does not move on hand-off.
-const BOOT_TABS = [
-  { label: "Home", Icon: House },
-  { label: "Needs you", Icon: Inbox },
-  { label: "New", Icon: Plus },
-  { label: "Browse", Icon: Layers },
-  { label: "Search", Icon: Search },
-] as const;
+const noop = () => {};
 
 /** A placeholder bar. Still under reduced motion; the caption beside it is the live signal. */
 function Bone({ className, width }: { className?: string; width?: string }) {
