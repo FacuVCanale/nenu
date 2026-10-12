@@ -218,7 +218,8 @@ describe("dialog calls", () => {
 
   it("names a plan Plan, with its title and no heading marks", () => {
     render(<Steps calls={[{ ...plan, result: { text: "User approved" } }]} />);
-    expect(screen.getByRole("button", { name: /^Plan Add haiku\.txt/ })).not.toHaveTextContent("ExitPlanMode");
+    // The journal keeps the plan on one line; its title ends at the next heading.
+    expect(screen.getByRole("button", { name: "Plan Add haiku.txt" })).not.toHaveTextContent("ExitPlanMode");
   });
 
   // Claude titles most plans "Plan: …"; the line already says Plan once.
