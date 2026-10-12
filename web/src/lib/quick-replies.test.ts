@@ -20,8 +20,8 @@ describe("quickRepliesFor", () => {
     expect(items).not.toContain("skip");
   });
 
-  // The dock shows a group's title as written, so an operator's "iOS release" keeps its case; the
-  // shipped titles are written in the sentence case the dock reads in.
+  // The shipped titles are written in the sentence case the dock reads in, so nothing has to recase
+  // them on the way to the screen.
   it("ships its group titles in sentence case", () => {
     expect(quickRepliesFor("claude", false).map((g) => g.title)).toEqual(["Confirm", "Common"]);
     expect(quickRepliesFor("shell", true).map((g) => g.title)).toEqual(["Confirm"]);

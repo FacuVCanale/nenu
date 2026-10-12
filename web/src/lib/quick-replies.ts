@@ -17,7 +17,11 @@ import { rowsFor } from "@/lib/operator-scope";
 import type { OperatorQuickReplyRow } from "@/lib/types";
 
 export interface QuickReplyGroup {
-  /** The group's name above its pills, shown as written: the shipped ones are sentence case. */
+  /**
+   * The group's name above its pills. The shipped ones are written in the sentence case the dock reads
+   * in; the dock still capitalises every title's first letter on the way (quick-actions.tsx), so an
+   * operator's "iOS release" shows as "IOS release" until that goes.
+   */
   title: string;
   /** The literal strings sent — each is typed into the pane and submitted verbatim. */
   items: readonly string[];
