@@ -3,24 +3,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// The primary action is ink (foreground fill, background label), one per surface; the blue accent is
+// for focus, links and on-states. Disabled comes from its own tokens rather than opacity, which made
+// a disabled primary the brightest block on a dark screen. Focus is the app-wide ring (index.css).
+// Heights live in the ui-button-* classes (index.css, components layer): 44px on a coarse pointer,
+// and a caller's own h-* or size-* still wins.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,scale] duration-150 ease-out motion-reduce:transition-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-ring active:scale-[0.96] motion-reduce:active:scale-100 select-none",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,scale] duration-150 ease-out motion-reduce:transition-none disabled:pointer-events-none disabled:text-disabled-foreground disabled:shadow-none [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 active:scale-[0.96] motion-reduce:active:scale-100 select-none",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+        default: "bg-foreground text-background shadow-xs hover:bg-foreground/90 disabled:bg-disabled",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 disabled:bg-disabled",
         outline: "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+        secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80 disabled:bg-disabled",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-11 rounded-md px-6 has-[>svg]:px-4 text-base",
-        icon: "size-9",
+        default: "ui-button-default px-4 py-2 has-[>svg]:px-3",
+        sm: "ui-button-sm rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
+        lg: "ui-button-lg rounded-md px-6 has-[>svg]:px-4 text-base",
+        icon: "ui-button-icon",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
