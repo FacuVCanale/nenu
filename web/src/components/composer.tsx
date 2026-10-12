@@ -1218,13 +1218,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         )}
 
-        {/* While a draft holds the round button for Send, Stop stays one tap away on the row that says
-            the agent is working, never as a second round button beside Send. */}
-        {stop.offered && (hasDraft || direct.active) && (
-          <div role="group" aria-label="Agent working" className="flex min-h-8 items-center gap-2 px-1 pb-1">
+        {/* Stop lives on the row that says the agent is working, for the whole turn, and never in the
+            Send slot: a draft appearing or clearing must not move the target under the thumb. */}
+        {stop.offered && (
+          <div role="group" aria-label="Agent working" className="composer-working">
             <WorkActivityLabel startedAt={workingSince} />
-            <span className="flex-1" />
-            <StopControl stop={stop} disabled={locked} compact />
+            <StopControl stop={stop} disabled={locked} />
           </div>
         )}
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
@@ -1300,9 +1299,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               rows={1}
             />
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
-            {/* One round button that morphs: Stop while the agent works and there is nothing to send,
-                Send (or queue) once a draft exists. */}
-            {stop.offered && !hasDraft && !direct.active ? <StopControl stop={stop} disabled={locked} /> : !direct.active && forcingSend ? (
+            {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
+            {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
               // submit key is still conditional on the verify step behind it.

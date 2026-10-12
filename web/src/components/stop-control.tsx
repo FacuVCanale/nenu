@@ -2,7 +2,6 @@ import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { StopTurn } from "@/hooks/use-stop-turn";
-import { cn } from "@/lib/utils";
 
 function StopGlyph() {
   return (
@@ -13,14 +12,14 @@ function StopGlyph() {
 }
 
 /**
- * The composer's Stop: the round primary button while nothing is typed, or (`compact`) a small
- * "■ Stop" on the "Working for …" row while a draft holds the round button for Send. Either way,
- * "Really stop?" when the bridge asked and "Stopping…" in flight.
+ * The composer's Stop, at the end of the "Working for …" row above the draft for as long as a turn
+ * runs. It never takes the Send slot, so typing a draft never moves it under the thumb. Every phase
+ * keeps the row's 32px height: "Really stop?" when the bridge asked, "Stopping…" in flight.
  */
-export function StopControl({ stop, disabled, compact = false }: { stop: StopTurn; disabled: boolean; compact?: boolean }) {
+export function StopControl({ stop, disabled }: { stop: StopTurn; disabled: boolean }) {
   if (stop.phase === "stopping") {
     return (
-      <span role="status" className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full text-xs text-muted-foreground", compact ? "h-7 px-2" : "h-8 border border-border px-3")}>
+      <span role="status" className="composer-stop inline-flex items-center gap-1.5 text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
         Stopping…
       </span>
@@ -28,21 +27,14 @@ export function StopControl({ stop, disabled, compact = false }: { stop: StopTur
   }
   if (stop.armed) {
     return (
-      <Button variant="destructive" className={cn("hit-area shrink-0 rounded-full px-3 text-xs font-semibold", compact ? "h-7" : "h-8")} onClick={stop.stop} disabled={disabled}>
+      <Button variant="destructive" className="composer-stop hit-area h-8 font-semibold" onClick={stop.stop} disabled={disabled}>
         Really stop?
       </Button>
     );
   }
-  if (compact) {
-    return (
-      <Button type="button" variant="ghost" className="hit-area h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-xs font-medium" onClick={stop.stop} disabled={disabled} aria-label="Stop" title="Stop">
-        <StopGlyph />Stop
-      </Button>
-    );
-  }
   return (
-    <Button type="button" variant="ghost" size="icon" className="composer-action composer-stop hit-area" onClick={stop.stop} disabled={disabled} aria-label="Stop" title="Stop (Esc)">
-      <StopGlyph />
+    <Button type="button" variant="outline" className="composer-stop hit-area h-8 gap-1.5" onClick={stop.stop} disabled={disabled} aria-label="Stop" title="Stop (Esc)">
+      <StopGlyph />Stop
     </Button>
   );
 }
