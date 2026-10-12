@@ -73,12 +73,12 @@ it("searches projects by thread metadata and chats by name, then closes on Escap
   const search = sidebar.getByRole("searchbox", { name: "Search projects and chats" });
   expect(search).toHaveFocus();
   await user.type(search, "t-0007");
-  expect(sidebar.getByRole("link", { name: /Nenu Project/ })).toBeInTheDocument();
-  expect(sidebar.queryByRole("link", { name: /Improve interface/ })).not.toBeInTheDocument();
+  expect(sidebar.getByRole("option", { name: /^Project navigation/ })).toHaveAttribute("href", "/project/nenu/node/t-0007?s=work");
+  expect(sidebar.queryByRole("option", { name: /Improve interface/ })).not.toBeInTheDocument();
   await user.clear(search);
   await user.type(search, "improve");
-  expect(sidebar.queryByRole("link", { name: /Nenu Project/ })).not.toBeInTheDocument();
-  expect(sidebar.getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
+  expect(sidebar.queryByRole("option", { name: /Nenu Project/ })).not.toBeInTheDocument();
+  expect(sidebar.getByRole("option", { name: /Improve interface/ })).toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(sidebar.queryByRole("searchbox")).not.toBeInTheDocument();
   expect(sidebar.getByRole("link", { name: /Nenu Project/ })).toBeInTheDocument();
@@ -90,7 +90,7 @@ it("filters without disturbing a mounted composer draft", async () => {
   await user.type(draft, " plus edits");
   await user.click(sidebar.getByRole("button", { name: "Search" }));
   await user.type(sidebar.getByRole("searchbox"), "missing");
-  expect(sidebar.getByText("No matching projects or chats")).toBeInTheDocument();
+  expect(sidebar.getByText("No matches for “missing”")).toBeInTheDocument();
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
   expect(draft).toHaveValue("Keep this draft plus edits");
@@ -160,8 +160,8 @@ it("opens a workspace on the same pane from the sidebar, search and the collapse
 
   await user.keyboard("{Meta>}k{/Meta}");
   await user.type(sidebar.getByRole("searchbox"), "op");
-  expect(workspaces().getByRole("link", { name: /^ops/ })).toHaveAttribute("href", opsPane);
-  await user.click(workspaces().getByRole("link", { name: /^ops/ }));
+  expect(sidebar.getByRole("option", { name: /^ops/ })).toHaveAttribute("href", opsPane);
+  await user.click(sidebar.getByRole("option", { name: /^ops/ }));
   expect(router.state.location.pathname + router.state.location.search).toBe(opsPane);
 
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
@@ -354,8 +354,8 @@ it("searches and starts something new from the drawer's header", async () => {
   expect(search).toHaveFocus();
   await user.type(search, "psag");
   expect(nav.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
-  expect(nav.getByRole("link", { name: /^psag/ })).toBeInTheDocument();
-  expect(nav.queryByRole("link", { name: /^AWAM producto/ })).not.toBeInTheDocument();
+  expect(nav.getByRole("option", { name: /^psag/ })).toBeInTheDocument();
+  expect(nav.queryByRole("option", { name: /^AWAM producto/ })).not.toBeInTheDocument();
   await user.click(nav.getByRole("button", { name: "New" }));
   expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   expect(screen.getByText("New dialog")).toBeInTheDocument();

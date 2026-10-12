@@ -59,6 +59,13 @@ describe("navigation search", () => {
     expect(groups("agent", many, 8)).toEqual([["Chats", ["Agent 0", "Agent 1", "Agent 2", "Agent 3", "Agent 4", "Agent 5", "Agent 6", "Agent 7"], 3]]);
   });
 
+  it("finds a workspace by its name, between Projects and Chats", () => {
+    const ws = (workspaceId: string, number: number, label: string) => ({ workspaceId, number, label, focused: false, activeTabId: "", tabCount: 2, paneCount: 1 });
+    const source = { ...herd, workspaces: [ws("w9", 9, "claws"), ws("w2", 2, "api")] };
+    expect(groups("claw", source)).toEqual([["Workspaces", ["claws"], 0], ["Chats", ["Notes"], 0]]);
+    expect(navSearch(source, "claw")[0]!.hits[0]).toMatchObject({ kind: "workspace", key: "workspace:w9", place: { place: "2 tabs", tab: null } });
+  });
+
   it("finds nothing without a query", () => {
     expect(navSearch(herd, "  ")).toEqual([]);
   });
