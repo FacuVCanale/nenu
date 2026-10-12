@@ -11,6 +11,7 @@ import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/pr
 import { WIZARD_CANCEL_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
 import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "../web/src/lib/typed-text.ts";
 import type { PaneRead } from "./herdr-client.ts";
+import { PERSISTENT, permissionSubject, promptSubjectText, stripKeyHint, terminalOnly } from "./interaction-subject.ts";
 import type {
   AgentView,
   AnswerOutcome,
@@ -21,6 +22,7 @@ import type {
   InteractionAnswer,
   InteractionOption,
   InteractionStep,
+  InteractionSubject,
   LivePublisher,
   LiveTopic,
 } from "./types.ts";
@@ -75,6 +77,8 @@ interface Described {
   context?: string;
   steps?: InteractionStep[];
   answers?: InteractionAnswer[];
+  subject?: InteractionSubject;
+  terminalOnly?: string[];
   choices: Draft[];
 }
 
@@ -100,7 +104,6 @@ const HEAD_ROWS = 12;
 const PLAN_TAIL_ROWS = 3;
 
 const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip)/i;
-const PERSISTENT = /\b(always|don['’]?t ask again|do not ask again|this session|auto mode|switch to|from this project|remember|as default)\b/i;
 const TYPE_SOMETHING = /^type something\b/i;
 /** A select question's escape row; Claude's prompt model carries no flag for it (wizard and multi-select do). */
 const QUESTION_ESCAPE = /^chat about this$/i;
@@ -148,8 +151,9 @@ const keys = (k: string[]): Recipe => ({ type: "keys", keys: k });
 /** The recipes that type the answer's `text`; an option carrying one is served with `acceptsText`. */
 const TEXT_RECIPES = new Set<Recipe["type"]>(["feedback", "amend", "typeSomething"]);
 /** A "Type something" row is typed into in the terminal; a digit would only focus or tick it. */
-const pick = (label: string, recipe: Recipe, extra: Partial<Option> = {}, answers = false): Draft => {
-  const option = { label, role: role(label, answers), ...extra };
+const pick = (raw: string, recipe: Recipe, extra: Partial<Option> = {}, answers = false): Draft => {
+  const label = stripKeyHint(raw);
+  const option = { label, role: role(label, answers), ...extra, ...(extra.description ? { description: stripKeyHint(extra.description) } : {}) };
   return { option, recipe: option.role === "freeText" && !TEXT_RECIPES.has(recipe.type) ? { type: "unsupported" } : recipe };
 };
 
@@ -203,8 +207,8 @@ function describePrompt(p: PromptModel, agent: string): Described {
   const kind: InteractionKind = p.family === "plan" ? "plan" : p.family === "select" ? "question" : "permission";
   const choices = p.options.map((o) => {
     const recipe: Recipe = o.amend && AMEND_FIELD[agent] ? { type: "amend", n: Number(o.keys[0]), keys: o.keys } : keys(o.keys);
-    const choice = pick(o.label, recipe, { role: role(o.label, kind === "question", p.family === "trust") });
-    if (o.description) choice.option.description = o.description;
+    const choice = pick(o.label, recipe, { role: role(stripKeyHint(o.label), kind === "question", p.family === "trust") });
+    if (o.description) choice.option.description = stripKeyHint(o.description);
     // Claude 2.1.296: a bare "No" rejects AND ends the turn; only Tab-amend keeps it going (PROBES_2026_10).
     else if (agent === "claude" && p.family === "permission" && o.label === "No") choice.option.description = "Stops Claude's turn";
     return choice;
@@ -219,6 +223,16 @@ function describePrompt(p: PromptModel, agent: string): Described {
   }
   // AskUserQuestion's single-choice "Type something." has no measured recipe: shown, answered in the terminal.
   if (p.textRow) choices.push(pick(p.textRow.label, { type: "unsupported" }, { role: "freeText" }));
+  if (kind === "permission") {
+    // The rows as plain text stay the context (a push body reads it); the card reads the parts.
+    const context = promptSubjectText(p).join("\n");
+    const subject = permissionSubject(agent, p);
+    const terminal = terminalOnly(p);
+    return {
+      kind, family: p.family, question: p.question, choices,
+      ...(context ? { context } : {}), ...(subject ? { subject } : {}), ...(terminal.length ? { terminalOnly: terminal } : {}),
+    };
+  }
   const { context, steps } = promptContext(p);
   return { kind, family: p.family, question: p.question, ...(context ? { context } : {}), ...stepsOf(steps), choices };
 }
@@ -247,9 +261,10 @@ function headerChips(row: string): InteractionStep[] | null {
 }
 
 /**
- * The subject of a prompt from its literal region: the rows under the dialog's top rule and above the
- * question (Claude's command or file), plus the rows between the question and the first option
- * (Codex's `$ command`). Bounded, so a long plan shows its tail here and its whole text via a hint.
+ * The detail of a question or plan from its literal region: the rows under the dialog's top rule and
+ * above the question, plus the rows between the question and the first option. Bounded, so a long plan
+ * shows its tail here and its whole text via a hint. A permission's subject is read in parts instead
+ * (interaction-subject.ts).
  */
 function promptContext(p: PromptModel): { context?: string; steps?: InteractionStep[] } {
   const lines = p.signature.split("\n");
@@ -338,6 +353,9 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   // A permission hint only agrees when its command is whole rows of the screen's subject, so that
   // subject (tool header, command, description) already shows it in full. A plan hint is longer.
   const context = base.kind === "permission" ? base.context : (detail ?? base.context);
+  // An agreeing hint's command is exact where the screen's had to be unwrapped.
+  const subject = base.subject?.command !== undefined && detail !== undefined && compact(detail) === compact(base.subject.command)
+    ? { ...base.subject, command: detail } : base.subject;
   const interaction: Interaction = {
     paneId: pane.paneId,
     agent: pane.agent,
@@ -347,6 +365,8 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     ...(context ? { context } : {}),
     ...(base.steps ? { steps: base.steps } : {}),
     ...(base.answers ? { answers: base.answers } : {}),
+    ...(subject ? { subject } : {}),
+    ...(base.terminalOnly ? { terminalOnly: base.terminalOnly } : {}),
     options: choices.map((c) => c.option),
     signature: dialogSignature(dialog),
     revision,

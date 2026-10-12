@@ -643,6 +643,22 @@ export interface InteractionAnswer {
   answer: string;
 }
 
+/** What a permission asks to run or change, read from the dialog's own rows. Display only. */
+export interface InteractionSubject {
+  /** The tool the dialog names: "Bash", "Create file". */
+  tool?: string;
+  /** What the agent says the call is for (Claude's description row, Codex's Reason). */
+  description?: string;
+  /** The command, with the terminal's wrapping undone; exact when a hint agreed with the screen. */
+  command?: string;
+  /** The file the call creates or edits. */
+  file?: string;
+  /** The dialog's preview of the file's lines, its own line numbers kept. */
+  preview?: string;
+  /** Short facts about where it runs ("Environment: local"). */
+  meta?: string[];
+}
+
 export interface Interaction {
   paneId: string;
   agent: string;
@@ -654,6 +670,10 @@ export interface Interaction {
   steps?: InteractionStep[];
   /** A wizard's review: what Submit sends, one pair per question. */
   answers?: InteractionAnswer[];
+  /** A permission's subject in parts; `context` keeps the same rows as plain text. */
+  subject?: InteractionSubject;
+  /** Options the screen shows that no answer here can press (Codex's and Grok's "don't ask again"). */
+  terminalOnly?: string[];
   options: InteractionOption[];
   /** Identity of the dialog on screen; an answer with another signature comes back `interaction_changed`. */
   signature: string;
