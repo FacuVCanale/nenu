@@ -187,6 +187,20 @@ describe("TabStrip — long-press actions", () => {
     expect(screen.getByText(/isn't authorised to rename or close tabs/)).toBeInTheDocument();
   });
 
+  // The chip, the sheet's title and its confirmation each named the tab their own way: "Tab 2",
+  // "Tab " and "Close “Tab 3”?" for a tab with no label, second in the strip, numbered 3 by Herdr.
+  it("names the sheet and its close confirmation as the strip names the tab", async () => {
+    const user = userEvent.setup();
+    const strip: TabView[] = [tabs[0]!, { tabId: "w1:t3", workspaceId: "w1", number: 3, label: "", focused: false, paneCount: 1 }];
+    render(
+      <TabStrip workspaceId="w1" tabs={strip} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} onRenamed={vi.fn()} onClosed={vi.fn()} />,
+    );
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" }));
+    expect(screen.getByRole("dialog", { name: "Tab 2" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    expect(screen.getByRole("heading", { name: "Close “Tab 2”?" })).toBeInTheDocument();
+  });
+
   it("still switches on a tap of a non-selected tab even with actions wired", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

@@ -131,6 +131,27 @@ describe("PaneStrip", () => {
     expect(screen.getByRole("dialog", { name: "Panel depósito" })).toBeInTheDocument();
   });
 
+  // A destructive confirmation that says only "Payments adapter" doesn't say which of the two closes.
+  it("names a repeated pane's sheet and its close confirmation with its number, as its pill does", async () => {
+    const user = userEvent.setup();
+    render(
+      <PaneStrip
+        panes={[
+          pane("w1:p1", "claude", "agent", { paneLabel: "Payments adapter" }),
+          pane("w1:p2", "claude", "agent", { paneLabel: "Payments adapter" }),
+        ]}
+        currentPaneId="w1:p1"
+        onSelect={vi.fn()}
+        onRenamed={vi.fn()}
+        onClosed={vi.fn()}
+      />,
+    );
+    fireEvent.contextMenu(screen.getAllByRole("button", { name: /Payments adapter/ })[1]!);
+    expect(screen.getByRole("dialog", { name: "Payments adapter · 2" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(screen.getByRole("heading", { name: "Close “Payments adapter · 2”?" })).toBeInTheDocument();
+  });
+
   it("fires onSelect with the pane id when a pane is tapped", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
