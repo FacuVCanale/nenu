@@ -515,8 +515,8 @@ function PlanText({ text, compact, folded, overflows, onMeasure, onOpenAll }: {
     <div className="flex min-w-0 flex-col items-start rounded-xl border border-border px-3.5 pt-3 pb-1">
       <div ref={box} role="group" aria-label="Plan" className={cn(
         "w-full min-w-0 pb-2 [&>div]:text-[15px] [&_li]:leading-6 [&_p]:leading-6",
-        // The fade reaches nothing before the edge, so a cut line never peeks through.
-        folded && "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-4rem),transparent_calc(100%-0.5rem))]",
+        // The fade is clear a full line (1.5rem) above the cut, so a row the cut slices is never seen.
+        folded && "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent_calc(100%-1.5rem))]",
         folded && (compact ? "max-h-36" : "max-h-64"),
       )}>
         <MarkdownText text={text} />
