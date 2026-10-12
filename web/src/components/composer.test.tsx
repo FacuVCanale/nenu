@@ -516,6 +516,37 @@ describe("Composer — a refused send is said beside the draft", () => {
     expect(props.setRawTerminal).toHaveBeenCalledWith(true);
   });
 
+  // Try again is Send again, guards included: a retry that skipped them put a destructive command
+  // on the wire without "Really send?".
+  it("asks Really send? again when Try again retries a destructive draft", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderComposerWithStatus();
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "rm -rf build");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Really send?" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    await user.click(within(sendNotice()).getByRole("button", { name: "Try again" }));
+    expect(screen.getByRole("button", { name: "Really send?" })).toBeVisible();
+    expect(sends).toHaveLength(1);
+  });
+
+  // Take over, a card's answer, a bubble's Edit and a picked command all change the draft without
+  // the textarea's own change event. The notice was about the draft it refused, so it goes too.
+  it("goes away when the draft changes from outside the box, so Try again never sends what it did not refuse", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend((body) => refusal(body, "verify", VERIFY, false));
+    renderDraftHarness({ terminalDraft: "rm -rf build" });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "hello");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
+    await user.click(screen.getByRole("button", { name: /take over/i }));
+    expect(box).toHaveValue("hello\nrm -rf build");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(sends).toHaveLength(1);
+  });
+
   it("goes away on the next edit, which is the operator taking it from there", async () => {
     const user = userEvent.setup();
     serveSend((body) => refusal(body, "verify", VERIFY, false));
