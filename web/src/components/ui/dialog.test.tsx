@@ -1,6 +1,6 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
-import { Dialog } from "./dialog";
+import { ConfirmDialog, Dialog } from "./dialog";
 
 /** The browser's exit animation, which jsdom does not run: the test decides when it ends. */
 function stubExitAnimation() {
@@ -32,6 +32,27 @@ it("keeps a closing dialog open, with what it said, until its exit ends", async 
   await finish();
   expect(dialog(container)).not.toHaveAttribute("open");
   expect(screen.queryByText("Close this thread?")).toBeNull();
+});
+
+it("takes no press while it fades out", async () => {
+  const finish = stubExitAnimation();
+  const onClose = vi.fn();
+  const { container, rerender } = render(
+    <ConfirmDialog open title="Merge this pull request?" confirmLabel="Merge" onConfirm={vi.fn()} onCancel={onClose} />,
+  );
+  // Escape cancelled it; a second press in the 150 ms it takes to go must not reach the old Merge.
+  rerender(<ConfirmDialog open={false} title="Merge this pull request?" confirmLabel="Merge" onConfirm={vi.fn()} onCancel={onClose} />);
+  const closing = dialog(container);
+  expect(closing).toHaveAttribute("open");
+  expect(closing).toHaveAttribute("inert");
+
+  // Nor does Escape or a press on its backdrop close it a second time.
+  fireEvent(closing, new Event("cancel", { cancelable: true }));
+  fireEvent.click(closing);
+  expect(onClose).not.toHaveBeenCalled();
+
+  await finish();
+  expect(dialog(container)).not.toHaveAttribute("inert");
 });
 
 it("stays open when it is reopened before its exit ends", async () => {
