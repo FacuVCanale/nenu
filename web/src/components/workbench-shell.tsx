@@ -154,7 +154,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
       </div>
 
       <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet ? SHEET_TITLE[sheet] : undefined}>
-        <WorkbenchSidebar key={sheet} data={data} onNavigate={() => setSheet(null)} onNewChat={newChat} phone
+        <WorkbenchSidebar key={sheet} data={data} onNavigate={() => setSheet(null)} onNewChat={newChat} variant="sheet"
           request={sheet === "search" || sheet === "needs-you" ? { target: sheet, seq: 1 } : undefined} />
       </BottomSheet>
 
@@ -166,7 +166,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
           <button type="button" className="workbench-icon-button" aria-label="Search" onClick={() => setDrawerSearch((n) => n + 1)}><Search aria-hidden size={18} /></button>
           <button type="button" className="workbench-icon-button" aria-label="New" onClick={newChat} disabled={!newChat}><Plus aria-hidden size={18} /></button>
         </>}>
-        <WorkbenchSidebar data={data} onNavigate={closeDrawer} onNewChat={newChat} phone
+        <WorkbenchSidebar data={data} onNavigate={closeDrawer} onNewChat={newChat} variant="drawer"
           request={drawerSearch ? { target: "search", seq: drawerSearch } : undefined} />
       </SideSheet>
     </div>

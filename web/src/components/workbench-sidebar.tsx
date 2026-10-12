@@ -27,17 +27,20 @@ export interface SidebarRequest {
 }
 
 /**
- * The workbench navigation: New, Search, Needs you and Home, then projects (coordinators and their
- * threads) and the workspaces no project holds, and the host it all runs on. On a phone it leads with
- * what needs you and the chats that moved last, and its projects and workspaces start folded.
+ * Where the navigation is drawn. The desk's sidebar leads with New, Search, Needs you and Home. A
+ * phone's sheet (the tab bar's) and drawer (a chat's Nenu mark) leave those to the bar or the drawer's
+ * header and start every project and workspace folded; the drawer, which has no Home behind it, also
+ * leads with what needs you and the chats that moved last.
  */
-export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, phone = false }: {
+export type SidebarVariant = "sidebar" | "sheet" | "drawer";
+
+/**
+ * The workbench navigation: its variant's lead, then projects (coordinators and their threads) and
+ * the workspaces no project holds, and the host it all runs on.
+ */
+export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant = "sidebar" }: {
   data: HomeData;
-  /**
-   * The phone's navigation: Needs you and Recent first, every project and workspace folded, and no
-   * New, Search, Needs you or Home rows, which its tab bar or drawer header already offer.
-   */
-  phone?: boolean;
+  variant?: SidebarVariant;
   onNavigate?: () => void;
   onNewChat?: () => void;
   /** Each new `seq` opens search or the Needs you list (⌘K, the rail, the tab bar). */
@@ -49,6 +52,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, phone =
   const searchBox = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const attention = needsYou(data);
+  const phone = variant !== "sidebar";
 
   const target = request?.target;
   useEffect(() => {
@@ -110,7 +114,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, phone =
         {mode === "needs-you"
           ? <NeedsYouList data={data} panes={attention} onNavigate={onNavigate} />
           : <>
-            {phone && !query.trim() && <PhoneSections data={data} onNavigate={onNavigate} />}
+            {variant === "drawer" && !query.trim() && <DrawerSections data={data} onNavigate={onNavigate} />}
             <SidebarTree data={data} query={query} onNavigate={onNavigate} folded={phone} />
           </>}
       </div>
@@ -143,8 +147,8 @@ function NeedsYouList({ data, panes, onNavigate }: { data: HomeData; panes: Agen
   );
 }
 
-/** What the phone's navigation leads with: the chats waiting on you, then the ones that moved last. */
-function PhoneSections({ data, onNavigate }: { data: HomeData; onNavigate?: () => void }) {
+/** What the drawer leads with: the chats waiting on you, then the ones that moved last. */
+function DrawerSections({ data, onNavigate }: { data: HomeData; onNavigate?: () => void }) {
   const { paneId } = useParams();
   const { needsYou: needs, recent } = drawerSections(data, paneId);
   const now = Date.now();

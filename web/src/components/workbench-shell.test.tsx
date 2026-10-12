@@ -360,3 +360,13 @@ it("searches and starts something new from the drawer's header", async () => {
   expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   expect(screen.getByText("New dialog")).toBeInTheDocument();
 });
+
+it("leaves Needs you and Recent to Home in the tab bar's Browse, and folds every project and workspace there", async () => {
+  const { user } = setup(herd, "/?s=work");
+  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
+  const sheet = within(screen.getByRole("dialog", { name: "Navigation" }));
+  expect(sheet.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
+  expect(sheet.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
+  expect(sheet.getByRole("button", { name: "AWAM Comercio SaaS tasks" })).toHaveAttribute("aria-expanded", "false");
+  expect(sheet.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+});
