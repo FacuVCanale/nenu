@@ -94,11 +94,8 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
     <DialogCard label={menu.title}>
       <QuestionHeading>{menu.title}</QuestionHeading>
 
-      {/* The screen's own lines, read as the card's content. Their cap is lifted: the card sits in the
-          conversation's scroller, and a second scroller inside it would trap a swipe. */}
-      <div className="[&>div]:max-h-none [&>div]:overflow-visible [&>div]:text-[15px] [&>div]:leading-5">
-        <NativeMenuContent menu={menu} lines={lines} />
-      </div>
+      {/* The screen's own lines, read as the card's content. */}
+      <NativeMenuContent menu={menu} lines={lines} />
 
       {/* Arrow pad — only the directions the screen itself advertised (a `❯` row for Up/Down, an
           "←/→ to <verb>" row for Left/Right). Each is one keystroke; they move a highlight and commit

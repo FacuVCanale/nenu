@@ -17,7 +17,13 @@ function isRenderedFooter(text: string, menu: MenuModel): boolean {
     menu.actions.some((action) => action.label === "Go back" && action.keys.join() === "Escape");
 }
 
-/** Display structure only: static rows cannot infer a key recipe from numbering or a cursor. */
+/**
+ * Display structure only: static rows cannot infer a key recipe from numbering or a cursor. Drawn as
+ * the card's text (the card sits in the conversation's scroller, so it has no scroller of its own).
+ * The screen's indent, less the margin every row shares, becomes a hanging indent so a wrapped row
+ * lines up under itself, and the highlighted row is marked by its chevron, never filled like a
+ * button: tapping it does nothing.
+ */
 export function NativeMenuContent({ menu, lines }: { menu: MenuModel; lines: StyledLine[] }) {
   const text = lines.map((line) => line.segments.map((segment) => segment.text).join("").trimEnd());
   while (text.length && (!text[0]?.trim() || OUTER_RULE.test(text[0]!))) text.shift();
@@ -27,28 +33,35 @@ export function NativeMenuContent({ menu, lines }: { menu: MenuModel; lines: Sty
   const rows = text.filter((line) => line.trim()).filter((line) => {
     const arrow = MENU_ARROW_ROW.exec(line);
     return !arrow || !menu.nav.leftRight || arrow[1]?.trim() !== menu.nav.leftRight.label || arrow[2]?.trim() !== menu.nav.leftRight.verb;
+  }).map((line) => {
+    // Strip paired Unicode box sides, leaving all subject/command text between them intact.
+    const content = line.replace(/^\s*[│┃║]\s?(.*?)\s?[│┃║]$/u, "$1");
+    return { indent: content.length - content.trimStart().length, content: content.trimStart() };
   });
+  const margin = Math.min(...rows.map((row) => row.indent));
 
   return (
-    <div className="max-h-[min(24rem,45dvh)] space-y-1 overflow-y-auto break-words text-xs leading-relaxed">
-      {rows.map((line, index) => {
-        // Strip paired Unicode box sides, leaving all subject/command text between them intact.
-        const content = line.replace(/^\s*[│┃║]\s?(.*?)\s?[│┃║]$/u, "$1");
-        const option = /^\s*([❯›])?\s*(?:(\d+)\.\s+)?(.+)$/u.exec(content);
+    <div className="flex flex-col gap-1 break-words text-[15px] leading-5">
+      {rows.map(({ indent, content }, index) => {
+        const style = { paddingLeft: `${indent - margin}ch` };
+        const option = /^([❯›])?\s*(?:(\d+)\.\s+)?(.+)$/u.exec(content);
         if (option && (option[1] || option[2])) {
           const selected = Boolean(option[1]);
           const [label = "", ...description] = option[3]!.split(/\s{2,}/);
           return (
-            <div key={index} className={`flex min-h-11 items-start gap-2 rounded-md px-2.5 py-2 ${selected ? "bg-accent text-accent-foreground" : "bg-muted/30"}`}>
-              {selected ? <ChevronRight className="mt-0.5 size-3.5 shrink-0" aria-label="Highlighted" /> : <span className="w-3.5 shrink-0" />}
+            <div key={index} data-row style={style} className={`flex items-start py-0.5 ${selected ? "font-medium text-foreground" : "text-foreground"}`}>
+              {/* The cursor's two columns: its chevron, or the gap it leaves on the other rows. */}
+              <span className="flex w-[2ch] shrink-0 pt-[3px]">
+                {selected && <ChevronRight className="size-3.5" aria-label="Highlighted" />}
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="font-medium">{option[2] && <span className="mr-1.5 text-muted-foreground">{option[2]}.</span>}{label}</p>
-                {description.length > 0 && <p className="mt-0.5 text-muted-foreground">{description.join(" ")}</p>}
+                <p>{option[2] && <span className="mr-1.5 font-normal text-muted-foreground">{option[2]}.</span>}{label}</p>
+                {description.length > 0 && <p className="mt-0.5 text-[13px] leading-[18px] font-normal text-muted-foreground">{description.join(" ")}</p>}
               </div>
             </div>
           );
         }
-        return <p key={index} className="whitespace-pre-wrap px-2.5 py-1 text-muted-foreground">{content}</p>;
+        return <p key={index} data-row style={style} className="whitespace-pre-wrap py-0.5 text-muted-foreground">{content}</p>;
       })}
     </div>
   );
