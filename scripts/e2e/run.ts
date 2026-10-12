@@ -330,7 +330,11 @@ async function tabs(): Promise<void> {
     const sheetClose = (band: "tabs" | "panes", row: "Close tab" | "Close pane") => async (page: Page) => {
       await page.locator(`[data-workbench-navigation-band="${band}"] button[aria-current="true"]`).click();
       await page.getByRole("button", { name: row, exact: true }).click({ timeout: 5000 });
-      await page.getByRole("button", { name: /^Tap again to close/ }).click({ timeout: 5000 });
+      // The row asks first: its confirmation's button carries the row's name and ignores taps for
+      // its first 500 ms (action-sheet-rows.tsx), so a double tap closes nothing.
+      await page.getByRole("heading", { name: /^Close “/ }).waitFor({ timeout: 5000 });
+      await page.waitForTimeout(700);
+      await page.getByRole("button", { name: row, exact: true }).click({ timeout: 5000 });
     };
     const inHerdr = (tabId: string) => async () => fake.closeTab(tabId);
 
