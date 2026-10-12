@@ -782,8 +782,8 @@ describe("AgentChat — history affordance", () => {
     const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
     renderChat({ agent, agents: [agent] });
     const shortcut = async (name: string) => {
-      await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
-      await user.click(within(screen.getByRole("dialog", { name: "Message shortcuts" })).getByRole("button", { name }));
+      await user.click(screen.getByRole("button", { name: "Message actions" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name }));
     };
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
     await shortcut("Keys");
@@ -791,7 +791,7 @@ describe("AgentChat — history affordance", () => {
     await shortcut("Type into terminal");
     expect(screen.getByPlaceholderText(/type into the terminal/i)).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Close Keys" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Message actions" }));
     expect(screen.getByRole("button", { name: "Type into terminal" })).toHaveAttribute("aria-pressed", "true");
   });
 
