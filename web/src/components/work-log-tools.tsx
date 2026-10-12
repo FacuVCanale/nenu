@@ -139,7 +139,8 @@ export function ToolStep({ id, part, owner, query, active, focused }: { id: stri
     <div data-tool={id} data-step={step.kind} className="min-w-0">
       <StepLine icon={<StepIcon kind={step.kind} />} label={[verb, part.summary, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
-        <span className="shrink-0 text-foreground">{verb}</span>
+        {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
+        <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
         <StepTarget text={part.summary} format={step.target} query={query} />
         {failed ? <FailedChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
         {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}

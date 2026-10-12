@@ -114,10 +114,14 @@ const TOOL_STEPS: Array<[RegExp, ToolStepDescription]> = [
   [/^(todowrite|update_plan)$/, { kind: "plan", done: "Updated the plan", doing: "Updating the plan", target: "text" }],
 ];
 
-/** A tool call as a step; a tool it does not know keeps its own name as the verb. */
+// Claude Code's spelling of an MCP tool: mcp__<server>__<tool>.
+const MCP_TOOL = /^mcp__.+?__(.+)$/;
+
+/** A tool call as a step; a tool it does not know keeps its own name (an MCP tool's, without its server) as the verb. */
 export function describeTool(name: string): ToolStepDescription {
   const key = name.toLowerCase();
-  return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: name, doing: name, target: "text" };
+  const own = MCP_TOOL.exec(name)?.[1] ?? name;
+  return TOOL_STEPS.find(([pattern]) => pattern.test(key))?.[1] ?? { kind: "tool", done: own, doing: own, target: "text" };
 }
 
 /** The first line of `text` that has words, trimmed: what a one-line preview of a thought shows. */
