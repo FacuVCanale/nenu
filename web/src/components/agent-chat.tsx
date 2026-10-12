@@ -610,8 +610,8 @@ export function AgentChat({
         action.kind === "option"
           ? await submitPromptOption({ ...base, option: action.option })
           : await submitPromptFeedback({ ...base, text: action.text });
+      // The answered dialog leaving the screen is the receipt, so a sent answer raises no toast (T10).
       if (result.status === "sent") {
-        setStatus(action.kind === "feedback" ? "Feedback sent" : "Sent", "success");
         setFollowing(true);
         revalidator.revalidate();
         listRef.current?.scrollToBottom();
@@ -650,7 +650,6 @@ export function AgentChat({
         keys,
       });
       if (result.status === "sent") {
-        setStatus("Sent", "success");
         setFollowing(true);
         revalidator.revalidate();
         listRef.current?.scrollToBottom();
@@ -696,10 +695,6 @@ export function AgentChat({
       // refreshed card shows its preview, so a second tap can't act on the read it replaced.
       if (result.status === "sent" && action.kind === "point") await revalidator.revalidate();
       else if (result.status === "sent") {
-        setStatus(
-          action.kind === "note" ? (action.text ? "Note saved" : "Note removed") : "Sent",
-          "success",
-        );
         setFollowing(true);
         revalidator.revalidate();
         listRef.current?.scrollToBottom();
@@ -735,7 +730,6 @@ export function AgentChat({
         intent: action,
       });
       if (result.status === "sent") {
-        setStatus("Sent", "success");
         setFollowing(true);
         revalidator.revalidate();
         listRef.current?.scrollToBottom();
@@ -792,7 +786,6 @@ export function AgentChat({
           return;
         }
         localModel.released();
-        setStatus("Sent", "success");
         setFollowing(true);
         revalidator.revalidate();
         listRef.current?.scrollToBottom();
@@ -1178,11 +1171,14 @@ export function AgentChat({
                     <ScrollText className="size-3.5" />
                     Show entire history
                   </button>
-                ) : moreScrollback ? (
+                ) : moreScrollback || loadingOlder ? (
+                  // Kept while it loads: the step that reaches Herdr's cap leaves no more to offer, and
+                  // the button vanished mid-load instead of saying it was busy.
                   <button
                     type="button"
                     onClick={loadOlder}
                     disabled={loadingOlder}
+                    aria-busy={loadingOlder || undefined}
                     className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60"
                   >
                     {loadingOlder ? (
