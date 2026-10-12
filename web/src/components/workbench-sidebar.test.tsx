@@ -249,6 +249,16 @@ describe("the sidebar", () => {
     expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
+  it("marks Home as the page on screen only on Home", () => {
+    open("/");
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("leaves Home unmarked in a chat", () => {
+    open("/pane/depo");
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
+  });
+
   it("names the host and what it holds in the footer, beside Settings", () => {
     open();
     expect(screen.getByText("2 workspaces · 6 agents")).toBeInTheDocument();
