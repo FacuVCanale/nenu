@@ -24,6 +24,11 @@ describe("strip chips", () => {
     expect(declarations(css, ".strip-chip", [LAYER])["max-width"]).toBe("min(60vw, 240px)");
   });
 
+  // --subtle-foreground on the open chip's fill reads 4.43:1 in light; text at 13px needs 4.5.
+  it("draw the open chip's sibling number in the muted ink, which holds 4.5:1 on its fill", () => {
+    expect(declarations(css, '.strip-chip[aria-current="true"] .strip-chip-tag', [LAYER]).color).toBe("var(--muted-foreground)");
+  });
+
   it("fade the edge a strip can still scroll toward", () => {
     expect(declarations(css, '.strip-scroller[data-overflow~="start"]', [LAYER])["--fade-start"]).toBe("24px");
     expect(declarations(css, '.strip-scroller[data-overflow~="end"]', [LAYER])["--fade-end"]).toBe("24px");
