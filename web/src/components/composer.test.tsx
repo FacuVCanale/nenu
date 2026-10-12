@@ -613,7 +613,11 @@ describe("Composer — typing into the terminal", () => {
 
     const strip = screen.getByText(/typing into terminal/i);
     expect(strip).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^stop$/i }));
+    // Named for what it stops, so it never reads as the turn's Stop on the row beside it, and
+    // tappable at 44px though it looks like a link.
+    const stop = screen.getByRole("button", { name: /^stop typing$/i });
+    expect(stop).toHaveClass("hit-area");
+    fireEvent.click(stop);
 
     await waitFor(() =>
       expect(screen.queryByPlaceholderText(/type into the terminal/i)).toBeNull(),

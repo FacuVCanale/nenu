@@ -196,6 +196,16 @@ it("opens one menu from the +, grouped Attach, Replies, Terminal and Session, an
   expect(sendMessage).not.toHaveBeenCalled();
 });
 
+it("takes the phone keyboard down when the + opens its menu, so the menu has the screen", async () => {
+  const { user } = setup();
+  const input = screen.getByRole("textbox");
+  await user.click(input);
+  expect(input).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+  expect(screen.getByRole("dialog", { name: "Message shortcuts" })).toBeVisible();
+  expect(input).not.toHaveFocus();
+});
+
 it("opens the image picker from the menu's Photo row", async () => {
   const { user } = setup();
   const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!;
