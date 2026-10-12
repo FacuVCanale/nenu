@@ -18,7 +18,8 @@ interface Props {
 // The chosen row carries one mark, a trailing check, as an iOS list does; a radio dot beside it said
 // the same thing twice. Use model is the cards' one commit (Button's block: 44px on touch, the rows'
 // radius and type) across the panel; on a phone, where the picker is a bottom sheet, Cancel gives
-// way to the sheet's own close.
+// way to the sheet's own close, and the sheet's body is full bleed: the rows' names and Use model
+// start on the 16px gutter, where the sheet's title does.
 export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCancel, more }: Props) {
   const id = useId();
   const [selection, setSelection] = useState<string | undefined>(() =>
@@ -61,7 +62,7 @@ export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCanc
 
   return (
     <div className="local-model-picker min-w-0 text-popover-foreground" aria-busy={busy}>
-      <div role="radiogroup" aria-label="Available models" className="max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-1.5">
+      <div role="radiogroup" aria-label="Available models" className="max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-1.5 max-lg:px-1">
         {rows.map((row, index) => (
           <button
             key={row.name}
@@ -100,7 +101,7 @@ export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCanc
       </div>
       {error && <p role="alert" className="px-4 pb-3 text-footnote text-destructive [overflow-wrap:anywhere]">{error}</p>}
       {more}
-      <div className="flex items-center gap-2 border-t border-border px-3 py-2 max-lg:pt-3">
+      <div className="flex items-center gap-2 border-t border-border px-3 py-2 max-lg:px-4 max-lg:pt-3">
         <Button type="button" variant="ghost" onClick={onCancel} className="text-muted-foreground max-lg:hidden">Cancel</Button>
         <Button
           type="button"
