@@ -501,6 +501,8 @@ export function AgentChat({
   }, []);
   // The list centres the current hit when it moves to it; this runs after that (a parent's effect
   // follows its children's) and leaves the hit a third down what the reader sees, under the chrome.
+  // Only the mirror marks its current hit so far: the chat's turns mark none (transcript-view), so in
+  // the chat this finds nothing and the conversation keeps the turn centred.
   useEffect(() => {
     const root = chatRef.current;
     if (!findOpen || matchCount === 0 || !root) return;
