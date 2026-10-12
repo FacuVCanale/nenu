@@ -75,6 +75,29 @@ function spoken(entry: TranscriptEntry): boolean {
   return (entry.role === "user" || entry.role === "assistant") && entry.parts.some((part) => part.kind === "text" || part.kind === "image");
 }
 
+/**
+ * The held window with each call's result where the live window has it: a call that finished while
+ * the reader held the thread says so on its row. Nothing else in the window moves. The same window
+ * comes back when no result landed, so a held thread does not redraw on every poll.
+ */
+function withResults(held: AvailableHistory, live: TranscriptEntry[]): AvailableHistory {
+  const now = new Map(live.map((entry) => [entry.uuid, entry]));
+  const landed = (entry: TranscriptEntry, index: number) => {
+    const part = now.get(entry.uuid)?.parts[index];
+    return part?.kind === "tool" ? part.result : undefined;
+  };
+  let changed = false;
+  const entries = held.entries.map((entry) => {
+    if (!entry.parts.some((part, index) => part.kind === "tool" && !part.result && landed(entry, index))) return entry;
+    changed = true;
+    return { ...entry, parts: entry.parts.map((part, index) => {
+      const result = part.kind === "tool" && !part.result ? landed(entry, index) : undefined;
+      return result ? { ...part, result } : part;
+    }) };
+  });
+  return changed ? { ...held, entries } : held;
+}
+
 /** The operator is typing in a box inside the question (a reply, a note). */
 function typingIn(el: HTMLElement): boolean {
   const active = document.activeElement;
@@ -142,12 +165,19 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     latest?.uuid !== lastShown?.uuid || latest?.turn?.status !== lastShown?.turn?.status ||
     latest?.turn?.durationMs !== lastShown?.turn?.durationMs
   );
-  // How many messages arrived below the frozen window; null when the live window slid past it.
-  const newCount = useMemo(() => {
-    if (!hasNew || !history?.available) return 0;
+  // What the live window holds below the frozen one; null when it slid past it.
+  const below = useMemo(() => {
+    if (!frozen || !history?.available) return null;
     const from = lastShown ? history.entries.findIndex((entry) => entry.uuid === lastShown.uuid) : -1;
-    return from < 0 ? null : history.entries.slice(from + 1).filter(spoken).length;
-  }, [hasNew, history, lastShown]);
+    return from < 0 ? null : history.entries.slice(from + 1);
+  }, [frozen, history, lastShown]);
+  // How many messages arrived below the frozen window; null when the live window slid past it.
+  const newCount = !hasNew ? 0 : below ? below.filter(spoken).length : null;
+  // The frozen window still ends on the live turn when only the agent's own steps came after it.
+  const onLiveTurn = below?.every((entry) => entry.role === "assistant") ?? false;
+  useEffect(() => {
+    if (history?.available) setFrozen((current) => current?.available ? withResults(current, history.entries) : current);
+  }, [history]);
   const matches = useMemo(() => matchingEntries(entries, query), [entries, query]);
   // This client's sends the journal has not caught up with yet. Reconciled against the LIVE window,
   // not a frozen one, so scrolling back to read never holds a delivered bubble on screen.
@@ -183,7 +213,10 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const timer = setTimeout(() => setStarting(null), TURN_PENDING_MS);
     return () => clearTimeout(timer);
   }, [starting, activityStatus]);
-  const activity = error || frozen ? undefined : starting ? "working" : activityStatus;
+  // A frozen window shows its turn running only while that turn is the live one and still runs: any
+  // other state would draw the reader's window as something it is not, or fold a turn they are reading.
+  const activity = error ? undefined : frozen ? (onLiveTurn && activityStatus === "working" ? "working" : undefined)
+    : starting ? "working" : activityStatus;
   // Under this client's bubble while the journal does not show it yet; the transcript's own after that.
   const labelUnderSend = activity === "working" && delivered !== null;
   const startingLabel = labelUnderSend && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
