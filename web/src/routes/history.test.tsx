@@ -20,9 +20,9 @@ const turns = (count: number): TranscriptEntry[] => Array.from({ length: count }
   parts: [{ kind: "text", text: `Message ${i}` }],
 }));
 
-function setup(paneId: string, history: Partial<HistoryData>, agents: AgentView[] = []) {
+function setup(paneId: string, history: Partial<HistoryData>, agents: AgentView[] = [], snapshot: Partial<HomeData> = {}) {
   const root: HomeData = { bridge: "connected", agents, shellPanes: [], workspaces: [], tabs: [], projects: [], device: undefined,
-    sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
+    sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false, ...snapshot };
   const data: HistoryData = { paneId, session: undefined, entries: [], hasMore: false, total: 0, fileTruncated: false, ...history };
   const router = createMemoryRouter([{
     id: ROOT_ROUTE_ID, path: "/", loader: () => root, element: <Outlet />,
@@ -81,7 +81,7 @@ describe("history with nothing to read", () => {
   it("says why, names the pane and offers one way back to it", async () => {
     const { router, user } = setup("w2:codex", { unavailable: "no-session" }, [pane("w2:codex", { paneLabel: "Codex" })]);
     expect(await screen.findByRole("heading", { name: "No conversation yet" })).toBeInTheDocument();
-    expect(screen.getByText(/Codex has no agent session/)).toBeInTheDocument();
+    expect(screen.getByText(/no agent session in Codex/)).toBeInTheDocument();
     const main = screen.getByRole("main");
     expect(within(main).getAllByRole("button")).toHaveLength(1);
     await user.click(within(main).getByRole("button", { name: "Back to Codex" }));
@@ -93,6 +93,23 @@ describe("history with nothing to read", () => {
     expect(await screen.findByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to Home" }));
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  // A pane missing from a snapshot that failed, or from one taken while Herdr is down, may be alive.
+  it("does not call a pane closed when the snapshot could not be read", async () => {
+    const { router, user } = setup("w1:idle", { unavailable: "error" }, [], { bridge: undefined, error: true });
+    expect(await screen.findByRole("heading", { name: "Couldn't read the transcript" })).toBeInTheDocument();
+    expect(screen.queryByText(/closed/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Nenu can't reach its bridge/)).toBeInTheDocument();
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to the pane" }));
+    expect(router.state.location.pathname).toBe("/pane/w1%3Aidle");
+  });
+
+  it("does not call a pane closed while Herdr is disconnected", async () => {
+    setup("w1:idle", { unavailable: "error" }, [], { bridge: "disconnected" });
+    expect(await screen.findByRole("heading", { name: "Couldn't read the transcript" })).toBeInTheDocument();
+    expect(screen.queryByText(/closed/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Herdr is unavailable/)).toBeInTheDocument();
   });
 
   it("explains a transcript it could not read", async () => {
