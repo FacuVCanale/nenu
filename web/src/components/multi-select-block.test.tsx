@@ -24,7 +24,7 @@ describe("MultiSelectBlock — checkbox screen", () => {
     render(<MultiSelectBlock multi={model} onAction={vi.fn()} />);
 
     expect(
-      screen.getByRole("group", { name: "Which pizza toppings do you want?" }),
+      screen.getByRole("region", { name: "Which pizza toppings do you want?" }),
     ).toBeInTheDocument();
 
     // Four checkbox controls; the fixture has Mushrooms + Olives checked.
@@ -81,7 +81,7 @@ describe("MultiSelectBlock — review screen", () => {
     const model = fixtureModel("claude--select-multiselect-review.txt");
     render(<MultiSelectBlock multi={model} onAction={onAction} />);
 
-    expect(screen.getByRole("group", { name: "Ready to submit your answers?" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Ready to submit your answers?" })).toBeInTheDocument();
     expect(screen.getByText(/not answered all questions/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Submit answers/ }));

@@ -1105,10 +1105,43 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(within(within(card).getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
   });
 
-  it("keeps the popover while the bridge has no card for the pane", async () => {
+  it("draws the dialog as a card in the conversation while the bridge has no card for the pane", async () => {
     const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: PERMISSION });
-    expect(await screen.findByRole("region", { name: "Agent interaction" })).toBeInTheDocument();
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Waiting on you")).toBeVisible();
+    expect(card.closest("[data-follow-stop]")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+
+  it("draws a generic menu in the conversation as a card, never over it", async () => {
+    const MENU = readFileSync("src/fixtures/panes/claude-lab--menu-rewind--w82.txt", "utf8");
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "menu", family: "claude", question: "Rewind", signature: "sig-m", revision: 1, detectedAt: 0,
+      options: [{ index: 0, label: "Continue", role: "neutral" }, { index: 1, label: "Cancel", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: MENU });
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Rewind" });
+    expect(within(card).getByRole("button", { name: "Continue" })).toBeVisible();
+    expect(within(card).getByRole("button", { name: "Cancel" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+  });
+
+  it("draws a preview question in the conversation as a card, never over it", async () => {
+    const PREVIEW = readFileSync("src/fixtures/panes/claude--select-preview.txt", "utf8");
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "question", family: "claude", question: "Which widget design should we use?", signature: "sig-p", revision: 1, detectedAt: 0,
+      options: [{ index: 0, label: "Boxy", role: "neutral" }, { index: 1, label: "Rounded", role: "neutral" }, { index: 2, label: "Minimal", role: "neutral" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: PREVIEW });
+    const conversation = await screen.findByRole("region", { name: "Live conversation" });
+    const card = await within(conversation).findByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
   });
 });
 

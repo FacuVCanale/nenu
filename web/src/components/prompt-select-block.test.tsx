@@ -59,7 +59,7 @@ describe("PromptSelectBlock — presentation", () => {
   it("renders each option as a focusable button, labelled by the question", () => {
     render(<PromptSelectBlock prompt={selectModel} onAction={vi.fn()} />);
     expect(
-      screen.getByRole("group", { name: "Which color theme should the dashboard use?" }),
+      screen.getByRole("region", { name: "Which color theme should the dashboard use?" }),
     ).toBeInTheDocument();
     const buttons = screen.getAllByRole("button");
     expect(buttons).toHaveLength(2);
