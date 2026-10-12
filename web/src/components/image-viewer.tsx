@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
 
 import { shortName, useFitted } from "@/lib/fit-text";
 import {
@@ -71,6 +71,7 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
   onImageLoad: (src: string) => void;
 }) {
   const [chrome, setChrome] = useState(true);
+  const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
   const root = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const title = useFitted(titleRef, titleRef, name, (max) => shortName(name, max), 80);
@@ -87,8 +88,9 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
   const landing = useRef<(() => void) | null>(null);
 
   const previous = index > 0 ? images[index - 1] ?? null : null;
+  const current = images[index] ?? null;
   const next = images[index + 1] ?? null;
-  const slots = ([[previous, -1], [images[index] ?? null, 0], [next, 1]] as const)
+  const slots = ([[previous, -1], [current, 0], [next, 1]] as const)
     .filter((slot): slot is readonly [ViewerImage, -1 | 0 | 1] => slot[0] !== null);
 
   const zoomElement = () => stage.current?.querySelector<HTMLElement>("[data-image-zoom]") ?? null;
@@ -323,12 +325,16 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
           <div className="image-viewer-zoom" data-image-zoom={offset === 0 ? "" : undefined}>
             {/* The pictures beside this one wait for a swipe, out of the reading order. */}
             <img src={image.src} alt={offset === 0 ? image.label : ""} aria-hidden={offset === 0 ? undefined : true} draggable={false} decoding="async"
-              onError={() => onImageError(image.src)} onLoad={() => onImageLoad(image.src)} />
+              onError={() => onImageError(image.src)} onLoad={() => { setLoaded((done) => new Set(done).add(image.src)); onImageLoad(image.src); }} />
           </div>
         </div>)}
       </div>}
     </div>
     {error && <div className="image-viewer-error">{error}</div>}
+    {/* Waits 300ms before it shows, so a picture from the cache never flashes it. */}
+    {!error && current && !loaded.has(current.src) && <div role="status" aria-label="Loading image" className="image-viewer-loading">
+      <Loader2 className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+    </div>}
     <header className="image-viewer-bar image-viewer-top">
       <button type="button" className="preview-done" onClick={onClose}><ChevronLeft className="size-6" aria-hidden="true" />Done</button>
       <h2 ref={titleRef} className="image-viewer-title" aria-label={title === name ? undefined : name} title={title === name ? undefined : name}>{title}</h2>

@@ -89,6 +89,8 @@
 /* A desk leaves room for the bars around the picture; a phone, on its side too, gives it the whole
    screen and floats the bars over it, as Photos does. */
 @media (min-width: 640px) and (pointer: fine) { .image-viewer-zoom { padding: 72px; } }
+.image-viewer-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; animation: image-viewer-appear 120ms ease-out 300ms forwards; }
+@keyframes image-viewer-appear { to { opacity: 1; } }
 .image-viewer-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 72px 16px; }
 .image-viewer-error > * { max-width: 36rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--card-foreground); }
 
