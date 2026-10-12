@@ -173,10 +173,11 @@ export function useDisplayPrefs(scope = DEFAULT_SCOPE): UseDisplayPrefsReturn {
 
 // ── Chat text ─────────────────────────────────────────────────────────────────────────────────────
 //
-// How big the conversation's prose reads. It is the type scale's body step (index.css), so the prose,
-// the bubbles and every row set in text-body follow it, while the mirror keeps its own Text size
-// above. One value for the whole app, not per pane, and applied at import so every route — history
-// included — reads it from first paint, before any Display dock has mounted.
+// How big the conversation reads. The choice goes on the root as data-chat-text, and the chat
+// stylesheet (styles/chat.css) turns it into a step around the root's own body size for the
+// conversation's turns only, so the app's row titles keep their size and the mirror keeps its own
+// Text size above. One value for the whole app, not per pane, and applied at import so every route,
+// history included, reads it from first paint, before any Display dock has mounted.
 
 export type ChatTextSize = "small" | "default" | "large";
 
@@ -187,13 +188,6 @@ export const CHAT_TEXT_SIZES: ReadonlyArray<{ id: ChatTextSize; label: string }>
 ];
 
 const CHAT_TEXT_KEY = "collie:chat-text:v1";
-
-// Steps around the pointer's own body size (15px fine, 16px coarse in index.css): one px down, two
-// up, each with the line height that keeps prose at roughly 1.5.
-const CHAT_TEXT_STEP: Record<Exclude<ChatTextSize, "default">, { delta: number; lineHeight: string }> = {
-  small: { delta: -1, lineHeight: "1.375rem" },
-  large: { delta: 2, lineHeight: "1.625rem" },
-};
 
 function isChatTextSize(value: unknown): value is ChatTextSize {
   return CHAT_TEXT_SIZES.some((size) => size.id === value);
@@ -208,26 +202,16 @@ function loadChatText(): ChatTextSize {
   }
 }
 
-const coarsePointer = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-
 function applyChatText(size: ChatTextSize): void {
   if (typeof document === "undefined") return;
-  const style = document.documentElement.style;
-  if (size === "default") {
-    style.removeProperty("--text-body");
-    style.removeProperty("--text-body--line-height");
-    return;
-  }
-  const step = CHAT_TEXT_STEP[size];
-  style.setProperty("--text-body", `${((coarsePointer() ? 16 : 15) + step.delta) / 16}rem`);
-  style.setProperty("--text-body--line-height", step.lineHeight);
+  const root = document.documentElement;
+  if (size === "default") delete root.dataset.chatText;
+  else root.dataset.chatText = size;
 }
 
 let chatText = loadChatText();
 const chatTextListeners = new Set<() => void>();
 applyChatText(chatText);
-// The base step follows the pointer, so a convertible switching input re-derives the override.
-if (typeof matchMedia === "function") matchMedia("(pointer: coarse)").addEventListener?.("change", () => applyChatText(chatText));
 
 function setChatText(size: ChatTextSize): void {
   chatText = size;
