@@ -31,15 +31,15 @@ it("reads a blocked row as its thread, where it lives and why it waits", () => {
   expect(row).toHaveAttribute("href", "/pane/w5%3Aa2?s=work");
 });
 
-// jsdom lays nothing out, so this pins what lets a long name give way inside its card on a phone
-// (the regression drew the name at its full width and pushed the chevron off screen). The e2e bench
-// measures the result.
-it("lets a long name and place shorten inside the row while the status stays readable", () => {
-  const row = renderRow();
-  expect(row).toHaveClass("overflow-hidden");
+// jsdom lays nothing out, so this pins the class the fix stands on: the column that holds the name
+// and the place may shrink below its text (min-w-0). Without it the name keeps its full width, crosses
+// the card and pushes the chevron off a phone screen while every class below still reads right. The
+// geometry itself is measured in a browser at 390 px, outside this suite.
+it("lets the name and the place shorten inside the row while the status stays readable", () => {
+  renderRow();
   const name = screen.getByText(NAME);
-  expect(name).toHaveClass("min-w-0", "truncate");
-  expect(name).not.toHaveClass("shrink-0");
+  expect(name.parentElement).toHaveClass("min-w-0");
+  expect(name).toHaveClass("truncate");
   expect(screen.getByText(PLACE)).toHaveClass("min-w-0", "truncate");
   expect(screen.getByText("waiting in the terminal")).toHaveClass("shrink-0");
 });
