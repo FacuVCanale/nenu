@@ -107,7 +107,7 @@ function CheckboxPhase({
                   "flex size-5 shrink-0 items-center justify-center rounded-md border",
                   option.checked
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "border-muted-foreground/60",
+                    : "border-muted-foreground",
                 )}
               >
                 {option.checked ? <Check className="size-3.5" /> : null}

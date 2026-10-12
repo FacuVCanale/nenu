@@ -117,7 +117,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
             >
               <span aria-hidden className={cn(
                 "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
-                option.pointed ? "border-primary" : "border-muted-foreground/60",
+                option.pointed ? "border-primary" : "border-muted-foreground",
               )}>
                 {option.pointed && <span className="size-2.5 rounded-full bg-primary" />}
               </span>

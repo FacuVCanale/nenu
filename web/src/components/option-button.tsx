@@ -11,8 +11,11 @@ import { cn } from "@/lib/utils";
 // XSS boundary unchanged: labels/descriptions passed in are React text nodes; nothing is ever set as
 // innerHTML.
 
-/** The card's surface: an elevated card with a hairline, the same in the thread and the mirror. */
-export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm";
+/** The card's surface: an elevated card with a hairline and no shadow (direction.md), in the thread and the mirror. */
+export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4";
+
+/** A press: scale 0.98 over 120 ms with the colours, and no scale under reduced motion (direction.md). */
+export const PRESS = "transition-[transform,background-color,border-color,color] duration-[120ms] ease-out active:scale-[0.98] motion-reduce:active:scale-100";
 
 /** The card's status: the blocked dot carries the urgency, the words stay plain (direction.md). */
 export function WaitingOnYou() {
@@ -57,8 +60,8 @@ export type OptionTone = "default" | "selected" | "busy";
 /** A tappable option row: 44 px at least, the card's row radius. */
 export function optionSurface(tone: OptionTone): string {
   return cn(
-    "flex min-h-11 w-full items-center gap-3 rounded-xl border px-3.5 py-2 text-left transition-colors",
-    "active:scale-[0.99]",
+    "flex min-h-11 w-full items-center gap-3 rounded-xl border px-3.5 py-2 text-left",
+    PRESS,
     tone === "busy"
       ? "border-primary bg-primary/10" // in flight — accent, never dimmed (the spinner reads over it)
       : tone === "selected"
@@ -68,11 +71,15 @@ export function optionSurface(tone: OptionTone): string {
 }
 
 /** The card's one commit: an ink fill, full width (direction.md: one primary per surface). */
-export const PRIMARY_ACTION =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-3.5 py-2.5 text-center text-base font-medium text-background transition-colors active:scale-[0.99] disabled:bg-muted disabled:text-muted-foreground";
+export const PRIMARY_ACTION = cn(
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-3.5 py-2.5 text-center text-base font-medium text-background disabled:bg-muted disabled:text-muted-foreground",
+  PRESS,
+);
 /** A second key the screen names that commits too, beside the primary but never as loud. */
-export const NEUTRAL_ACTION =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-3.5 py-2.5 text-center text-base font-medium text-foreground transition-colors active:scale-[0.99] disabled:opacity-60";
+export const NEUTRAL_ACTION = cn(
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary px-3.5 py-2.5 text-center text-base font-medium text-foreground disabled:opacity-60",
+  PRESS,
+);
 /** An escape or a utility under the card (Cancel, Chat about this, Add a note…): plain text, neutral. */
 export const SECONDARY_ACTION =
   "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-muted-foreground/70";

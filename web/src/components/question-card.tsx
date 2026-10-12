@@ -3,7 +3,7 @@ import type { ReactNode, Ref } from "react";
 import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
-import { DIALOG_CARD, PRIMARY_ACTION, QuestionHeading, SECONDARY_ACTION, SecondaryActions, WaitingOnYou } from "@/components/option-button";
+import { DIALOG_CARD, PRESS, PRIMARY_ACTION, QuestionHeading, SECONDARY_ACTION, SecondaryActions, WaitingOnYou } from "@/components/option-button";
 import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
@@ -455,7 +455,7 @@ function Frame({ ref, compact, answered, label, children }: { ref?: Ref<HTMLElem
           ? "rounded-xl border border-border/60 bg-muted/30 px-3.5 py-2.5"
           // A card is a message waiting on you, not an alarm: the dot carries the urgency, in the thread
           // and on Home alike. Home's header row bleeds to the card's edge, so its padding starts below.
-          : cn(DIALOG_CARD, compact && "px-3 pt-1 pb-3"),
+          : cn(DIALOG_CARD, compact && "gap-2 pt-1"),
       )}>
       {children}
     </section>
@@ -661,8 +661,8 @@ function NoteButton({ locked, textId, className, onClick }: { locked: boolean; t
 }
 
 // Touch targets reach 44 px on a coarse pointer (direction.md); a mouse keeps the denser 40.
-const PILL = "inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium transition-colors active:scale-[0.99]";
-const DECISION = "inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-base font-medium transition-colors active:scale-[0.99]";
+const PILL = cn("inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium", PRESS);
+const DECISION = cn("inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-base font-medium", PRESS);
 const LIST_ROW = "flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left text-base transition-colors hover:bg-muted/50 active:bg-muted";
 const OUTLINED = "border border-border bg-transparent text-muted-foreground disabled:text-muted-foreground/70";
 const NEUTRAL = "border border-border bg-secondary text-foreground";
@@ -765,7 +765,7 @@ function DecisionButton({ option, armed, busy, failed, disabled, onPress, label,
 function Checkbox({ checked }: { checked: boolean }) {
   return (
     <span aria-hidden className={cn("flex size-5 shrink-0 items-center justify-center rounded-md border",
-      checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/60")}>
+      checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground")}>
       {checked && <Check className="size-3.5" />}
     </span>
   );
