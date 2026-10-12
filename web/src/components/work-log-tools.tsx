@@ -1,4 +1,4 @@
-import { useContext, useId, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, MessageCircleQuestion, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
 import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
@@ -18,6 +18,9 @@ import { Elapsed, LiveGlyph } from "./work-activity-label";
 // second fold, so a failure is one tap from its output once the turn is open.
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
+
+/** The pane's folder: a step's path reads from it, as the operator names files inside the project. */
+export const PaneCwdContext = createContext("");
 
 /** Whether `text` holds the searched words: a folded body that does opens, so the hit is on screen. */
 export function containsQuery(text: string, query: string): boolean {
@@ -134,9 +137,10 @@ function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
  * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay.
  */
 function StepTarget({ text, format, query, current }: { text: string; format: ToolStepDescription["target"] | "thought"; query: string; current: boolean }) {
+  const cwd = useContext(PaneCwdContext);
   if (!text) return <span className="flex-1" />;
   if (format === "path") {
-    const { dir, base } = displayPath(text, "", 32);
+    const { dir, base } = displayPath(text, cwd, 32);
     return <span className="flex min-w-0 flex-1">
       {dir && <span className="min-w-0 truncate text-muted-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} current={current} /></span></span>}
       <span className="max-w-full shrink-0 truncate text-foreground"><Highlight text={base} query={query} current={current} /></span>
