@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
-import { ExternalLink, MessageSquare } from "lucide-react";
+import { ExternalLink, MessageSquare, MessageSquareOff } from "lucide-react";
 
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
 import { NodeDot } from "@/components/node-row";
 import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { nodePath, panePath, projectPath } from "@/lib/nav";
+import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
+import { ProjectMissing } from "@/routes/project";
 import { STATE_LABEL, flatten, orgTree } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
@@ -29,8 +31,13 @@ export function NodeRoute() {
   let body;
   // Back climbs one level: to the node's parent, else to its project, else Home.
   let back: HeaderBack | undefined = project && { to: projectPath(project.slug, data.session), label: project.name };
-  if (!project || !node) {
-    body = <p className="py-16 text-center text-sm text-muted-foreground">{project ? "This node is not in the project any more." : "Project not found in this Herdr session."}</p>;
+  if (!project) {
+    body = <ProjectMissing session={data.session} />;
+  } else if (!node) {
+    body = <EmptyState icon={MessageSquareOff} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
+      <Link to={projectPath(project.slug, data.session)} className={buttonVariants()}>Open {project.name}</Link>
+      <Link to={homePath(data.session)} className={buttonVariants({ variant: "outline" })}>Go to Home</Link>
+    </div>}>{project.name} no longer lists it.</EmptyState>;
   } else {
     const { thread, state } = node;
     const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
