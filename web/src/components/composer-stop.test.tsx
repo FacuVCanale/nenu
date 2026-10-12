@@ -49,22 +49,22 @@ function setup(overrides: Partial<Props> = {}) {
 
 const stopButton = () => screen.queryByRole("button", { name: "Stop" });
 
-it("is the one round button while Claude works; a draft turns it into Send and moves Stop to the Working row", async () => {
+it("keeps Stop in one place on the Working row while Claude works, draft or not; the round button is only Send", async () => {
   const { user } = setup();
-  expect(stopButton()).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
-  await user.type(screen.getByRole("textbox"), "and the tests");
-  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   const row = screen.getByRole("group", { name: "Agent working" });
   expect(within(row).getByText(/^Working/)).toBeVisible();
-  // Exactly one Stop, and it is the row's small one, not a second button beside Send.
-  expect(screen.getAllByRole("button", { name: "Stop" })).toHaveLength(1);
-  expect(within(row).getByRole("button", { name: "Stop" })).toBeVisible();
-  await user.click(within(row).getByRole("button", { name: "Stop" }));
+  const stop = within(row).getByRole("button", { name: "Stop" });
+  // Send keeps its slot, waiting for a draft, so nothing else ever sits under the thumb there.
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  await user.type(screen.getByRole("textbox"), "and the tests");
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  // The same Stop, in the same row: typing never moves it.
+  expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
+  expect(screen.getAllByRole("button", { name: "Stop" })).toEqual([stop]);
+  await user.click(stop);
   await waitFor(() => expect(bodies).toEqual([{}]));
   await user.clear(screen.getByRole("textbox"));
-  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
 });
 
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
