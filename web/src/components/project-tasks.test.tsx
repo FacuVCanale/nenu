@@ -200,6 +200,26 @@ describe("one organization, the way Herdr Organizations draws it", () => {
     expect(view.container.querySelector(".bg-status-done, .text-status-done")).toBeNull();
   });
 
+  it("pages a long History twenty rows at a time", async () => {
+    const resolved = Array.from({ length: 45 }, (_, i) => node(`r-${i}`, `Fix ${i + 1}`, "root", { status: "resolved", updated: ago(i + 1) }));
+    const { user } = show({ project: { ...org, threads: resolved } });
+    await user.click(screen.getByRole("button", { name: /^History/ }));
+    const rows = () => screen.getByRole("list", { name: "History" }).children;
+    expect(rows()).toHaveLength(20);
+    await user.click(screen.getByRole("button", { name: "Show 20 more" }));
+    expect(rows()).toHaveLength(40);
+    await user.click(screen.getByRole("button", { name: "Show 5 more" }));
+    expect(rows()).toHaveLength(45);
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  it("opens History as far as the resolved thread whose chat is on screen", () => {
+    const resolved = Array.from({ length: 45 }, (_, i) => node(`r-${i}`, `Fix ${i + 1}`, "root", { status: "resolved", updated: ago(i + 1), ...(i === 29 && { paneId: "old" }) }));
+    show({ project: { ...org, threads: resolved }, currentPaneId: "old" });
+    const history = within(screen.getByRole("list", { name: "History" }));
+    expect(history.getByRole("button", { name: /^Fix 30/ }).closest("li")).toHaveAttribute("aria-current", "true");
+  });
+
   it("opens a live node's chat and any other node's detail, never somewhere else", async () => {
     const { user, onOpenPane, onOpenNode } = show();
     await user.click(screen.getByRole("button", { name: /^Depot/ }));
