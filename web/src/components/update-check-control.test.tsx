@@ -1,13 +1,18 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { server } from "@/test/setup";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { checkForUpdate } from "@/lib/pwa";
+import { __resetServerBuild, observeServerBuild } from "@/lib/server-build";
 import type { UpdateInfo } from "@/lib/types";
 import { UpdateCheckControl } from "./update-check-control";
+
+vi.mock("@/lib/pwa", () => ({ checkForUpdate: vi.fn() }));
+afterEach(() => __resetServerBuild());
 
 // UpdateCheckControl reads the running version / last-checked from the root loader's `update`, and on
 // tap forces an upstream check then revalidates the snapshot. Drive it through a memory router (for
@@ -76,7 +81,7 @@ describe("UpdateCheckControl", () => {
   });
   it("shows the running version and 'Up to date' when nothing is pending", async () => {
     renderControl(upToDate);
-    expect(await screen.findByText(/running v0\.11\.0/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nenu 0\.11\.0/i)).toBeInTheDocument();
     expect(screen.getByText(/up to date/i)).toBeInTheDocument();
   });
 
@@ -141,3 +146,71 @@ describe("UpdateCheckControl", () => {
     expect(screen.queryByText(/up to date/i)).toBeNull();
   });
 });
+
+// Every actionable state lives in this card, with a badge and one action (SYS-08, ADR 0027: no
+// floating notice anywhere else).
+describe("UpdateCheckControl — the card owns every update state", () => {
+  const card = async () => screen.findByRole("region", { name: "Updates" });
+
+  it("names an available release and links its notes", async () => {
+    const url = "https://github.com/AltanS/collie/releases/tag/v0.12.0";
+    renderControl({ ...upToDate, releaseAvailable: true, latest: "0.12.0", latestUrl: url });
+    const updates = await card();
+    expect(within(updates).getByText("0.12.0 available")).toBeInTheDocument();
+    expect(within(updates).getByRole("link", { name: /release notes/i })).toHaveAttribute("href", url);
+    expect(within(updates).queryByRole("button", { name: /check for updates/i })).toBeNull();
+  });
+
+  it("asks for a restart with the command to copy", async () => {
+    const user = userEvent.setup();
+    renderControl({ ...upToDate, bridgeStale: true });
+    const updates = await card();
+    expect(within(updates).getByText("Restart needed")).toBeInTheDocument();
+    expect(within(updates).getByText("herdr plugin action invoke restart --plugin herdr.collie")).toBeInTheDocument();
+
+    await user.click(within(updates).getByRole("button", { name: "Copy command" }));
+
+    expect(await navigator.clipboard.readText()).toBe("herdr plugin action invoke restart --plugin herdr.collie");
+    expect(within(updates).getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("names a major with its consent command and its notes", async () => {
+    const url = "https://github.com/AltanS/collie/releases/tag/v1.0.0";
+    renderControl({ ...upToDate, majorAvailable: "1.0.0", majorUrl: url });
+    const updates = await card();
+    expect(within(updates).getByText("1.0.0 available")).toBeInTheDocument();
+    expect(within(updates).getByText("herdr plugin action invoke update-major --plugin herdr.collie")).toBeInTheDocument();
+    expect(within(updates).getByRole("link", { name: /release notes/i })).toHaveAttribute("href", url);
+  });
+
+  it("offers to reload a stale interface, and keeps the page when that fails", async () => {
+    vi.mocked(checkForUpdate).mockResolvedValue(false);
+    const user = userEvent.setup();
+    renderControl(upToDate);
+    const updates = await card();
+    act(() => observeServerBuild("0.99.0+new.1")); // the bridge serves another build than this bundle
+
+    expect(within(updates).getByText("Interface update ready")).toBeInTheDocument();
+    await user.click(within(updates).getByRole("button", { name: "Reload interface" }));
+
+    expect(checkForUpdate).toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent("Your session is unchanged");
+    expect(within(updates).getByRole("button", { name: "Reload interface" })).toBeEnabled();
+  });
+
+  it("shows a check in flight in the badge, on a button that keeps its place", async () => {
+    let finish!: () => void;
+    server.use(http.post("/api/update/check", () => new Promise<Response>((resolve) => { finish = () => resolve(HttpResponse.json({ ...upToDate, checkedAt: 1_700_000_000_500 })); })));
+    const user = userEvent.setup();
+    renderControl(upToDate);
+    const updates = await card();
+
+    await user.click(within(updates).getByRole("button", { name: /check for updates/i }));
+
+    expect(within(updates).getByText("Checking…")).toBeInTheDocument();
+    expect(within(updates).getByRole("button", { name: /check for updates/i })).toHaveAttribute("aria-busy", "true");
+    finish();
+    await waitFor(() => expect(within(updates).queryByText("Checking…")).toBeNull());
+  });
+});
+
