@@ -4,7 +4,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, ChevronDown, Gauge, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -69,20 +69,23 @@ export interface ComposerHandle {
 }
 
 /**
- * One of the composer's secondary controls. The composer owns their state and behaviour. The
- * chevron under the draft reaches the message-side groups; View is published to the pane header's
- * ⋯ menu, so the input row stays one line on every screen.
+ * One of the composer's secondary controls. The composer owns their state and behaviour. The + at
+ * the start of the box reaches every message-side group in this order; View is published to the
+ * pane header's ⋯ menu, so the header keeps the view and the composer keeps the message.
  */
 export interface ComposerControl {
-  id: "keys" | "type" | "quick" | "commands" | "display" | "usage";
-  group: "Terminal" | "Shortcuts" | "Session" | "View";
+  id: "photo" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
+  group: (typeof MESSAGE_GROUPS)[number] | "View";
   label: string;
   icon: LucideIcon;
   disabled: boolean;
-  /** An open dock or an armed mode. */
-  on: boolean;
+  /** An open dock or an armed mode; absent for a plain action. */
+  on?: boolean;
   run: () => void;
 }
+
+/** The + menu's groups, in the order it lists them. */
+const MESSAGE_GROUPS = ["Attach", "Replies", "Terminal", "Session"] as const;
 
 interface ComposerProps {
   paneId: string;
@@ -149,10 +152,10 @@ interface ComposerProps {
 // exposes `focusInput` so the mirror tap can bring up the keyboard.
 //
 // Keys, Quick, Display and Usage open as in-flow docks above the input (they act on, or change how
-// you read, what is on screen, so the conversation stays visible while they are up). Their entry
-// points are the header's ⋯ menu (onControlsChange) and, for the Terminal and Shortcuts rows, the
-// chevron under the draft. The box holds only the draft and its one action (send, stop or confirm);
-// attach, the chevron and the model/context controls sit in the quiet row beneath it.
+// you read, what is on screen, so the conversation stays visible while they are up). One box holds
+// the + (every message-side action, attach included), the draft and Send; Display is published to
+// the header's ⋯ menu (onControlsChange). The model and the session's background work sit in the
+// quiet row beneath the box, which steps aside while a phone keyboard is up.
 type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
 
 // Grace window after a send during which a terminal draft matching what we just sent is treated as
@@ -1018,7 +1021,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The secondary controls, published to the header menu. Their handlers read the latest render
   // through a ref, so the list is re-published only when something a menu row shows has changed.
   const toggleDock = (dock: Exclude<ComposerDrawer, null>) => requestDrawer(drawer === dock ? null : dock);
-  const controlActions = useRef({ toggleDock, type: () => {} });
+  const controlActions = useRef({ toggleDock, type: () => {}, photo: () => {} });
   controlActions.current = {
     toggleDock,
     type: () => {
@@ -1031,32 +1034,35 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       requestDrawer(null);
       direct.activate();
     },
+    // Synchronous inside the row's click, so the browser still counts it as the user's gesture.
+    photo: () => fileRef.current?.click(),
   };
   const dockControl = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
     disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
   });
   const controls: ComposerControl[] = [
+    { id: "photo", group: "Attach", label: "Photo", icon: ImagePlus, disabled: locked || direct.active, run: () => controlActions.current.photo() },
+    { id: "quick", group: "Replies", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
+    ...(commands.length > 0 ? [{ id: "commands", group: "Replies", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") } as const] : []),
     { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dockControl("keys", locked) },
     // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
     { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
-    { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
+    ...(usageControls ? [{ id: "usage", group: "Session", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) } as const] : []),
     { id: "display", group: "View", label: "Display", icon: Settings2, ...dockControl("display", false) },
   ];
-  if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
-  if (usageControls) controls.push({ id: "usage", group: "Session", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) });
   const latestControls = useRef(controls);
   latestControls.current = controls;
   useEffect(() => {
     onControlsChange?.(latestControls.current);
   }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
-  // The chevron under the draft reaches the message-side rows (Terminal, Shortcuts, Session) without
-  // the header; View stays in the header's ⋯ menu.
-  const shortcutGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts", "Session"] as const).map((group) => ({
+  const menuGroups: ConversationActionGroup[] = MESSAGE_GROUPS.map((group) => ({
     label: group,
     actions: controls.filter((control) => control.group === group),
   }));
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const shortcutsRef = useRef<HTMLButtonElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // The menu hangs from the box's leading column, which spans the box's full height: anchored there,
+  // it opens above the box's top edge however tall the draft has grown, and never over the draft.
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
 
   const [dragging, setDragging] = useState(false);
   const dropHandlers = locked || direct.active ? {} : {
@@ -1237,6 +1243,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed")}>
+            <div ref={menuAnchorRef} className="composer-lead">
+              <button type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
+                onPointerDown={(e) => e.preventDefault()} onClick={() => setMenuOpen(!menuOpen)}>
+                <Plus aria-hidden="true" className="size-5" />
+              </button>
+            </div>
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}
@@ -1294,7 +1306,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               }
               autoCorrect={direct.active ? "off" : undefined}
               spellCheck={direct.active ? false : undefined}
-              className="composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-3.5 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm"
+              className="composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm"
               disabled={gone || readOnly}
               rows={1}
             />
@@ -1346,22 +1358,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           </div>
         </div>
-        <div role="group" aria-label="Message tools" className="composer-meta">
-          <button type="button" className="composer-quiet hit-area" title="Attach image" aria-label="Attach image"
-            disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-            <Plus aria-hidden="true" className="size-4" />
-          </button>
-          <button ref={shortcutsRef} type="button" className="composer-quiet hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen}
-            onClick={() => setShortcutsOpen(!shortcutsOpen)}>
-            <ChevronDown aria-hidden="true" className="size-4" />
-          </button>
-          <WorkbenchPopover open={shortcutsOpen} onDismiss={() => setShortcutsOpen(false)} anchorRef={shortcutsRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
-            <ActionGroups groups={shortcutGroups} onRun={(run) => { setShortcutsOpen(false); run(); }} />
-          </WorkbenchPopover>
-          <div className="flex-1" />
-          {processesControl}
-          {modelControl && <div className="flex min-w-0 items-center justify-end">{modelControl}</div>}
-        </div>
+        <WorkbenchPopover open={menuOpen} onDismiss={() => setMenuOpen(false)} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+          <ActionGroups groups={menuGroups} onRun={(run) => { setMenuOpen(false); run(); }} />
+        </WorkbenchPopover>
+        {(modelControl || processesControl) && (
+          <div role="group" aria-label="Message tools" className="composer-meta">
+            {modelControl && <div className="flex min-w-0 items-center">{modelControl}</div>}
+            <div className="flex-1" />
+            {processesControl}
+          </div>
+        )}
       </div>
 
       {/* Slash-command palette */}

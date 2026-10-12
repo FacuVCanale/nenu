@@ -8,6 +8,13 @@
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
 .composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
 .composer-input::placeholder { color: var(--muted-foreground); }
+/* The + leads the box: a 32px circle at the draft's last line, its column spanning the box so the
+   menu it opens hangs above the box, never over the draft. */
+.composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; padding: 6px 0 6px 6px; }
+.composer-plus { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; color: var(--muted-foreground); background: var(--muted); transition: color 150ms ease-out, background-color 150ms ease-out, scale 120ms ease-out; }
+.composer-plus[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
+.composer-plus:active { scale: 0.96; }
+@media (hover: hover) { .composer-plus:hover { color: var(--foreground); background: var(--accent); } }
 /* The one action: a 32px circle. Send is ink once there is something to send, and takes the accent
    only while Type into terminal is armed, matching the box's border. */
 .composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
@@ -43,4 +50,10 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   /* The keyboard covers the home indicator, whose inset iOS still reports; the composer sits on the keys. */
   .workbench-chat[data-keyboard-open] .workbench-composer { margin-bottom: 8px; }
+  /* While typing, the model and background-work row gives its height back to the thread. */
+  .workbench-chat[data-keyboard-open] .composer-meta { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-plus { transition: none; }
+  .composer-plus:active { scale: none; }
 }
