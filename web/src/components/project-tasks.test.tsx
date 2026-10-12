@@ -35,6 +35,13 @@ it("lists the coordinator, then the open threads, with the resolved ones folded 
   expect(onOpenPane).toHaveBeenCalledWith("c");
 });
 
+it("marks the project coordinator's row You're here when its chat is the one on screen", () => {
+  setup({ currentPaneId: "c" });
+  const own = screen.getByRole("button", { name: /^Coordinator/ });
+  expect(own).toHaveTextContent("You're here · claude");
+  expect(own.closest("li")).toHaveAttribute("aria-current", "true");
+});
+
 it("sums up a pull request as far as Organizations reported it", () => {
   expect(prSummary({ number: 7, state: "open", review: "approved", checks: { passed: 6, failed: 0, pending: 0 } })).toBe("PR #7 · approved · checks passed");
   expect(prSummary({ number: 7, state: "open", checks: { passed: 4, failed: 0, pending: 2 } })).toBe("PR #7 · checks 4/6");
@@ -85,7 +92,88 @@ it("keeps the dialog open with the bridge's reason when closing fails", async ()
 it("offers no close or new thread on a read-only device", () => {
   setup({ readOnly: true });
   expect(screen.queryByRole("button", { name: "Close Build" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Build actions" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "New thread" })).not.toBeInTheDocument();
+});
+
+it("hands the keyboard to the first row Show more brought, even when the button goes with it", async () => {
+  const resolved = Array.from({ length: 25 }, (_, i): ProjectThreadView => ({ id: `R${i + 1}`, title: `Done ${i + 1}`, parentId: "root", role: "worker", status: "resolved" }));
+  const { user } = setup({ project: { ...project, threads: resolved } });
+  await user.click(screen.getByRole("button", { name: /^History/ }));
+  const history = screen.getByRole("list", { name: "History" });
+  expect(history.children).toHaveLength(20);
+  screen.getByRole("button", { name: "Show 5 more" }).focus();
+  await user.keyboard("{Enter}");
+  expect(history.children).toHaveLength(25);
+  expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(history.children[20]!.querySelector(".task-main"));
+});
+
+describe("closing is never a check", () => {
+  /** A device by its media features: a query matches when one of its comma-separated parts matches every feature it names. */
+  const original = window.matchMedia;
+  function device(features: Record<string, string>) {
+    const matches = (query: string) => query.split(",").some((part) => [...part.matchAll(/\(([\w-]+):\s*([\w-]+)\)/g)].every(([, name, value]) => features[name!] === value));
+    window.matchMedia = ((query: string) => ({ matches: matches(query), media: query, onchange: null, addEventListener: () => {},
+      removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+  }
+  /** A phone or tablet: the pointer is coarse, so there is no hover to reveal a row's actions. */
+  const touchScreen = () => device({ hover: "none", pointer: "coarse" });
+  afterEach(() => { window.matchMedia = original; });
+
+  // A pen or a TV remote points finely and cannot hover: a word that waits for hover would never show.
+  it("gives a screen that cannot hover the ⋯, whatever its pointer", () => {
+    device({ hover: "none", pointer: "fine" });
+    setup();
+    expect(screen.getByRole("button", { name: "Build actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close Build" })).not.toBeInTheDocument();
+  });
+
+  it("names Close on an open row on a desk, and keeps the check for resolved work", async () => {
+    const { user } = setup();
+    const close = screen.getByRole("button", { name: "Close Build" });
+    expect(close).toHaveTextContent("Close");
+    expect(close.closest("li")!.querySelector('[data-node-state="resolved"]')).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^History/ }));
+    expect(screen.getByRole("button", { name: /^Audit/ }).querySelector('[data-node-state="resolved"]')).not.toBeNull();
+  });
+
+  it("closes from the row's ⋯ on a touch screen, and still asks first", async () => {
+    touchScreen();
+    let posted: unknown;
+    server.use(http.post("/api/org/node/resolve", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true }); }));
+    const { user, onOpenPane } = setup();
+    expect(screen.queryByRole("button", { name: "Close Build" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Build actions" }));
+    const sheet = screen.getByRole("dialog", { name: "Build" });
+    await user.click(within(sheet).getByRole("button", { name: "Open chat" }));
+    expect(onOpenPane).toHaveBeenCalledWith("a");
+    expect(screen.queryByRole("dialog", { name: "Build" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Build actions" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Build" })).getByRole("button", { name: "Close thread…" }));
+    expect(screen.queryByRole("dialog", { name: "Build" })).not.toBeInTheDocument();
+    const confirm = screen.getByRole("dialog", { name: "Close this thread?" });
+    expect(posted).toBeUndefined();
+    await user.click(within(confirm).getByRole("button", { name: "Close thread" }));
+    await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T1" }));
+  });
+
+  it("offers no ⋯ on a read-only touch screen", () => {
+    touchScreen();
+    setup({ readOnly: true, project: { ...project, nodeActions: true } });
+    expect(screen.queryByRole("button", { name: /actions$/ })).not.toBeInTheDocument();
+  });
+
+  it("replaces the project coordinator from its ⋯ on a touch screen", async () => {
+    touchScreen();
+    server.use(http.get("/api/org/start-options", () => HttpResponse.json({ ok: true, templates: [], profiles: ["claude", "codex"] })));
+    const { user } = setup({ project: { ...project, nodeActions: true } });
+    await user.click(screen.getByRole("button", { name: "Coordinator actions" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Coordinator" })).getByRole("button", { name: "Replace coordinator…" }));
+    expect(screen.getByRole("dialog", { name: "Replace the coordinator?" })).toBeInTheDocument();
+  });
 });
 
 describe("one organization, the way Herdr Organizations draws it", () => {
@@ -147,6 +235,26 @@ describe("one organization, the way Herdr Organizations draws it", () => {
     // Resolved work is grey and has nothing to close; nothing in the tree is green.
     expect(within(history).queryByRole("button", { name: /^Close/ })).not.toBeInTheDocument();
     expect(view.container.querySelector(".bg-status-done, .text-status-done")).toBeNull();
+  });
+
+  it("pages a long History twenty rows at a time", async () => {
+    const resolved = Array.from({ length: 45 }, (_, i) => node(`r-${i}`, `Fix ${i + 1}`, "root", { status: "resolved", updated: ago(i + 1) }));
+    const { user } = show({ project: { ...org, threads: resolved } });
+    await user.click(screen.getByRole("button", { name: /^History/ }));
+    const rows = () => screen.getByRole("list", { name: "History" }).children;
+    expect(rows()).toHaveLength(20);
+    await user.click(screen.getByRole("button", { name: "Show 20 more" }));
+    expect(rows()).toHaveLength(40);
+    await user.click(screen.getByRole("button", { name: "Show 5 more" }));
+    expect(rows()).toHaveLength(45);
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  it("opens History as far as the resolved thread whose chat is on screen", () => {
+    const resolved = Array.from({ length: 45 }, (_, i) => node(`r-${i}`, `Fix ${i + 1}`, "root", { status: "resolved", updated: ago(i + 1), ...(i === 29 && { paneId: "old" }) }));
+    show({ project: { ...org, threads: resolved }, currentPaneId: "old" });
+    const history = within(screen.getByRole("list", { name: "History" }));
+    expect(history.getByRole("button", { name: /^Fix 30/ }).closest("li")).toHaveAttribute("aria-current", "true");
   });
 
   it("opens a live node's chat and any other node's detail, never somewhere else", async () => {

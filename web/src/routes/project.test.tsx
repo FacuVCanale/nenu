@@ -26,7 +26,8 @@ vi.mock("@/components/agent-chat", () => ({
 }));
 
 let wide = false;
-vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: () => wide }));
+// The width decides the frame; the pointer stays fine (a desk's hover actions) whatever the width.
+vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: (query: string) => query.includes("min-width") && wide }));
 afterEach(() => { wide = false; });
 
 function pane(paneId: string): AgentView {
@@ -74,10 +75,10 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "coordinator");
 
-  // Cards under the conversation: Merge only where Organizations says nothing blocks it.
+  // Cards under the conversation: Merge only where Organizations says nothing blocks it, named as the PR list names it.
   const cards = within(screen.getByRole("region", { name: "Threads" }));
-  expect(within(cards.getByRole("article", { name: "Docs" })).getByRole("button", { name: "Merge it" })).toBeInTheDocument();
-  expect(within(cards.getByRole("article", { name: "Build" })).queryByRole("button", { name: "Merge it" })).not.toBeInTheDocument();
+  expect(within(cards.getByRole("article", { name: "Docs" })).getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
+  expect(within(cards.getByRole("article", { name: "Build" })).queryByRole("button", { name: /^Merge/ })).not.toBeInTheDocument();
 
   const tabs = within(screen.getByRole("tablist", { name: "Project" }));
   await user.click(tabs.getByRole("tab", { name: /Threads/ }));
@@ -96,7 +97,10 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(screen.getByRole("heading", { name: "Build" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "worker");
   const chips = within(screen.getByRole("navigation", { name: "Threads" }));
-  expect(chips.getByRole("button", { name: /Build/ })).toHaveAttribute("aria-current", "page");
+  const build = chips.getByRole("button", { name: /Build/ });
+  expect(build).toHaveAttribute("aria-current", "true");
+  // The shared strip, which steps aside with the tab and pane strips while a phone keyboard is up.
+  expect(build.closest("[data-workbench-navigation-band]")).not.toBeNull();
   expect(chips.getByRole("button", { name: /coordinator/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
 });
@@ -105,7 +109,7 @@ it("merges a thread's PR from its card only after confirming", async () => {
   let posted: unknown;
   server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
   const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-  await user.click(await screen.findByRole("button", { name: "Merge it" }));
+  await user.click(await screen.findByRole("button", { name: "Merge Docs" }));
   expect(posted).toBeUndefined();
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
@@ -117,7 +121,7 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   const { router, user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
   expect(await screen.findByRole("tablist", { name: "Project panel" })).toBeInTheDocument();
   expect(screen.queryByRole("tablist", { name: "Project" })).not.toBeInTheDocument();
-  await user.click(within(screen.getByRole("article", { name: "Build" })).getByRole("button", { name: /Build/ }));
+  await user.click(within(screen.getByRole("complementary", { name: "Project" })).getByRole("button", { name: /^Build/ }));
   expect(router.state.location.search).toBe("?thread=worker");
   expect(await screen.findByTestId("docked")).toHaveAttribute("data-role", "worker");
   const docked = within(screen.getByTestId("docked"));
@@ -130,6 +134,50 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   await user.click(docked.getByRole("button", { name: "Close thread" }));
   expect(router.state.location.search).toBe("");
   expect(await screen.findByRole("tablist", { name: "Project panel" })).toBeInTheDocument();
+});
+
+describe("a wide screen beside the project panel", () => {
+  beforeEach(() => { wide = true; });
+
+  it("lists each thread once: the panel, not cards under the chat as well", async () => {
+    const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
+    const panel = within(await screen.findByRole("complementary", { name: "Project" }));
+    expect(panel.getByRole("button", { name: /^Build/ })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
+    // With the panel put away, the cards are the list again.
+    await user.click(panel.getByRole("button", { name: "Hide project panel" }));
+    expect(within(screen.getByRole("region", { name: "Threads" })).getByRole("article", { name: "Build" })).toBeInTheDocument();
+  });
+
+  it("lists a thread's siblings once: the panel, not chips above the chat as well", async () => {
+    const { user } = setup("/pane/worker", home([pane("coord"), pane("worker"), pane("docs")]));
+    const panel = within(await screen.findByRole("complementary", { name: "Project" }));
+    expect(panel.getByRole("button", { name: /^Docs/ })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Hide project panel" }));
+    expect(within(screen.getByRole("navigation", { name: "Threads" })).getByRole("button", { name: /Docs/ })).toBeInTheDocument();
+  });
+
+  it("merges from the panel's PRs, only after confirming", async () => {
+    let posted: unknown;
+    server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
+    const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
+    const panel = within(await screen.findByRole("complementary", { name: "Project" }));
+    await user.click(panel.getByRole("tab", { name: "PRs" }));
+    // Merge only where Organizations says nothing blocks it.
+    expect(panel.queryByRole("button", { name: "Merge Build" })).not.toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
+    await user.click(panel.getByRole("button", { name: "Merge Docs" }));
+    expect(posted).toBeUndefined();
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
+    await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
+  });
+
+  it("names every tab of the panel, not only the open one", async () => {
+    setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
+    const tabs = within(await screen.findByRole("tablist", { name: "Project panel" })).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Threads", "PRs", "Activity", "Memory"]);
+  });
 });
 
 it("keeps a phone thread's way to the project's threads and coordinator when it has no chips", async () => {
@@ -147,6 +195,48 @@ it("keeps a phone thread's way to the project's threads and coordinator when it 
   await user.click(screen.getByRole("button", { name: "Back to chat" }));
   expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker");
   expect(router.state.location.pathname).toBe("/pane/worker");
+});
+
+describe("a coordinator under the project", () => {
+  // Lead runs Build; the project's own coordinator is not running.
+  const org: ProjectView = {
+    slug: "hub", name: "Hub", goal: "Ship it", status: "active",
+    threads: [
+      { id: "L", title: "Lead", parentId: "root", role: "coordinator", status: "open", paneId: "lead", liveStatus: "idle", agent: "claude" },
+      { id: "B", title: "Build", parentId: "L", role: "worker", status: "open", paneId: "worker", liveStatus: "working" },
+    ],
+  };
+
+  it("lists its own row in its threads, never the project coordinator as not running", async () => {
+    const { router, user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));
+    await user.click(await screen.findByRole("tab", { name: /Threads/ }));
+    expect(screen.queryByRole("button", { name: "Start coordinator" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Not running")).not.toBeInTheDocument();
+    const own = screen.getByRole("button", { name: /^Coordinator/ });
+    expect(own).toHaveTextContent("You're here");
+    expect(own.closest("li")).toHaveAttribute("aria-current", "true");
+
+    // A thread it runs lists the same coordinator above its siblings, one tap from its chat.
+    // The app remounts the frame per pane (root.tsx keys the route's provider by pane and session);
+    // this harness has no such key, so the frame would carry the Threads view over to the next pane.
+    // Back to Chat first, as the app would start there. (The stub draws the strip beside the overlay,
+    // which is why the segmented control shows twice.)
+    await user.click(screen.getAllByRole("tab", { name: "Chat" })[0]!);
+    await router.navigate("/pane/worker");
+    await user.click(await screen.findByRole("button", { name: "Threads, 1 open" }));
+    const lead = screen.getByRole("button", { name: /^Coordinator/ });
+    expect(lead).not.toHaveTextContent("You're here");
+    await user.click(lead);
+    expect(router.state.location.pathname).toBe("/pane/lead");
+  });
+
+  it("lists its own row in the panel beside it on a wide screen", async () => {
+    wide = true;
+    setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));
+    const panel = within(await screen.findByRole("complementary", { name: "Project" }));
+    expect(panel.queryByRole("button", { name: "Start coordinator" })).not.toBeInTheDocument();
+    expect(panel.getByRole("button", { name: /^Coordinator/ })).toHaveTextContent("You're here");
+  });
 });
 
 it("shows the organization with a way to start the coordinator when none is running", async () => {

@@ -1,6 +1,7 @@
 import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { ColumnPage } from "@/components/column-page";
+import { ProjectMissing } from "@/components/project-missing";
 import { ProjectTasks } from "@/components/project-tasks";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
@@ -20,7 +21,7 @@ export function ProjectRoute() {
   if (coordinator) return <Navigate to={panePath(coordinator, data.session)} replace />;
 
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
-    {!project ? <p className="py-16 text-center text-sm text-muted-foreground">Project not found in this Herdr session.</p>
+    {!project ? <ProjectMissing session={data.session} />
       : <ProjectTasks project={project} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
         onChanged={() => revalidator.revalidate()} />}
