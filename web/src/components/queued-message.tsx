@@ -45,6 +45,7 @@ export function QueuedMessage({
   menu,
   remedies = [],
   editor,
+  clamp = false,
 }: {
   /** The wire text: prose plus image paths. */
   text: string;
@@ -58,6 +59,8 @@ export function QueuedMessage({
   remedies?: QueuedAction[];
   /** Replaces the bubble's text while the message is edited in place. */
   editor?: ReactNode;
+  /** Shows the first three lines only, where the rows share a short strip above the composer. */
+  clamp?: boolean;
 }) {
   const { text: prose, images } = splitMessageImages(text);
   const [open, setOpen] = useState(false);
@@ -80,7 +83,7 @@ export function QueuedMessage({
       >
         {editor ?? (
           <>
-            {prose && <MarkdownText text={prose} query="" />}
+            {prose && <MarkdownText text={prose} query="" className={clamp ? "line-clamp-3" : undefined} />}
             <MessageImages paths={images} className="pt-1" />
           </>
         )}

@@ -39,10 +39,12 @@ export function MessageQueueStrip({
   const [editing, setEditing] = useState<string | null>(null);
   const [text, setText] = useState("");
   if (!messages.length && !delivered.length && !error) return null;
-  // Below the desk breakpoint the composer sits 8px from the edges and the thread a page gutter in,
-  // so the strip's padding lines its bubbles up with the chat bubbles right above them.
+  // The strip sits in the composer, so every px it takes comes off the conversation: rows show three
+  // lines (Edit has the rest) and the strip stops at 13rem, less on a short screen. Below the desk
+  // breakpoint the composer sits 8px from the edges and the thread a page gutter in, so the strip's
+  // padding lines its bubbles up with the chat bubbles right above them.
   return (
-    <section aria-label="Queued messages" className="mb-2 max-h-[min(20rem,40dvh)] overflow-y-auto overscroll-contain max-lg:px-[calc(var(--page-gutter)-8px)]">
+    <section aria-label="Queued messages" className="mb-2 max-h-[min(13rem,30dvh)] overflow-y-auto overscroll-contain max-lg:px-[calc(var(--page-gutter)-8px)]">
       {error && (
         <p role="alert" className="px-1 pb-1 text-footnote text-destructive">
           {error}
@@ -86,6 +88,7 @@ export function MessageQueueStrip({
                 menuLabel={`Queued message ${index + 1} actions`}
                 menu={menu}
                 remedies={remedies}
+                clamp
                 editor={isEditing ? (
                   <textarea
                     aria-label="Edit queued message"
@@ -109,6 +112,7 @@ export function MessageQueueStrip({
                 label={status.label}
                 menuLabel="Queued message actions"
                 menu={[]}
+                clamp
                 remedies={readNow && status.actions.includes("readNow")
                   ? [{ id: "readNow", label: armed ? "Tap again to read it now" : "Read it now", icon: Zap, disabled: busy, armed, run: () => readNow(row.id) }]
                   : []}
