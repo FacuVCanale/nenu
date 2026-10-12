@@ -394,7 +394,7 @@ describe("QuestionCard", () => {
       await user.click(screen.getByRole("button", { name: "Add a note…" }));
       await user.type(screen.getByRole("textbox"), "only here");
       await user.click(screen.getByRole("button", { name: /don’t ask again/ }));
-      await user.click(screen.getByRole("button", { name: /Tap again to confirm/ }));
+      await user.click(screen.getByRole("button", { name: /^Confirm/ }));
       expect(onAnswer).toHaveBeenCalledWith(persistent.options[1], { text: "only here", confirm: true });
     });
 
