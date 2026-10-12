@@ -1298,8 +1298,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
+              {/* Taking focus is deliberate: on a phone the keyboard goes down and the menu gets the
+                  screen, as Messages does; a row that needs the keyboard (Type) focuses the draft. */}
               <button type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
-                onPointerDown={(e) => e.preventDefault()} onClick={() => setMenuOpen(!menuOpen)}>
+                onClick={() => setMenuOpen(!menuOpen)}>
                 <Plus aria-hidden="true" className="size-5" />
               </button>
             </div>}

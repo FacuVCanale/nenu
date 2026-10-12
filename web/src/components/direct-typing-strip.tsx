@@ -20,12 +20,13 @@ export function DirectTypingStrip({ onStop }: { onStop: () => void }) {
         <span className="font-medium">Typing into terminal</span>
         <span className="text-muted-foreground"> — keys go straight through</span>
       </span>
+      {/* Named for what it stops: while a turn runs, the turn's own Stop sits on the row below. */}
       <button
         type="button"
         onClick={onStop}
-        className="shrink-0 rounded-md px-2 py-0.5 font-medium underline-offset-2 transition-colors hover:underline active:bg-muted"
+        className="hit-area shrink-0 rounded-md px-2 py-1 font-medium underline-offset-2 transition-colors hover:underline active:bg-muted"
       >
-        Stop
+        Stop typing
       </button>
     </div>
   );
