@@ -283,14 +283,15 @@ export function QuestionCard({
           </div>
           {onOpen && (
             <button type="button" onClick={onOpen} className={cn(compact ? PILL : DECISION, "bg-foreground text-background")}>
-              <TerminalSquare aria-hidden className="size-4 shrink-0" />{openLabelFor}
+              {!compact && <TerminalSquare aria-hidden className="size-4 shrink-0" />}{openLabelFor}
             </button>
           )}
         </div>
       ) : <>
         {lockLine && <p className="text-[13px] leading-[18px] text-muted-foreground">{lockLine}</p>}
-        {approvalHidden && !i.detailComplete && (
-          <p className="text-[13px] leading-[18px] text-muted-foreground">The full {i.kind === "plan" ? "plan" : "request"} isn't on this card.</p>
+        {/* A plan without its hint shows only its on-screen tail; a command may well be whole, just unverified. */}
+        {approvalHidden && !i.detailComplete && i.kind === "plan" && (
+          <p className="text-[13px] leading-[18px] text-muted-foreground">The full plan isn't on this card.</p>
         )}
 
         {staticList ? <>
@@ -499,17 +500,19 @@ function PlanText({ text, compact, folded, overflows, onMeasure, onOpenAll }: {
     const el = box.current;
     if (el && overflows === null) onMeasure(el.scrollHeight > el.clientHeight + 1);
   }, [text, overflows, onMeasure]);
+  // Its own surface, so the plan's headings read as the document under the question, not as more questions.
   return (
-    <div className="flex min-w-0 flex-col items-start gap-1">
+    <div className="flex min-w-0 flex-col items-start rounded-xl border border-border px-3.5 pt-3 pb-1">
       <div ref={box} aria-label="Plan" className={cn(
-        "w-full min-w-0 [&>div]:text-[15px] [&>div]:leading-normal",
-        folded && "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-2.5rem),transparent)]",
-        folded && (compact ? "max-h-[7.5rem]" : "max-h-60"),
+        "w-full min-w-0 pb-2 [&>div]:text-[15px] [&_li]:leading-6 [&_p]:leading-6",
+        // The fade reaches nothing before the edge, so a cut line never peeks through.
+        folded && "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-4rem),transparent_calc(100%-0.5rem))]",
+        folded && (compact ? "max-h-36" : "max-h-64"),
       )}>
         <MarkdownText text={text} />
       </div>
       {folded && overflows && (
-        <button type="button" onClick={onOpenAll} className="-mx-1 min-h-11 rounded-md px-1 text-[13px] font-medium text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={onOpenAll} className="-mx-1 -mt-1 min-h-11 rounded-md px-1 text-[13px] font-medium text-foreground/80 hover:text-foreground">
           Read the full plan
         </button>
       )}
@@ -678,11 +681,13 @@ function DecisionButton({ option, armed, busy, failed, disabled, onPress, label,
       className={cn(DECISION, "w-full lg:w-auto", dim ? DISABLED : toneClass(tone), failed && FAILED)}>
       <span className="flex min-w-0 flex-1 flex-col py-1.5">
         <span className="break-words">{label ?? option.label}</span>
-        {detail && (
-          <span className={cn("text-[13px] leading-[18px] font-normal", tone === "primary" && !dim ? "text-background/70" : "text-muted-foreground")}>{detail}</span>
+        {(detail || armed) && (
+          <span className="flex min-w-0 items-center justify-between gap-3">
+            <span className={cn("text-[13px] leading-[18px] font-normal", tone === "primary" && !dim ? "text-background/70" : "text-muted-foreground")}>{detail}</span>
+            {armed && <ConfirmPill />}
+          </span>
         )}
       </span>
-      {armed && <ConfirmPill />}
       {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin" />}
     </button>
   );
