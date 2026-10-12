@@ -209,7 +209,8 @@ describe("where a question sits in its set", () => {
     const q1 = detect("codex--ask-wizard-q1.txt");
     expect(q1.steps).toEqual([{ label: "Question 1", answered: false, current: true }, { label: "Question 2", answered: false, current: false }]);
     expect(q1.context).toBeUndefined();
-    expect(detect("codex--ask-wizard-q2.txt").steps).toEqual([{ label: "Question 1", answered: true, current: false }, { label: "Question 2", answered: false, current: true }]);
+    // "Question 2/2 (1 unanswered)" says how many, not which: question 1 may be the one skipped.
+    expect(detect("codex--ask-wizard-q2.txt").steps).toEqual([{ label: "Question 1", answered: false, current: false }, { label: "Question 2", answered: false, current: true }]);
     const single = detect("codex--ask-fruit.txt");
     expect(single.steps).toBeUndefined();
     expect(single.context).toBeUndefined();
