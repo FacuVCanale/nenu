@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import { Check, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { RowBody } from "@/components/nav-rows";
+import { StatusDot } from "@/components/status-badge";
 import { BottomSheet } from "@/components/ui/sheet";
 import { homePath } from "@/lib/nav";
-import type { SessionSummary } from "@/lib/types";
+import { TITLE_SEP } from "@/lib/pane-name";
+import type { AgentStatus, SessionSummary } from "@/lib/types";
 
 interface SessionSwitcherProps {
   /** The bridge's session registry (primary-first). */
@@ -47,7 +49,7 @@ export function SessionSwitcher({ sessions, current }: SessionSwitcherProps) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Session: ${currentName}. Switch session`}
-        className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 active:scale-95"
+        className="hit-area flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-1 text-caption font-medium text-muted-foreground transition-colors hover:bg-muted/70 active:scale-95"
       >
         <Layers className="size-3.5" />
         <span className="max-w-[7rem] truncate">{currentName}</span>
@@ -58,61 +60,40 @@ export function SessionSwitcher({ sessions, current }: SessionSwitcherProps) {
           backdrop-blur before) would make it the containing block and clip the sheet to the header band. */}
       {createPortal(
         <BottomSheet open={open} onClose={() => setOpen(false)} title="Sessions">
-          <ul className="flex flex-col gap-1">
-            {sessions.map((s) => {
-              const active = isActive(s);
-              return (
-                <li key={s.name}>
-                  <button
-                    type="button"
-                    disabled={!s.reachable}
-                    onClick={() => select(s)}
-                    aria-current={active ? "true" : undefined}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors",
-                      active
-                        ? "bg-accent text-accent-foreground"
-                        : "hover:bg-muted/60 active:bg-muted",
-                      !s.reachable && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                    )}
-                  >
-                    <Layers className="size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="truncate text-sm font-medium">{s.name}</span>
-                        {s.isPrimary && (
-                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            primary
-                          </span>
-                        )}
-                        {!s.reachable && (
-                          <span className="text-[11px] text-muted-foreground">unreachable</span>
-                        )}
-                      </div>
-                      {s.reachable && (s.blocked > 0 || s.working > 0) && (
-                        <div className="mt-1 flex items-center gap-1.5">
-                          {s.blocked > 0 && (
-                            <span className="rounded-full border border-status-blocked/30 bg-status-blocked/15 px-1.5 py-0.5 text-[10px] font-medium text-status-blocked">
-                              {s.blocked} needs you
-                            </span>
-                          )}
-                          {s.working > 0 && (
-                            <span className="rounded-full border border-status-working/30 bg-status-working/15 px-1.5 py-0.5 text-[10px] font-medium text-status-working">
-                              {s.working} working
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {active && <Check className="size-4 shrink-0 text-primary" />}
-                  </button>
-                </li>
-              );
-            })}
+          {/* The navigation's own rows: a state dot, the name, the state in words under it. */}
+          <ul className="-mx-2.5 flex flex-col">
+            {sessions.map((s) => (
+              <li key={s.name}>
+                <button
+                  type="button"
+                  disabled={!s.reachable}
+                  onClick={() => select(s)}
+                  aria-current={isActive(s) ? "page" : undefined}
+                  className="nav-pane disabled:cursor-default disabled:text-disabled-foreground disabled:hover:bg-transparent"
+                >
+                  <RowBody mark={<StatusDot status={sessionState(s)} surface="bg-transparent" className="size-2" />}
+                    title={s.name} detail={sessionDetail(s) || undefined} />
+                </button>
+              </li>
+            ))}
           </ul>
         </BottomSheet>,
         document.body,
       )}
     </>
   );
+}
+
+/** The dot a session's row wears: its most pressing state, as a pane's dot says it. */
+function sessionState(s: SessionSummary): AgentStatus {
+  if (!s.reachable) return "unknown";
+  return s.blocked > 0 ? "blocked" : s.working > 0 ? "working" : "idle";
+}
+
+/** The line under a session's name: primary or not, then what needs you and what runs, in words. */
+function sessionDetail(s: SessionSummary): string {
+  const state = s.reachable
+    ? [s.blocked > 0 && `${s.blocked} needs you`, s.working > 0 && `${s.working} working`]
+    : ["Unreachable"];
+  return [s.isPrimary && "Primary", ...state].filter(Boolean).join(TITLE_SEP);
 }
