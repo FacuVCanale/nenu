@@ -169,3 +169,24 @@ describe("BottomSheet — backdrop dismiss requires press AND release on the bac
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe("SideSheet — swipe to dismiss", () => {
+  function swipe(panel: Element, path: Array<[number, number]>) {
+    const touch = ([clientX, clientY]: [number, number]) => ({ clientX, clientY, identifier: 0, target: panel });
+    fireEvent.touchStart(panel, { touches: [touch(path[0]!)] });
+    for (const point of path.slice(1)) fireEvent.touchMove(panel, { touches: [touch(point)] });
+    fireEvent.touchEnd(panel, { touches: [] });
+  }
+
+  it("closes on a swipe toward its edge, and not on a scroll or a short drag", () => {
+    const onClose = vi.fn();
+    render(<SideSheet open onClose={onClose} title="Navigation">body</SideSheet>);
+    const panel = document.querySelector(".side-sheet-panel")!;
+    swipe(panel, [[200, 300], [200, 360], [120, 420]]);
+    expect(onClose).not.toHaveBeenCalled();
+    swipe(panel, [[200, 300], [170, 302], [150, 303]]);
+    expect(onClose).not.toHaveBeenCalled();
+    swipe(panel, [[200, 300], [180, 302], [100, 306]]);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

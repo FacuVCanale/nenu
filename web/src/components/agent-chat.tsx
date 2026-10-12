@@ -83,7 +83,7 @@ import type {
 } from "@/lib/blocks";
 
 /** The chat title's box, whether it opens the project's page or has nothing to open. */
-const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left lg:-mx-1 lg:min-h-9";
+const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
 const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
@@ -231,6 +231,13 @@ export function AgentChat({
   const [historyRequest, setHistoryRequest] = useState(0);
   const [subagent, setSubagent] = useState<SubagentSelection | null>(null);
   useEffect(() => setSubagent(null), [displayScope, agent?.agent]);
+  // A message for a subagent goes through Main: its draft lands in Main's composer once that is back on screen.
+  const [forward, setForward] = useState<string | null>(null);
+  useEffect(() => {
+    if (subagent || forward === null) return;
+    composerRef.current?.prepareAnswer(forward);
+    setForward(null);
+  }, [subagent, forward]);
   const selectSubagent = useCallback((next: SubagentSelection | null) => {
     setSubagent(next);
     if (next) setRawTerminal(false);
@@ -1024,7 +1031,9 @@ export function AgentChat({
             straight into terminal output — the chrome and the mirror read as one surface. Drawing it
             here rather than as a border-b on PaneStrip covers the case where that strip is absent
             (a tab holding a single pane), which is the common one. */}
-        {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
+        {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent}
+          harness={agent?.agent === "codex" ? "codex" : "claude"} onMain={() => setSubagent(null)}
+          onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
             <QuestionLiveContext.Provider value={interaction === undefined ? null : showCard && cardCovers ? "card" : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
