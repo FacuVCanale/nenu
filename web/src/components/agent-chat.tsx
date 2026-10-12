@@ -657,8 +657,9 @@ export function AgentChat({
             : action.kind === "note"
               ? await submitPreviewNote({ ...base, text: action.text })
               : await submitPreviewKeys({ ...base, keys: action.keys });
-      // Pointing only moves the pointer: the refreshed card shows its preview, nothing was answered.
-      if (result.status === "sent" && action.kind === "point") revalidator.revalidate();
+      // Pointing only moves the pointer: nothing was answered. The tapped row stays busy until the
+      // refreshed card shows its preview, so a second tap can't act on the read it replaced.
+      if (result.status === "sent" && action.kind === "point") await revalidator.revalidate();
       else if (result.status === "sent") {
         setStatus(
           action.kind === "note" ? (action.text ? "Note saved" : "Note removed") : "Sent",
