@@ -24,8 +24,8 @@ export function ProjectMissing({ session }: { session?: string }) {
   }
   return (
     <EmptyState icon={FolderX} title="Project not found" action={<div className="flex flex-wrap justify-center gap-3">
-      <Link to={homePath(session)} className={buttonVariants()}>Go to Home</Link>
-      <Button type="button" variant="outline" disabled={checking} aria-busy={checking || undefined} onClick={() => void check()}>
+      <Link to={homePath(session)} className={buttonVariants({ size: "lg" })}>Go to Home</Link>
+      <Button type="button" variant="outline" size="lg" disabled={checking} aria-busy={checking || undefined} onClick={() => void check()}>
         {checking && <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />}{checking ? "Checking…" : "Check again"}
       </Button>
     </div>}>
