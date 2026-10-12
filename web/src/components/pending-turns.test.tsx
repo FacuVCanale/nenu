@@ -29,7 +29,7 @@ describe("PendingTurns", () => {
 
     await user.click(screen.getByRole("button", { name: "Queued message actions" }));
     const menu = screen.getByRole("dialog", { name: "Queued message" });
-    expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(["Send now", "Edit", "Remove"]);
+    expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Send now", "Edit", "Remove"]);
     await user.click(within(menu).getByRole("button", { name: "Remove" }));
     expect(handlers.remove).toHaveBeenCalledExactlyOnceWith(queued);
     expect(screen.queryByRole("dialog", { name: "Queued message" })).toBeNull();

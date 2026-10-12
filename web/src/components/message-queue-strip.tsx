@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { Check, Pencil, Send, X, Zap } from "lucide-react";
+import { Check, Pencil, Send, Trash2, X, Zap } from "lucide-react";
 import type { QueueMessage } from "@/lib/api";
 import { queueRowStatus, type DeliveredRow } from "@/hooks/use-message-queue";
 import { serializeMessage, splitMessageImages } from "@/lib/message-images";
-import { cn } from "@/lib/utils";
-import { MessageImages } from "./message-images";
+import { QueuedMessage, type QueuedAction } from "./queued-message";
 
-const ICON_BUTTON = "flex size-11 items-center justify-center disabled:opacity-40";
-
+/**
+ * The messages waiting in Nenu's queue (and in Claude's own) that have no bubble in this device's
+ * conversation: queued on another device, or before this page loaded. Each is drawn as the same
+ * QueuedMessage this device uses for its own, with the same status copy, so a message reads the same
+ * whichever device it was typed on. Delivery semantics are the queue's (ADR 0056); this only draws it.
+ */
 export function MessageQueueStrip({
   agent,
   messages,
@@ -36,134 +39,80 @@ export function MessageQueueStrip({
   const [editing, setEditing] = useState<string | null>(null);
   const [text, setText] = useState("");
   if (!messages.length && !delivered.length && !error) return null;
-  const waiting = messages.length;
+  // Below the desk breakpoint the composer sits 8px from the edges and the thread a page gutter in,
+  // so the strip's padding lines its bubbles up with the chat bubbles right above them.
   return (
-    <section
-      aria-label="Queued messages"
-      className="mb-2 max-h-52 overflow-y-auto rounded-lg border border-border/50 px-3 py-1"
-    >
-      {waiting > 0 && (
-        <p className="py-1 text-xs text-muted-foreground">
-          {waiting === 1 ? "1 message waits" : `${waiting} messages wait`} in Nenu
-        </p>
-      )}
+    <section aria-label="Queued messages" className="mb-2 max-h-[min(20rem,40dvh)] overflow-y-auto overscroll-contain max-lg:px-[calc(var(--page-gutter)-8px)]">
       {error && (
-        <p role="alert" className="py-1 text-xs text-destructive">
+        <p role="alert" className="px-1 pb-1 text-footnote text-destructive">
           {error}
         </p>
       )}
-      <ol className="divide-y divide-border/40">
+      <ol className="space-y-3">
         {messages.map((item, index) => {
           // The prose is what gets edited; the images ride along unchanged.
           const { text: prose, images } = splitMessageImages(item.text);
           const status = queueRowStatus(agent, item);
           const can = (action: (typeof status.actions)[number]) => status.actions.includes(action);
+          const locked = busy || item.state === "sending";
+          const isEditing = editing === item.id;
+          const menu: QueuedAction[] = [];
+          if (!isEditing) {
+            if (can("sendNow")) menu.push({ id: "send", label: item.stranded ? "Send here" : "Send now", icon: Send, disabled: locked, run: () => void change("send", undefined, item) });
+            // A paused row's delivery is uncertain: it is removed, not edited in place.
+            if (can("edit") && item.state !== "paused") menu.push({ id: "edit", label: "Edit", icon: Pencil, disabled: locked, run: () => { setEditing(item.id); setText(prose); } });
+            menu.push({ id: "remove", label: "Remove", icon: Trash2, disabled: locked, run: () => void change("remove", undefined, item) });
+          }
+          const remedies: QueuedAction[] = isEditing
+            ? [
+                { id: "cancel", label: "Cancel", icon: X, run: () => setEditing(null) },
+                {
+                  id: "save",
+                  label: "Save",
+                  name: "Save queued message",
+                  icon: Check,
+                  disabled: busy || (!text.trim() && !images.length),
+                  run: () => void change("edit", serializeMessage(text, images), item).then((saved) => { if (saved) setEditing(null); }),
+                },
+              ]
+            : [];
           return (
-          <li key={item.id} className="py-1" data-queue-row={item.stranded ? "stranded" : item.state}>
-            {editing === item.id ? (
-              <textarea
-                aria-label="Edit queued message"
-                className="w-full resize-y rounded-md bg-background p-2 text-base"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
+            <li key={item.id} data-queue-row={item.stranded ? "stranded" : item.state}>
+              <QueuedMessage
+                text={item.text}
+                tone={status.tone}
+                label={status.label}
+                device={item.device ?? undefined}
+                menuLabel={`Queued message ${index + 1} actions`}
+                menu={menu}
+                remedies={remedies}
+                editor={isEditing ? (
+                  <textarea
+                    aria-label="Edit queued message"
+                    className="block w-full resize-y rounded-lg bg-background p-2 text-body text-foreground"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                ) : undefined}
               />
-            ) : (
-              <div className="flex items-start gap-2">
-                <span className="pt-0.5 text-xs text-muted-foreground">{index + 1}</span>
-                <div className="min-w-0 flex-1 space-y-1">
-                  {prose && <p className="line-clamp-2 break-words text-sm">{prose}</p>}
-                  <MessageImages paths={images} size="sm" />
-                </div>
-              </div>
-            )}
-            <div className="flex items-center gap-1">
-              <span className={cn("min-w-0 flex-1 text-xs text-muted-foreground", status.tone === "problem" && "text-destructive")}>
-                {status.label}
-                {item.device ? <span className="text-muted-foreground"> · from {item.device}</span> : null}
-              </span>
-              {editing === item.id ? (
-                <button
-                  type="button"
-                  aria-label="Save queued message"
-                  disabled={busy || (!text.trim() && !images.length)}
-                  className={ICON_BUTTON}
-                  onClick={async () => {
-                    if (await change("edit", serializeMessage(text, images), item)) setEditing(null);
-                  }}
-                >
-                  <Check className="size-3.5" />
-                </button>
-              ) : (
-                <>
-                  {/* A paused row's delivery is uncertain: it is removed, not edited in place. */}
-                  {can("edit") && item.state !== "paused" && (
-                    <button
-                      type="button"
-                      aria-label={`Edit queued message ${index + 1}`}
-                      disabled={busy || item.state === "sending"}
-                      className={ICON_BUTTON}
-                      onClick={() => {
-                        setEditing(item.id);
-                        setText(prose);
-                      }}
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                  )}
-                  {can("sendNow") && (
-                    <button
-                      type="button"
-                      aria-label={item.stranded ? `Send queued message ${index + 1} here` : `Send queued message ${index + 1} now`}
-                      title={item.stranded ? "Send here" : "Send now"}
-                      disabled={busy || item.state === "sending"}
-                      className={ICON_BUTTON}
-                      onClick={() => void change("send", undefined, item)}
-                    >
-                      <Send className="size-3.5" />
-                    </button>
-                  )}
-                </>
-              )}
-              <button
-                type="button"
-                aria-label={`Remove queued message ${index + 1}`}
-                disabled={busy || item.state === "sending"}
-                className={ICON_BUTTON}
-                onClick={() => void change("remove", undefined, item)}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          </li>
+            </li>
           );
         })}
         {delivered.map((row) => {
-          const { text: prose, images } = splitMessageImages(row.text);
           const status = queueRowStatus(agent, { state: "sent", deliveryMode: row.deliveryMode, native: row.native, readNowAt: row.readNowAt });
           const armed = readNowArmed === row.id;
           return (
-            <li key={row.id} className="py-1" data-queue-row={row.native ?? "sent"}>
-              <div className="min-w-0 space-y-1">
-                {prose && <p className="line-clamp-2 break-words text-sm">{prose}</p>}
-                <MessageImages paths={images} size="sm" />
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="min-w-0 flex-1 text-xs text-muted-foreground">{status.label}</span>
-                {readNow && status.actions.includes("readNow") && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className={cn(
-                      "flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-medium disabled:opacity-40",
-                      armed && "bg-destructive/10 text-destructive",
-                    )}
-                    onClick={() => readNow(row.id)}
-                  >
-                    <Zap className="size-3.5" aria-hidden="true" />
-                    {armed ? "Tap again to read it now" : "Read it now"}
-                  </button>
-                )}
-              </div>
+            <li key={row.id} data-queue-row={row.native ?? "sent"}>
+              <QueuedMessage
+                text={row.text}
+                tone={status.tone}
+                label={status.label}
+                menuLabel="Queued message actions"
+                menu={[]}
+                remedies={readNow && status.actions.includes("readNow")
+                  ? [{ id: "readNow", label: armed ? "Tap again to read it now" : "Read it now", icon: Zap, disabled: busy, armed, run: () => readNow(row.id) }]
+                  : []}
+              />
             </li>
           );
         })}

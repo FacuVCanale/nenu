@@ -58,7 +58,7 @@ it("keeps uncertain deliveries visible without offering an unsafe retry", async 
     />,
   );
   const menu = await menuOf(user, 1);
-  expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(["Remove"]);
+  expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Remove"]);
 });
 
 it("says per row and per agent why it waits, and whose device queued it", () => {
@@ -93,7 +93,7 @@ it("offers a stranded row only Send here and Remove", async () => {
   render(<MessageQueueStrip agent="claude" messages={[item]} busy={false} error="" change={change} />);
   expect(screen.getByText(item.stranded.reason)).toBeInTheDocument();
   const menu = await menuOf(user, 1);
-  expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(["Send here", "Remove"]);
+  expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Send here", "Remove"]);
   await user.click(within(menu).getByRole("button", { name: "Send here" }));
   expect(change).toHaveBeenLastCalledWith("send", undefined, item);
 });
