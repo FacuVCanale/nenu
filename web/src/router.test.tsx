@@ -24,7 +24,7 @@ function open(path: string, data: HomeData = home) {
 describe("routes", () => {
   it("answers an unknown URL with Page not found inside the app, not the crash screen", () => {
     const router = open("/this/does/not/exist?s=qa");
-    expect(screen.getByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("/this/does/not/exist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/?s=qa");
     expect(screen.queryByText(/Nenu hit a problem|Something went wrong/)).not.toBeInTheDocument();
