@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, jumpTargets, looseChats, paneIdentity, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
+import { groupChats, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -65,56 +65,5 @@ describe("pane ownership", () => {
     expect(projectForPane([project], "b")?.thread?.id).toBe("T2");
     expect(projectForPane([project], "nope")).toBeUndefined();
     expect(looseChats([pane("c"), pane("b"), pane("x")], [project]).map((chat) => chat.paneId)).toEqual(["x"]);
-  });
-});
-
-describe("project groups", () => {
-  const titles = (query: string) => projectGroups([project], query).map((group) => [group.coordinator, group.threads.map((thread) => thread.id)]);
-
-  it("keeps every row when the project itself matches", () => {
-    expect(titles("")).toEqual([[true, ["T1", "T2", "T3", "T0"]]]);
-    expect(titles("hub")).toEqual([[true, ["T1", "T2", "T3", "T0"]]]);
-  });
-
-  it("narrows to matching tasks, including resolved ones, and drops projects with nothing left", () => {
-    expect(titles("review")).toEqual([[false, ["T2"]]]);
-    expect(titles("old")).toEqual([[false, ["T0"]]]);
-    expect(titles("nothing")).toEqual([]);
-  });
-
-  it("names a project pane after its task, or the coordinator", () => {
-    expect(paneTitle(pane("b", { paneLabel: "raw" }), projectForPane([project], "b"))).toBe("Review");
-    expect(paneTitle(pane("c"), projectForPane([project], "c"))).toBe("Coordinator");
-    expect(paneTitle(pane("x", { paneLabel: "Loose" }), undefined)).toBe("Loose");
-  });
-});
-
-describe("pane identity", () => {
-  it("names a project pane by its thread and project, any other by its own name, workspace and tab", () => {
-    expect(paneIdentity(pane("b", { tabLabel: "server" }), [project])).toEqual({ title: "Review", place: "Hub", tab: null });
-    expect(paneIdentity(pane("c"), [project])).toEqual({ title: "Coordinator", place: "Hub", tab: null });
-    expect(paneIdentity(pane("x", { paneLabel: "Changelog", workspaceLabel: "nenu", tabLabel: "docs" }), [project]))
-      .toEqual({ title: "Changelog", place: "nenu", tab: "docs" });
-    expect(paneIdentity(pane("y", { workspaceLabel: "" }), undefined)).toEqual({ title: "claude", place: "w", tab: null });
-  });
-});
-
-describe("jump targets", () => {
-  const MIN = 60_000;
-  const panes = [
-    pane("c", { lastActiveAt: now - 30 * MIN }),
-    pane("a", { lastActiveAt: now - 2 * MIN }),
-    pane("old", { paneLabel: "Changelog", lastActiveAt: now - 60 * MIN }),
-    pane("new", { paneLabel: "Auth review", workspaceLabel: "api", lastActiveAt: now - 10 * MIN }),
-  ];
-
-  it("lists projects and loose chats by last movement, a project moving with its panes", () => {
-    expect(jumpTargets(panes, [project]).map((target) => `${target.kind}:${target.id}`)).toEqual(["project:hub", "chat:new", "chat:old"]);
-  });
-
-  it("filters with the sidebar's matchers, including a project's thread titles", () => {
-    expect(jumpTargets(panes, [project], "auth").map((target) => target.id)).toEqual(["new"]);
-    expect(jumpTargets(panes, [project], "queued").map((target) => target.id)).toEqual(["hub"]);
-    expect(jumpTargets(panes, [project], "nothing like this")).toEqual([]);
   });
 });
