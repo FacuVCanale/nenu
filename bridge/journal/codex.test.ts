@@ -262,6 +262,56 @@ describe("parseCodexTranscript", () => {
     expect(entries[0]!.parts[0]).toMatchObject({ text: "review PR 152" });
   });
 
+  // Codex 0.160 says what each user-role message carries: `content_item_kinds` on
+  // internal_chat_message_metadata_passthrough. Only `user.*` items are something the operator typed.
+  const stamped = (kinds: string[], text: string, turn = "t1") =>
+    item({
+      type: "message", role: "user",
+      internal_chat_message_metadata_passthrough: { turn_id: turn, content_item_kinds: kinds },
+      content: [{ type: "input_text", text }],
+    });
+
+  test("a skill Codex attached folds under the message that asked for it, never as yours", () => {
+    const entries = parseCodexTranscript([
+      stamped(["user.text"], "review it, run $thermo-review"),
+      stamped(["skills.selected_skill_instructions"], "<skill>\n<name>thermo-review</name>\n<path>/skills/thermo-review/SKILL.md</path>\n# Thermo review\nBe strict.\n</skill>"),
+      message("assistant", "Reviewing."),
+    ].join("\n"));
+    expect(entries.map((e) => e.role)).toEqual(["user", "assistant"]);
+    expect(entries[0]!.parts).toEqual([
+      { kind: "text", text: "review it, run $thermo-review" },
+      { kind: "context", label: "Skill · thermo-review", text: "# Thermo review\nBe strict." },
+    ]);
+  });
+
+  test("a skill with no message of its own turn to sit under is its own line", () => {
+    const entries = parseCodexTranscript([
+      stamped(["user.text"], "earlier", "t0"),
+      stamped(["skills.selected_skill_instructions"], "<skill>\n<name>loop</name>\n<path>/s</path>\nbody\n</skill>", "t1"),
+    ].join("\n"));
+    expect(entries.map((e) => [e.role, e.parts.at(-1)])).toEqual([
+      ["user", { kind: "text", text: "earlier" }],
+      ["note", { kind: "context", label: "Skill · loop", text: "body" }],
+    ]);
+  });
+
+  test("injected context that explains the next step is a line; model-only context is dropped", () => {
+    const entries = parseCodexTranscript([
+      stamped(["goal.internal_context"], '<codex_internal_context source="goal">\nContinue working toward the active thread goal.\n</codex_internal_context>'),
+      stamped(["generic.turn_aborted"], "<turn_aborted>\nThe user interrupted the previous turn on purpose.\n</turn_aborted>"),
+      stamped(["daemon_recovery.internal_context"], '<codex_internal_context source="daemon_recovery">\nThe server restarted.\n</codex_internal_context>'),
+      stamped(["additional_content.codex_apps_open_page"], '<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>'),
+      stamped(["plugins.recommendations", "agents_md.instructions", "environments.environment_context"], "<recommended_plugins>\n- Dropbox\n</recommended_plugins>"),
+      stamped(["user.text", "user.image", "user.text"], "my own words"),
+    ].join("\n"));
+    expect(entries.map((e) => [e.role, e.parts[0]])).toEqual([
+      ["note", { kind: "context", label: "Goal check-in", text: "Continue working toward the active thread goal." }],
+      ["note", { kind: "context", label: "Interrupted", text: "The user interrupted the previous turn on purpose." }],
+      ["note", { kind: "context", label: "Resumed after a restart", text: "The server restarted." }],
+      ["user", { kind: "text", text: "my own words" }],
+    ]);
+  });
+
   test("removes Codex memory metadata from a final answer but preserves its visible text", () => {
     const final = item({
       type: "message",
