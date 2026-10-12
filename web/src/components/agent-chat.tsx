@@ -11,7 +11,7 @@ import { detailTitle, ProcessDetailView, ProcessesChip, ProcessesList, ProcessPa
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare } from "lucide-react";
+import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, PanelTop, ScrollText, Search, TerminalSquare } from "lucide-react";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { agentName } from "@/hooks/use-message-queue";
 import { StartAgent } from "@/components/start-agent";
@@ -56,6 +56,8 @@ import { commandsFor } from "@/lib/agent-commands";
 import { useOperatorCommands } from "@/lib/operator-config";
 import { TabStrip } from "@/components/tab-strip";
 import { PaneStrip } from "@/components/pane-strip";
+import { PaneActionsSheet } from "@/components/pane-actions-sheet";
+import { TabActionsSheet } from "@/components/tab-actions-sheet";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { StatusDot } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
@@ -72,7 +74,7 @@ import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath } from "@/lib/nav";
-import { paneInTab } from "@/lib/spaces";
+import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
@@ -891,9 +893,18 @@ export function AgentChat({
     ...(hasConversation ? [{ id: "history", label: "Conversation history", icon: ScrollText,
       run: () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) }] : []),
     ...(conversationCapable ? [{ id: "files", label: "Artifacts and files", icon: Paperclip, run: () => setFilesOpen(true) }] : []),
-    ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal mirror", icon: TerminalSquare, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
+    ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal view", icon: TerminalSquare, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
     ...composerControls.filter((control) => control.group === "View"),
   ];
+  // Renaming and closing the pane and its tab, which otherwise hide behind a long-press on a chip.
+  // Each opens the strip's own sheet, so the rename field and the close confirmation are the same.
+  const [paneSheet, setPaneSheet] = useState<"pane" | "tab" | null>(null);
+  const tab = agent && tabs.find((t) => t.tabId === agent.tabId);
+  const tabTitle = tab ? tabName(tab.label, tabs.filter((t) => t.workspaceId === tab.workspaceId).indexOf(tab) + 1) : "";
+  const paneActions: ConversationAction[] = agent && !readOnly ? [
+    { id: "pane", label: "Rename or close pane…", icon: AppWindow, run: () => setPaneSheet("pane") },
+    ...(tab ? [{ id: "tab", label: "Rename or close tab…", icon: PanelTop, run: () => setPaneSheet("tab") }] : []),
+  ] : [];
 
   // Background work: workflows and commands (Claude's activity reader) and subagents, as one list
   // behind the chip in the composer row.
@@ -934,7 +945,7 @@ export function AgentChat({
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions
-    groups={[{ label: "View", actions: viewActions }]}
+    groups={[{ label: "View", actions: viewActions }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;
@@ -1069,6 +1080,7 @@ export function AgentChat({
               .filter((p) => p.workspaceId === agent.workspaceId && p.tabId === agent.tabId)
               .sort((a, b) => a.paneId.localeCompare(b.paneId))}
             currentPaneId={paneId}
+            projects={projects}
             onSelect={switchTo}
             session={session}
             readOnly={readOnly}
@@ -1289,6 +1301,12 @@ export function AgentChat({
       </div>
       {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
       </div>
+
+      {/* Closing the open pane or its tab moves the route to the pane beside it (DetailRoute). */}
+      {agent && <PaneActionsSheet open={paneSheet === "pane"} onClose={() => setPaneSheet(null)} pane={agent} name={title}
+        session={session} readOnly={readOnly} onRenamed={() => revalidator.revalidate()} onClosed={() => revalidator.revalidate()} />}
+      {tab && <TabActionsSheet open={paneSheet === "tab"} onClose={() => setPaneSheet(null)} tab={tab} name={tabTitle}
+        session={session} readOnly={readOnly} onRenamed={() => revalidator.revalidate()} onClosed={() => revalidator.revalidate()} />}
 
     </div>
   );
