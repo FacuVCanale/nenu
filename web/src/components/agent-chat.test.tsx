@@ -1181,6 +1181,22 @@ describe("AgentChat — a project's overlay", () => {
   });
 });
 
+// The work log names a file as the operator thinks of it inside the project: from the pane's folder.
+it("shows a work step's file relative to the pane's folder", async () => {
+  const ts = "2026-07-25T06:22:21.253Z";
+  server.use(http.get(/\/api\/pane\/[^/]+\/history/, () => HttpResponse.json({
+    paneId: "w1:p1", available: true, hasMore: false, total: 2, fileTruncated: false, entries: [
+      { uuid: "t1", ts, role: "user", parts: [{ kind: "text", text: "read the stylesheet" }] },
+      { uuid: "t2", ts, role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "ok" } }] },
+    ],
+  })));
+  const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+  renderChat({ agent, agents: [agent] });
+  const work = await screen.findByRole("button", { name: /^(Worked|Work log)/ });
+  if (work.getAttribute("aria-expanded") === "false") await userEvent.click(work);
+  expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+});
+
 // Find names what it searches, in the menu and in the bar (T31).
 describe("AgentChat — find says what it searches", () => {
   it("finds in the chat while the conversation shows", async () => {

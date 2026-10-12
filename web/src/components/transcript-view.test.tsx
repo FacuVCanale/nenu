@@ -97,6 +97,21 @@ describe("TranscriptView", () => {
     expect(screen.getAllByText("No output recorded")).toHaveLength(2);
   });
 
+  it("shows a step's file relative to the pane's folder, and one outside it from home", async () => {
+    render(
+      <TranscriptView
+        cwd="/home/you/webapp"
+        entries={[turn({ role: "assistant", parts: [
+          { kind: "tool", name: "Read", summary: "/home/you/webapp/web/src/workbench.css", result: { text: "" } },
+          { kind: "tool", name: "Edit", summary: "/home/you/.config/nenu/keys.toml", result: { text: "" } },
+        ] })]}
+      />,
+    );
+    await openWork();
+    expect(screen.getByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+    expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent(/^Edited\s*~\/\.config\/nenu\/keys\.toml$/);
+  });
+
   it("flags truncated output rather than silently dropping the tail", async () => {
     render(
       <TranscriptView
