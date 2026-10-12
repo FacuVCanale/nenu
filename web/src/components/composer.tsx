@@ -1296,7 +1296,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
-          <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked")}>
+          <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
               <button type="button" className="composer-plus hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={menuOpen}
                 onPointerDown={(e) => e.preventDefault()} onClick={() => setMenuOpen(!menuOpen)}>
