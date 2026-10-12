@@ -29,10 +29,12 @@
 [aria-current="true"] > .task-row { background: var(--workbench-row-selected); }
 .task-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 7px 8px; text-align: left; border-radius: var(--radius-md); }
 /* A desk's row actions: words laid over the row's age while the pointer rests on the row, on the
-   row's own fill so the age underneath never shows through. Out of reach until then, except to a key. */
-.task-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; padding-left: 4px; border-radius: var(--radius-md); background: inherit; opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; }
-@media (hover: hover) { .task-row:hover .task-actions { opacity: 1; pointer-events: auto; } }
-.task-actions:focus-within { opacity: 1; pointer-events: auto; }
+   row's own fill so the age underneath never shows through. A pointer reaches them by resting on the
+   row first; one that cannot hover never meets them unseen, and a key always reaches them. */
+.task-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; padding-left: 4px; border-radius: var(--radius-md); background: inherit; opacity: 0; transition: opacity 150ms ease-out; }
+@media (hover: hover) { .task-row:hover .task-actions { opacity: 1; } }
+@media (hover: none) { .task-actions:not(:focus-within) { pointer-events: none; } }
+.task-actions:focus-within { opacity: 1; }
 .task-action { height: 28px; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
 .task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); }
 /* A touch screen's ⋯, always there: there is no hover to find it by. */
