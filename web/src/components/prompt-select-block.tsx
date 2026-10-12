@@ -133,7 +133,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
     <DialogCard label={prompt.question}>
       <QuestionHeading>{prompt.question}</QuestionHeading>
       <PromptRequestContext prompt={prompt} />
-      <OptionList aria-label="Options">
+      <OptionList aria-label="Answers">
         {prompt.options.map((option, index) => {
           const id = `opt-${index}`;
           const busy = sending === id;

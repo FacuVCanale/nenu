@@ -165,7 +165,6 @@ it("names a permission's pressable list Answers in the card and in the mirror bl
   for (const name of ["thread permission", "prompt-select (mirror)"]) {
     const card = renderCard(CARDS.find(([n]) => n === name)![1]);
     expect(card.querySelector("[data-option-list]"), name).toHaveAttribute("aria-label", "Answers");
-    card.remove();
   }
 });
 
