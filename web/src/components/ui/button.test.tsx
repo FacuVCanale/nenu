@@ -2,11 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 
+import { declarations } from "@/test/css-rules";
 import { Button, buttonVariants } from "./button";
 
 // jsdom compiles no Tailwind, so these pin the classes and rules the bench then measures:
 // 44px on a coarse pointer, ink for the primary action, disabled from tokens, one focus ring.
 const indexCss = readFileSync(resolve(import.meta.dirname, "../../index.css"), "utf8");
+const COMPONENTS = "@layer components";
+const COARSE = "@media (pointer: coarse)";
 const variants = ["default", "destructive", "outline", "secondary", "ghost", "link"] as const;
 
 describe("Button", () => {
@@ -17,11 +20,16 @@ describe("Button", () => {
     expect(button).not.toHaveClass("bg-primary");
   });
 
-  it("grows default, sm and icon buttons to 44px on a coarse pointer, unless the caller sizes them", () => {
-    for (const size of ["default", "sm", "icon"] as const) expect(buttonVariants({ size })).toContain(`ui-button-${size}`);
-    expect(indexCss).toMatch(/@media \(pointer: coarse\) \{\s*\.ui-button-default, \.ui-button-sm \{ height: 2\.75rem; \}\s*\.ui-button-icon \{ width: 2\.75rem; height: 2\.75rem; \}/);
+  it("gives default, sm and icon buttons a 44 by 44 target on a coarse pointer, unless the caller sizes them", () => {
+    for (const size of ["default", "sm", "icon"] as const) {
+      expect(buttonVariants({ size })).toContain(`ui-button-${size}`);
+      const coarse = declarations(indexCss, `.ui-button-${size}`, [COMPONENTS, COARSE]);
+      expect(coarse.height, size).toBe("2.75rem");
+      // Width too: "1h" alone measured 39 wide.
+      expect(coarse["min-width"] ?? coarse.width, size).toBe("2.75rem");
+    }
     // The sizes sit in the components layer, so a caller's h-6 or size-9 still wins.
-    expect(indexCss).toMatch(/@layer components \{[^@]*\.ui-button-default \{ height: 2\.25rem; \}/);
+    expect(declarations(indexCss, ".ui-button-default", [COMPONENTS]).height).toBe("2.25rem");
   });
 
   it("draws unavailable from its own tokens, never as opacity over a fill", () => {
