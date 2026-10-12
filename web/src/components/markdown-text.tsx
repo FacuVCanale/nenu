@@ -4,8 +4,10 @@ import { parseMarkdown, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
+import { tableHtml, tableMarkdown } from "@/lib/table-copy";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { CopyButton, QUIET_ACTION } from "./copy-button";
 import { IMAGE_EDGE } from "./message-images";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
@@ -178,37 +180,43 @@ function Block({ block }: { block: MdBlock }) {
       );
     case "table":
       // Columns can't be made to fit a phone, so the table keeps its real widths and pans inside its
-      // own scroller — the same thing a mobile browser does with a table on any normal page.
+      // own scroller — the same thing a mobile browser does with a table on any normal page. Its Copy
+      // sits above it, right-aligned like a code block's.
       return (
-        <div className="overflow-x-auto">
-          <table className="w-max border-collapse text-footnote tabular-nums">
-            <thead>
-              <tr>
-                {block.header.map((cell, i) => (
-                  <th
-                    key={i}
-                    className={`border px-2 py-1 font-semibold ${ALIGN_CLASS[block.align[i] ?? "left"]}`}
-                  >
-                    <Spans spans={cell} />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {block.rows.map((row, r) => (
-                <tr key={r}>
-                  {row.map((cell, c) => (
-                    <td
-                      key={c}
-                      className={`border px-2 py-1 align-top ${ALIGN_CLASS[block.align[c] ?? "left"]}`}
+        <div data-md-table>
+          <div className="flex justify-end">
+            <CopyButton what="table" payload={() => ({ text: tableMarkdown(block), html: tableHtml(block) })} className={cn(QUIET_ACTION, "-mr-2")} />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-max border-collapse text-footnote tabular-nums">
+              <thead>
+                <tr>
+                  {block.header.map((cell, i) => (
+                    <th
+                      key={i}
+                      className={`border px-2 py-1 font-semibold ${ALIGN_CLASS[block.align[i] ?? "left"]}`}
                     >
                       <Spans spans={cell} />
-                    </td>
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {block.rows.map((row, r) => (
+                  <tr key={r}>
+                    {row.map((cell, c) => (
+                      <td
+                        key={c}
+                        className={`border px-2 py-1 align-top ${ALIGN_CLASS[block.align[c] ?? "left"]}`}
+                      >
+                        <Spans spans={cell} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
     case "rule":

@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Copy, WrapText } from "lucide-react";
+import { WrapText } from "lucide-react";
 
+import { CopyButton, QUIET_ACTION } from "@/components/copy-button";
 import { cn } from "@/lib/utils";
-
-const CONFIRM_MS = 2000;
-const COPY_LABEL = { idle: "Copy", copied: "Copied", failed: "Failed" } as const;
-
-// Pressed and the press itself take the neutral selected fill the nav rows use: --accent all but
-// vanished on the block's muted header in light (244 on 248).
-const HEADER_BUTTON = "hit-area inline-flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-caption text-muted-foreground transition-colors hover:bg-[var(--workbench-row-hover)] hover:text-foreground active:bg-[var(--workbench-row-selected)] aria-pressed:bg-[var(--workbench-row-selected)] aria-pressed:text-foreground [&_svg]:size-3.5";
 
 /**
  * A fenced block from agent prose: a 32px header with the language, Wrap and Copy over the code at
@@ -20,7 +14,6 @@ export function CodeBlock({ lang, text, children }: { lang: string; text: string
   const pre = useRef<HTMLPreElement>(null);
   const [wrap, setWrap] = useState(false);
   const [clipped, setClipped] = useState(false);
-  const [copy, setCopy] = useState<keyof typeof COPY_LABEL>("idle");
 
   // One pixel of slack: a fractional scroll position can stop just short of the end.
   const measure = useCallback(() => {
@@ -35,43 +28,17 @@ export function CodeBlock({ lang, text, children }: { lang: string; text: string
     observer.observe(el);
     return () => observer.disconnect();
   }, [measure]);
-  useEffect(() => {
-    if (copy === "idle") return;
-    const timer = setTimeout(() => setCopy("idle"), CONFIRM_MS);
-    return () => clearTimeout(timer);
-  }, [copy]);
-
-  // The write starts inside the tap itself: Safari refuses a clipboard write the gesture no longer
-  // covers. Outside a secure context there is no navigator.clipboard, and that lands in "failed" too.
-  const onCopy = () => {
-    let write: Promise<void>;
-    try {
-      write = navigator.clipboard.writeText(text);
-    } catch (error) {
-      write = Promise.reject(error);
-    }
-    write.then(() => setCopy("copied"), () => setCopy("failed"));
-  };
 
   return (
     <div className="rounded-lg border bg-muted/50">
       <div className="flex h-8 items-center gap-2 border-b pr-0.5 pl-3">
         {lang && <span className="min-w-0 truncate text-caption text-muted-foreground">{lang}</span>}
         <div className="ml-auto flex items-center gap-2">
-          <button type="button" aria-pressed={wrap} onClick={() => setWrap((on) => !on)} className={HEADER_BUTTON}>
+          <button type="button" aria-pressed={wrap} onClick={() => setWrap((on) => !on)} className={QUIET_ACTION}>
             <WrapText aria-hidden="true" />
             Wrap
           </button>
-          <button type="button" onClick={onCopy} className={HEADER_BUTTON}>
-            {copy === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            {/* As wide as its widest label from the start, so no answer moves Wrap under the finger. */}
-            <span className="grid justify-items-center">
-              <span aria-live="polite" className="col-start-1 row-start-1">{COPY_LABEL[copy]}</span>
-              {Object.values(COPY_LABEL).map((label) => (
-                <span key={label} aria-hidden="true" className="invisible col-start-1 row-start-1">{label}</span>
-              ))}
-            </span>
-          </button>
+          <CopyButton payload={() => ({ text })} />
         </div>
       </div>
       <pre

@@ -186,7 +186,10 @@ describe("tables", () => {
   it("copy as Markdown text, with an HTML twin a spreadsheet pastes as cells", async () => {
     const written: Array<Record<string, string>> = [];
     class FakeItem {
-      constructor(readonly types: Record<string, Blob>) {}
+      readonly types: Record<string, Blob>;
+      constructor(types: Record<string, Blob>) {
+        this.types = types;
+      }
     }
     Object.defineProperty(globalThis, "ClipboardItem", { configurable: true, value: FakeItem });
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
