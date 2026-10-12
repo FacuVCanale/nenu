@@ -128,6 +128,20 @@ describe("the sidebar's workspaces, with no projects", () => {
     expect(router.state.location.pathname).toBe("/pane/d2");
   });
 
+  it("keeps a search through a navigation it did not make, and ends it once its pick is on screen", async () => {
+    const user = open("/pane/d1");
+    await user.click(screen.getByRole("button", { name: /^Search/ }));
+    await user.type(screen.getByRole("searchbox"), "panel");
+    // The chat on screen closes and its page replaces itself: the half-typed search stays.
+    await act(() => router.navigate("/pane/n1", { replace: true }));
+    expect(screen.getByRole("searchbox")).toHaveValue("panel");
+
+    await user.click(screen.getByRole("searchbox"));
+    await user.keyboard("{Enter}");
+    expect(router.state.location.pathname).toBe("/pane/d2");
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
   it("says when nothing matches", async () => {
     const user = open("/");
     await user.click(screen.getByRole("button", { name: /^Search/ }));
