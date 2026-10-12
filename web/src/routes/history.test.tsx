@@ -97,8 +97,10 @@ describe("history with nothing to read", () => {
     expect(await screen.findByRole("heading", { name: "No conversation yet" })).toBeInTheDocument();
     expect(screen.getByText(/no agent session in Codex/)).toBeInTheDocument();
     const main = screen.getByRole("main");
-    expect(within(main).getAllByRole("button")).toHaveLength(1);
-    await user.click(within(main).getByRole("button", { name: "Back to Codex" }));
+    // The way back is a link to the pane, the same as the bar's.
+    expect(within(main).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(main).getAllByRole("link")).toHaveLength(1);
+    await user.click(within(main).getByRole("link", { name: "Back to Codex" }));
     expect(router.state.location.pathname).toBe("/pane/w2%3Acodex");
   });
 
@@ -106,8 +108,8 @@ describe("history with nothing to read", () => {
     const { router, user } = setup("w9:ghost", { unavailable: "no-session" });
     expect(await screen.findByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
     // The one action style every empty and error page shares: the large ink button.
-    expect(within(screen.getByRole("main")).getByRole("button", { name: "Back to Home" })).toHaveClass("ui-button-lg", "bg-foreground");
-    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to Home" }));
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Back to Home" })).toHaveClass("ui-button-lg", "bg-foreground");
+    await user.click(within(screen.getByRole("main")).getByRole("link", { name: "Back to Home" }));
     expect(router.state.location.pathname).toBe("/");
   });
 
@@ -115,7 +117,7 @@ describe("history with nothing to read", () => {
     setup("w2:shell", { unavailable: "no-session" }, [], { shellPanes: [pane("w2:shell", { kind: "shell", paneLabel: "Shell" })] });
     expect(await screen.findByRole("heading", { name: "Shells keep no transcript" })).toBeInTheDocument();
     expect(screen.queryByText(/\byet\b/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to Shell" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Back to Shell" })).toBeInTheDocument();
   });
 
   // A pane missing from a snapshot that failed, or from one taken while Herdr is down, may be alive.
@@ -124,7 +126,7 @@ describe("history with nothing to read", () => {
     expect(await screen.findByRole("heading", { name: "Couldn't read the transcript" })).toBeInTheDocument();
     expect(screen.queryByText(/closed/i)).not.toBeInTheDocument();
     expect(screen.getByText(/^Can’t reach Nenu\./)).toBeInTheDocument();
-    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Back to the pane" }));
+    await user.click(within(screen.getByRole("main")).getByRole("link", { name: "Back to the pane" }));
     expect(router.state.location.pathname).toBe("/pane/w1%3Aidle");
   });
 
@@ -138,6 +140,6 @@ describe("history with nothing to read", () => {
   it("explains a transcript it could not read", async () => {
     setup("w1:idle", { unavailable: "error" }, [pane("w1:idle", { paneLabel: "Idle Claude" })]);
     expect(await screen.findByRole("heading", { name: "Couldn't read the transcript" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to Idle Claude" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Back to Idle Claude" })).toBeInTheDocument();
   });
 });

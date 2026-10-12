@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { useNavigate, useRouteLoaderData } from "react-router";
+import { useRouteLoaderData } from "react-router";
 
 import { AppHeader } from "@/components/app-header";
 import { BuildStamp } from "@/components/build-stamp";
@@ -25,7 +25,6 @@ import { useSession } from "@/lib/session";
 // push state lands on a blocked or unavailable device, "This device" gains its note and the "Notify
 // when" footer can take a second line, so the groups under them move down once.
 export function SettingsRoute() {
-  const navigate = useNavigate();
   const session = useSession();
   const { state, busy, setEnabled } = usePushControl();
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +49,7 @@ export function SettingsRoute() {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
-      <AppHeader bridge={root?.bridge} error={Boolean(root?.error)} title="Settings"
-        onHome={() => navigate(homePath(session))} />
+      <AppHeader bridge={root?.bridge} error={Boolean(root?.error)} title="Settings" back={{ to: homePath(session), label: "Home" }} />
 
       <main className="page-body flex flex-col">
         {/* One 640px column, centred in the content area on a desk. */}

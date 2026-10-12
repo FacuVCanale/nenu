@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLoaderData, useNavigate, useParams, useRouteLoaderData } from "react-router";
-import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search, X } from "lucide-react";
+import { Link, useLoaderData, useParams, useRouteLoaderData } from "react-router";
+import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search } from "lucide-react";
 
 import { AppHeader } from "@/components/app-header";
 import { linkPhrase, linkProblemOf, type LinkProblem } from "@/components/connection-banner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FindBar } from "@/components/find-bar";
@@ -62,7 +62,6 @@ export function HistoryRoute() {
   const data = useLoaderData() as HistoryData;
   const root = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { paneId = "" } = useParams();
-  const navigate = useNavigate();
   const session = data.session;
 
   const pane =
@@ -205,7 +204,9 @@ export function HistoryRoute() {
   }, []);
 
   const matchCursor = matches.indexOf(cursor);
-  const back = () => navigate(panePath(paneId, session));
+  // The pane this history belongs to, or Home once the pane is gone: the one way out, in the bar and
+  // on an empty page alike.
+  const back = gone ? { to: homePath(session), label: "Home" } : { to: panePath(paneId, session), label: name ?? "the pane" };
   const total = Math.max(data.total, entries.length);
   const empty = gone
     ? { title: "This pane is closed", body: "Its history can't be read from here anymore." }
@@ -216,7 +217,9 @@ export function HistoryRoute() {
       <AppHeader
         bridge={root.bridge}
         error={root.error}
-        onHome={back}
+        title="History"
+        subtitle={name}
+        back={back}
         override={
           findOpen ? (
             <FindBar
@@ -239,23 +242,7 @@ export function HistoryRoute() {
             </button>
           )
         }
-        // Explicit exit from reading mode. The Nenu mark also returns to the pane, but this is a
-        // full-screen reading view you deliberately entered — it should be as obvious to leave as it
-        // was to open, without relying on the phone's back gesture.
-        rightTrail={
-          <button type="button" onClick={back} aria-label="Close history" className="workbench-icon-button">
-            <X aria-hidden="true" size={17} />
-          </button>
-        }
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <ScrollText aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate font-semibold leading-tight">History</span>
-          </div>
-          {name && <div className="truncate text-xs leading-tight text-muted-foreground">{name}</div>}
-        </div>
-      </AppHeader>
+      />
 
       {/* The text scrolls under the home indicator; everything that floats stops above it.
           ChatMessageList pins its Latest pill to its own box, so that box ends at the inset (this
@@ -267,9 +254,9 @@ export function HistoryRoute() {
             title={empty.title}
             className="h-full justify-center"
             action={
-              <Button size="lg" onClick={() => (gone ? navigate(homePath(session)) : back())} className="max-w-[min(20rem,80vw)]">
-                <span className="truncate">{gone ? "Back to Home" : `Back to ${name ?? "the pane"}`}</span>
-              </Button>
+              <Link to={back.to} className={buttonVariants({ size: "lg", className: "max-w-[min(20rem,80vw)]" })}>
+                <span className="truncate">Back to {back.label}</span>
+              </Link>
             }
           >
             {empty.body}
