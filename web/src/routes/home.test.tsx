@@ -63,12 +63,12 @@ function Shell() {
   return <WorkbenchShell data={value}><Outlet /></WorkbenchShell>;
 }
 
-async function setup(value = data) {
+async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<unknown> } = {}) {
   let current = value;
   const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell />, children: [
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
-    { path: "/pane/:paneId", element: <p>Pane opened</p> },
+    { path: "/pane/:paneId", element: <p>Pane opened</p>, ...(paneLoader ? { loader: paneLoader } : {}) },
     { path: "/project/:projectSlug", element: <p>Project page</p> },
   ] }], { initialEntries: ["/?s=work"] });
   render(<RouterProvider router={router} />);
@@ -299,6 +299,29 @@ describe("Recent", () => {
     await user.click(recent.getByRole("button", { name: "Show all 8" }));
     expect(recent.getAllByRole("listitem")).toHaveLength(8);
   });
+});
+
+it("marks the tapped row as opening while a slow pane read holds the navigation", async () => {
+  let release!: () => void;
+  const read = new Promise<null>((resolve) => { release = () => resolve(null); });
+  const { user, main } = await setup(data, { paneLoader: () => read });
+  const row = within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ });
+  const tapped = performance.now();
+  await user.click(row);
+  // A fast read never flashes a spinner; a slow one shows on the row that was tapped.
+  expect(row).not.toHaveAttribute("aria-busy");
+  await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
+  expect(performance.now() - tapped).toBeGreaterThanOrEqual(120);
+  expect(within(main.getByRole("region", { name: /^Needs you/ })).getByRole("link")).not.toHaveAttribute("aria-busy");
+  release();
+  expect(await screen.findByText("Pane opened")).toBeInTheDocument();
+});
+
+it("marks a Needs you row as opening too", async () => {
+  const { user, main } = await setup(data, { paneLoader: () => new Promise(() => {}) });
+  const row = within(main.getByRole("region", { name: /^Needs you/ })).getByRole("link", { name: /^Review changes/ });
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
 });
 
 it("leaves projects and workspaces to the sidebar instead of repeating them", async () => {
