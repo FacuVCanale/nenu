@@ -151,6 +151,12 @@ function StepTarget({ text, format, query, current }: { text: string; format: To
   </span>;
 }
 
+/** A step's path as its row reads it whole, for the row's name: what a voice command says is what it sees. */
+function spokenPath(path: string, cwd: string): string {
+  const { dir, base } = displayPath(path, cwd, Infinity);
+  return dir + base;
+}
+
 /** A finished step that failed says so on its line, so the failure shows before anything opens. */
 function FailedChip() {
   return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/40 px-2 text-caption text-destructive">
@@ -178,6 +184,8 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
   const images = useToolImages();
   const open = expanded || focused || matches(part, query);
   const step = describeCall(part);
+  const cwd = useContext(PaneCwdContext);
+  const target = step.target === "path" && step.text ? spokenPath(step.text, cwd) : step.text;
   const failed = !!part.result?.isError;
   const asking = waiting && !part.result;
   const running = !part.result && active && !asking;
@@ -186,7 +194,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
   const truncated = !!part.result?.truncated;
   return (
     <div data-tool={id} data-step={step.kind} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, step.text, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+      <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, target, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
         <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
