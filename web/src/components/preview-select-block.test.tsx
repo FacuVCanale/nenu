@@ -21,25 +21,27 @@ function fixtureModel(name: string): PreviewSelectModel {
 }
 
 describe("PreviewSelectBlock — presentation", () => {
-  it("renders options as buttons, the pointed option's preview pane, and the add-note affordance", () => {
+  it("draws the question as a card: rows, the pointed row's preview, Choose, and a way to add a note", () => {
     const model = fixtureModel("claude--select-preview.txt");
     const { container } = render(<PreviewSelectBlock preview={model} onAction={vi.fn()} />);
 
-    expect(
-      screen.getByRole("group", { name: "Which widget design should we use?" }),
-    ).toBeInTheDocument();
+    const card = screen.getByRole("region", { name: "Which widget design should we use?" });
+    expect(within(card).getByText("Waiting on you")).toBeInTheDocument();
     for (const label of ["Boxy", "Rounded", "Minimal"]) {
-      expect(screen.getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: new RegExp(`^${label}`) })).toBeInTheDocument();
     }
+    // The pointed row is the one previewed, and the one Choose commits.
+    expect(screen.getByRole("button", { name: /^Boxy/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Rounded/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Choose Boxy" })).toBeInTheDocument();
     expect(screen.getByText(model.question)).toBeInTheDocument();
-    expect(within(screen.getByRole("button", { name: /Boxy/ })).queryByText("1")).not.toBeInTheDocument();
-    // The preview pane, captioned with the pointed option, verbatim as text.
-    expect(screen.getByText(/Preview · Boxy/)).toBeInTheDocument();
-    expect(screen.getByText(/WIDGET/)).toBeInTheDocument();
+    // No terminal-style caption above the card: the header says what it is.
+    expect(screen.queryByText("Choose an option")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Preview of Boxy" })).getByText(/WIDGET/)).toBeInTheDocument();
     expect(container.querySelector("pre")).toBeNull();
     expect(container.textContent).not.toContain("┌──");
     expect(screen.getByRole("button", { name: /Add a note/ })).toBeInTheDocument();
-    // Single-question: no stepper navigation (the question/chip stays in the raw mirror above).
+    // Single-question: no stepper navigation.
     expect(screen.queryByRole("button", { name: "Next step" })).not.toBeInTheDocument();
   });
 
@@ -79,14 +81,35 @@ describe("PreviewSelectBlock — presentation", () => {
 });
 
 describe("PreviewSelectBlock — intents", () => {
-  it("tapping an option raises an option intent (the handler owns digit→verify→Enter)", async () => {
+  it("tapping another row only points at it, so its preview shows before anything is chosen", async () => {
     const onAction = vi.fn();
     const user = userEvent.setup();
     const model = fixtureModel("claude--select-preview.txt");
     render(<PreviewSelectBlock preview={model} onAction={onAction} />);
 
-    await user.click(screen.getByRole("button", { name: /Rounded/ }));
-    expect(onAction).toHaveBeenCalledWith({ kind: "option", option: model.options[1] });
+    await user.click(screen.getByRole("button", { name: /^Rounded/ }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction).toHaveBeenCalledWith({ kind: "point", option: model.options[1] });
+  });
+
+  it("tapping the row already pointed at sends nothing", async () => {
+    const onAction = vi.fn();
+    const user = userEvent.setup();
+    const model = fixtureModel("claude--select-preview.txt");
+    render(<PreviewSelectBlock preview={model} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: /^Boxy/ }));
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("Choose commits the pointed row", async () => {
+    const onAction = vi.fn();
+    const user = userEvent.setup();
+    const model = fixtureModel("claude--select-preview.txt");
+    render(<PreviewSelectBlock preview={model} onAction={onAction} />);
+
+    await user.click(screen.getByRole("button", { name: "Choose Boxy" }));
+    expect(onAction).toHaveBeenCalledWith({ kind: "choose", option: model.options[0] });
   });
 
   it("adding a note opens the editor and saves the typed text as a note intent", async () => {
