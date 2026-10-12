@@ -22,6 +22,11 @@ describe("railMonograms", () => {
     const shown = railMonograms(["nenu", "nenu", "nenu", "—", "—"]);
     expect(new Set(shown).size).toBe(shown.length);
   });
+
+  it("draws a name of only emoji as its whole first emoji, never half of one", () => {
+    expect(railMonograms(["🚀", "🛸", "nenu"])).toEqual(["🚀", "🛸", "NE"]);
+    expect(railMonograms(["🚀", "🚀 🛸"])).toEqual(["🚀", "🚀2"]);
+  });
 });
 
 describe("railHue", () => {
