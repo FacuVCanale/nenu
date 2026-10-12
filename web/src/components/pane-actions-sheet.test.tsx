@@ -162,16 +162,72 @@ describe("PaneActionsSheet — rename", () => {
 });
 
 describe("PaneActionsSheet — close", () => {
-  it("closes only after a two-tap confirm, then calls onClosed and closes the sheet", async () => {
+  // Only the clock the settle window reads is faked; user-event and MSW keep real timers.
+  beforeEach(() => vi.useFakeTimers({ toFake: ["performance"] }));
+  afterEach(() => vi.useRealTimers());
+
+  function countCloses() {
+    const calls: string[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/close$/, ({ request }) => {
+        calls.push(request.url);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    return calls;
+  }
+
+  it("asks first, naming the pane and what closing it does, and closes nothing yet", async () => {
     const user = userEvent.setup();
+    const calls = countCloses();
     const props = renderSheet();
 
     await user.click(screen.getByRole("button", { name: "Close pane" }));
-    expect(props.onClosed).not.toHaveBeenCalled(); // first tap only arms
 
-    await user.click(screen.getByRole("button", { name: "Tap again to close" }));
+    expect(screen.getByRole("heading", { name: "Close “claude”?" })).toBeInTheDocument();
+    expect(screen.getByText("The agent in this pane stops. This can't be undone.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(calls).toEqual([]);
+    expect(props.onClosed).not.toHaveBeenCalled();
+  });
+
+  it("ignores a tap that lands right after the first, so a double tap closes nothing", async () => {
+    const user = userEvent.setup();
+    const calls = countCloses();
+    const props = renderSheet();
+
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(calls).toEqual([]);
+
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
     await waitFor(() => expect(props.onClosed).toHaveBeenCalledExactlyOnceWith("w1:p1"));
+    expect(calls).toHaveLength(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Cancel goes back to the actions and closes nothing", async () => {
+    const user = userEvent.setup();
+    const calls = countCloses();
+    const props = renderSheet();
+
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Close/ })).toBeNull();
+    expect(calls).toEqual([]);
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it("says a shell's programs stop, not an agent", async () => {
+    const user = userEvent.setup();
+    renderSheet({ pane: { ...agent, kind: "shell", agent: "shell", paneLabel: "dev server" } });
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(screen.getByRole("heading", { name: "Close “dev server”?" })).toBeInTheDocument();
+    expect(screen.getByText("Anything running in this shell stops. This can't be undone.")).toBeInTheDocument();
   });
 });
 

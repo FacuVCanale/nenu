@@ -181,7 +181,30 @@ describe("TabActionsSheet — rename", () => {
 });
 
 describe("TabActionsSheet — close", () => {
-  it("closes only after a two-tap confirm, then calls onClosed and closes the sheet", async () => {
+  // Only the clock the settle window reads is faked; user-event and MSW keep real timers.
+  beforeEach(() => vi.useFakeTimers({ toFake: ["performance"] }));
+  afterEach(() => vi.useRealTimers());
+
+  it("asks first, naming the tab and the panes that close with it", async () => {
+    const user = userEvent.setup();
+    const props = renderSheet();
+
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+
+    expect(screen.getByRole("heading", { name: "Close “Tab 1”?" })).toBeInTheDocument();
+    expect(screen.getByText("Its 2 panes close, and anything running in them stops. This can't be undone.")).toBeInTheDocument();
+    expect(props.onClosed).not.toHaveBeenCalled();
+  });
+
+  it("names a lone pane in the singular", async () => {
+    const user = userEvent.setup();
+    renderSheet({ tab: { ...tab, label: "review", paneCount: 1 } });
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    expect(screen.getByRole("heading", { name: "Close “review”?" })).toBeInTheDocument();
+    expect(screen.getByText("Its pane closes, and anything running in it stops. This can't be undone.")).toBeInTheDocument();
+  });
+
+  it("closes once confirmed, then calls onClosed and closes the sheet", async () => {
     const user = userEvent.setup();
     let url = "";
     server.use(
@@ -193,20 +216,14 @@ describe("TabActionsSheet — close", () => {
     const props = renderSheet();
 
     await user.click(screen.getByRole("button", { name: "Close tab" }));
-    expect(props.onClosed).not.toHaveBeenCalled(); // first tap only arms
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
+    expect(url).toBe(""); // a double tap closes nothing
 
-    // Armed, the row names the blast radius (paneCount = 2).
-    await user.click(screen.getByRole("button", { name: "Tap again to close 2 panes" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
     await waitFor(() => expect(props.onClosed).toHaveBeenCalledExactlyOnceWith("w1:t1"));
     expect(url).toContain("/api/tab/w1%3At1/close");
     expect(props.onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("singularises the blast-radius confirm when the tab holds one pane", async () => {
-    const user = userEvent.setup();
-    renderSheet({ tab: { ...tab, paneCount: 1 } });
-    await user.click(screen.getByRole("button", { name: "Close tab" }));
-    expect(screen.getByRole("button", { name: "Tap again to close 1 pane" })).toBeInTheDocument();
   });
 
   it("does NOT close the sheet or fire onClosed when the close fails", async () => {
@@ -218,9 +235,10 @@ describe("TabActionsSheet — close", () => {
     );
     const props = renderSheet();
     await user.click(screen.getByRole("button", { name: "Close tab" }));
-    await user.click(screen.getByRole("button", { name: "Tap again to close 2 panes" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close tab" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close tab" })).not.toHaveAttribute("aria-busy", "true"));
     expect(props.onClosed).not.toHaveBeenCalled();
     expect(props.onClose).not.toHaveBeenCalled();
   });

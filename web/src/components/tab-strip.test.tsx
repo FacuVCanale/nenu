@@ -74,6 +74,8 @@ describe("TabStrip", () => {
 });
 
 describe("TabStrip — long-press actions", () => {
+  afterEach(() => vi.useRealTimers());
+
   // A long-press on a chip reaches the DOM as a `contextmenu` event (Android Chrome / right-click);
   // with both actions wired it opens the actions sheet (rename / close), like the pane strip.
   it("opens the actions sheet on a long-press (contextmenu) when the actions are wired", () => {
@@ -184,9 +186,10 @@ describe("TabStrip — long-press actions", () => {
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
 
-  // The two-tap close wiring the call-site fallbacks hang off: long-press → Close tab → confirm hits
-  // the bridge and fires the parent's onClosed with the tab id.
-  it("closes a tab through a two-tap confirm and reports the closed tab id", async () => {
+  // The close wiring the call-site fallbacks hang off: long-press → Close tab → confirm hits the
+  // bridge and fires the parent's onClosed with the tab id.
+  it("closes a tab once confirmed and reports the closed tab id", async () => {
+    vi.useFakeTimers({ toFake: ["performance"] });
     const user = userEvent.setup();
     const onClosed = vi.fn();
     let url = "";
@@ -210,7 +213,8 @@ describe("TabStrip — long-press actions", () => {
     );
     fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" })); // w1:t2, paneCount 1
     await user.click(screen.getByRole("button", { name: "Close tab" }));
-    await user.click(screen.getByRole("button", { name: "Tap again to close 1 pane" }));
+    vi.advanceTimersByTime(600);
+    await user.click(screen.getByRole("button", { name: "Close tab" }));
 
     await waitFor(() => expect(onClosed).toHaveBeenCalledExactlyOnceWith("w1:t2"));
     expect(url).toContain("/api/tab/w1%3At2/close");
