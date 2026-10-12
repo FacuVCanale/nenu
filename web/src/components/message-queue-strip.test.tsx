@@ -1,6 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageQueueStrip } from "./message-queue-strip";
+import { PendingTurns } from "./pending-turns";
+
+/** Opens row n's ⋯ and returns the menu it shows. */
+async function menuOf(user: ReturnType<typeof userEvent.setup>, n: number) {
+  await user.click(screen.getByRole("button", { name: `Queued message ${n} actions` }));
+  return screen.getByRole("dialog", { name: "Queued message" });
+}
 
 it("edits, selects for delivery and removes a queued message without changing its identity", async () => {
   const user = userEvent.setup();
@@ -20,25 +27,20 @@ it("edits, selects for delivery and removes a queued message without changing it
       change={change}
     />,
   );
-  await user.click(
-    screen.getByRole("button", { name: "Edit queued message 1" }),
-  );
+  await user.click(within(await menuOf(user, 1)).getByRole("button", { name: "Edit" }));
   const input = screen.getByRole("textbox", { name: "Edit queued message" });
   await user.clear(input);
   await user.type(input, "Revised");
   await user.click(screen.getByRole("button", { name: "Save queued message" }));
   expect(change).toHaveBeenLastCalledWith("edit", "Revised", item);
-  await user.click(
-    screen.getByRole("button", { name: "Send queued message 1 now" }),
-  );
+  await user.click(within(await menuOf(user, 1)).getByRole("button", { name: "Send now" }));
   expect(change).toHaveBeenLastCalledWith("send", undefined, item);
-  await user.click(
-    screen.getByRole("button", { name: "Remove queued message 1" }),
-  );
+  await user.click(within(await menuOf(user, 1)).getByRole("button", { name: "Remove" }));
   expect(change).toHaveBeenLastCalledWith("remove", undefined, item);
 });
 
-it("keeps uncertain deliveries visible without offering an unsafe retry", () => {
+it("keeps uncertain deliveries visible without offering an unsafe retry", async () => {
+  const user = userEvent.setup();
   render(
     <MessageQueueStrip
       messages={[
@@ -55,15 +57,8 @@ it("keeps uncertain deliveries visible without offering an unsafe retry", () => 
       change={vi.fn()}
     />,
   );
-  expect(
-    screen.queryByRole("button", { name: "Edit queued message 1" }),
-  ).toBeNull();
-  expect(
-    screen.queryByRole("button", { name: "Send queued message 1 now" }),
-  ).toBeNull();
-  expect(
-    screen.getByRole("button", { name: "Remove queued message 1" }),
-  ).toBeInTheDocument();
+  const menu = await menuOf(user, 1);
+  expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Remove"]);
 });
 
 it("says per row and per agent why it waits, and whose device queued it", () => {
@@ -79,7 +74,7 @@ it("says per row and per agent why it waits, and whose device queued it", () => 
       change={vi.fn()}
     />,
   );
-  expect(screen.getByText("2 messages wait in Nenu")).toBeInTheDocument();
+  expect(screen.getAllByText("Queued")).toHaveLength(2);
   expect(screen.getByText(/Waiting for Codex to finish this turn\./)).toHaveTextContent("· from Fran's iPhone");
   expect(screen.getByText("Waiting. Answer the dialog first.")).toBeInTheDocument();
 });
@@ -97,10 +92,10 @@ it("offers a stranded row only Send here and Remove", async () => {
   };
   render(<MessageQueueStrip agent="claude" messages={[item]} busy={false} error="" change={change} />);
   expect(screen.getByText(item.stranded.reason)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Edit queued message 1" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Send queued message 1 here" }));
+  const menu = await menuOf(user, 1);
+  expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Send here", "Remove"]);
+  await user.click(within(menu).getByRole("button", { name: "Send here" }));
   expect(change).toHaveBeenLastCalledWith("send", undefined, item);
-  expect(screen.getByRole("button", { name: "Remove queued message 1" })).toBeInTheDocument();
 });
 
 it("shows a message Claude's own queue still holds, with Read it now armed by the composer", async () => {
@@ -117,4 +112,19 @@ it("shows a message Claude's own queue still holds, with Read it now armed by th
     <MessageQueueStrip agent="claude" messages={[]} delivered={delivered} busy={false} error="" change={vi.fn()} readNow={readNow} readNowArmed="d1" />,
   );
   expect(screen.getByRole("button", { name: "Tap again to read it now" })).toBeInTheDocument();
+});
+
+it("draws a row queued on another device exactly as this device draws its own", () => {
+  const row = { id: "q1", text: "after this turn", state: "queued" as const, createdAt: 1, revision: 1, deliveryMode: "afterTurn" as const, waitingFor: "working" as const };
+  const strip = render(<MessageQueueStrip agent="claude" messages={[row]} busy={false} error="" change={vi.fn()} />);
+  const elsewhere = within(strip.container).getByRole("status").textContent;
+  strip.unmount();
+  const own = render(
+    <PendingTurns
+      sends={[{ id: "s1", text: "after this turn", state: "queued", queueId: "q1", queueState: "queued", deliveryMode: "afterTurn", waitingFor: "working", agent: "claude" }]}
+      actions={{ retry: vi.fn(), edit: vi.fn(), remove: vi.fn(), sendNow: vi.fn(), readNow: vi.fn(), openTerminal: vi.fn() }}
+    />,
+  );
+  expect(within(own.container).getByRole("status").textContent).toBe(elsewhere);
+  expect(elsewhere).toBe("Queued Waiting for Claude to finish this turn.");
 });

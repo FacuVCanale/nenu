@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 // Terminal mirror display preferences, persisted in localStorage.
 // Safe to call in SSR contexts (localStorage guarded throughout).
@@ -169,4 +169,69 @@ export function useDisplayPrefs(scope = DEFAULT_SCOPE): UseDisplayPrefsReturn {
   }, []);
 
   return { prefs, setWrap, setFontSize, stepFontSize, setRawTerminal, setTapToFocus };
+}
+
+// ── Chat text ─────────────────────────────────────────────────────────────────────────────────────
+//
+// How big the conversation reads. The choice goes on the root as data-chat-text, and the chat
+// stylesheet (styles/chat.css) turns it into a step around the root's own body size for the
+// conversation's turns only, so the app's row titles keep their size and the mirror keeps its own
+// Text size above. One value for the whole app, not per pane, and applied at import so every route,
+// history included, reads it from first paint, before any Display dock has mounted.
+
+export type ChatTextSize = "small" | "default" | "large";
+
+export const CHAT_TEXT_SIZES: ReadonlyArray<{ id: ChatTextSize; label: string }> = [
+  { id: "small", label: "Small" },
+  { id: "default", label: "Default" },
+  { id: "large", label: "Large" },
+];
+
+const CHAT_TEXT_KEY = "collie:chat-text:v1";
+
+function isChatTextSize(value: unknown): value is ChatTextSize {
+  return CHAT_TEXT_SIZES.some((size) => size.id === value);
+}
+
+function loadChatText(): ChatTextSize {
+  try {
+    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(CHAT_TEXT_KEY) : null;
+    return isChatTextSize(stored) ? stored : "default";
+  } catch {
+    return "default";
+  }
+}
+
+function applyChatText(size: ChatTextSize): void {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (size === "default") delete root.dataset.chatText;
+  else root.dataset.chatText = size;
+}
+
+let chatText = loadChatText();
+const chatTextListeners = new Set<() => void>();
+applyChatText(chatText);
+
+function setChatText(size: ChatTextSize): void {
+  chatText = size;
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (size === "default") localStorage.removeItem(CHAT_TEXT_KEY);
+      else localStorage.setItem(CHAT_TEXT_KEY, size);
+    }
+  } catch {
+    // Ignore quota / SSR write errors; the size still applies for this session.
+  }
+  applyChatText(size);
+  for (const listener of chatTextListeners) listener();
+}
+
+function subscribeChatText(listener: () => void): () => void {
+  chatTextListeners.add(listener);
+  return () => chatTextListeners.delete(listener);
+}
+
+export function useChatText(): [ChatTextSize, (size: ChatTextSize) => void] {
+  return [useSyncExternalStore(subscribeChatText, () => chatText, () => "default"), setChatText];
 }

@@ -14,3 +14,20 @@
 @media (pointer: coarse) {
   .workbench-menu-item { min-height: 44px; }
 }
+
+/* Display's Chat text (hooks/use-display-prefs.ts puts the choice on the root). The step is taken
+   from the root's own body size, so it follows the pointer and whatever index.css sets, and only the
+   conversation's turns read it: the thread's, this device's pending ones and the queue's. Row titles
+   elsewhere keep the app's body size. */
+:root[data-chat-text="small"] {
+  --chat-text: calc(var(--text-body) - 1px);
+  --chat-text--line-height: calc(var(--text-body--line-height) - 2px);
+}
+:root[data-chat-text="large"] {
+  --chat-text: calc(var(--text-body) + 2px);
+  --chat-text--line-height: calc(var(--text-body--line-height) + 2px);
+}
+:root[data-chat-text] :is([data-speaker], [data-pending-send], [data-queue-row]) {
+  --text-body: var(--chat-text);
+  --text-body--line-height: var(--chat-text--line-height);
+}
