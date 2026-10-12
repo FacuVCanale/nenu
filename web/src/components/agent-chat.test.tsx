@@ -1107,6 +1107,26 @@ it("names a project's pane in the pane strip as its rows do", () => {
   expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
 });
 
+// A project lays its Threads and PRs over the chat (ProjectFrame) and brings its own tabs into the
+// overlay, so only the header stays above it: the strips belong to the chat underneath.
+describe("AgentChat — a project's overlay", () => {
+  const sibling = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "Second pane" };
+
+  it("draws the project's tabs once, inside the overlay", () => {
+    const projectTabs = <div role="tablist" aria-label="Project" />;
+    renderChat({ strip: projectTabs, overlay: <div>{projectTabs}<p>Threads list</p></div> });
+    expect(screen.getAllByRole("tablist", { name: "Project" })).toHaveLength(1);
+    expect(screen.getByText("Threads list")).toBeVisible();
+  });
+
+  it("keeps a worker's chips and the pane row under the overlay", () => {
+    renderChat({ agents: [fixtureAgents[0]!, sibling], strip: <nav aria-label="Threads" />, overlay: <p>Threads list</p> });
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Threads" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Second pane/ })).toBeNull();
+  });
+});
+
 // Find names what it searches, in the menu and in the bar (T31).
 describe("AgentChat — find says what it searches", () => {
   it("finds in the chat while the conversation shows", async () => {
