@@ -660,7 +660,7 @@ export class Interactions {
       return { status: 400, outcome: { ok: false, error: "This option takes no text." } };
     }
     const { dialog } = detection;
-    if (detection.interaction.typing) return changed("Someone is typing in this dialog.");
+    if (detection.interaction.typing) return changed(TEXT_BOX_IN_USE);
     let result: AnswerResult;
     try {
       result = await this.run(io, pane, dialog, choice.recipe, body.text);
@@ -742,7 +742,7 @@ export class Interactions {
    */
   private async feedback(io: PaneIO, pane: AgentView, tapped: PromptModel, key: string, raw: string): Promise<AnswerResult> {
     const row = tapped.feedback;
-    if (!row || row.focused || row.text !== "") return changed("Someone is typing in this dialog.");
+    if (!row || row.focused || row.text !== "") return changed(TEXT_BOX_IN_USE);
     const text = typedText(raw);
     if (typeof text !== "string") return text;
     await io.sendPaneKeys(pane.paneId, [key]);
@@ -913,6 +913,9 @@ function sameQuestionRows(a: MultiSelectModel, b: MultiSelectModel, rows: number
 }
 
 const sent = (keys: string[]): AnswerResult => ({ status: 200, outcome: { ok: true }, keys });
+/** Before any key: the card itself says the box has focus, so the refusal names the same box. */
+const TEXT_BOX_IN_USE = "The terminal's text box is in use. Nothing was sent.";
+/** A walk that already moved the pointer sent arrows, so its default says nothing was submitted. */
 const changed = (error = "The question changed in the terminal. Nothing was submitted."): AnswerResult =>
   ({ status: 409, outcome: { ok: false, error, code: "interaction_changed" } });
 const failed = (error: string): AnswerResult => ({ status: 409, outcome: { ok: false, error } });
