@@ -1160,7 +1160,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             palette, not a pad). */}
         {drawer === "usage" && usageControls && (
           <ComposerDock title="Context and usage" onClose={closeDrawer}>
-            <div className="flex flex-wrap items-center gap-1 pb-2">{usageControls}</div>
+            <div className="px-3 pb-3">{usageControls}</div>
           </ComposerDock>
         )}
         {drawer === "keys" && (
