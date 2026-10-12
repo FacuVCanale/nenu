@@ -594,6 +594,17 @@ describe("TranscriptView — the work timeline", () => {
     expect(container.textContent).not.toMatch(/\b0\d:\d\d/);
   });
 
+  it("gives a turn that ends in the minute it started no second time, since its question already shows it", () => {
+    const { container } = render(<TranscriptView activityStatus="done" entries={[
+      ask,
+      step("look", "09:05", [{ kind: "tool", name: "Grep", summary: "x", result: { text: "y" } }]),
+      step("final", "09:05", [{ kind: "text", text: "Done." }], { phase: "final_answer", turn: { status: "completed", durationMs: 17_000 } }),
+    ]} />);
+    expect(screen.getByRole("button", { name: /^Worked for 17s/ })).toBeInTheDocument();
+    expect(screen.getAllByText(clock("09:05"))).toHaveLength(1);
+    expect(container.querySelector("[data-work-turn] time")).toBeNull();
+  });
+
   const working = (last: TranscriptEntry["parts"]) => [
     ask,
     step("read", "09:06", [{ kind: "tool", name: "Read", summary: "/repo/web/src/components/tab-strip.tsx", result: { text: "import" } }], { turn: { status: "running", startedAt: at("09:05") } }),
