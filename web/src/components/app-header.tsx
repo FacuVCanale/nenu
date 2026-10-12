@@ -1,29 +1,39 @@
 import { useContext, type ReactNode } from "react";
-import { Settings } from "lucide-react";
-import { useNavigate } from "react-router";
+import { ChevronLeft, Settings } from "lucide-react";
+import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
-import { settingsPath } from "@/lib/nav";
+import { homePath, settingsPath } from "@/lib/nav";
+import { useSession } from "@/lib/session";
 import { CollieHome } from "@/components/collie-home";
 import type { BridgeStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
+
+/** Where a screen's back control leads: the parent's path and its name, read out as "Back to <label>". */
+export interface HeaderBack {
+  to: string;
+  label: string;
+}
 
 interface AppHeaderProps {
   // Brief network failures do not animate the header. A sustained outage mutes the mark.
   bridge: BridgeStatus | undefined;
   error: boolean;
 
-  /** Tapping the Nenu mark returns to the dashboard. A callback, not a `<Link to="/">`: the
-   *  dashboard and the drilled-in space view share the "/" route, so a same-route link would no-op. */
+  /** The screen's name in the bar and its h1: the 17 px headline on a phone, with an optional 13 px line under it. */
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  /** The page is showing the title as its own heading right now (ColumnPage), so the bar leaves it out. */
+  titleHidden?: boolean;
+  /** Where the phone's back control goes. Without one it goes Home. */
+  back?: HeaderBack;
+  /** Older callers' way to say where the leading control goes; with no `back`, the back control calls it. */
   onHome?: () => void;
-  /** Show the "Nenu" wordmark beside the mark (dashboard + space). Omit inside a pane — the
-   *  breadcrumb in `children` carries the context there, and the mark stands alone to save width. */
-  wordmark?: boolean;
 
-  /** Route-specific center content — the pane's `space › tab` breadcrumb. Rendered in a `flex-1
-   *  min-w-0` region so a long breadcrumb truncates instead of pushing the pill off the row. Empty on
-   *  the dashboard/space, where the region is just the spacer that pushes the right cluster over. */
+  /** Route-specific center content beside or instead of the title (a chat's own title). Rendered in a
+   *  `flex-1 min-w-0` region so it truncates instead of pushing the right cluster off the row. */
   children?: ReactNode;
   /** Right-cluster lead items (the pane's tools). */
   rightLead?: ReactNode;
@@ -36,48 +46,71 @@ interface AppHeaderProps {
   override?: ReactNode;
 }
 
+/** The routes whose phone header leads with the mark, which opens navigation: Home, and a chat until its
+ *  title opens the switcher; then the chat goes back like every other screen. */
+const HOME_ROUTE = "/";
+const CHAT_ROUTE = "/pane/:paneId";
+
+// A real 44 px box on a phone, its chevron at the leading edge so the stroke lines up with the 16 px page
+// gutter without a negative margin (which would push the focus ring off screen). On a desk the sidebar
+// is the way around, so the back steps aside.
+const BACK_CONTROL = "flex size-11 shrink-0 items-center rounded-md pl-1 text-foreground transition-opacity active:opacity-60 lg:hidden";
+
 // Shared header and connection treatment for every route; its size and padding live in workbench.css.
 export function AppHeader({
   bridge,
   error,
+  title,
+  subtitle,
+  titleHidden = false,
+  back,
   onHome,
-  wordmark,
   children,
   rightLead,
   rightTrail,
   override,
 }: AppHeaderProps) {
   const navigation = useContext(WorkbenchNavigationContext);
-  const connecting = isConnecting({ bridge, error });
-  const lost = useConnectionLost(connecting);
+  const { pathname } = useLocation();
+  const session = useSession();
+  const lost = useConnectionLost(isConnecting({ bridge, error }));
+  // Home's bar is the brand: the page's headline sits right under it, so it carries no title of its own.
+  const home = matchPath(HOME_ROUTE, pathname) !== null;
+  const mark = home || matchPath(CHAT_ROUTE, pathname) !== null;
+  const icon = <ChevronLeft aria-hidden className="size-6" strokeWidth={2.25} />;
   return (
     <header className="workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted">
       {override ?? (
         <>
-          {navigation && (
+          {mark ? (
+            // With the workbench navigation, the sidebar carries the brand on a desktop.
             <CollieHome
-              onHome={navigation.onOpen}
-              label="Open navigation"
-              expanded={navigation.open}
+              onHome={navigation?.onOpen ?? onHome}
+              label={navigation ? "Open navigation" : undefined}
+              expanded={navigation?.open}
               trouble={lost}
               lost={lost}
               className="workbench-chat-menu lg:hidden"
             />
+          ) : onHome && !back ? (
+            <button type="button" onClick={onHome} aria-label="Back" className={BACK_CONTROL}>{icon}</button>
+          ) : (
+            <Link to={back?.to ?? homePath(session)} aria-label={`Back to ${back?.label ?? "Home"}`} className={BACK_CONTROL}>{icon}</Link>
           )}
-          {/* With the workbench navigation, the sidebar carries the brand on a desktop; the header
-              repeating it was a second logo competing with the pane's title. */}
-          {!navigation && (
-            <CollieHome
-              onHome={onHome}
-              trouble={lost}
-              lost={lost}
-              wordmark={wordmark}
-              className={!wordmark ? "max-sm:hidden" : undefined}
-            />
-          )}
-          {/* Center region: the breadcrumb (or, on the dashboard/space, an empty flex-1 spacer that
-              pushes the right cluster to the edge). min-w-0 so the breadcrumb truncates when tight. */}
-          <div className="flex min-w-0 flex-1 items-center">{children}</div>
+          {/* Center region: the title, the route's own content, or on Home an empty flex-1 spacer that
+              pushes the right cluster to the edge. min-w-0 so a long title truncates when tight. */}
+          <div className="flex min-w-0 flex-1 items-center">
+            {title !== undefined && !home && (
+              <div
+                aria-hidden={titleHidden || undefined}
+                className={cn("flex min-w-0 flex-col transition-opacity duration-150 ease-out motion-reduce:duration-100", titleHidden && "opacity-0")}
+              >
+                <h1 className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</h1>
+                {subtitle && <span className="truncate text-footnote text-muted-foreground">{subtitle}</span>}
+              </div>
+            )}
+            {children}
+          </div>
           {/* gap-1, not gap-3: the icon buttons now carry their own 12px of padding to reach 44px,
               so a 12px gap on top of that reads as a gulf. 4px keeps the apparent spacing between
               icons close to what it was. */}

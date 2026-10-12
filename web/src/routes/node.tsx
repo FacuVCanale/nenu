@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 import { ExternalLink, MessageSquare } from "lucide-react";
 
+import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
 import { NodeDot } from "@/components/node-row";
 import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
@@ -26,11 +27,14 @@ export function NodeRoute() {
   const refresh = () => revalidator.revalidate();
 
   let body;
+  // Back climbs one level: to the node's parent, else to its project, else Home.
+  let back: HeaderBack | undefined = project && { to: projectPath(project.slug, data.session), label: project.name };
   if (!project || !node) {
     body = <p className="py-16 text-center text-sm text-muted-foreground">{project ? "This node is not in the project any more." : "Project not found in this Herdr session."}</p>;
   } else {
     const { thread, state } = node;
     const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
+    if (parent) back = { to: nodePath(project.slug, parent.id, data.session), label: parent.title };
     const live = thread.paneId !== undefined && data.agents.some((pane) => pane.paneId === thread.paneId);
     const coordinator = thread.role === "coordinator";
     const age = threadAge(thread, Date.now());
@@ -62,5 +66,5 @@ export function NodeRoute() {
     </>;
   }
 
-  return <ColumnPage data={data} title={project?.name ?? "Project"}>{body}</ColumnPage>;
+  return <ColumnPage data={data} title={node?.thread.title ?? project?.name ?? "Project"} back={back}>{body}</ColumnPage>;
 }
