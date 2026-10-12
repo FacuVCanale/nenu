@@ -100,14 +100,14 @@ describe("QuestionCard", () => {
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
-  it("keeps a question's escape out of the answers, next to Open terminal", () => {
+  it("keeps a question's escape out of the answers, next to the terminal", () => {
     setup();
     const answers = screen.getByRole("group", { name: "Answers" });
     expect(within(answers).getByRole("button", { name: /Apple/ })).toBeVisible();
     expect(within(answers).queryByRole("button", { name: /Chat about this/ })).not.toBeInTheDocument();
     const secondary = document.querySelector<HTMLElement>("[data-secondary-actions]")!;
     expect(within(secondary).getByRole("button", { name: "Chat about this" })).toHaveAttribute("data-role", "deny");
-    expect(within(secondary).getByRole("button", { name: "Open terminal" })).toBeVisible();
+    expect(within(secondary).getByRole("button", { name: "Terminal" })).toBeVisible();
   });
 
   it("keeps a permission's No among the answers", () => {
@@ -143,6 +143,14 @@ describe("QuestionCard", () => {
     const steps = screen.getByRole("list", { name: "Questions" });
     expect(within(steps).getByText("Scope").closest("li")).toHaveAttribute("aria-current", "step");
     expect(within(steps).getByText("Focus area").closest("li")).toHaveAccessibleName(/answered/);
+  });
+
+  it("counts from the first unanswered question when the screen carried no highlight", () => {
+    setup({ interaction: { ...question, kind: "wizard", steps: [
+      { label: "Focus area", answered: true, current: false },
+      { label: "Scope", answered: false, current: false },
+    ] } });
+    expect(screen.getByText("2 of 2")).toBeVisible();
   });
 
   it("lists a review's answers instead of echoing them as code", () => {

@@ -165,7 +165,7 @@ function describe(dialog: Dialog, agent: string): Described {
     }
     case "multi-select": {
       const m = dialog.model;
-      if (m.phase === "review") return { ...review(agent, "multi-select"), ...stepsOf(m.steps) };
+      if (m.phase === "review") return review(agent, "multi-select");
       const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
       return {
         kind: "multi-select", family: agent, question: m.question, ...stepsOf(m.steps),

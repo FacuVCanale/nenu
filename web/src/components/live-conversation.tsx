@@ -27,12 +27,16 @@ interface LiveConversationProps {
   query?: string;
   currentMatch?: number;
   onMatchCount?: (count: number) => void;
-  /** Rendered after the newest turn, inside the scroller (a coordinator's thread cards). */
+  /** Rendered after the newest turn, inside the scroller (a coordinator's thread cards, the question card). */
   footer?: ReactNode;
+  /** A question waits at the tail: the way back to it says so. */
+  waiting?: boolean;
 }
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 const OLDER_PAGE_SIZE = 120;
+/** Room kept above a `[data-follow-stop]` element when following lands on it. */
+const STOP_MARGIN = 12;
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
   "no-session": "Send the first message to start the conversation, or connect an existing session.",
@@ -45,7 +49,7 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -130,8 +134,14 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     request.current = null;
   }, []);
 
+  // Following lands on the newest line, except that a question at the tail taller than the list is
+  // read from its first line: the view never passes that line, and a reader already further down
+  // inside the question stays where they are.
   const pin = useCallback((el: HTMLElement) => {
-    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    const bottom = el.scrollHeight - el.clientHeight;
+    const stop = el.querySelector<HTMLElement>("[data-follow-stop]");
+    const cap = stop ? el.scrollTop + stop.getBoundingClientRect().top - el.getBoundingClientRect().top - STOP_MARGIN : bottom;
+    el.scrollTo({ top: cap < bottom ? Math.max(cap, Math.min(el.scrollTop, bottom)) : bottom, behavior: "auto" });
     lastTop.current = el.scrollTop;
   }, []);
 
@@ -326,7 +336,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
           </div>
         </div>
         {paused && <button type="button" onClick={followLatest} aria-label="Scroll to latest" className="absolute bottom-3 left-1/2 z-10 flex min-h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs shadow-md hover:bg-muted">
-          <ArrowDown aria-hidden="true" className="size-4" />{hasNew ? "New messages" : "Latest"}
+          {waiting
+            ? <><span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />Waiting on you<ArrowDown aria-hidden="true" className="size-4" /></>
+            : <><ArrowDown aria-hidden="true" className="size-4" />{hasNew ? "New messages" : "Latest"}</>}
         </button>}
       </div>
     </section>
