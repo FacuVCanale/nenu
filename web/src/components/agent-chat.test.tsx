@@ -490,6 +490,20 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     return (pane: { text: string; revision: number }) => advance(pane);
   }
 
+  // The answered menu leaving the screen is the receipt; a "Sent" toast over the thread repeated it
+  // (T10). What the screen cannot show, a menu that changed under the tap, still says so.
+  it("answers a terminal menu without a Sent toast, and still says when the menu changed under the tap", async () => {
+    const user = userEvent.setup();
+    renderChat({ text: MENU_TEXT });
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledOnce());
+    await act(async () => {});
+    expect(screen.queryByText("Sent")).toBeNull();
+    mockSubmit.mockResolvedValueOnce({ status: "changed" });
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+    expect(await screen.findByText("Menu changed — refreshing")).toBeInTheDocument();
+  });
+
   it("passes the FROZEN revision when the mirror is frozen and the pane advances underneath", async () => {
     // Regression (found in review): the handler used to pass the LIVE loader revision, which keeps
     // advancing via background polls even while the mirror is frozen — so the guard compared
@@ -815,6 +829,13 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(loadOlder()).toBeInTheDocument();
     expect(showHistory()).not.toBeInTheDocument();
+  });
+
+  it("says Load older is busy while the older lines are on their way", () => {
+    const agent = { ...fixtureAgents[0]!, kind: "shell" as const, readableLines: 6946 };
+    renderChat({ agent, agents: [agent], requestedLines: 600 });
+    fireEvent.click(loadOlder()!);
+    expect(screen.getByRole("button", { name: /loading/i })).toHaveAttribute("aria-busy", "true");
   });
 
   it("offers nothing when the pane has neither", () => {
