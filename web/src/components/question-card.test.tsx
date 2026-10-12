@@ -455,6 +455,11 @@ describe("QuestionCard", () => {
     expect(screen.getByRole("button", { name: /Apple/ })).toHaveAttribute("data-failed", "true");
   });
 
+  it("opens with the refusal its pane's last tap met, so a card that replaced the tapped one says why nothing was sent", () => {
+    setup({ refused: "The question changed in the terminal. Nothing was sent." });
+    expect(screen.getByRole("status")).toHaveTextContent("The question changed in the terminal. Nothing was sent.");
+  });
+
   it("a Submit the terminal never reached says so, and offers to try again or open the terminal", async () => {
     const error = "Couldn't reach Submit in the terminal. Nothing was submitted.";
     const onAnswer = vi.fn()

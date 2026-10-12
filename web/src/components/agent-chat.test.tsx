@@ -1051,6 +1051,29 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(await screen.findByText("Approved · mkfifo fixture-fifo")).toBeVisible();
   });
 
+  it("keeps saying why a tap did nothing when the question it hit is replaced by the next one", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    const ask = (signature: string, question: string) => ({
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question, signature, revision: 1, detectedAt: 0,
+      subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    });
+    let shown = [ask("sig-1", "Do you want to proceed?")];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: shown })),
+      http.post(/\/api\/interactions\/[^/]+\/answer$/, () => {
+        shown = [ask("sig-2", "Do you want to make this edit?")];
+        return HttpResponse.json({ ok: false, error: "The question changed in the terminal. Nothing was sent.", code: "interaction_changed" }, { status: 409 });
+      }),
+    );
+    renderChat({ agent, agents: [agent], text: PERMISSION });
+    const first = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    await user.click(within(first).getByRole("button", { name: "Yes" }));
+    const next = await screen.findByRole("region", { name: "Do you want to make this edit?" });
+    expect(within(next).getByRole("status")).toHaveTextContent("The question changed in the terminal. Nothing was sent.");
+  });
+
   it.each([
     [{ device: { enforced: true, device: "spare-phone", authorized: false } }, "Read-only on this device. Answer from an authorised one."],
     [{ error: true, authError: true }, "Sign in again to answer."],

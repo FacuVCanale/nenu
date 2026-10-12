@@ -94,4 +94,25 @@ describe("useInteractions", () => {
     expect(outcome).toEqual({ ok: false, error: "The dialog changed.", code: "interaction_changed" });
     expect(result.current.receipts).toEqual([]);
   });
+
+  it("carries a tap refused because the question changed to the pane's next dialog, and only that one", async () => {
+    const error = "The question changed in the terminal. Nothing was sent.";
+    let shown = [card];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: shown })),
+      http.post(/\/api\/interactions\/[^/]+\/answer$/, () => HttpResponse.json({ ok: false, error, code: "interaction_changed" }, { status: 409 })),
+    );
+    const { result } = renderHook(() => useInteractions());
+    await waitFor(() => expect(result.current.interactions).toHaveLength(1));
+    const next = { ...card, signature: "sig-2", question: "Which colour?" };
+    shown = [next];
+    await act(async () => { await result.current.answer(card, card.options[0]!); });
+    await waitFor(() => expect(result.current.interactions[0]?.signature).toBe("sig-2"));
+    expect(result.current.refusalFor(result.current.interactions[0]!)).toBe(error);
+    // The dialog after that one never inherits it.
+    shown = [{ ...card, signature: "sig-3" }];
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.interactions[0]?.signature).toBe("sig-3"));
+    expect(result.current.refusalFor(result.current.interactions[0]!)).toBeUndefined();
+  });
 });
