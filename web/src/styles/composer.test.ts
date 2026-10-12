@@ -9,9 +9,12 @@ import { declarations } from "@/test/css-rules";
 const css = readFileSync(resolve(import.meta.dirname, "composer.css"), "utf8");
 
 describe("the composer", () => {
-  it("sits on the page gutter at every width, the column the header, the prose and the cards share", () => {
-    expect(declarations(css, ".workbench-composer").width).toBe("calc(100% - 2 * var(--page-gutter))");
-    expect(declarations(css, ".workbench-composer", ["@media (min-width: 1024px)"]).width).toBeUndefined();
+  // The box bleeds 8px into a phone's gutter, as the strips' pills do: its + and Send sit on the column
+  // the prose starts on, and the draft keeps its width. Tried at the 16px gutter on the bench: the
+  // draft lost 16px, and a four-line draft wrapped to five under the keyboard, taking 24px of thread.
+  it("bleeds 8px into a phone's gutter so the draft keeps its width, and sits on the gutter on a desk", () => {
+    expect(declarations(css, ".workbench-composer").width).toBe("calc(100% - 16px)");
+    expect(declarations(css, ".workbench-composer", ["@media (min-width: 1024px)"]).width).toBe("calc(100% - 2 * var(--page-gutter))");
   });
 
   // Measured on the bench: the model chip's 44px reach rose 4px into the box and took the bottom of
