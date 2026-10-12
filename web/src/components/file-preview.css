@@ -1,7 +1,8 @@
 /* The file preview. From 640px it floats over the chat as a sheet; below that it is a screen of its
-   own, with a nav bar that holds Done, the name and the actions. Pictures open in the black viewer
-   at the end of this file. Every colour comes from the tokens in index.css. */
-.file-preview-backdrop { position: fixed; inset: 0; top: var(--app-viewport-top, 0px); height: var(--app-viewport-height, 100dvh); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / 40%); }
+   own, with a nav bar that holds Done, the name and the actions. The sheet and the screen take their
+   colours from the tokens in index.css, and the scrim is the Sheet's. Pictures open in the black
+   viewer at the end of this file, whose fixed colours are explained there. */
+.file-preview-backdrop { position: fixed; inset: 0; top: var(--app-viewport-top, 0px); height: var(--app-viewport-height, 100dvh); z-index: 100; display: flex; align-items: center; justify-content: center; padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); background: rgb(0 0 0 / 50%); }
 .file-preview-backdrop[data-leaving] { pointer-events: none; }
 .file-preview-panel { position: relative; display: flex; flex-direction: column; width: min(100%, 960px); height: min(90dvh, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); outline: none; }
 .file-preview-panel--full { width: min(100%, 1440px); height: 100%; }
@@ -13,7 +14,7 @@
 .file-preview-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
 .file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); transition: background-color 120ms ease-out, color 120ms ease-out, scale 120ms ease-out; }
 @media (hover: hover) and (pointer: fine) { .file-preview-action:hover { background: var(--accent); color: var(--foreground); } }
-.file-preview-action:active { scale: 0.96; }
+.file-preview-action:active { scale: 0.97; }
 @media (pointer: coarse) { .file-preview-action { width: 44px; height: 44px; } }
 
 /* Done leaves on a phone, the ✕ on a desk: one of the two is on screen at a time. */
@@ -45,9 +46,10 @@
   .file-preview-heading { position: absolute; inset-inline: 96px; bottom: 0; height: 48px; flex: none; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
   .file-preview-title { max-width: 100%; font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; }
   .file-preview-subtitle { max-width: 100%; }
-  .file-preview-content:not(.html-viewer-stage) { padding-bottom: env(safe-area-inset-bottom); }
+  .file-preview-content { padding-bottom: env(safe-area-inset-bottom); }
   .html-viewer-widths > button { display: none; }
-  .html-viewer-stage--phone { padding: 0; background: none; }
+  .html-viewer-widths > a { min-width: 44px; justify-content: center; padding-inline: 0; }
+  .html-viewer-stage--phone { padding: 0 0 env(safe-area-inset-bottom); background: none; }
   .html-viewer-stage--phone .file-preview-html { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
 }
 
@@ -84,7 +86,9 @@
 .image-viewer-track, .image-viewer-slot, .image-viewer-zoom { position: absolute; inset: 0; }
 .image-viewer-zoom { display: flex; align-items: center; justify-content: center; transform-origin: 50% 50%; will-change: transform; }
 .image-viewer-zoom > img { max-width: 100%; max-height: 100%; object-fit: contain; -webkit-user-drag: none; }
-@media (min-width: 640px) { .image-viewer-zoom { padding: 72px; } }
+/* A desk leaves room for the bars around the picture; a phone, on its side too, gives it the whole
+   screen and floats the bars over it, as Photos does. */
+@media (min-width: 640px) and (pointer: fine) { .image-viewer-zoom { padding: 72px; } }
 .image-viewer-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 72px 16px; }
 .image-viewer-error > * { max-width: 36rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--card-foreground); }
 
@@ -95,7 +99,7 @@
 .image-viewer-actions { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
 .image-viewer-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-md); transition: background-color 120ms ease-out, scale 120ms ease-out; }
 @media (hover: hover) and (pointer: fine) { .image-viewer-action:not(:disabled):hover { background: rgb(255 255 255 / 12%); } }
-.image-viewer-action:not(:disabled):active { scale: 0.96; }
+.image-viewer-action:not(:disabled):active { scale: 0.97; }
 .image-viewer-action:disabled { color: #71717a; }
 .image-viewer-count { min-width: 4.5rem; text-align: center; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); font-variant-numeric: tabular-nums; }
 .image-viewer[data-chrome="hidden"] .image-viewer-bar, .image-viewer[data-gesture] .image-viewer-bar { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 200ms ease-out, visibility 0s linear 200ms; }
