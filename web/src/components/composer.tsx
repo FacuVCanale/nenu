@@ -203,7 +203,7 @@ function ComposerDock({
  * measured behaviour, so "now" never promises more than the CLI does.
  */
 function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
-  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none";
+  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted";
   return (
     <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-2xl border border-border/65 bg-card p-1">
       <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{choice.name} is working. When should it read this?</p>
