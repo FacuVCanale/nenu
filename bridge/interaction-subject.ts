@@ -11,8 +11,8 @@ const RULE = /^\s*[─━▔═]{8,}\s*$/;
 const DASHED = /^\s*╌{8,}\s*$/;
 /** A numbered option row of any harness: `❯ 1. Yes`, `› 1. Yes, proceed (y)`, `┃  1 (●) Yes`. */
 const OPTION_ROW = /^[❯›>]?\s*(\d{1,2})(?:\.|\s+\([●○ ]\))\s+(.+)$/;
-/** Rows of a prompt's subject kept above its question. */
-const SUBJECT_MAX_ROWS = 12;
+/** How far above its question a permission's subject may reach: a heredoc prints in full. */
+const SUBJECT_MAX_ROWS = 40;
 /** A key the terminal names after a label or description: nothing a phone can press. */
 const KEY_HINT = /\s*\((?:shift\+tab|tab|esc|enter|ctrl\+[a-z])\)(\.?)\s*$/i;
 /** An option that changes a setting beyond this answer ("don't ask again", "this session"). */
