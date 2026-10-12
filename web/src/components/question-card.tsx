@@ -16,6 +16,8 @@ export const CONFIRM_MS = 5_000;
 
 /** Dialogs whose plain options are answers of equal weight, drawn as one list. */
 const ANSWER_KINDS = new Set<InteractionKind>(["question", "wizard", "multi-select"]);
+/** Rows of a command or plan shown before "Show all": the thread's own scroll reads the rest. */
+const SUBJECT_ROWS = 8;
 /** The agent's own marker for the option it suggests; the card shows it as a badge. */
 const RECOMMENDED = /\s*\(recommended\)\s*$/i;
 
@@ -177,8 +179,8 @@ export function QuestionCard({
         )}
       </div>
       {steps.length > 1 && !compact && <Stepper steps={steps} />}
-      <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-[15.5px] leading-snug")}>{i.question}</p>
-      {i.context && <Context interaction={i} text={i.context} compact={compact} />}
+      <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-base font-medium leading-snug")}>{i.question}</p>
+      {i.context && <Context interaction={i} text={i.context} compact={compact} approvable={i.kind === "permission" && !approvalHidden} />}
       {typing && <p className="text-xs text-muted-foreground">Someone is typing in this dialog in the terminal. Answer there, or wait.</p>}
       {readOnly && <p className="text-xs text-muted-foreground">Read-only on this device.</p>}
       {approvalHidden && <p className="text-xs text-muted-foreground">The full request isn't on this card. {compact ? "Open the thread" : "Open the terminal"} to approve it.</p>}
@@ -300,8 +302,12 @@ function Stepper({ steps }: { steps: InteractionStep[] }) {
   );
 }
 
-/** What the operator decides on: a command or plan in mono, a review's answers as a list, else text. */
-function Context({ interaction: i, text, compact }: { interaction: Interaction; text: string; compact: boolean }) {
+/**
+ * What the operator decides on: a command or plan in mono, a review's answers as a list, else text.
+ * A command Home can approve is never clamped: approving needs it whole (ADR 0057 §4).
+ */
+function Context({ interaction: i, text, compact, approvable }: { interaction: Interaction; text: string; compact: boolean; approvable: boolean }) {
+  const [expanded, setExpanded] = useState(false);
   if ((i.kind === "wizard" || i.kind === "multi-select") && text.includes(" → ")) {
     return (
       <ul aria-label="Your answers" className="flex flex-col gap-1.5 rounded-xl bg-muted/60 px-3 py-2.5 text-[13px] leading-snug">
@@ -320,14 +326,21 @@ function Context({ interaction: i, text, compact }: { interaction: Interaction; 
   if (ANSWER_KINDS.has(i.kind)) {
     return <p className={cn("min-w-0 whitespace-pre-wrap break-words text-[13px] text-muted-foreground", compact && "line-clamp-2")}>{text}</p>;
   }
+  const rows = text.split("\n");
+  const folded = !compact && !expanded && rows.length > SUBJECT_ROWS;
   return (
     // The padding sits outside the clamped box: a clamp only cuts at its own padding edge, so
     // padding on the clamped element itself shows the top half of the next line.
-    <div className={cn("min-w-0 rounded-lg bg-muted/60 px-2.5 py-2", !compact && "max-h-56 overflow-y-auto")}>
+    <div className="flex min-w-0 flex-col items-start gap-1 rounded-lg bg-muted/60 px-2.5 py-2">
       <pre aria-label="Request details" className={cn(
-        "min-w-0 whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground",
-        compact && "line-clamp-3",
-      )}>{text}</pre>
+        "w-full min-w-0 whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground",
+        compact && !approvable && "line-clamp-3",
+      )}>{folded ? rows.slice(0, SUBJECT_ROWS).join("\n") : text}</pre>
+      {folded && (
+        <button type="button" onClick={() => setExpanded(true)} className="-mx-1 min-h-10 rounded-md px-1 text-[13px] font-medium text-muted-foreground hover:text-foreground">
+          Show all {rows.length} lines
+        </button>
+      )}
     </div>
   );
 }
