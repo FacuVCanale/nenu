@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 // itself is a solid floating surface, so its copy reads over any pane text.
 //
 // It leads with the Nenu mark for a plain reason: this is the one screen in the app with no header,
-// no herd chrome and no nav, so without the badge a full-viewport panel is unattributable — it could
+// no herd chrome and no nav, so without the mark a full-viewport panel is unattributable — it could
 // be any app that happened to be open. The mark is the STATIC app icon, never <DogGallop/>: that
 // sprite's rest frame is a full-stretch mid-stride pose that reads as "frozen mid-run", and this
 // screen is the app's most literal rest state.
