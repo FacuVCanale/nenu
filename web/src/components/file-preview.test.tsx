@@ -206,7 +206,7 @@ it("steps through a gallery of journal images with previous, next and the arrow 
     { kind: "journal", entry: "e1", index: 1, label: "Image 2" },
   ]} start={1} onClose={() => {}} />);
   expect(screen.getByRole("img", { name: "Image 2" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=1");
-  expect(screen.getByText("· 2 of 2")).toBeInTheDocument();
+  expect(screen.getByText("2 of 2")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
@@ -260,4 +260,96 @@ it("closes on Done and keeps Reload and Copy path behind More actions", async ()
 
   fireEvent.click(screen.getByRole("button", { name: "Done" }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
+});
+
+describe("image viewer", () => {
+  const gallery = [
+    { kind: "journal" as const, entry: "e1", index: 0, label: "Image 1" },
+    { kind: "journal" as const, entry: "e1", index: 1, label: "Image 2" },
+  ];
+  const stage = () => document.querySelector<HTMLElement>("[data-image-stage]")!;
+  const zoom = () => Number(/scale\(([\d.]+)\)/.exec(document.querySelector<HTMLElement>("[data-image-zoom]")!.style.transform)?.[1] ?? 1);
+  const point = (id: number, x: number, y: number, type = "touch") => ({ pointerId: id, pointerType: type, clientX: x, clientY: y, isPrimary: id === 1, button: 0 });
+  function drag(points: [number, number][], type = "touch") {
+    const [first, ...rest] = points;
+    fireEvent.pointerDown(stage(), point(1, ...first!, type));
+    for (const [x, y] of rest) fireEvent.pointerMove(stage(), point(1, x, y, type));
+    fireEvent.pointerUp(stage(), point(1, ...points.at(-1)!, type));
+  }
+  const tap = (x: number, y: number, type = "touch") => drag([[x, y]], type);
+
+  it("shows the picture alone on black, with Done and Download and nothing to reload", () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "Image 1" })).toBeInTheDocument();
+    // The next picture waits beside this one for a swipe, out of the reading order.
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+    expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download image" })).toHaveAttribute("href", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
+    expect(screen.queryByRole("button", { name: /Refresh|Reload|More actions/ })).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+  });
+
+  it("opens an image file by its own URL and asks the bridge why when it will not load", async () => {
+    fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): This file is outside the project.", 404, true));
+    render(<FilePreview paneId="w1:p1" path="/elsewhere/shot.png" onClose={() => {}} />);
+    const image = screen.getByRole("img", { name: "shot.png" });
+    expect(image).toHaveAttribute("src", "/api/pane/w1%3Ap1/file?path=%2Felsewhere%2Fshot.png");
+    expect(fetchFile).not.toHaveBeenCalled();
+    fireEvent.error(image);
+    expect(await screen.findByRole("alert")).toHaveTextContent("outside this agent's folder");
+  });
+
+  it("closes on a long pull down and settles back after a short one", async () => {
+    const close = vi.fn();
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
+    drag([[500, 300], [502, 320], [505, 340]]);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(close).not.toHaveBeenCalled();
+    drag([[500, 300], [502, 400], [510, 550], [515, 700]]);
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
+
+  it("turns to the next picture on a swipe sideways, and not past the last one", async () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    drag([[900, 400], [700, 404], [400, 406], [150, 410]]);
+    expect(await screen.findByText("2 of 2")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Image 2" })).toBeInTheDocument();
+    drag([[900, 400], [700, 404], [400, 406], [150, 410]]);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("zooms where a double tap lands and back out on the next one, and pinches", async () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    tap(600, 300); tap(600, 300);
+    expect(zoom()).toBe(2.5);
+    tap(600, 300); tap(600, 300);
+    expect(zoom()).toBe(1);
+    fireEvent.pointerDown(stage(), point(1, 480, 380));
+    fireEvent.pointerDown(stage(), point(2, 540, 380));
+    fireEvent.pointerMove(stage(), point(1, 400, 380));
+    fireEvent.pointerMove(stage(), point(2, 620, 380));
+    fireEvent.pointerUp(stage(), point(1, 400, 380));
+    fireEvent.pointerUp(stage(), point(2, 620, 380));
+    expect(zoom()).toBeGreaterThan(2);
+  });
+
+  it("hides and shows its bars on a single tap, after waiting out a double tap", async () => {
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={() => {}} />);
+    const viewer = document.querySelector("[data-chrome]")!;
+    expect(viewer).toHaveAttribute("data-chrome", "shown");
+    tap(500, 400);
+    expect(viewer).toHaveAttribute("data-chrome", "shown");
+    await waitFor(() => expect(viewer).toHaveAttribute("data-chrome", "hidden"));
+    tap(500, 400);
+    await waitFor(() => expect(viewer).toHaveAttribute("data-chrome", "shown"));
+  });
+
+  it("closes on a click beside the picture on a desk", async () => {
+    const close = vi.fn();
+    render(<FilePreview paneId="w1:p1" items={gallery} onClose={close} />);
+    tap(20, 400, "mouse");
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
 });
