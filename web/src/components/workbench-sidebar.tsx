@@ -152,8 +152,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, variant
 
       <div ref={scroller} className="nav-scroll" onScroll={(event) => { if (browsing) treeScroll.current = event.currentTarget.scrollTop; }}>
         {query.trim()
-          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
- />
+          ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked} />
           : mode === "needs-you"
           ? <NeedsYouList data={data} panes={attention} labelled={!phone} />
           : <>
