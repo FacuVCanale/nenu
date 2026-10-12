@@ -5,17 +5,15 @@ import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard,
 import { MarkdownText } from "@/components/markdown-text";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
-import {
-  isReadOnly,
-  type AnswerOutcome,
-  type BridgeStatus,
-  type DeviceAuth,
-  type Interaction,
-  type InteractionAnswer,
-  type InteractionKind,
-  type InteractionOption,
-  type InteractionStep,
-  type InteractionSubject,
+import type {
+  AnswerOutcome,
+  BridgeStatus,
+  Interaction,
+  InteractionAnswer,
+  InteractionKind,
+  InteractionOption,
+  InteractionStep,
+  InteractionSubject,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -43,9 +41,9 @@ const LOCK_COPY: Record<LockReason, string> = {
   refused: "Sign in again to answer.",
 };
 
-/** The lock a snapshot implies: the device first, then a refused or failed read, then Herdr itself. */
-export function lockReasonOf(s: { device: DeviceAuth | undefined; error: boolean; authError: boolean; bridge: BridgeStatus | undefined }): LockReason | undefined {
-  if (isReadOnly(s.device)) return "read-only";
+/** The lock a snapshot implies: a read-only device first, then a refused or failed read, then Herdr itself. */
+export function lockReasonOf(s: { readOnly: boolean; error: boolean; authError: boolean; bridge: BridgeStatus | undefined }): LockReason | undefined {
+  if (s.readOnly) return "read-only";
   if (s.error) return s.authError ? "refused" : "offline";
   return s.bridge === "connected" ? undefined : "herdr";
 }

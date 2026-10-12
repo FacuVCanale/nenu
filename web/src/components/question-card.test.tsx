@@ -481,11 +481,11 @@ describe("QuestionCard", () => {
   });
 
   it.each([
-    [{ device: { enforced: true, authorized: false }, error: false, authError: false, bridge: "connected" }, "read-only"],
-    [{ device: undefined, error: true, authError: true, bridge: "connected" }, "refused"],
-    [{ device: undefined, error: true, authError: false, bridge: "connected" }, "offline"],
-    [{ device: undefined, error: false, authError: false, bridge: "disconnected" }, "herdr"],
-    [{ device: undefined, error: false, authError: false, bridge: "connected" }, undefined],
+    [{ readOnly: true, error: false, authError: false, bridge: "connected" }, "read-only"],
+    [{ readOnly: false, error: true, authError: true, bridge: "connected" }, "refused"],
+    [{ readOnly: false, error: true, authError: false, bridge: "connected" }, "offline"],
+    [{ readOnly: false, error: false, authError: false, bridge: "disconnected" }, "herdr"],
+    [{ readOnly: false, error: false, authError: false, bridge: "connected" }, undefined],
   ] as const)("names the lock from the snapshot: %j", (snapshot, reason) => {
     expect(lockReasonOf(snapshot as Parameters<typeof lockReasonOf>[0])).toBe(reason);
   });

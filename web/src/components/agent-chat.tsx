@@ -1,5 +1,5 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
-import { QuestionCard } from "@/components/question-card";
+import { lockReasonOf, QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
 import { agentBusy, turnNote, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
@@ -414,7 +414,7 @@ export function AgentChat({
     {conversationFooter}
     <div data-follow-stop className="mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
-        readOnly={cardReadOnly} onOpen={() => setRawTerminal(true)}
+        readOnly={cardReadOnly} lockReason={lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge })} onOpen={() => setRawTerminal(true)}
         onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
         onAnswer={async (option, extra) => {
           const outcome = await answer(interaction!, option, extra);
