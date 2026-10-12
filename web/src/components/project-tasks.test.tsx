@@ -89,6 +89,19 @@ it("offers no close or new thread on a read-only device", () => {
   expect(screen.queryByRole("button", { name: "New thread" })).not.toBeInTheDocument();
 });
 
+it("hands the keyboard to the first row Show more brought, even when the button goes with it", async () => {
+  const resolved = Array.from({ length: 25 }, (_, i): ProjectThreadView => ({ id: `R${i + 1}`, title: `Done ${i + 1}`, parentId: "root", role: "worker", status: "resolved" }));
+  const { user } = setup({ project: { ...project, threads: resolved } });
+  await user.click(screen.getByRole("button", { name: /^History/ }));
+  const history = screen.getByRole("list", { name: "History" });
+  expect(history.children).toHaveLength(20);
+  screen.getByRole("button", { name: "Show 5 more" }).focus();
+  await user.keyboard("{Enter}");
+  expect(history.children).toHaveLength(25);
+  expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(history.children[20]!.querySelector(".task-main"));
+});
+
 describe("closing is never a check", () => {
   /** A phone or tablet: the pointer is coarse, so there is no hover to reveal a row's actions. */
   const original = window.matchMedia;
