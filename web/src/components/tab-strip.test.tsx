@@ -338,7 +338,7 @@ describe("TabStrip — status on the chips", () => {
 // Reordering by drag (ui/strip-reorder): jsdom lays nothing out, so the chips get the slots a strip of
 // three short names has (92px wide, 8px apart); the bench drags real ones (tabs-display-copy-shots).
 describe("TabStrip — dragging a tab to another place", () => {
-  const three: TabView[] = [
+  const trio: TabView[] = [
     { tabId: "w1:t1", workspaceId: "w1", number: 1, label: "one", focused: false, paneCount: 1 },
     { tabId: "w1:t2", workspaceId: "w1", number: 2, label: "two", focused: false, paneCount: 1 },
     { tabId: "w1:t3", workspaceId: "w1", number: 3, label: "three", focused: false, paneCount: 1 },
@@ -356,7 +356,7 @@ describe("TabStrip — dragging a tab to another place", () => {
   const point = (pointerType: "mouse" | "touch", clientX: number, clientY = 16) => ({ pointerId: 1, pointerType, isPrimary: true, button: 0, clientX, clientY });
   const draw = (props: Partial<Parameters<typeof TabStrip>[0]> = {}) =>
     render(
-      <TabStrip workspaceId="w1" tabs={three} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()}
+      <TabStrip workspaceId="w1" tabs={trio} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()}
         onRenamed={vi.fn()} onClosed={vi.fn()} onMoved={vi.fn()} {...props} />,
     );
 
@@ -430,6 +430,44 @@ describe("TabStrip — dragging a tab to another place", () => {
     expect(two).not.toHaveAttribute("data-lifted");
     fireEvent.pointerUp(two, point("touch", 120));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // The phone saw [one, two, three] while Herdr already had [two, one, three]; "three before one"
+  // lands as [two, three, one]. The drop's order must give way to whatever Herdr says next.
+  it("shows Herdr's order once it answers, even when the drop was made on an older one", async () => {
+    server.use(http.post(/\/api\/tab\/[^/]+\/move$/, () => HttpResponse.json({ ok: true })));
+    const onMoved = vi.fn();
+    const props = { workspaceId: "w1", agents: [], selected: "w1:t1", onSelect: vi.fn(), onNewTab: vi.fn(), onRenamed: vi.fn(), onClosed: vi.fn(), onMoved };
+    const [one, two, three] = trio;
+    const view = render(<TabStrip {...props} tabs={[one, two, three]} />);
+    layOut();
+    const chip = screen.getByRole("button", { name: "three" });
+    fireEvent.pointerDown(chip, point("mouse", 246));
+    fireEvent.pointerMove(chip, point("mouse", 230));
+    fireEvent.pointerMove(chip, point("mouse", 20));
+    fireEvent.pointerUp(chip, point("mouse", 20));
+    expect(names()).toEqual(["three", "one", "two"]);
+    await waitFor(() => expect(onMoved).toHaveBeenCalledOnce());
+    view.rerender(<TabStrip {...props} tabs={[two, three, one]} />);
+    expect(names()).toEqual(["two", "three", "one"]);
+    view.rerender(<TabStrip {...props} tabs={[one, two, three]} />);
+    expect(names()).toEqual(["one", "two", "three"]);
+  });
+
+  // A thumb drifts 10-15px during a deliberate hold (use-long-press.ts); short of a scroll, that hold
+  // still opens the actions, and the jitter after the lift is no drag.
+  it("opens the actions of a hold whose finger drifted before the lift", () => {
+    vi.useFakeTimers();
+    draw();
+    layOut();
+    const two = screen.getByRole("button", { name: "two" });
+    fireEvent.pointerDown(two, point("touch", 146, 16));
+    fireEvent.pointerMove(two, point("touch", 146, 28));
+    act(() => { vi.advanceTimersByTime(450); });
+    fireEvent.pointerMove(two, point("touch", 149, 29));
+    fireEvent.pointerUp(two, point("touch", 149, 29));
+    fireEvent.click(two);
+    expect(screen.getByRole("dialog", { name: "two" })).toBeInTheDocument();
   });
 
   it("moves a tab one place from its actions, and offers no way past either end", async () => {
