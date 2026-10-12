@@ -11,6 +11,7 @@ import { atTail, isTextField, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
+import { RecoveryLeads } from "@/components/connect-conversation";
 import { cn } from "@/lib/utils";
 
 interface LiveConversationProps {
@@ -448,7 +449,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
                 <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
                 <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
-                <div className="mt-5 w-full">{recovery}</div>
+                <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
                 {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
               </section>
               {footer}

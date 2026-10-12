@@ -1,10 +1,16 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRevalidator } from "react-router";
 import { ChevronDown } from "lucide-react";
 import { connectConversation, fetchConversations } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+/**
+ * True where the recovery is the surface's one way forward (the empty pane's card): Find is then the
+ * primary action. Elsewhere, as inside the ⋯ menu, it stays outlined among the menu's plain rows.
+ */
+export const RecoveryLeads = createContext(false);
 
 /**
  * Explicit recovery: never choose a conversation just because its directory matches. One way forward
@@ -22,6 +28,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
   const request = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
   const revalidator = useRevalidator();
+  const leads = useContext(RecoveryLeads);
   const regionId = useId();
   const listId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -76,7 +83,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
           {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.title} ({choice.id.slice(0, 8)})</option>)}
         </select>
       </div>
-      : <Button variant={manual ? "outline" : "default"} className="w-full" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()}>Find Codex conversations</Button>}
+      : <Button variant={leads && !manual ? "default" : "outline"} className="w-full" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()}>Find Codex conversations</Button>}
     {choices?.length === 0 && <p role="status" className="text-center text-footnote text-muted-foreground">No Codex conversation is running in this folder.</p>}
     {listed && connectButton}
     <button type="button" aria-expanded={manual} aria-controls={regionId} onClick={toggleManual} className={cn(quiet, "w-full")}>
