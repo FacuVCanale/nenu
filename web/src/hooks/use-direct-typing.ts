@@ -124,7 +124,7 @@ export function useDirectTyping({
     committedComposition.current = null;
     activeRef.current = true;
     setActive(true);
-    setStatus("Typing into the terminal — keys send as you type.", "success");
+    // No toast: the armed strip above the composer says it, and stays while the mode does.
     // Focus synchronously while the long-press/contextmenu gesture still carries browser user
     // activation; a deferred focus selects the field but mobile browsers may refuse to open their
     // software keyboard once that activation has expired. The existing callback still runs after
@@ -178,12 +178,8 @@ export function useDirectTyping({
     }, 0);
   }
 
+  /** Disarm on the operator's own tap. Silent: the strip going away and the placeholder say it. */
   function deactivate() {
-    clearMode();
-    setStatus("Back to sending replies", "info");
-  }
-
-  function deactivateSilently() {
     clearMode();
   }
 
@@ -312,7 +308,6 @@ export function useDirectTyping({
     busy: sender.busy,
     activate,
     deactivate,
-    deactivateSilently,
     onChange,
     onCompositionStart,
     onCompositionEnd,

@@ -692,7 +692,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   function takeOverDraft() {
     if (effectiveRaw === null) return;
     const draft = effectiveRaw;
-    direct.deactivateSilently();
+    direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
@@ -786,20 +786,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           setHandledKey(normalizeDraft(effectiveRaw));
           setPreviewLatched(false);
         }
-        // ✓ flash on the send button + status line acknowledge a VERIFIED send (the text was seen in
-        // the input box before the submit key went out). The "You sent: …" pending preview keeps the
-        // typed text visible until the mirror catches up (cleared by the next text update or a 6s
-        // safety timeout).
+        // The ✓ flash on the send button acknowledges a VERIFIED send (the text was seen in the input
+        // box before the submit key went out), and the bubble or the "You sent: …" preview keeps the
+        // text in view until the transcript catches up, so a plain send needs no toast. One still
+        // speaks for what nothing on screen says: an unverified send, and the two actions.
         setJustSent(true);
         if (sentTimer.current) clearTimeout(sentTimer.current);
         sentTimer.current = setTimeout(() => setJustSent(false), 1500);
         // The native picker already shows its own loading state.
-        if (action !== "model" || !nativeWorkbench) {
-          setStatus(
-            action === "model" ? "Opening model picker…" : action === "compact" ? "Compaction requested" : unverified ? "Sent, not verified: Nenu can't read this agent's input box." : "Message sent",
-            action === "model" || unverified ? "info" : "success",
-          );
-        }
+        const said = action === "model" ? (nativeWorkbench ? null : "Opening model picker…") : action === "compact" ? "Compaction requested" : unverified ? "Sent, not verified: Nenu can't read this agent's input box." : null;
+        if (said) setStatus(said, action === "compact" ? "success" : "info");
         // The conversation view shows the pending bubble instead of this strip.
         setLastSent(action || nativeWorkbench ? null : sentPreview(t));
         if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current);
@@ -982,7 +978,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Insert "/cmd " into the composer (arg-taking commands) and focus it. Appends to any draft already
   // typed (with a separating space) rather than clobbering it; an empty draft just gets set.
   function insertCommand(value: string) {
-    direct.deactivateSilently();
+    direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${value}` : value));
     focusInputEnd();
   }
