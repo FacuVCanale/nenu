@@ -215,6 +215,15 @@ describe("QuestionCard", () => {
     expect(onAnswer).toHaveBeenCalledWith(permission.options[1], { confirm: true });
   });
 
+  it("arms the row when the bridge asks for a confirm, without a notice repeating it", async () => {
+    const onAnswer = vi.fn((): Promise<AnswerOutcome> => Promise.resolve({ ok: false, error: "This answer changes a setting. Confirm it.", code: "confirm_required" }));
+    const { user } = setup({ interaction: permission, onAnswer });
+    await user.click(screen.getByRole("button", { name: /^Yes$/ }));
+    expect(await screen.findByRole("button", { name: "Confirm: Yes" })).toBeVisible();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Confirm it\./)).not.toBeInTheDocument();
+  });
+
   it("while the terminal's text box has focus, says so instead of offering answers, and opens the terminal", async () => {
     const { onOpen, user } = setup({ interaction: { ...plan, typing: true } });
     expect(screen.getByText("The terminal's text box has focus")).toBeVisible();
@@ -522,6 +531,8 @@ describe("QuestionCard", () => {
     it("keeps approval off a permission without its full detail and offers Review in thread", async () => {
       const { onOpen, user } = setup({ interaction: permission, compact: true, title: "panel depo" });
       expect(screen.queryByRole("button", { name: /^Yes$/ })).not.toBeInTheDocument();
+      // The command may well be whole on the card, only unverified: no line claims it is missing.
+      expect(screen.queryByText(/full request/)).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /don’t ask again/ })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^No/ })).toBeEnabled();
       expect(screen.getByText("panel depo", { exact: false })).toBeVisible();
