@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { usePresence } from "@/components/ui/presence";
 
 // Minimal modal focus handling (no deps, no full trap): on open move focus into the panel so
 // keyboard / screen-reader users land inside the dialog; on close restore focus to whatever was
@@ -18,8 +19,20 @@ function useDialogFocus(open: boolean, panelRef: React.RefObject<HTMLElement | n
   }, [open, panelRef]);
 }
 
-// A minimal bottom sheet — no Radix, no portals, no extra deps. Renders nothing when closed.
-// Dismisses on backdrop tap or Escape. Animations come from tw-animate-css (already imported).
+// Every layer here leaves the way it came and stays mounted until its exit animation ends
+// (presence.ts), out of reach (inert) while it goes. Reduced motion keeps one 120 ms fade of the whole
+// layer and nothing that moves. Animations come from tw-animate-css (already imported).
+const LAYER_MOTION = {
+  open: "motion-reduce:animate-in motion-reduce:fade-in motion-reduce:duration-120",
+  closing: "motion-reduce:animate-out motion-reduce:fade-out motion-reduce:duration-120 motion-reduce:fill-mode-forwards",
+};
+const BACKDROP_MOTION = {
+  open: "animate-in fade-in",
+  closing: "animate-out fade-out fill-mode-forwards",
+};
+
+// A minimal bottom sheet — no Radix, no portals, no extra deps. Renders nothing once closed and
+// gone. Dismisses on backdrop tap or Escape.
 interface BottomSheetProps {
   open: boolean;
   onClose: () => void;
@@ -29,10 +42,12 @@ interface BottomSheetProps {
 }
 
 export function BottomSheet({ open, onClose, title, children, className }: BottomSheetProps) {
+  const viewportRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const drag = React.useRef({ startY: 0, atTop: false, engaged: false, dy: 0 });
   const [dragY, setDragY] = React.useState(0);
   const titleId = React.useId();
+  const { mounted, closing, content } = usePresence(open, { title, children }, viewportRef);
   useDialogFocus(open, panelRef);
 
   // Backdrop dismiss requires press AND release on the backdrop itself (the Radix
@@ -115,14 +130,16 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <div
-      className="sheet-viewport fixed inset-x-0 z-50 flex flex-col justify-end"
+      ref={viewportRef}
+      className={cn("sheet-viewport fixed inset-x-0 z-50 flex flex-col justify-end", closing ? LAYER_MOTION.closing : LAYER_MOTION.open)}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={title ? titleId : undefined}
+      aria-labelledby={content.title ? titleId : undefined}
+      inert={closing}
     >
       {/* Backdrop: still dismisses on tap, but hidden from assistive tech — the ✕ in the header is
           the single accessible "Close", so the dialog isn't announced with a giant duplicate. Dismiss
@@ -131,7 +148,7 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
         type="button"
         aria-hidden="true"
         tabIndex={-1}
-        className="absolute inset-0 bg-black/50 duration-200 animate-in fade-in motion-reduce:animate-none"
+        className={cn("absolute inset-0 bg-black/50 duration-200 ease-out motion-reduce:animate-none", closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open)}
         onPointerDown={() => {
           backdropArmed.current = true;
         }}
@@ -149,8 +166,11 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
           transition: drag.current.engaged ? "none" : undefined,
         }}
         className={cn(
-          "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl border-t border-border bg-background shadow-2xl duration-200 animate-in slide-in-from-bottom-4 motion-reduce:animate-none",
+          "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl border-t border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
           "pb-[calc(env(safe-area-inset-bottom)_+_1rem)]",
+          // A released drag closes from where the finger left it: the exit runs from the panel's
+          // own transform to fully below the screen.
+          closing ? "animate-out slide-out-to-bottom fill-mode-forwards" : "animate-in slide-in-from-bottom-4",
           className,
         )}
       >
@@ -160,8 +180,8 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
             <span className="h-1 w-9 rounded-full bg-muted-foreground/40" />
           </div>
           <div className="flex items-center justify-between px-4 pb-3">
-            <span id={title ? titleId : undefined} className="text-sm font-semibold">
-              {title}
+            <span id={content.title ? titleId : undefined} className="text-sm font-semibold">
+              {content.title}
             </span>
             <Button
               variant="ghost"
@@ -174,7 +194,7 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
             </Button>
           </div>
         </div>
-        <div className="px-4 py-3">{children}</div>
+        <div className="px-4 py-3">{content.children}</div>
       </div>
     </div>
   );
@@ -207,10 +227,12 @@ export function SideSheet({
   footer,
   className,
 }: SideSheetProps) {
+  const viewportRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const [dragX, setDragX] = React.useState(0);
   const dragging = React.useRef(false);
   const titleId = React.useId();
+  const { mounted, closing, content } = usePresence(open, { heading, headerAction, children, footer }, viewportRef);
   useDialogFocus(open, panelRef);
 
   // Backdrop dismiss requires press AND release on the backdrop itself (the Radix
@@ -289,15 +311,17 @@ export function SideSheet({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <div
-      className="sheet-viewport fixed inset-x-0 z-50 flex"
+      ref={viewportRef}
+      className={cn("sheet-viewport fixed inset-x-0 z-50 flex", closing ? LAYER_MOTION.closing : LAYER_MOTION.open)}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={heading ? undefined : titleId}
-      aria-label={heading ? title : undefined}
+      aria-labelledby={content.heading ? undefined : titleId}
+      aria-label={content.heading ? title : undefined}
+      inert={closing}
     >
       <div
         ref={panelRef}
@@ -307,19 +331,21 @@ export function SideSheet({
           transition: dragging.current ? "none" : undefined,
         }}
         className={cn(
-          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col border-r border-border bg-background shadow-2xl duration-200 animate-in slide-in-from-left-4 motion-reduce:animate-none",
+          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col border-r border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
+          // A released swipe closes from where the finger left it, out past the left edge.
+          closing ? "animate-out slide-out-to-left fill-mode-forwards" : "animate-in slide-in-from-left-4",
           className,
         )}
       >
         <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 pt-[env(safe-area-inset-top)]">
           <div className="flex min-h-13 min-w-0 flex-1 items-center pl-2">
-            {heading ?? (
+            {content.heading ?? (
               <span id={titleId} className="text-sm font-semibold">
                 {title}
               </span>
             )}
           </div>
-          {headerAction}
+          {content.headerAction}
           <Button
             variant="ghost"
             size="icon"
@@ -330,10 +356,10 @@ export function SideSheet({
             <X className="size-4" />
           </Button>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{children}</div>
-        {footer && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{content.children}</div>
+        {content.footer && (
           <div className="shrink-0 border-t border-border/60 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)_+_0.5rem)]">
-            {footer}
+            {content.footer}
           </div>
         )}
       </div>
@@ -344,7 +370,7 @@ export function SideSheet({
         type="button"
         aria-hidden="true"
         tabIndex={-1}
-        className="flex-1 bg-black/50 duration-200 animate-in fade-in motion-reduce:animate-none"
+        className={cn("flex-1 bg-black/50 duration-200 ease-out motion-reduce:animate-none", closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open)}
         onPointerDown={() => {
           backdropArmed.current = true;
         }}
