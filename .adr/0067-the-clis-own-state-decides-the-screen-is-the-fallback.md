@@ -66,3 +66,28 @@ real files under `bridge/test-support/agent-state/` are what a re-probe compares
 
 Revisit if a CLI exposes a documented local state or interrupt API, or if a probe shows the session
 file reporting `busy` while a dialog owns the keyboard.
+
+## Addendum — 2026-10-12: background work alone is not a turn for sending either
+
+Status is unchanged: **Accepted**. Nothing above this line is rewritten. This addendum extends rule 3
+from Stop to Send.
+
+**Send kept asking "now or later" while only background work ran.** The composer, the Home
+coordinator and the queue's hold for "after this turn" counted Herdr's `working` as a turn on purpose
+(`agentBusy`: "busy, turn or not"). With a background agent running after the main turn ended,
+Herdr stays at `working` and Claude's session file at `busy`, so the operator was asked to choose,
+and a "Queue for later" row waited for the background work, which can last hours. Measured in a
+disposable Herdr 0.9.3 with Claude 2.1.296: Enter typed in that state starts a new turn at once
+(answer 1.1 s later, no `queue-operation` row), exactly as at an idle prompt. A background shell
+already reads as idle (`shell` in the session file, `idle` in Herdr).
+
+**Every send decision reads `turnRunning` (`web/src/lib/turn.ts`)**, the entry Stop reads: the
+composer's choice, the Home coordinator's choice, `bridge/queue-readiness.ts`, and the queue's
+turn-start mark (ADR 0056 rule 5), which also counts a running turn as started because Herdr's state
+counter does not move while it stays at `working`. Herdr's status remains the fallback only for a
+pane without structured state. The conversation's "Working…" still follows `agentBusy`: it describes
+the agent, not a send.
+
+The same probe found Claude 2.1.296 adding "↓ to manage" to the hint row while a background agent
+runs. The send guard now treats it as Claude's own key, like "esc to interrupt" (ADR 0056 named that
+hint as the only exception); a hint row naming any other key is still refused.
