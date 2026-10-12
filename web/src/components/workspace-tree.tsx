@@ -62,7 +62,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, open, searchin
             disabled={searching} onClick={() => onToggle(!open)}>
             <ChevronRight aria-hidden size={14} />
           </button>
-          <Link className="nav-row" to={href} onClick={onNavigate}>
+          <Link className="nav-row" to={href} onClick={onNavigate} aria-current={branch.current ? "true" : undefined}>
             <LayoutGrid aria-hidden size={14} />
             <span className="nav-row-text">{name}</span>
             {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}

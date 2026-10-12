@@ -118,17 +118,3 @@ export function paneAfterClose(
   const tabId = alive.has(closed.tabId) ? closed.tabId : neighborTab(before, closed.tabId, (id) => alive.has(id));
   return tabId === undefined ? undefined : paneInTab(tabId, now.agents, now.shellPanes)?.paneId;
 }
-
-/**
- * Last-used time for EVERY space in one pass over the panes. The dashboard needs this per space and
- * again per rendered row, and it re-renders on every poll; deriving it per space would be
- * spaces × panes each time (45 × 59 on a real herd, three times over). One pass, then map lookups.
- */
-export function spaceLastSeenMap(panes: readonly AgentView[]): Map<string, number> {
-  const seen = new Map<string, number>();
-  for (const p of panes) {
-    const at = p.lastSeenAt ?? 0;
-    if (at > (seen.get(p.workspaceId) ?? 0)) seen.set(p.workspaceId, at);
-  }
-  return seen;
-}

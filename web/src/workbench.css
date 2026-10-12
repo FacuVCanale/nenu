@@ -54,6 +54,8 @@
 .nav-row > svg { flex-shrink: 0; color: var(--muted-foreground); }
 .nav-row:hover { background: var(--workbench-row-hover); }
 .nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
+/* The workspace holding the open chat: marked, lighter than the chat's own row. */
+.nav-row[aria-current="true"] { background: var(--workbench-row-hover); }
 .nav-row:disabled { cursor: default; opacity: 0.5; background: none; }
 .nav-row-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-search { cursor: text; background: var(--workbench-row-hover); }

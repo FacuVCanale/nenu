@@ -44,11 +44,13 @@ describe("the sidebar's workspaces, with no projects", () => {
   }
   const workspaces = () => within(screen.getByRole("region", { name: "Workspaces" }));
 
-  it("leads with the workspace on screen, names each tab and lists a split tab's panes with their state", () => {
+  it("puts the workspace that moved last first, marks and opens the one on screen, and lists a split tab's panes with their state", () => {
     open("/pane/d1");
-    expect(workspaces().getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Design", "Nenu"]);
+    expect(workspaces().getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Nenu", "Design"]);
 
     const design = screen.getByRole("region", { name: "Design" });
+    expect(within(design).getByRole("link", { name: /^Design/ })).toHaveAttribute("aria-current", "true");
+    expect(within(screen.getByRole("region", { name: "Nenu" })).getByRole("link", { name: /^Nenu/ })).not.toHaveAttribute("aria-current");
     expect(within(design).getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
     // The workspace opens on the agent asking for you.
     expect(within(design).getByRole("link", { name: /^Design/ })).toHaveAttribute("href", "/pane/d3");
