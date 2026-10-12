@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { AlertTriangle, Check, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import type { MultiSelectModel } from "@/lib/blocks";
 import type { MultiSelectIntent } from "@/lib/multi-select-action";
 import {
   DialogCard,
-  OptionLabel,
-  optionSurface,
-  PRIMARY_ACTION,
+  OptionButton,
+  OptionCheckbox,
+  OptionList,
   QuestionHeading,
   SECONDARY_ACTION,
   SecondaryActions,
 } from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { WIZARD_BACK_KEYS, WIZARD_NEXT_KEYS } from "@/lib/harness/wizard-model";
 
@@ -59,6 +59,8 @@ export function MultiSelectBlock({ multi, onAction, disabled }: MultiSelectBlock
 const spinner = (
   <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
 );
+/** The same spinner on the ink primary, in the label's own colour. */
+const busyOnInk = <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />;
 
 function CheckboxPhase({
   multi,
@@ -85,62 +87,44 @@ function CheckboxPhase({
         />
       )}
       <QuestionHeading>{multi.question}</QuestionHeading>
-      <div className="flex flex-col gap-2">
+      <OptionList aria-label={multi.question}>
         {multi.options.map((option) => {
           const id = `opt-${option.n}`;
           const busy = sending === id;
-          const tone = busy ? "busy" : "default";
           return (
-            <button
+            <OptionButton
               key={option.n}
-              type="button"
               role="checkbox"
               aria-checked={option.checked}
+              tone={busy ? "busy" : option.checked ? "selected" : "default"}
+              label={option.label}
+              description={option.description}
               disabled={locked}
               onClick={() => onPress(id, { kind: "toggle", n: option.n })}
-              className={optionSurface(tone)}
-            >
-              {/* The checkbox reflects the TERMINAL state (option.checked), never a local guess. */}
-              <span
-                aria-hidden
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-md border",
-                  option.checked
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-muted-foreground",
-                )}
-              >
-                {option.checked ? <Check className="size-3.5" /> : null}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <OptionLabel label={option.label} />
-                {option.description ? (
-                  <span className="text-[13px] leading-[18px] text-muted-foreground">
-                    {option.description}
-                  </span>
-                ) : null}
-              </span>
-              {busy ? spinner : null}
-            </button>
+              // The checkbox reflects the TERMINAL state (option.checked), never a local guess.
+              leading={<OptionCheckbox checked={option.checked} />}
+              trailing={busy ? spinner : null}
+            />
           );
         })}
-      </div>
+      </OptionList>
 
       {/* The advance row — "Submit" on the last question, "Next" before it. The handler drives the
           closed-loop macro that walks the pointer onto it and verifies before pressing Enter. */}
-      <button
+      <Button
         type="button"
+        size="block"
         disabled={locked}
+        aria-busy={sending === "advance" || undefined}
         // The name is on the ATTRIBUTE, not just the text: this same button element is renamed
         // "Next" → "Submit" underneath a user who may already have it focused, and a plain
         // child-text swap on a focused control is not reliably re-announced.
         aria-label={multi.advanceLabel}
         onClick={() => onPress("advance", { kind: "advance" })}
-        className={PRIMARY_ACTION}
       >
-        {sending === "advance" ? spinner : null}
+        {sending === "advance" ? busyOnInk : null}
         {multi.advanceLabel}
-      </button>
+      </Button>
 
       {/* "Chat about this" ABORTS the tool — with the card's utilities, apart from the answers. */}
       {multi.escape ? (
@@ -178,20 +162,21 @@ function ReviewPhase({
       {incomplete ? (
         // role="alert" so a screen reader announces the incomplete-answers warning when the review
         // screen mounts — otherwise a user could confirm a partial set without ever hearing it.
-        <p role="alert" className="flex items-center gap-2 text-[15px] leading-5 text-status-working">
+        <p role="alert" className="flex items-center gap-2 text-body text-status-working">
           <AlertTriangle aria-hidden className="size-4 shrink-0" />
           You have not answered all questions
         </p>
       ) : null}
-      <button
+      <Button
         type="button"
+        size="block"
         disabled={locked}
+        aria-busy={sending === "confirm" || undefined}
         onClick={() => onPress("confirm", { kind: "confirm" })}
-        className={PRIMARY_ACTION}
       >
-        {sending === "confirm" ? spinner : null}
+        {sending === "confirm" ? busyOnInk : null}
         Submit answers
-      </button>
+      </Button>
       <SecondaryActions>
         <button
           type="button"

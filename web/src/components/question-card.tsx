@@ -3,8 +3,11 @@ import type { ReactNode, Ref } from "react";
 import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
-import { DIALOG_CARD, PRESS, PRIMARY_ACTION, QuestionHeading, SECONDARY_ACTION, SecondaryActions, WaitingOnYou } from "@/components/option-button";
-import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
+import {
+  DIALOG_CARD, OPTION_LIST, OptionCheckbox, OptionDescription, OptionLabel, OptionList, optionRow, QuestionHeading, SECONDARY_ACTION,
+  SecondaryActions, WaitingOnYou,
+} from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
@@ -82,6 +85,8 @@ export interface QuestionCardProps {
    * otherwise the card offers `onOpen` instead (ADR 0057 §4). Defaults to on for the compact (Home) card.
    */
   approveNeedsDetail?: boolean;
+  /** Home: a tap on this card is opening its thread, whose read is still in flight (SYS-17). */
+  opening?: boolean;
 }
 
 /** A refusal shown next to what was tapped: `warn` when the question changed, `error` otherwise. A
@@ -90,9 +95,12 @@ type Notice = { tone: "warn" | "error"; text: string; retry?: InteractionOption;
 /** The text box open on the card: a text row's reply (required), or a note other answers may carry. */
 type Writing = { to: "reply"; option: InteractionOption } | { to: "note" } | null;
 
+/** Home's one label for every way into the thread from a card: what you go there to do, and where. */
+const TO_THREAD = "Answer in thread";
+
 export function QuestionCard({
   interaction: i, receipt, onAnswer, readOnly = false, lockReason, refused, compact = false, title, onOpen,
-  onKeys, approveNeedsDetail = compact,
+  onKeys, approveNeedsDetail = compact, opening = false,
 }: QuestionCardProps) {
   const [busy, setBusy] = useState<number | null>(null);
   const [armed, setArmed] = useState<number | null>(null);
@@ -164,7 +172,7 @@ export function QuestionCard({
     if (!receipt) return null;
     return (
       <Frame compact={compact} answered>
-        <p role="status" className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+        <p role="status" className="flex min-w-0 items-center gap-2 text-subhead text-muted-foreground">
           <Check aria-hidden className="size-4 shrink-0 text-status-done" />
           {title && <span className="shrink-0 font-medium text-foreground">{title}</span>}
           <span className="min-w-0 truncate">{receipt.summary}</span>
@@ -204,8 +212,10 @@ export function QuestionCard({
   // Home answers neither a menu nor a preview: their content and previews only live in the thread.
   const opensOnly = compact && (i.kind === "menu" || isPreviewQuestion(i));
   const escapes = answers || opensOnly ? choices.filter((o) => o.role === "deny") : [];
-  const listed = answers ? choices.filter((o) => o.role === "neutral") : [];
-  const decisions = choices.filter((o) => !escapes.includes(o) && !listed.includes(o));
+  // A question's advance (Submit, Next) commits what is ticked above it: the card's one large primary.
+  // Every other choice is a row of the one list, a permission's and a plan's Yes and No included.
+  const advance = answers ? choices.filter((o) => o.role === "primary") : [];
+  const listed = choices.filter((o) => !escapes.includes(o) && !advance.includes(o));
   const ticked = i.options.filter((o) => o.checked).length;
   const openLabelFor = compact ? "Open thread" : "Open terminal";
   const clamped = compact && cut?.signature === i.signature && cut.cut && onOpen !== undefined;
@@ -260,11 +270,19 @@ export function QuestionCard({
     disabled: locked || (note !== "" && !option.acceptsText),
     onPress: () => press(option),
   });
-  const replyButton = (option: InteractionOption, className: string) => (
+  // A text row the card types: the list's last row, quieter than the answers, opening the reply box.
+  const replyRow = (option: InteractionOption) => (
     <button key={option.index} type="button" disabled={locked} aria-expanded={false} aria-controls={textId}
-      onClick={() => write({ to: "reply", option })} className={className}>
-      {!compact && <MessageSquareText aria-hidden className="size-4 shrink-0" />}{replyLabel(option)}
+      onClick={() => write({ to: "reply", option })} className={optionRow()}>
+      {!compact && <MessageSquareText aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+      <span className="min-w-0 flex-1 break-words text-body font-medium text-muted-foreground">{replyLabel(option)}</span>
     </button>
+  );
+  // Home's one way into the thread from the card, as its one large primary.
+  const toThread = onOpen && (
+    <Button type="button" size="block" aria-busy={opening || undefined} onClick={onOpen}>
+      {opening && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />}{TO_THREAD}
+    </Button>
   );
   // A multi-select's advance says how much it sends; a review with a gap says it sends it anyway. A
   // wizard step's Next only moves on, so its count reads as a selection, never as a question number.
@@ -285,13 +303,13 @@ export function QuestionCard({
 
   const noticeView = notice && (
     <div className="flex flex-col gap-2">
-      <p ref={noticeLine} role="status" className={cn("flex items-start gap-2 text-[15px] leading-5", notice.tone === "error" ? "text-destructive" : "text-status-working")}>
+      <p ref={noticeLine} role="status" className={cn("flex items-start gap-2 text-body", notice.tone === "error" ? "text-destructive" : "text-status-working")}>
         {notice.tone === "error" ? <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" /> : <RefreshCw aria-hidden className="mt-0.5 size-4 shrink-0" />}
         <span className="min-w-0">{notice.text}</span>
       </p>
       {/* The card's own row already leads to the terminal (or the thread): one way there, not two. */}
       {notice.retry && (
-        <button type="button" disabled={locked} onClick={() => press(notice.retry!)} className={cn(compact ? PILL : DECISION, NEUTRAL, "self-start")}>Try again</button>
+        <Button type="button" variant="secondary" disabled={locked} onClick={() => press(notice.retry!)} className="self-start text-subhead">Try again</Button>
       )}
     </div>
   );
@@ -305,19 +323,19 @@ export function QuestionCard({
   );
 
   return (
-    <Frame ref={setFrame} compact={compact} label={i.question}>
+    <Frame ref={setFrame} compact={compact} label={i.question} busy={opening}>
       {compact ? <>
-        <CompactHeader title={title} onOpen={onOpen} />
+        <CompactHeader title={title} onOpen={onOpen} opening={opening} />
         {/* The question's header chip, or where a wizard stands, as a quiet line over the question. */}
         {steps.length > 0 && (
-          <div className="-mt-1 flex min-w-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
+          <div className="-mt-1 flex min-w-0 items-center gap-2 text-footnote font-medium text-muted-foreground">
             <span className="min-w-0 truncate">{steps.length === 1 ? steps[0]!.label : current >= 0 ? steps[current]!.label : "Your answers"}</span>
             {progress}
           </div>
         )}
-        <p className="line-clamp-3 text-[15px] leading-5 text-foreground">{i.question}</p>
+        <QuestionHeading clamp>{i.question}</QuestionHeading>
       </> : <>
-        <div className="flex min-w-0 items-center gap-2 text-[13px] leading-[18px]">
+        <div className="flex min-w-0 items-center gap-2 text-footnote">
           <WaitingOnYou />
           {title && <span className="min-w-0 truncate text-muted-foreground">· {title}</span>}
           {steps.length === 1 && <span className="min-w-0 truncate text-muted-foreground"><span aria-hidden>· </span><span>{steps[0]!.label}</span></span>}
@@ -334,49 +352,50 @@ export function QuestionCard({
       </div>
 
       {typing ? (
-        <div className="flex flex-col items-start gap-3">
+        <div className="flex flex-col gap-3">
           <div className="flex items-start gap-3">
             <Keyboard aria-hidden className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
             <div className="flex flex-col gap-0.5">
-              <p className="text-[15px] leading-5 font-medium text-foreground">The terminal's text box has focus</p>
-              <p className="text-[13px] leading-[18px] text-muted-foreground">Answers come back when typing ends</p>
+              <p className="text-body font-medium text-foreground">The terminal's text box has focus</p>
+              <p className="text-footnote text-muted-foreground">Answers come back when typing ends</p>
             </div>
           </div>
           {onOpen && (
-            <button type="button" onClick={onOpen} className={cn(compact ? PILL : DECISION, "bg-foreground text-background")}>
-              {!compact && <TerminalSquare aria-hidden className="size-4 shrink-0" />}{openLabelFor}
-            </button>
+            <Button type="button" size="block" aria-busy={(compact && opening) || undefined} onClick={onOpen}>
+              {compact ? opening && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <TerminalSquare aria-hidden className="size-4 shrink-0" />}{openLabelFor}
+            </Button>
           )}
         </div>
       ) : <>
-        {lockLine && <p className="text-[13px] leading-[18px] text-muted-foreground">{lockLine}</p>}
+        {lockLine && <p className="text-footnote text-muted-foreground">{lockLine}</p>}
         {/* A plan without its hint shows only its on-screen tail; a command may well be whole, just unverified. */}
         {approvalHidden && !i.detailComplete && i.kind === "plan" && (
-          <p className="text-[13px] leading-[18px] text-muted-foreground">The full plan isn't on this card.</p>
+          <p className="text-footnote text-muted-foreground">The full plan isn't on this card.</p>
         )}
 
-        {opensOnly ? (
-          onOpen && <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Open to answer</button>
-        ) : !answerable ? <>
+        {opensOnly ? toThread : !answerable ? <>
           {/* Read-only: what the agent offers, nothing to press. Cut short on Home: answered in the thread. */}
           <StaticOptions ref={clamped ? setAnswerList : undefined} options={clamped ? listed : compact ? choices.filter((o) => !escapes.includes(o)) : choices} labelsOnly={compact && !clamped} clamp={clamped} />
-          {clamped && <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Answer in thread</button>}
+          {clamped && toThread}
         </> : <>
-          {compact && approvalHidden && onOpen && (
-            <button type="button" onClick={onOpen} className={PRIMARY_ACTION}>Review in thread</button>
+          {(listed.length > 0 || (replies.length > 0 && !reply)) && (
+            <OptionList ref={setAnswerList} data-answers aria-label="Answers">
+              {listed.map((option) => <ChoiceRow key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} clamp={compact && answers} />)}
+              {!reply && replies.map(replyRow)}
+            </OptionList>
           )}
-          {(listed.length > 0 || (answers && replies.length > 0 && !reply)) && (
-            <div ref={setAnswerList} data-answers role="group" aria-label="Answers" className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border">
-              {listed.map((option) => <AnswerRow key={option.index} {...rowProps(option)} toggle={isToggle(i, option)} clamp={compact} />)}
-              {answers && !reply && replies.map((option) => replyButton(option, cn(LIST_ROW, "text-muted-foreground disabled:text-muted-foreground/70")))}
-            </div>
-          )}
-          {(decisions.length > 0 || (!answers && replies.length > 0 && !reply)) && (
-            <div className="flex flex-col gap-2">
-              {decisions.map((option) => <DecisionButton key={option.index} {...rowProps(option)} label={decisionLabel(option)} quiet={quiet(option)} />)}
-              {!answers && !reply && replies.map((option) => replyButton(option, cn(DECISION, OUTLINED)))}
-            </div>
-          )}
+          {advance.map((option) => (
+            <Button key={option.index} type="button" size="block" variant={quiet(option) ? "secondary" : "default"}
+              data-role={option.role} data-quiet={quiet(option) || undefined} data-failed={failed === option.index || undefined}
+              disabled={rowProps(option).disabled} aria-busy={busy === option.index || undefined} onClick={() => press(option)}
+              className={cn(failed === option.index && FAILED)}>
+              {busy === option.index && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin" />}
+              {/* One flex item: the button's gap would otherwise split "Submit" from its count. */}
+              <span>{decisionLabel(option) ?? option.label}</span>
+            </Button>
+          ))}
+          {/* Home approves only with the whole request on the card; until then the thread does. */}
+          {compact && approvalHidden && toThread}
         </>}
 
         {notice?.at === "options" && noticeView}
@@ -389,17 +408,15 @@ export function QuestionCard({
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={FEEDBACK_MAX_LENGTH} rows={compact ? 2 : 3} autoFocus
               aria-label={reply ? reply.label : "Note with your answer"}
               placeholder={reply ? reply.label : "Add a note, then pick an answer"} disabled={lockLine !== null}
-              className="min-h-16 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm" />
-            <div className="flex items-center gap-2">
-              {reply && (
-                <button type="submit" disabled={locked || !draft.trim()}
-                  className={cn(compact ? PILL : DECISION, locked || !draft.trim() ? DISABLED : "bg-foreground text-background")}>
-                  {busy === reply.index && <Loader2 aria-hidden className="size-4 animate-spin" />}Send
-                </button>
-              )}
-              <button type="button" disabled={busy !== null} onClick={() => write(null)}
-                className={cn(compact ? PILL : DECISION, "border border-border text-muted-foreground")}>Cancel</button>
-              <span aria-live="polite" className="ml-auto text-xs tabular-nums text-muted-foreground">{draft.length}/{FEEDBACK_MAX_LENGTH}</span>
+              className="min-h-16 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-body outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            {reply && (
+              <Button type="submit" size="block" disabled={locked || !draft.trim()} aria-busy={busy === reply.index || undefined}>
+                {busy === reply.index && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin" />}Send
+              </Button>
+            )}
+            <div className="-mx-2 flex items-center gap-2">
+              <button type="button" disabled={busy !== null} onClick={() => write(null)} className={SECONDARY}>Cancel</button>
+              <span aria-live="polite" className="ml-auto px-2 text-caption tabular-nums text-muted-foreground">{draft.length}/{FEEDBACK_MAX_LENGTH}</span>
             </div>
           </form>
         )}
@@ -407,7 +424,7 @@ export function QuestionCard({
         {notice?.at === "reply" && noticeView}
 
         {i.terminalOnly && i.terminalOnly.length > 0 && (
-          <p className="min-w-0 break-words text-[13px] leading-[18px] text-muted-foreground">
+          <p className="min-w-0 break-words text-footnote text-muted-foreground">
             Also in the terminal: <span className="text-foreground">{i.terminalOnly.join(" · ")}</span>
           </p>
         )}
@@ -444,9 +461,9 @@ export function QuestionCard({
   );
 }
 
-function Frame({ ref, compact, answered, label, children }: { ref?: Ref<HTMLElement>; compact: boolean; answered?: boolean; label?: string; children: ReactNode }) {
+function Frame({ ref, compact, answered, label, busy = false, children }: { ref?: Ref<HTMLElement>; compact: boolean; answered?: boolean; label?: string; busy?: boolean; children: ReactNode }) {
   return (
-    <section ref={ref} aria-label={label ?? "Answered"} data-question-card={compact ? "compact" : "full"}
+    <section ref={ref} aria-label={label ?? "Answered"} aria-busy={busy || undefined} data-question-card={compact ? "compact" : "full"}
       className={cn(
         "flex min-w-0 flex-col",
         answered
@@ -460,19 +477,22 @@ function Frame({ ref, compact, answered, label, children }: { ref?: Ref<HTMLElem
   );
 }
 
-/** Home's card header: who is asking, and the whole row opens the thread. Section already says Needs you. */
-function CompactHeader({ title, onOpen }: { title?: ReactNode; onOpen?: () => void }) {
+/** Home's card header: who is asking, and the whole row opens the thread; while that thread loads, its
+ *  chevron turns into the spinner every opening row on Home shows. Section already says Needs you. */
+function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?: () => void; opening: boolean }) {
   const who = <>
     <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-blocked" />
-    <span className="min-w-0 flex-1 truncate text-[15px] leading-5 font-medium text-foreground">{title ?? "Waiting on you"}</span>
+    <span className="min-w-0 flex-1 truncate text-subhead font-medium text-foreground">{title ?? "Waiting on you"}</span>
   </>;
   if (!onOpen) return <div className="flex min-h-11 min-w-0 items-center gap-2.5">{who}</div>;
   return (
-    <button type="button" onClick={onOpen}
-      className="-mx-2 flex min-h-11 min-w-0 items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted/60 active:bg-muted">
+    <button type="button" onClick={onOpen} aria-busy={opening || undefined}
+      className="-mx-2 flex min-h-11 min-w-0 select-none items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted active:bg-muted">
       {who}
       <span className="sr-only">, open thread</span>
-      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      {opening
+        ? <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
+        : <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
     </button>
   );
 }
@@ -495,7 +515,7 @@ function Stepper({ steps }: { steps: InteractionStep[] }) {
         <li key={n} aria-current={step.current ? "step" : undefined}
           aria-label={`${step.label}${step.answered ? ", answered" : ""}`}
           className={cn(
-            "inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+            "inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-caption",
             step.current ? "bg-foreground/10 font-medium text-foreground" : "text-muted-foreground",
           )}>
           {step.answered && <Check aria-hidden className="size-3 shrink-0 text-status-done" />}
@@ -506,11 +526,11 @@ function Stepper({ steps }: { steps: InteractionStep[] }) {
   );
 }
 
-const CODE = "w-full min-w-0 whitespace-pre-wrap rounded-lg bg-muted px-3 py-2.5 font-mono text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]";
+const CODE = "w-full min-w-0 whitespace-pre-wrap rounded-lg bg-muted px-3 py-2.5 font-mono text-code text-foreground [overflow-wrap:anywhere]";
 
 function ShowAll({ count, onClick }: { count: number; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="-mx-1 min-h-11 rounded-md px-1 text-[13px] font-medium text-muted-foreground hover:text-foreground">
+    <button type="button" onClick={onClick} className="-mx-1 min-h-11 rounded-md px-1 text-footnote font-medium text-muted-foreground hover:text-foreground">
       Show all {count} lines
     </button>
   );
@@ -525,13 +545,13 @@ function Subject({ subject, folded, onOpenAll }: { subject: InteractionSubject; 
   const visible = folded ? rows.slice(0, SUBJECT_ROWS) : rows;
   return (
     <div data-subject className="flex min-w-0 flex-col items-start gap-1.5">
-      {subject.tool && <p className="text-[13px] leading-[18px] font-semibold text-muted-foreground">{subject.tool}</p>}
-      {subject.description && <p className="text-[15px] leading-5 text-foreground text-pretty">{subject.description}</p>}
-      {subject.file && <p role="group" aria-label="File" className="w-full min-w-0 font-mono text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{subject.file}</p>}
+      {subject.tool && <p className="text-footnote font-semibold text-muted-foreground">{subject.tool}</p>}
+      {subject.description && <p className="text-body text-foreground text-pretty">{subject.description}</p>}
+      {subject.file && <p role="group" aria-label="File" className="w-full min-w-0 font-mono text-code text-foreground [overflow-wrap:anywhere]">{subject.file}</p>}
       {subject.command !== undefined && <pre role="group" aria-label="Command" className={CODE}>{visible.join("\n")}</pre>}
       {subject.preview !== undefined && <Preview rows={visible} />}
       {folded && <ShowAll count={rows.length} onClick={onOpenAll} />}
-      {subject.meta && subject.meta.length > 0 && <p className="text-[13px] leading-[18px] text-muted-foreground">{subject.meta.join(" · ")}</p>}
+      {subject.meta && subject.meta.length > 0 && <p className="text-footnote text-muted-foreground">{subject.meta.join(" · ")}</p>}
     </div>
   );
 }
@@ -541,7 +561,7 @@ function Preview({ rows }: { rows: string[] }) {
   const lines = rows.map((row) => /^(\d+)(?:\s(.*))?$/.exec(row));
   const gutter = Math.max(1, ...lines.map((m) => m?.[1]?.length ?? 0));
   return (
-    <div role="group" aria-label="Preview" className="w-full min-w-0 rounded-lg bg-muted py-2 font-mono text-[13px] leading-5 text-foreground">
+    <div role="group" aria-label="Preview" className="w-full min-w-0 rounded-lg bg-muted py-2 font-mono text-code text-foreground">
       {rows.map((row, n) => (
         <div key={n} className="flex gap-3 px-3">
           <span aria-hidden="true" className="shrink-0 text-right tabular-nums text-muted-foreground select-none" style={{ width: `${gutter}ch` }}>{lines[n]?.[1] ?? ""}</span>
@@ -568,9 +588,9 @@ function PlanText({ text, compact, folded, overflows, onMeasure, onOpenAll }: {
   }, [text, overflows, onMeasure]);
   // Its own surface, so the plan's headings read as the document under the question, not as more questions.
   return (
-    <div className="flex min-w-0 flex-col items-start rounded-xl border border-border px-3.5 pt-3 pb-1">
+    <div className="flex min-w-0 flex-col items-start rounded-lg border border-border px-3.5 pt-3 pb-1">
       <div ref={box} role="group" aria-label="Plan" className={cn(
-        "w-full min-w-0 pb-2 [&>div]:text-[15px] [&_li]:leading-6 [&_p]:leading-6",
+        "w-full min-w-0 pb-2 [&>div]:text-body",
         // The fade is clear a full line (1.5rem) above the cut, so a row the cut slices is never seen.
         folded && "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent_calc(100%-1.5rem))]",
         folded && (compact ? "max-h-36" : "max-h-64"),
@@ -578,7 +598,7 @@ function PlanText({ text, compact, folded, overflows, onMeasure, onOpenAll }: {
         <MarkdownText text={text} />
       </div>
       {folded && overflows && (
-        <button type="button" onClick={onOpenAll} className="-mx-1 -mt-1 min-h-11 rounded-md px-1 text-[13px] font-medium text-foreground/80 hover:text-foreground">
+        <button type="button" onClick={onOpenAll} className="-mx-1 -mt-1 min-h-11 rounded-md px-1 text-footnote font-medium text-muted-foreground hover:text-foreground">
           Read the full plan
         </button>
       )}
@@ -594,7 +614,7 @@ function Context({ interaction: i, text, compact, clamp, folded, onOpenAll }: {
   interaction: Interaction; text: string; compact: boolean; clamp: boolean; folded: boolean; onOpenAll: () => void;
 }) {
   if (ANSWER_KINDS.has(i.kind)) {
-    return <p className={cn("min-w-0 whitespace-pre-wrap break-words text-[13px] text-muted-foreground", compact && "line-clamp-2")}>{text}</p>;
+    return <p className={cn("min-w-0 whitespace-pre-wrap break-words text-footnote text-muted-foreground", compact && "line-clamp-2")}>{text}</p>;
   }
   const rows = text.split("\n");
   return (
@@ -602,7 +622,7 @@ function Context({ interaction: i, text, compact, clamp, folded, onOpenAll }: {
     // padding on the clamped element itself shows the top half of the next line.
     <div className="flex min-w-0 flex-col items-start gap-1 rounded-lg bg-muted/60 px-2.5 py-2">
       <pre role="group" aria-label="Request details" className={cn(
-        "w-full min-w-0 whitespace-pre-wrap break-words font-mono text-[13px] leading-5 text-foreground",
+        "w-full min-w-0 whitespace-pre-wrap break-words font-mono text-code text-foreground",
         clamp && "line-clamp-3",
       )}>{folded ? rows.slice(0, SUBJECT_ROWS).join("\n") : text}</pre>
       {folded && <ShowAll count={rows.length} onClick={onOpenAll} />}
@@ -614,7 +634,7 @@ function Context({ interaction: i, text, compact, clamp, folded, onOpenAll }: {
 function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; incomplete: boolean }) {
   return <>
     {answers.length > 0 && (
-      <ul aria-label="Your answers" className="flex flex-col gap-1.5 rounded-xl bg-muted/60 px-3 py-2.5 text-[13px] leading-snug">
+      <ul aria-label="Your answers" className="flex flex-col gap-1.5 rounded-lg bg-muted/60 px-3 py-2.5 text-footnote">
         {answers.map((a, n) => (
           <li key={n} className="flex min-w-0 flex-col">
             <span className="text-muted-foreground">{a.question}</span>
@@ -624,28 +644,24 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
       </ul>
     )}
     {incomplete && (
-      <p className="flex items-center gap-2 text-[15px] leading-5 text-status-working">
+      <p className="flex items-center gap-2 text-body text-status-working">
         <AlertTriangle aria-hidden className="size-4 shrink-0" />Some questions have no answer
       </p>
     )}
   </>;
 }
 
-/** A read-only device's options: what the agent offers, with nothing to press. Home's keeps the labels. */
+/** A read-only device's options: what the agent offers, with nothing to press, drawn as the same list
+ *  as the answers. Home's keeps the labels. */
 function StaticOptions({ ref, options, labelsOnly, clamp = false }: { ref?: Ref<HTMLUListElement>; options: InteractionOption[]; labelsOnly: boolean; clamp?: boolean }) {
   return (
-    <ul ref={ref} aria-label="Options" className="flex flex-col gap-2 border-l border-border pl-3">
-      {options.map((option) => {
-        const { text, recommended } = recommendedLabel(option.label);
-        return (
-          <li key={option.index} className="flex min-w-0 flex-col">
-            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] leading-5 text-foreground">
-              {text}{recommended && <RecommendedBadge />}
-            </span>
-            {option.description && !labelsOnly && <span data-description className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>}
-          </li>
-        );
-      })}
+    <ul ref={ref} aria-label="Options" data-option-list className={OPTION_LIST}>
+      {options.map((option) => (
+        <li key={option.index} className="flex min-h-9 min-w-0 flex-col justify-center gap-0.5 px-3.5 py-1.5 coarse:min-h-11 coarse:py-2">
+          <OptionLabel label={option.label} />
+          {option.description && !labelsOnly && <OptionDescription clamp={clamp}>{option.description}</OptionDescription>}
+        </li>
+      ))}
     </ul>
   );
 }
@@ -658,15 +674,7 @@ function NoteButton({ locked, textId, className, onClick }: { locked: boolean; t
   );
 }
 
-// Touch targets reach 44 px on a coarse pointer (direction.md); a mouse keeps the denser 40.
-const PILL = cn("inline-flex min-h-10 pointer-coarse:min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-sm font-medium", PRESS);
-const DECISION = cn("inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-left text-base font-medium", PRESS);
-const LIST_ROW = "flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left text-base transition-colors hover:bg-muted/50 active:bg-muted";
-const OUTLINED = "border border-border bg-transparent text-muted-foreground disabled:text-muted-foreground/70";
-const NEUTRAL = "border border-border bg-secondary text-foreground";
 const SECONDARY = SECONDARY_ACTION;
-/** A control that cannot fire: muted, never a faded fill that reads as highlighted. */
-const DISABLED = "border border-transparent bg-muted text-muted-foreground cursor-not-allowed";
 /** The tapped option a refusal is about, until the next tap. */
 const FAILED = "outline outline-1 -outline-offset-1 outline-destructive";
 
@@ -682,34 +690,26 @@ interface RowProps {
 /** A label without its trailing dots or ellipsis, to end it with our own. */
 const bare = (label: string) => label.replace(/[.…]+$/, "");
 
-/** Weight by role: the one-tap answer filled, a persistent one dashed. A decline is an answer like
- *  any other, so it stays neutral: red reads as an error, and the dot already says it is your turn. */
-function toneClass(tone: InteractionOption["role"]) {
-  return cn(
-    tone === "primary" && "bg-foreground text-background",
-    (tone === "neutral" || tone === "nav" || tone === "deny") && NEUTRAL,
-    tone === "persistent" && "border border-dashed border-border bg-secondary text-foreground",
-  );
-}
-
-/** One answer of a question: title, the agent's description in small grey, a quiet Recommended. */
-function AnswerRow({ option, toggle, busy, failed, disabled, onPress, clamp = false }: RowProps & { toggle: boolean; clamp?: boolean }) {
-  const { text, recommended } = recommendedLabel(option.label);
-  const dim = disabled && !busy;
+/**
+ * One choice of the card's list, whatever the dialog: a question's answer, a multi-select's box, a
+ * permission's or a plan's Yes and No. Its title, what it means in small grey, a quiet Recommended.
+ * A decline is an answer like any other, so it stays neutral: red reads as an error, and the dot
+ * already says it is your turn. A persistent answer says it changes a setting and asks for a second
+ * tap, its Confirm pill running out at the row's end.
+ */
+function ChoiceRow({ option, toggle, armed, busy, failed, disabled, onPress, clamp = false }: RowProps & { toggle: boolean; clamp?: boolean }) {
+  const detail = armed ? "Applies to future prompts" : option.role === "persistent" ? "Changes a setting beyond this answer" : option.description;
+  const checked = toggle && Boolean(option.checked);
   return (
     <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined}
-      aria-pressed={toggle ? Boolean(option.checked) : undefined}
-      className={cn(LIST_ROW, dim && "cursor-not-allowed", failed && FAILED)}>
-      {toggle && <Checkbox checked={Boolean(option.checked)} />}
+      aria-pressed={toggle ? checked : undefined} aria-label={armed ? `Confirm: ${option.label}` : undefined}
+      className={cn(optionRow(busy || checked ? "selected" : "default"), failed && FAILED)}>
+      {toggle && <OptionCheckbox checked={checked} />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className={cn("min-w-0 break-words font-medium", dim ? "text-muted-foreground" : "text-foreground")}>{text}</span>
-          {recommended && <RecommendedBadge />}
-        </span>
-        {option.description && (
-          <span data-description className={cn("text-[13px] leading-[18px] text-muted-foreground", clamp && "line-clamp-2")}>{option.description}</span>
-        )}
+        <OptionLabel label={option.label} dim={disabled && !busy} />
+        {detail && <OptionDescription clamp={clamp && !armed}>{detail}</OptionDescription>}
       </span>
+      {armed && <ConfirmPill />}
       {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin text-muted-foreground" />}
     </button>
   );
@@ -727,44 +727,12 @@ function ConfirmPill() {
     return () => animation?.cancel();
   }, []);
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-foreground py-1 pr-2.5 pl-1.5 text-[13px] font-medium text-background">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-foreground py-1 pr-2.5 pl-1.5 text-footnote font-medium text-background">
       <svg aria-hidden viewBox="0 0 16 16" className="size-4 -rotate-90">
         <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" />
         <circle ref={ring} cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="38" strokeDashoffset="0" />
       </svg>
       Confirm
-    </span>
-  );
-}
-
-/** A decision (approve, deny, submit): a button whose weight follows its role. */
-function DecisionButton({ option, armed, busy, failed, disabled, onPress, label, quiet }: RowProps & { label?: ReactNode; quiet?: boolean }) {
-  const detail = armed ? "Applies to future prompts" : option.role === "persistent" ? "Changes a setting beyond this answer" : option.description;
-  const dim = disabled && !busy;
-  const tone = quiet && option.role === "primary" ? "neutral" : option.role;
-  return (
-    <button type="button" disabled={disabled} onClick={onPress} data-role={option.role} data-failed={failed || undefined} data-quiet={quiet || undefined}
-      aria-label={armed ? `Confirm: ${option.label}` : undefined}
-      className={cn(DECISION, "w-full", dim ? DISABLED : toneClass(tone), failed && FAILED)}>
-      <span className="flex min-w-0 flex-1 flex-col py-1.5">
-        <span className="break-words">{label ?? option.label}</span>
-        {(detail || armed) && (
-          <span className="flex min-w-0 items-center justify-between gap-3">
-            <span className={cn("text-[13px] leading-[18px] font-normal", tone === "primary" && !dim ? "text-background/70" : "text-muted-foreground")}>{detail}</span>
-            {armed && <ConfirmPill />}
-          </span>
-        )}
-      </span>
-      {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin" />}
-    </button>
-  );
-}
-
-function Checkbox({ checked }: { checked: boolean }) {
-  return (
-    <span aria-hidden className={cn("flex size-5 shrink-0 items-center justify-center rounded-md border",
-      checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground")}>
-      {checked && <Check className="size-3.5" />}
     </span>
   );
 }

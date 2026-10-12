@@ -11,12 +11,11 @@ import {
 } from "@/lib/harness/menu-hints";
 import {
   DialogCard,
-  NEUTRAL_ACTION,
-  PRIMARY_ACTION,
   QuestionHeading,
   SECONDARY_ACTION,
   SecondaryActions,
 } from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import { parseNativeModelMenu } from "@/lib/native-model-menu";
 import { NativeModelMenu } from "@/components/native-model-menu";
 import { NativeMenuContent } from "@/components/native-menu-content";
@@ -74,17 +73,21 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
     <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
   );
 
+  // The arrows are the large primary's neutral sibling, side by side: same height and radius.
   const navButton = (id: string, label: string, keys: string[], icon: ReactNode) => (
-    <button
+    <Button
       key={id}
       type="button"
+      size="block"
+      variant="secondary"
       aria-label={label}
       disabled={locked}
+      aria-busy={sending === id || undefined}
       onClick={() => press(id, { keys, nav: true })}
-      className="flex h-11 flex-1 items-center justify-center rounded-xl border border-border bg-secondary text-foreground transition-colors active:bg-muted disabled:text-muted-foreground"
+      className="flex-1"
     >
       {sending === id ? spinner : icon}
-    </button>
+    </Button>
   );
 
   const commits = menu.actions.filter((a) => !a.cancel);
@@ -116,7 +119,7 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
                 MENU_LEFT_KEYS,
                 <ArrowLeft className="size-5" />,
               )}
-              <span className="min-w-0 flex-1 truncate text-center text-[13px] text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-center text-footnote text-muted-foreground">
                 {menu.nav.leftRight.label}
               </span>
               {navButton(
@@ -130,23 +133,25 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
         </div>
       )}
 
-      {/* The footer's own actions: the first is the card's one filled commit, any other a quieter
+      {/* The footer's own actions: the first is the card's one large primary, any other its quieter
           peer. Cancel (Esc) leaves without committing, so it sits with the utilities below. */}
       {commits.length > 0 && (
         <div className="flex flex-col gap-2">
           {commits.map((action, i) => {
             const id = `action-${i}`;
             return (
-              <button
+              <Button
                 key={id}
                 type="button"
+                size="block"
+                variant={i === 0 ? "default" : "secondary"}
                 disabled={locked}
+                aria-busy={sending === id || undefined}
                 onClick={() => press(id, { keys: action.keys, nav: false })}
-                className={i === 0 ? PRIMARY_ACTION : NEUTRAL_ACTION}
               >
-                {sending === id ? spinner : null}
+                {sending === id ? <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" /> : null}
                 {action.label}
-              </button>
+              </Button>
             );
           })}
         </div>

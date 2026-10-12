@@ -3,17 +3,17 @@ import { Check, Loader2, Pencil, StickyNote, Trash2 } from "lucide-react";
 
 import { WizardStepper } from "@/components/wizard-stepper";
 import { PreviewContent } from "@/components/preview-content";
-import { cn } from "@/lib/utils";
 import type { PreviewOption, PreviewSelectModel } from "@/lib/blocks";
 import {
   DialogCard,
-  OptionLabel,
-  optionSurface,
-  PRIMARY_ACTION,
+  OptionButton,
+  OptionList,
+  OptionRadio,
   QuestionHeading,
   SECONDARY_ACTION,
   SecondaryActions,
 } from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import { NOTE_MAX_LENGTH } from "@/lib/preview-action";
 import { recommendedLabel } from "@/components/recommended-badge";
 import { WIZARD_BACK_KEYS, WIZARD_NEXT_KEYS } from "@/lib/harness/wizard-model";
@@ -81,6 +81,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
   const busyIcon = (
     <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
   );
+  const busyOnInk = <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />;
 
   return (
     <DialogCard label={preview.question}>
@@ -101,41 +102,32 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
 
       {/* A row points at its option (its preview shows below); the pointed row is already shown. One
           choice, so the rows are radios and the pointed one is checked. */}
-      <div role="radiogroup" aria-label={preview.question} className="flex flex-col gap-2">
+      <OptionList role="radiogroup" aria-label={preview.question}>
         {preview.options.map((option, i) => {
           const id = `opt-${i}`;
           const busy = sending === id;
           return (
-            <button
+            <OptionButton
               key={i}
-              type="button"
               role="radio"
               aria-checked={option.pointed}
+              tone={busy ? "busy" : option.pointed ? "selected" : "default"}
+              label={option.label}
               disabled={locked}
               onClick={() => { if (!option.pointed) void press(id, { kind: "point", option }); }}
-              className={optionSurface(busy ? "busy" : option.pointed ? "selected" : "default")}
-            >
-              <span aria-hidden className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
-                option.pointed ? "border-primary" : "border-muted-foreground",
-              )}>
-                {option.pointed && <span className="size-2.5 rounded-full bg-primary" />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <OptionLabel label={option.label} />
-              </span>
-              {busy ? busyIcon : option.chosen ? (
+              leading={<OptionRadio checked={option.pointed} />}
+              trailing={busy ? busyIcon : option.chosen ? (
                 <Check className="size-4 shrink-0 text-primary" aria-label="Current answer" />
               ) : null}
-            </button>
+            />
           );
         })}
-      </div>
+      </OptionList>
 
       {/* Native preview content, without the terminal widget's frame. */}
       {preview.preview.length > 0 && (
         <div role="group" aria-labelledby={captionId} className="flex min-w-0 flex-col gap-1.5">
-          <p id={captionId} className="text-[13px] leading-[18px] text-muted-foreground">
+          <p id={captionId} className="text-footnote text-muted-foreground">
             {pointedName ? `Preview of ${pointedName}` : "Preview"}
           </p>
           <PreviewContent lines={preview.preview} />
@@ -145,7 +137,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
       {/* The question's note: the terminal-editing banner (everything locked), our own editor, or the
           attached note with edit/remove. Adding one sits with the card's other utilities below. */}
       {terminalEditing ? (
-        <p className="rounded-xl border border-dashed border-status-working/50 px-3.5 py-2.5 text-[15px] leading-5 text-status-working">
+        <p className="rounded-lg border border-dashed border-status-working/50 px-3.5 py-2.5 text-body text-status-working">
           Note is being edited in the agent session — controls resume when editing finishes.
           {preview.note.text ? <span className="text-muted-foreground"> ({preview.note.text})</span> : null}
         </p>
@@ -159,18 +151,19 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
             autoFocus
             aria-label="Note text"
             placeholder="Add context for your answer…"
-            className="min-h-16 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
+            className="min-h-16 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-body text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={locked || draft.trim().length === 0}
-              onClick={() => void saveNote()}
-              className={cn(PRIMARY_ACTION, "w-auto")}
-            >
-              {sending === "note-save" ? busyIcon : null}
-              Save note
-            </button>
+          <Button
+            type="button"
+            size="block"
+            disabled={locked || draft.trim().length === 0}
+            aria-busy={sending === "note-save" || undefined}
+            onClick={() => void saveNote()}
+          >
+            {sending === "note-save" ? busyOnInk : null}
+            Save note
+          </Button>
+          <div className="-mx-2 flex items-center">
             <button
               type="button"
               disabled={sending !== null}
@@ -182,9 +175,9 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
           </div>
         </div>
       ) : preview.note.state === "attached" ? (
-        <div className="flex items-center gap-2 rounded-xl bg-muted/60 py-1 pr-1 pl-3.5">
+        <div className="flex items-center gap-2 rounded-lg bg-muted/60 py-1 pr-1 pl-3.5">
           <StickyNote className="size-4 shrink-0 text-muted-foreground" aria-label="Note" />
-          <span className="min-w-0 flex-1 text-[15px] leading-5 text-foreground">{preview.note.text}</span>
+          <span className="min-w-0 flex-1 text-body text-foreground">{preview.note.text}</span>
           <button
             type="button"
             aria-label="Edit note"
@@ -193,7 +186,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
               setDraft(preview.note.text);
               setEditorOpen(true);
             }}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-50"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:text-disabled-foreground"
           >
             <Pencil className="size-4" />
           </button>
@@ -202,7 +195,7 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
             aria-label="Remove note"
             disabled={locked}
             onClick={() => void press("note-remove", { kind: "note", text: "" })}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-50"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:text-disabled-foreground"
           >
             {sending === "note-remove" ? busyIcon : <Trash2 className="size-4" />}
           </button>
@@ -211,15 +204,16 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
 
       {/* An open note editor owns the card until it is saved or dropped: choosing now would lose it. */}
       {pointed && !editorOpen && (
-        <button
+        <Button
           type="button"
+          size="block"
           disabled={locked}
+          aria-busy={sending === "choose" || undefined}
           onClick={() => void press("choose", { kind: "choose", option: pointed })}
-          className={PRIMARY_ACTION}
         >
-          {sending === "choose" ? busyIcon : null}
+          {sending === "choose" ? busyOnInk : null}
           Choose {pointedName}
-        </button>
+        </Button>
       )}
 
       {!terminalEditing && !editorOpen && preview.note.state !== "attached" && (

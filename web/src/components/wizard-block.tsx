@@ -6,11 +6,12 @@ import type { WizardModel, WizardOption } from "@/lib/blocks";
 import {
   DialogCard,
   OptionButton,
-  PRIMARY_ACTION,
+  OptionList,
   QuestionHeading,
   SECONDARY_ACTION,
   SecondaryActions,
 } from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import {
   WIZARD_BACK_KEYS,
   WIZARD_CANCEL_KEYS,
@@ -107,7 +108,7 @@ function QuestionStep({
   return (
     <>
       <QuestionHeading>{question}</QuestionHeading>
-      <div className="flex flex-col gap-2">
+      <OptionList aria-label={question}>
         {answers.map((option, i) => {
           const id = `opt-${i}`;
           const busy = sendingId === id;
@@ -129,7 +130,7 @@ function QuestionStep({
             />
           );
         })}
-      </div>
+      </OptionList>
       {/* The escape row ("Chat about this") ends the WHOLE wizard — the tool call resolves as
           declined — so it sits with the card's utilities, never like an answer. */}
       {escapes.length > 0 && (
@@ -173,7 +174,7 @@ function ReviewStep({
     <>
       <QuestionHeading>Review your answers</QuestionHeading>
       {wizard.answers.length > 0 && (
-        <dl className="flex flex-col gap-1.5 rounded-xl bg-muted/60 px-3 py-2.5 text-[13px] leading-snug">
+        <dl className="flex flex-col gap-1.5 rounded-lg bg-muted/60 px-3 py-2.5 text-footnote">
           {wizard.answers.map((qa, i) => (
             <div key={i}>
               <dt className="text-muted-foreground">{qa.question}</dt>
@@ -183,22 +184,23 @@ function ReviewStep({
         </dl>
       )}
       {wizard.incomplete && (
-        <p className="flex items-center gap-2 text-[15px] leading-5 text-status-working">
+        <p className="flex items-center gap-2 text-body text-status-working">
           <AlertTriangle aria-hidden className="size-4 shrink-0" />
           You have not answered all questions
         </p>
       )}
-      <button
+      <Button
         type="button"
+        size="block"
         disabled={locked}
+        aria-busy={sendingId === "submit" || undefined}
         onClick={() => onPress("submit", WIZARD_SUBMIT_KEYS)}
-        className={PRIMARY_ACTION}
       >
         {sendingId === "submit" ? (
           <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
         ) : null}
         Submit answers
-      </button>
+      </Button>
       <SecondaryActions>
         <button
           type="button"
