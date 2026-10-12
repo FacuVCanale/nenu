@@ -27,12 +27,14 @@ describe("PreviewSelectBlock — presentation", () => {
 
     const card = screen.getByRole("region", { name: "Which widget design should we use?" });
     expect(within(card).getByText("Waiting on you")).toBeInTheDocument();
+    // The rows are one choice, announced as radios: the pointed row is the checked one, the one
+    // previewed, and the one Choose commits.
+    const rows = within(card).getByRole("radiogroup", { name: model.question });
     for (const label of ["Boxy", "Rounded", "Minimal"]) {
-      expect(screen.getByRole("button", { name: new RegExp(`^${label}`) })).toBeInTheDocument();
+      expect(within(rows).getByRole("radio", { name: new RegExp(`^${label}`) })).toBeInTheDocument();
     }
-    // The pointed row is the one previewed, and the one Choose commits.
-    expect(screen.getByRole("button", { name: /^Boxy/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^Rounded/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("radio", { name: /^Boxy/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^Rounded/ })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Choose Boxy" })).toBeInTheDocument();
     expect(screen.getByText(model.question)).toBeInTheDocument();
     // No terminal-style caption above the card: the header says what it is.
@@ -50,7 +52,7 @@ describe("PreviewSelectBlock — presentation", () => {
   it("draws (Recommended) as the badge on the row and leaves it out of Choose", () => {
     const model = fixtureModel("claude--wizard-preview-wrapped-label.txt");
     render(<PreviewSelectBlock preview={model} onAction={vi.fn()} />);
-    const row = screen.getByRole("button", { name: /^Grid of equal-width cards with a fixed gutter/ });
+    const row = screen.getByRole("radio", { name: /^Grid of equal-width cards with a fixed gutter/ });
     expect(row).not.toHaveTextContent("(Recommended)");
     expect(within(row).getByText("Recommended")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Choose Grid of equal-width cards with a fixed gutter" })).toBeInTheDocument();
@@ -99,7 +101,7 @@ describe("PreviewSelectBlock — intents", () => {
     const model = fixtureModel("claude--select-preview.txt");
     render(<PreviewSelectBlock preview={model} onAction={onAction} />);
 
-    await user.click(screen.getByRole("button", { name: /^Rounded/ }));
+    await user.click(screen.getByRole("radio", { name: /^Rounded/ }));
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onAction).toHaveBeenCalledWith({ kind: "point", option: model.options[1] });
   });
@@ -110,7 +112,7 @@ describe("PreviewSelectBlock — intents", () => {
     const model = fixtureModel("claude--select-preview.txt");
     render(<PreviewSelectBlock preview={model} onAction={onAction} />);
 
-    await user.click(screen.getByRole("button", { name: /^Boxy/ }));
+    await user.click(screen.getByRole("radio", { name: /^Boxy/ }));
     expect(onAction).not.toHaveBeenCalled();
   });
 

@@ -1216,11 +1216,11 @@ describe("AgentChat — pointing at a preview option", () => {
     expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeVisible();
 
     hold = true;
-    await user.click(within(card).getByRole("button", { name: /^Rounded/ }));
+    await user.click(within(card).getByRole("radio", { name: /^Rounded/ }));
     await waitFor(() => expect(held).toBeGreaterThan(0));
     expect(keys).toEqual([["2"]]);
     // The pointer moved, but the card on screen is still the old read: nothing in it can be pressed.
-    expect(within(card).getByRole("button", { name: /^Rounded/ })).toBeDisabled();
+    expect(within(card).getByRole("radio", { name: /^Rounded/ })).toBeDisabled();
     expect(within(card).getByRole("button", { name: "Choose Boxy" })).toBeDisabled();
 
     hold = false;
