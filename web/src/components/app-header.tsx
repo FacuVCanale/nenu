@@ -51,8 +51,10 @@ interface AppHeaderProps {
 const HOME_ROUTE = "/";
 const CHAT_ROUTE = "/pane/:paneId";
 
-// A real 44 px box on a phone; on a desk the sidebar is the way around, so the back steps aside.
-const BACK_CONTROL = "-ml-1 grid size-11 shrink-0 place-items-center rounded-md text-foreground transition-opacity active:opacity-60 lg:hidden";
+// A real 44 px box on a phone, its chevron at the leading edge so the stroke lines up with the 16 px page
+// gutter without a negative margin (which would push the focus ring off screen). On a desk the sidebar
+// is the way around, so the back steps aside.
+const BACK_CONTROL = "flex size-11 shrink-0 items-center rounded-md pl-1 text-foreground transition-opacity active:opacity-60 lg:hidden";
 
 // Shared header and connection treatment for every route; its size and padding live in workbench.css.
 export function AppHeader({
