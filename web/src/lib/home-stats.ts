@@ -16,18 +16,20 @@ export interface HomeCounts {
   working: number;
 }
 
-/** The one sentence at the top of Home. The short form is the phone's, which has room for two facts. */
-export function homeHeadline(counts: HomeCounts, total: number, short = false): string {
+/** Home's headline: the one fact that needs you most, said with its noun, and the rest on a line under it. */
+export interface HomeHeadline {
+  title: string;
+  /** The other facts, " · "-joined; null when there are none. */
+  detail: string | null;
+}
+
+export function homeHeadline(counts: HomeCounts, total: number): HomeHeadline {
   const { needs, review, working } = counts;
-  if (short) {
-    const parts = [needs && `${needs} need${needs === 1 ? "s" : ""} you`, review && `${review} to review`, working && `${working} working`].filter(Boolean);
-    return parts.length ? parts.slice(0, 2).join(" · ") : total ? "All quiet" : "What should we work on?";
-  }
-  if (needs && review) return `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you, ${review} ${review === 1 ? "is" : "are"} ready to review`;
-  if (needs) return `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you`;
-  if (review) return `${plural(review, "pull request")} ready to review`;
-  if (working) return `${plural(working, "agent")} at work`;
-  return total ? "All quiet" : "What should we work on?";
+  const rest = (...parts: Array<string | false>) => parts.filter(Boolean).join(" · ") || null;
+  if (needs) return { title: `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you`, detail: rest(review > 0 && `${review} to review`, working > 0 && `${working} working`) };
+  if (review) return { title: `${plural(review, "pull request")} ready to review`, detail: rest(working > 0 && `${working} working`) };
+  if (working) return { title: `${plural(working, "agent")} at work`, detail: null };
+  return { title: total ? "All quiet" : "What should we work on?", detail: null };
 }
 
 export function greeting(now: number): string {

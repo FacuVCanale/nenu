@@ -66,7 +66,9 @@ async function setup(value = data) {
   return { router, user: userEvent.setup(), main: within(document.querySelector("main")!) };
 }
 
-const headline = () => screen.getByRole("heading", { level: 1 }).querySelector(".max-sm\\:hidden")?.textContent;
+const headline = () => screen.getByRole("heading", { level: 1 }).textContent;
+/** The line under the headline: the facts the headline leaves out. */
+const subline = () => screen.getByRole("heading", { level: 1 }).nextElementSibling?.textContent;
 
 it("answers a dialog in place from Needs you", async () => {
   const answers: unknown[] = [];
@@ -162,7 +164,8 @@ describe("a project's coordinator", () => {
 
 it("lists pull requests ready to review with their diff and checks", async () => {
   const { user, router, main } = await setup(projectData);
-  expect(headline()).toBe("1 thread needs you, 1 is ready to review");
+  expect(headline()).toBe("1 thread needs you");
+  expect(subline()).toBe("1 to review · 1 working");
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
   expect(review.getByText("Mobile panel")).toBeInTheDocument();
   expect(review.getByText("#1342")).toBeInTheDocument();
@@ -285,7 +288,8 @@ it("lists the pull requests agents opened outside Organizations and reviews them
     pr(1698, { title: "Abandoned carts", paneIds: ["w1:p1"], checks: { passed: 2, failed: 1, pending: 0 }, diff: { additions: 3752, deletions: 154 } }),
     pr(1696, { title: "Publish products", review: "approved", checks: { passed: 4, failed: 0, pending: 0 } }),
   ] });
-  expect(headline()).toBe("1 thread needs you, 3 are ready to review");
+  expect(headline()).toBe("1 thread needs you");
+  expect(subline()).toBe("3 to review");
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
   expect(review.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual(["Review Publish products", "Review Abandoned carts", "Review Email campaigns"]);
   expect(review.getByText("#1698")).toBeInTheDocument();
