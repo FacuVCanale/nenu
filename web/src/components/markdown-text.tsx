@@ -185,7 +185,7 @@ function Block({ block }: { block: MdBlock }) {
       // own scroller — the same thing a mobile browser does with a table on any normal page.
       return (
         <div className="overflow-x-auto">
-          <table className="w-max border-collapse text-xs">
+          <table className="w-max border-collapse text-footnote tabular-nums">
             <thead>
               <tr>
                 {block.header.map((cell, i) => (
