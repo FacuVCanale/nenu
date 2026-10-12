@@ -19,6 +19,15 @@ function fixtureModel(name: string): MultiSelectModel {
 }
 
 describe("MultiSelectBlock — checkbox screen", () => {
+  it("draws an option's (Recommended) suffix as the badge, not as text", () => {
+    const model = fixtureModel("claude--select-multiselect-checked.txt");
+    const recommended = { ...model, options: model.options.map((o, i) => (i === 0 ? { ...o, label: `${o.label} (Recommended)` } : o)) };
+    render(<MultiSelectBlock multi={recommended} onAction={vi.fn()} />);
+    const row = screen.getByRole("checkbox", { name: /^Cheese/ });
+    expect(row).not.toHaveTextContent("(Recommended)");
+    expect(within(row).getByText("Recommended")).toBeInTheDocument();
+  });
+
   it("renders the question, native labelled checkboxes, and the checked state", () => {
     const model = fixtureModel("claude--select-multiselect-checked.txt");
     render(<MultiSelectBlock multi={model} onAction={vi.fn()} />);

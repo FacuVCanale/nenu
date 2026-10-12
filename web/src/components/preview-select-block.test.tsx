@@ -45,6 +45,18 @@ describe("PreviewSelectBlock — presentation", () => {
     expect(screen.queryByRole("button", { name: "Next step" })).not.toBeInTheDocument();
   });
 
+  // The agent's "(Recommended)" suffix is the badge every card draws, never raw text in a row or in
+  // the Choose button (fixture: a wrapped three-line label that ends in the suffix).
+  it("draws (Recommended) as the badge on the row and leaves it out of Choose", () => {
+    const model = fixtureModel("claude--wizard-preview-wrapped-label.txt");
+    render(<PreviewSelectBlock preview={model} onAction={vi.fn()} />);
+    const row = screen.getByRole("button", { name: /^Grid of equal-width cards with a fixed gutter/ });
+    expect(row).not.toHaveTextContent("(Recommended)");
+    expect(within(row).getByText("Recommended")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose Grid of equal-width cards with a fixed gutter" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Preview of Grid of equal-width cards with a fixed gutter" })).toBeInTheDocument();
+  });
+
   it("shows an attached note with edit and remove controls", () => {
     const model = fixtureModel("claude--select-preview-note-attached.txt");
     render(<PreviewSelectBlock preview={model} onAction={vi.fn()} />);
