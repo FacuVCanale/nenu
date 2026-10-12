@@ -23,6 +23,12 @@
   :is(.nav-row, .nav-pane):hover { background: var(--workbench-row-hover); }
   .nav-row:disabled:hover { background: none; }
 }
+/* A finger gets the same tint the moment it lands, and it fades as the finger lifts. A row already
+   filled as current or picked keeps its fill. */
+@media (hover: none) {
+  :is(.nav-row, .nav-pane) { transition: background-color 120ms ease-out; }
+  :is(.nav-row, .nav-pane):active:not(:disabled, [aria-current="page"], [aria-selected="true"]) { background: var(--workbench-row-hover); transition-duration: 0ms; }
+}
 .nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
 /* The workspace holding the open chat, while folded; open, the chat's own row carries the mark. */
 .nav-ws:not(:has(> .nav-ws-body)) .nav-row[aria-current="true"] { background: var(--workbench-row-hover); }
