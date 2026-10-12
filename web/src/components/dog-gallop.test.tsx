@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { inflateSync } from "node:zlib";
 import { render, screen } from "@testing-library/react";
 
 import { DogGallop } from "./dog-gallop";
@@ -43,6 +44,16 @@ describe("DogGallop", () => {
     // and the boot splash, which only inverts it, drew the tile. PNG colour type 6 is RGBA.
     const png = readFileSync(resolve(import.meta.dirname, "../../public/nenu-mark.png"));
     expect(png.subarray(1, 4).toString("ascii")).toBe("PNG");
-    expect(png[25]).toBe(6);
+    // 8-bit RGBA, not interlaced, so the first scanline starts with the top-left pixel.
+    expect([png[24], png[25], png[28]]).toEqual([8, 6, 0]);
+    const idat: Buffer[] = [];
+    for (let at = 8; at < png.length;) {
+      const length = png.readUInt32BE(at);
+      if (png.subarray(at + 4, at + 8).toString("ascii") === "IDAT") idat.push(png.subarray(at + 8, at + 8 + length));
+      at += 12 + length;
+    }
+    // Byte 0 is the row's filter; every filter leaves the first pixel of the first row as stored.
+    const pixels = inflateSync(Buffer.concat(idat));
+    expect(pixels[4]).toBe(0);
   });
 });
