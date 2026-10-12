@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { Link, useRevalidator } from "react-router";
-import { AlertCircle, ChevronRight, FolderPlus, LockKeyhole, Sparkles, Wifi, WifiOff, Workflow, type LucideIcon } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useNavigation, useRevalidator } from "react-router";
+import { AlertCircle, ChevronRight, FolderPlus, Loader2, LockKeyhole, Sparkles, Wifi, WifiOff, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
@@ -15,6 +15,33 @@ import { panePath } from "@/lib/nav";
 import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** How long a tap's navigation may run before its row says it is opening, so a fast read never flashes. */
+export const OPENING_MS = 120;
+
+/**
+ * The path a navigation is loading (no query), once it has run for OPENING_MS; null otherwise. The
+ * pane route waits for its read, so over a slow link the tapped row is the only place to say so.
+ */
+export function useOpeningPath(): string | null {
+  const navigation = useNavigation();
+  const loading = navigation.state === "loading" ? navigation.location.pathname : null;
+  const [late, setLate] = useState<string | null>(null);
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => setLate(loading), OPENING_MS);
+    return () => clearTimeout(timer);
+  }, [loading]);
+  return loading !== null && late === loading ? loading : null;
+}
+
+/** Whether `to` (a path with an optional query) is the one opening. */
+export const isOpening = (opening: string | null, to: string) => opening !== null && opening === to.split("?")[0];
+
+/** The 16px spinner an opening row shows in place of its trailing mark (static under reduced motion). */
+export function OpeningSpinner({ className }: { className?: string }) {
+  return <Loader2 aria-hidden className={cn("size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none", className)} />;
+}
 
 /** A Home section's heading: its name, how many, and an optional note at the far end. */
 export function HomeHeading({ id, label, count, note }: { id: string; label: string; count?: number; note?: ReactNode }) {
@@ -49,28 +76,33 @@ const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { working: "text-statu
 const sr = (text: string) => <span className="sr-only">{text}</span>;
 
 /** Title, then state and place; the place gives up width before the tab, which tells rows apart. */
-function RecentRow({ chat, session, now }: { chat: RecentChat; session?: string; now: number }) {
+function RecentRow({ chat, session, now, opening }: { chat: RecentChat; session?: string; now: number; opening: string | null }) {
   const { agent, title, place, tab, at, unseen } = chat;
   const status = STATUS_LABEL[agent.status];
+  const to = panePath(agent.paneId, session);
+  const busy = isOpening(opening, to);
   return (
     <li>
-      <Link to={panePath(agent.paneId, session)}
-        className="grid min-h-13 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-1.5 hover:bg-[var(--workbench-row-hover)] sm:rounded-[10px] sm:px-3.5">
+      <Link to={to} aria-busy={busy || undefined}
+        className={cn("grid min-h-14 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:rounded-lg sm:px-3.5",
+          busy && "bg-[var(--workbench-row-hover)]")}>
         <StatusDot status={agent.status} className="row-span-2 size-2" />
         <span className="col-start-2 flex min-w-0 items-center gap-1.5">
-          <span className={cn("truncate text-[13.5px] leading-tight", unseen && "font-semibold")}>{title}</span>
-          {unseen && <>{sr(", ")}<span className="shrink-0 rounded border border-status-done/50 px-1 text-[11px] leading-4 text-status-done">New</span></>}
+          <span className={cn("truncate text-body", unseen && "font-semibold")}>{title}</span>
+          {unseen && <>{sr(", ")}<span className="shrink-0 rounded-sm border border-status-done/50 px-1 text-micro text-status-done">New</span></>}
         </span>
-        <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-xs leading-tight text-muted-foreground">
+        <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
           {sr(", ")}
           <span className={cn("shrink-0", STATUS_TEXT[agent.status])}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
           <span aria-hidden className="shrink-0">·</span>{sr(", ")}
           <span className={cn("truncate", tab ? "max-w-[45%] shrink" : "min-w-0 flex-1")}>{place}</span>
           {tab && <><span aria-hidden className="shrink-0">·</span>{sr(", ")}<span className="min-w-0 flex-1 truncate">{tab}</span></>}
         </span>
-        {at > 0 && <span className="col-start-3 row-span-2 row-start-1 text-xs text-muted-foreground tabular-nums">
-          {sr(", ")}<span aria-hidden>{timeAgoShort(at, now)}</span>{sr(timeAgo(at, now))}
-        </span>}
+        {busy
+          ? <OpeningSpinner className="col-start-3 row-span-2 row-start-1" />
+          : at > 0 && <span className="col-start-3 row-span-2 row-start-1 text-footnote text-muted-foreground tabular-nums">
+            {sr(", ")}<span aria-hidden>{timeAgoShort(at, now)}</span>{sr(timeAgo(at, now))}
+          </span>}
       </Link>
     </li>
   );
@@ -81,13 +113,14 @@ function RecentRow({ chat, session, now }: { chat: RecentChat; session?: string;
  * many agents are working right now. "New" marks one that finished since you last opened it.
  */
 export function RecentChats({ chats, working, session, now }: { chats: readonly RecentChat[]; working: number; session?: string; now: number }) {
+  const opening = useOpeningPath();
   if (!chats.length) return null;
   return (
     <section aria-labelledby="home-recent" className="flex flex-col gap-1.5">
       <HomeHeading id="home-recent" label="Recent"
         note={working > 0 && <><StatusDot status="working" className="size-1.5" />{working} working now</>} />
       <FoldedList items={chats} rows={RECENT_ROWS}>
-        {(chat) => <RecentRow key={chat.agent.paneId} chat={chat} session={session} now={now} />}
+        {(chat) => <RecentRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} />}
       </FoldedList>
     </section>
   );
@@ -95,32 +128,35 @@ export function RecentChats({ chats, working, session, now }: { chats: readonly 
 
 /** A workflow still running, with how far its agents got. */
 export function RunningWorkCard({ paneId, workflow, agent, session, now }: { paneId: string; workflow: ActivityWorkflow; agent?: AgentView; session?: string; now: number }) {
+  const opening = useOpeningPath();
   const agents = allAgents(workflow);
   const running = agents.filter((a) => a.state === "running").slice(0, 3);
   const elapsed = formatDuration(workflowElapsed(workflow, now));
+  const to = panePath(paneId, session);
+  const busy = isOpening(opening, to);
   return (
-    <Link to={panePath(paneId, session)} className="flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-3.5 hover:bg-card/80">
+    <Link to={to} aria-busy={busy || undefined} className={cn("flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-4 transition-colors hover:bg-accent", busy && "bg-accent")}>
       <span className="flex min-w-0 items-center gap-2.5">
         <Workflow aria-hidden className="size-4 shrink-0 text-status-working" />
-        <span className="flex min-w-0 flex-1 flex-col leading-snug">
-          <span className="truncate text-[13.5px] font-semibold">{workflow.name}</span>
-          <span className="truncate text-[11.5px] text-muted-foreground">{[agent?.workspaceLabel, elapsed].filter(Boolean).join(" · ")}</span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-subhead font-semibold">{workflow.name}</span>
+          <span className="truncate text-footnote text-muted-foreground">{[agent?.workspaceLabel, elapsed].filter(Boolean).join(" · ")}</span>
         </span>
-        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        {busy ? <OpeningSpinner /> : <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
       </span>
       <AgentBar states={agents.map((a) => a.state)} />
       {running.length > 0 && (
         <span className="flex flex-col gap-1">
           {running.map((a) => (
-            <span key={a.id} className="flex items-center gap-2 text-xs">
+            <span key={a.id} className="flex items-center gap-2 text-footnote">
               <StateDot state="running" />
-              <span className="min-w-0 flex-1 truncate text-foreground/85">{a.label}</span>
+              <span className="min-w-0 flex-1 truncate">{a.label}</span>
               <span className="shrink-0 text-muted-foreground tabular-nums">{formatDuration(agentElapsed(a, now))}</span>
             </span>
           ))}
         </span>
       )}
-      <span className="text-[11.5px] text-muted-foreground">{workflow.doneCount} of {workflow.agentCount} agents done</span>
+      <span className="text-footnote text-muted-foreground tabular-nums">{workflow.doneCount} of {workflow.agentCount} agents done</span>
     </Link>
   );
 }

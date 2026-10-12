@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Check, CircleDashed, GitPullRequest, X } from "lucide-react";
 
-import { FoldedList, HomeHeading } from "@/components/home-panels";
+import { FoldedList, HomeHeading, isOpening, OpeningSpinner, useOpeningPath } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import type { ReviewEntry } from "@/lib/home-stats";
@@ -97,9 +97,11 @@ const actionClass = "inline-flex min-h-9 shrink-0 items-center rounded-lg border
  * and the diff and checks sit in their own columns; on a phone it reads "#1342 · +212 −148", as the
  * narrow row has no room for both, and the number never gives way to the rest.
  */
-function ReviewRow({ entry, session }: { entry: ReviewEntry; session?: string }) {
+function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: string; opening: string | null }) {
   const verdict = entry.review && REVIEW_WORDS[entry.review];
   const label = `Review ${entry.title}`;
+  const to = entry.open && ("paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session));
+  const busy = !!to && isOpening(opening, to);
   return (
     <li className={rowClass}>
       <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0", entry.draft ? "text-muted-foreground" : "text-status-done")} />
@@ -126,9 +128,9 @@ function ReviewRow({ entry, session }: { entry: ReviewEntry; session?: string })
         </span>
       )}
       <span className="col-start-3 row-span-2 row-start-1 sm:col-start-4">{entry.checks && <Checks checks={entry.checks} />}</span>
-      {entry.open ? (
-        <Link to={"paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session)}
-          className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>Review</Link>
+      {to ? (
+        <Link to={to} aria-busy={busy || undefined}
+          className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>{busy && <OpeningSpinner className="text-current" />}Review</Link>
       ) : entry.url ? (
         <a href={entry.url} target="_blank" rel="noopener noreferrer" className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>Review</a>
       ) : null}
@@ -141,12 +143,13 @@ export const REVIEW_ROWS = 5;
 
 /** Home's "Ready to review": the pull requests waiting on you, nothing else. */
 export function ReadyToReviewList({ entries, session }: { entries: readonly ReviewEntry[]; session?: string }) {
+  const opening = useOpeningPath();
   if (!entries.length) return null;
   return (
     <section aria-labelledby="home-review" className="flex flex-col gap-1.5">
       <HomeHeading id="home-review" label="Ready to review" count={entries.length} />
       <FoldedList items={entries} rows={REVIEW_ROWS}>
-        {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} />}
+        {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
       </FoldedList>
     </section>
   );

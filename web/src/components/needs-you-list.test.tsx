@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { NeedsYouList } from "./needs-you-list";
 import type { InteractionsState } from "@/hooks/use-interactions";
 import type { AgentView } from "@/lib/types";
@@ -16,12 +16,10 @@ const interactions: InteractionsState = {
   interactions: [], receipts: [], stale: false, loaded: true, refresh: () => {}, answer: () => Promise.resolve({ ok: true }), refusalFor: () => undefined,
 };
 
+// A data router, as in the app: a row reads the navigation to say when it is opening.
 function renderRow() {
-  render(
-    <MemoryRouter>
-      <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId }]} receipts={[]} interactions={interactions} lockReason={undefined} />
-    </MemoryRouter>,
-  );
+  const element = <NeedsYouList agents={[blocked]} session="work" items={[{ paneId: blocked.paneId }]} receipts={[]} interactions={interactions} lockReason={undefined} />;
+  render(<RouterProvider router={createMemoryRouter([{ path: "/", element }])} />);
   return screen.getByRole("link");
 }
 

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { ChevronRight } from "lucide-react";
 
-import { HomeHeading } from "@/components/home-panels";
+import { HomeHeading, isOpening, OpeningSpinner, useOpeningPath } from "@/components/home-panels";
 import { QuestionCard, type LockReason } from "@/components/question-card";
 import { StatusDot } from "@/components/status-badge";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
@@ -9,6 +9,7 @@ import type { NeedsYouItem } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
 import { displayName, displayPlace } from "@/lib/display-name";
 import type { AgentView, Interaction, ProjectView } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** Who is asking and where it lives, by the names every other view gives the same pane. */
 function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | undefined, paneId: string): { name: string; where?: string } {
@@ -34,6 +35,7 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
   lockReason: LockReason | undefined;
 }) {
   const navigate = useNavigate();
+  const opening = useOpeningPath();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
   if (!items.length && !receipts.length) return null;
 
@@ -50,18 +52,21 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
               onOpen={() => navigate(panePath(paneId, session))} onAnswer={(option, extra) => interactions.answer(interaction, option, extra)} />
           );
         }
+        const to = panePath(paneId, session);
+        const busy = isOpening(opening, to);
         return (
-          <Link key={paneId} to={panePath(paneId, session)} aria-label={[who.name, who.where, WAITING].filter(Boolean).join(", ")}
-            className="flex min-h-14 min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-status-blocked/40 bg-status-blocked/[0.06] px-3.5 py-2">
+          <Link key={paneId} to={to} aria-busy={busy || undefined} aria-label={[who.name, who.where, WAITING].filter(Boolean).join(", ")}
+            className={cn("flex min-h-14 min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-2 transition-colors hover:bg-accent",
+              busy && "bg-accent")}>
             <StatusDot status="blocked" surface="bg-card" className="size-2" />
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-[0.9375rem] leading-5 font-medium">{who.name}</span>
-              <span className="flex min-w-0 items-baseline gap-1 text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
+              <span className="truncate text-subhead font-medium">{who.name}</span>
+              <span className="flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
                 {who.where && <><span className="min-w-0 truncate">{who.where}</span><span className="shrink-0">·</span></>}
                 <span className="shrink-0">{WAITING}</span>
               </span>
             </span>
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            {busy ? <OpeningSpinner /> : <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
           </Link>
         );
       })}
