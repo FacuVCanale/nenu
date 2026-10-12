@@ -67,6 +67,18 @@ it("keeps Stop in one place on the Working row while Claude works, draft or not;
   expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
 });
 
+// The row comes and goes with every turn; appearing or vanishing at once jerked the thread 40 px.
+it("folds the Working row shut when the turn ends, out of reach while it goes", async () => {
+  const { rerender } = setup();
+  const row = screen.getByRole("group", { name: "Agent working" });
+  rerender({ working: false });
+  // Still on screen while it folds, but nothing in it can be pressed or announced.
+  expect(row).toBeInTheDocument();
+  expect(row.closest("[inert]")).not.toBeNull();
+  expect(stopButton()).not.toBeInTheDocument();
+  await waitFor(() => expect(row).not.toBeInTheDocument());
+});
+
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
   const { user, rerender } = setup();
   await user.click(stopButton()!);
