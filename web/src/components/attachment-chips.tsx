@@ -72,9 +72,9 @@ function AttachmentChip({
         )}
       </span>
       <span className="flex min-w-0 flex-col items-start leading-tight">
-        <span className="text-xs font-medium">{label}</span>
+        <span className="text-caption font-medium">{label}</span>
         {item.status !== "ready" && (
-          <span className={cn("text-[11px]", failed ? "text-destructive" : "text-muted-foreground")}>
+          <span className={cn("text-caption", failed ? "text-destructive" : "text-muted-foreground")}>
             {failed ? "Failed · tap to retry" : "Uploading…"}
           </span>
         )}

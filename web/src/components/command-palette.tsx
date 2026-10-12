@@ -117,7 +117,7 @@ export function CommandPalette({
                     {c.command}
                   </span>
                   {c.takesArg && (
-                    <span className="font-mono text-[11px] text-muted-foreground">{c.argHint}</span>
+                    <span className="font-mono text-caption text-muted-foreground">{c.argHint}</span>
                   )}
                 </div>
                 <p className="truncate text-xs text-muted-foreground">{c.description}</p>

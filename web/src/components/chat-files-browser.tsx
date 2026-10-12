@@ -294,7 +294,7 @@ export function ChatFilesBrowser({
                 </div>
                 <div className="px-2.5 py-2">
                   <p className="truncate text-sm font-medium">{reference.name}</p>
-                  <p className="truncate font-mono text-[11px] text-muted-foreground">{reference.path}</p>
+                  <p className="truncate font-mono text-caption text-muted-foreground">{reference.path}</p>
                 </div>
               </button>
             ))}
@@ -308,7 +308,7 @@ export function ChatFilesBrowser({
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText aria-hidden="true" className="size-4" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{boards.get(reference.path) ?? reference.name}</span>
-                    <span className="block truncate font-mono text-[11px] text-muted-foreground">{reference.path}</span>
+                    <span className="block truncate font-mono text-caption text-muted-foreground">{reference.path}</span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-muted-foreground">
                     <span className="block">{boards.has(reference.path) ? "Designboard" : fileExtension(reference).toUpperCase()}</span>

@@ -42,8 +42,8 @@
 /* Stop at the end of the row above the box, right edge on Send's, for the whole turn. */
 .composer-working { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 40px; padding: 0 7px 4px 12px; }
 .composer-stop { height: 32px; padding: 0 12px; border-radius: 9999px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
-.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: 13px; color: var(--muted-foreground); }
-.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: var(--text-footnote); color: var(--muted-foreground); }
+.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; cursor: pointer; }
 .composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
 @media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
 .composer-quiet:disabled { opacity: 0.5; cursor: default; }
