@@ -198,7 +198,7 @@ async function agentPane(agent: "claude" | "codex", status: Status, { audited = 
   const codexBusy = await repoFile("web/src/fixtures/panes/codex--v0159-busy.txt");
   const codexDraft = await repoFile("web/src/lib/harness/codex/fixtures/busy-draft-v0160.txt");
   const pane = {
-    status, seq: 1, session: "first", draft: "", events: 0,
+    status, seq: 1, session: "first", draft: "", events: 0, turn: undefined as import("./types.ts").TurnState | undefined,
     submitted: [] as string[], keys: [] as string[][], journal: [] as import("./journal/types.ts").NativeQueueEvent[],
     audit: [] as import("./audit.ts").AuditEntry[],
   };
@@ -224,6 +224,7 @@ async function agentPane(agent: "claude" | "codex", status: Status, { audited = 
       pane: {
         paneId: "pane", workspaceId: "w", workspaceLabel: "QA", workspaceNumber: 1, tabId: "t", agent, cwd: "/tmp", focused: false,
         status: pane.status, stateChangeSeq: pane.seq, agentSession: { kind: "id" as const, value: pane.session },
+        ...(pane.turn ? { turn: pane.turn } : {}),
       },
       herdr, connected: true,
     }),
@@ -299,6 +300,29 @@ it("the second Claude row waits for Herdr to see the first one's turn start (sta
     t.service.kick();
     await t.settle(() => t.pane.submitted.length === 2);
     expect(t.pane.submitted).toEqual(["First", "Second"]);
+  } finally { await t.close(); }
+});
+
+// Measured 2026-10-12: while a background agent runs, Herdr stays working and its state counter does
+// not move when a delivered message starts a turn, so the second row waited the whole cap (~22 s).
+it("the second Claude row sees the first one's turn start in Claude's own state when Herdr's counter stays put", async () => {
+  const t = await agentPane("claude", "working");
+  const background = { running: false, background: true, source: "claude-session" as const };
+  t.pane.turn = background;
+  try {
+    await t.add("one", "First");
+    await t.settle(() => t.pane.submitted.length === 1);
+    const second = await t.add("two", "Second");
+    expect(second.body.messages[0]).toMatchObject({ id: "two", waitingFor: "turn-start" });
+    t.pane.turn = { running: true, source: "claude-session" }; // the turn started; seq and status did not move
+    t.service.kick();
+    await Bun.sleep(30);
+    expect((await t.call()).body.messages[0]).toMatchObject({ id: "two", waitingFor: "working" });
+    t.pane.turn = background;
+    t.service.kick();
+    await t.settle(() => t.pane.submitted.length === 2);
+    expect(t.pane.submitted).toEqual(["First", "Second"]);
+    expect(t.pane.seq).toBe(1);
   } finally { await t.close(); }
 });
 
