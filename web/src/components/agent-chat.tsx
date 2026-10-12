@@ -220,8 +220,9 @@ export function AgentChat({
   // rejects every write, so the composer drops to read-only. The mirror still polls (reading is fine).
   const readOnly = authError || isReadOnly(device);
   // Why writing is paused, in the words the question card uses too: a refused sign-in is not a device
-  // that was never authorised, and a silent Herdr is not a lost network.
-  const lock = lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
+  // that was never authorised, and a silent Herdr is not a lost network. A refusal counts even while
+  // the snapshot answers: DetailRoute passes the pane's own refused read as authError.
+  const lock = authError && !isReadOnly(device) ? "refused" : lockReasonOf({ readOnly: isReadOnly(device), error, authError, bridge });
   const refusedWrite = lock === "refused" ? "Access refused. Sign in again." : "Read-only — device not authorised";
 
   const listRef = useRef<ChatMessageListHandle>(null);
@@ -967,8 +968,8 @@ export function AgentChat({
   const navigation = useContext(WorkbenchNavigationContext);
   const opensNavigation = !desktop && navigation !== undefined;
   // Herdr answering nothing blocks the composer at once, so the header says so at once too, in the
-  // place line, before the outage notice's grace runs out.
-  const herdrSilent = lock === "herdr";
+  // place line, before the outage notice's grace runs out. It is news on a device that cannot write too.
+  const herdrSilent = bridge === "disconnected" && !error;
   const titleLabel = agent && <span className="flex min-w-0 flex-1 flex-col">
     <span className="flex min-w-0 items-center gap-1">
       <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
