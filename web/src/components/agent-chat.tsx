@@ -1321,6 +1321,7 @@ export function AgentChat({
             disconnected={unavailable}
             lockReason={lock}
             lockOnCard={showCard && cardCovers}
+            herdrDown={bridge === "disconnected" && !error}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             processesControl={processesControl}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
