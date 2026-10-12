@@ -73,12 +73,14 @@ interface ChipStripProps {
   activeKey: string;
   /** Before the scroller, outside it (the desk's "Panes" label). */
   lead?: ReactNode;
+  /** After the scroller, outside it, so it never scrolls out of reach (the tab strip's +). */
+  trail?: ReactNode;
   children: ReactNode;
 }
 
 // One row of chips that scrolls sideways. The open chip is kept in view, and an edge the row can
 // still scroll toward fades, so a sibling past it is seen to exist.
-export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
+export function ChipStrip({ band, activeKey, lead, trail, children }: ChipStripProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
   const revealed = useRef<ChipSpot | null>(null);
@@ -96,6 +98,14 @@ export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
     if (!scroller || !chips) return;
     const update = () => markFadingEdges(scroller);
     scroller.addEventListener("scroll", update, { passive: true });
+    // A mouse wheel only turns vertically and a strip has no scrollbar, so the wheel scrolls it
+    // sideways. A trackpad's own sideways swipe passes through untouched.
+    const wheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || scroller.scrollWidth <= scroller.clientWidth) return;
+      e.preventDefault();
+      scroller.scrollLeft += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY;
+    };
+    scroller.addEventListener("wheel", wheel, { passive: false });
     const resize =
       typeof ResizeObserver === "undefined"
         ? null
@@ -108,6 +118,7 @@ export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
     update();
     return () => {
       scroller.removeEventListener("scroll", update);
+      scroller.removeEventListener("wheel", wheel);
       resize?.disconnect();
     };
   }, []);
@@ -120,6 +131,7 @@ export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
           {children}
         </div>
       </div>
+      {trail}
     </div>
   );
 }

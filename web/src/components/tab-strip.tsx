@@ -52,7 +52,15 @@ export function TabStrip({
 
   return (
     <>
-      <ChipStrip band="tabs" activeKey={selected}>
+      <ChipStrip
+        band="tabs"
+        activeKey={selected}
+        trail={
+          <button type="button" onClick={() => onNewTab(workspaceId)} aria-label="New tab" className="strip-add">
+            <Plus className="size-4" />
+          </button>
+        }
+      >
         {wsTabs.map((t, index) => {
           // What's going on in there (blocked / ready / working / idle); nothing for a tab with no agent,
           // since empty is not idle.
@@ -71,9 +79,6 @@ export function TabStrip({
             />
           );
         })}
-        <button type="button" onClick={() => onNewTab(workspaceId)} aria-label="New tab" className="strip-add">
-          <Plus className="size-4" />
-        </button>
       </ChipStrip>
 
       {actionsEnabled && (
