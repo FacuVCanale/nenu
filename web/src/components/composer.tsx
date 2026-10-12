@@ -258,7 +258,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Every write affordance is off when the pane is gone OR this device is read-only.
   const locked = gone || readOnly || disconnected;
   // Nothing can be written here at all (as opposed to a draft waiting out an outage): the box keeps
-  // only the reason, with no + and no Send to offer what would refuse.
+  // the reason and Send's slot, disabled, and no + to offer actions that would refuse.
   const lockedOut = gone || readOnly;
   // …and a ref alongside it, for the ONE caller that reads it after an await. `send()` checks
   // `locked` once, up front, but its pre-clear sweep goes out on the far side of the pre-flight's
@@ -1367,7 +1367,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               disabled={gone || readOnly}
               rows={1}
             />
-            {!lockedOut && <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
+            <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
             {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
             {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
@@ -1412,7 +1412,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 )}
               </Button>
             )}
-            </div>}
+            </div>
           </div>
         </div>
         <WorkbenchPopover open={menuOpen && !lockedOut} onDismiss={() => setMenuOpen(false)} anchorRef={menuAnchorRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
