@@ -175,7 +175,7 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
   // being written names itself ahead of its opening words.
   const shown = open ? "" : preview;
   return <div data-step="thinking" className="min-w-0">
-    <StepLine icon={<StepIcon kind="thinking" />} live={live} label={truncated ? "Thinking · truncated" : "Thinking"} expanded={open} controls={contentId}
+    <StepLine icon={<StepIcon kind="thinking" />} live={live} label={`Thinking: ${preview}${truncated ? " · truncated" : ""}`} expanded={open} controls={contentId}
       onToggle={preview ? () => setExpanded((value) => !value) : undefined}>
       {(live || !shown) && <span className={cn("shrink-0", live ? "text-foreground" : "text-muted-foreground")}>Thinking</span>}
       <StepTarget text={shown} format="thought" query={query} />

@@ -393,7 +393,7 @@ describe("TranscriptView — work folding", () => {
   it("a query opens completed work and its matching thinking detail, then restores the fold", () => {
     const { rerender } = render(<TranscriptView entries={[activity, final]} activityStatus="done" query="dependency direction" />);
     expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Thinking", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Thinking: /, expanded: true })).toBeInTheDocument();
     expect(screen.getByText("dependency direction")).toBeVisible();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
     expect(screen.getByRole("button", { name: "Worked for 21s", expanded: false })).toBeInTheDocument();
