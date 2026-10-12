@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -71,15 +71,17 @@ describe("PaneActionsSheet — rename", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("name this pane")).toHaveFocus());
   });
 
-  it("edits under an iOS edit header, Cancel · Rename pane · Save, with no Back link", async () => {
+  it("edits under the sheet's one header, Back · Rename pane · Close, with Save under the field", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    expect(screen.getByRole("heading", { name: "Rename pane" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Pane name" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Rename pane" });
+    expect(within(dialog).getAllByRole("heading").map((h) => h.textContent)).toEqual(["Rename pane"]);
+    expect(within(dialog).getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("button", { name: "Close" })).toHaveLength(1);
+    expect(within(dialog).getByRole("textbox", { name: "Pane name" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("clears the field in one tap and keeps the keyboard on it", async () => {
@@ -92,11 +94,11 @@ describe("PaneActionsSheet — rename", () => {
     expect(screen.queryByRole("button", { name: "Clear name" })).toBeNull();
   });
 
-  it("Cancel returns to the action list without saving", async () => {
+  it("Back returns to the action list without saving", async () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(screen.getByRole("button", { name: "Rename" }));
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
 
     expect(screen.queryByPlaceholderText("name this pane")).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
@@ -232,6 +234,15 @@ describe("PaneActionsSheet — close", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(calls).toEqual([]);
     expect(props.onClosed).not.toHaveBeenCalled();
+  });
+
+  it("names the pane once: the question takes the sheet's title in place of the name", async () => {
+    const user = userEvent.setup();
+    renderSheet({ name: "Blocked Claude" });
+    await user.click(screen.getByRole("button", { name: "Close pane" }));
+    const dialog = screen.getByRole("dialog", { name: "Close “Blocked Claude”?" });
+    expect(within(dialog).getAllByText(/Blocked Claude/)).toHaveLength(1);
+    expect(within(dialog).getAllByRole("heading")).toHaveLength(1);
   });
 
   it("ignores a tap that lands right after the first, so a double tap closes nothing", async () => {
