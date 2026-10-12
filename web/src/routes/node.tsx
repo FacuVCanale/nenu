@@ -47,9 +47,8 @@ export function NodeRoute() {
     const age = threadAge(thread, Date.now());
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
-        {coordinator ? "Coordinator" : "Thread"} under {parent
-          ? <Link className="underline-offset-2 hover:underline" to={nodePath(project.slug, parent.id, data.session)}>{parent.title}</Link>
-          : <Link className="underline-offset-2 hover:underline" to={projectPath(project.slug, data.session)}>{project.name}</Link>}
+        {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
+          to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
@@ -62,7 +61,8 @@ export function NodeRoute() {
         {(live || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {live && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <MessageSquare aria-hidden className="size-4" />Open chat</Button>}
-          {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="ghost" onClick={() => setClosing(true)}>
+          {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
+            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">
             Close {coordinator ? "coordinator" : "thread"}</Button>}
         </div>}
       </section>
