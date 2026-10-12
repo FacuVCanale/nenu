@@ -109,7 +109,7 @@ export function QueuedMessage({
             disabled={disabled}
             onClick={run}
             className={cn(
-              "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2 text-footnote font-medium text-foreground hover:bg-accent disabled:text-disabled-foreground md:min-h-8",
+              "flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-footnote font-medium text-foreground hover:bg-accent disabled:text-disabled-foreground coarse:min-h-11",
               armed && "bg-destructive/10 text-destructive hover:bg-destructive/15",
             )}
           >

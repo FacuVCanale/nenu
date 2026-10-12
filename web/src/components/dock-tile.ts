@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
-// The composer docks' one control surface: a tile raised off the dock's card, used by the Keys pad
-// and the quick replies. The fill alone sits about 1.1:1 against the card in both themes, too faint to
+// The composer docks' one control surface: a tile raised off the dock's card, used by the Keys pad,
+// the quick replies and Display's steppers. The fill alone sits about 1.1:1 against the card in both themes, too faint to
 // find a key by (the old tiles measured 1.02:1), so the 1px edge carries the 3:1 a control's boundary
 // needs (WCAG 1.4.11). It borrows --switch-ring, the token index.css measures at 3:1 on the card for
 // exactly that job.
