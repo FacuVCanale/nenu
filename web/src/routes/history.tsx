@@ -266,7 +266,8 @@ export function HistoryRoute() {
             // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link.
             action={
               <Link to={back.to} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
-                <span className="truncate">Back to {back.label}</span>
+                {/* Home is every empty state's Go to Home; a live pane is where you came from. */}
+                <span className="truncate">{gone ? "Go to Home" : `Back to ${back.label}`}</span>
               </Link>
             }
           >
