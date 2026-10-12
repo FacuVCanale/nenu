@@ -71,7 +71,7 @@ function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", host = false }:
 
 function desktop() {
   const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
+  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)" || query === "(pointer: fine)", media: query }) as MediaQueryList;
   onTestFinished(() => { window.matchMedia = matchMedia; });
 }
 
@@ -112,6 +112,35 @@ it("names each step in the sheet's one title, and steps back from its header", a
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByRole("dialog", { name: "New" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+});
+
+it("moves focus to each step as it opens, so a keyboard never drops out of the sheet", async () => {
+  const { user } = setup();
+  const dialog = await screen.findByRole("dialog", { name: "New" });
+  screen.getByRole("button", { name: /^Here in/ }).focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("heading", { name: "New tab" })).toHaveFocus();
+  screen.getByRole("button", { name: /^Directory/ }).focus();
+  await user.keyboard("{Enter}");
+  expect(await screen.findByRole("heading", { name: "Choose a folder" })).toHaveFocus();
+  screen.getByRole("button", { name: "Back" }).focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("heading", { name: "New tab" })).toHaveFocus();
+  screen.getByRole("button", { name: "Back" }).focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("heading", { name: "New" })).toHaveFocus();
+  expect(dialog).toContainElement(document.activeElement as HTMLElement);
+});
+
+it("puts the caret in the first thing to type on a desk", async () => {
+  desktop();
+  const { user } = setup({ entry: "/project/awam?s=work" });
+  expect(await screen.findByRole("heading", { name: "New thread" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByLabelText("Title")).toHaveFocus());
+  await user.click(screen.getByRole("button", { name: /^Project/ }));
+  expect(screen.getByLabelText("Name")).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: /^Quick question/ }));
+  expect(screen.getByLabelText("Message")).toHaveFocus();
 });
 
 it("opens from a tab's + on New tab in that workspace, one Back from the list", async () => {
