@@ -112,7 +112,8 @@ export function QueuedMessage({
             TONE_ICON[tone]
           )}{" "}
           {label}
-          {device ? <> · from {device}</> : null}
+          {/* The device stays with its dot, so a wrapped line breaks before it, not after. */}
+          {device ? <> <span className="whitespace-nowrap">· from {device}</span></> : null}
         </p>
         {remedies.map(({ id, label: text, icon: Icon, run, disabled, name, armed }) => (
           <button
