@@ -1,10 +1,13 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { vi } from "vitest";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { onTestFinished, vi } from "vitest";
 
+import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { ProjectView, TemplateView } from "@/lib/types";
 import { server } from "@/test/setup";
+import { NewAgentHost, openNewDialog } from "./new-agent-sheet";
 import { NewNodeActions } from "./node-start";
 
 const project: ProjectView = {
@@ -33,6 +36,24 @@ const template: TemplateView = {
   updated: "2026-09-30T10:00:00Z",
 };
 
+/** The actions on a project page, with the New flow mounted at the root as the app mounts it. */
+function renderActions(on: ProjectView, { session, onStarted = vi.fn() }: { session?: string; onStarted?: () => void } = {}) {
+  onTestFinished(() => openNewDialog(false));
+  const data = {
+    bridge: "connected", device: undefined, session, sessions: [], error: false, authError: false, snoozedUntil: null, update: undefined,
+    tabs: [], shellPanes: [], workspaces: [], agents: [], projects: [on],
+  } as unknown as HomeData;
+  const router = createMemoryRouter([{
+    id: ROOT_ROUTE_ID,
+    path: "/",
+    loader: () => data,
+    element: <><NewAgentHost /><Outlet /></>,
+    children: [{ path: "project/:projectSlug", element: <NewNodeActions project={on} session={session} onStarted={onStarted} /> }],
+  }], { initialEntries: [`/project/${on.slug}`] });
+  render(<RouterProvider router={router} />);
+  return { router, onStarted, user: userEvent.setup() };
+}
+
 function serveOptions(options: { templates?: TemplateView[]; profiles?: string[] } = {}) {
   let requests = 0;
   server.use(http.get("/api/org/start-options", () => {
@@ -54,15 +75,14 @@ function recordStart() {
 }
 
 it("creates a coordinator under an open coordinator with the profile picked, reading options only once the form opens", async () => {
-  const user = userEvent.setup();
-  const onStarted = vi.fn();
   const requests = serveOptions();
   const start = recordStart();
-  render(<NewNodeActions project={project} session="work" onStarted={onStarted} />);
+  const { user, onStarted, router } = renderActions(project, { session: "work" });
 
+  const open = await screen.findByRole("button", { name: "New coordinator" });
   expect(requests()).toBe(0);
-  await user.click(screen.getByRole("button", { name: "New coordinator" }));
-  const dialog = within(screen.getByRole("dialog", { name: "New coordinator" }));
+  await user.click(open);
+  const dialog = within(await screen.findByRole("dialog", { name: "New coordinator" }));
   await user.type(dialog.getByLabelText("Title"), "Billing");
   // Only open coordinators can take children; the resolved one and the worker are not offered.
   const parent = dialog.getByLabelText("Parent");
@@ -77,16 +97,28 @@ it("creates a coordinator under an open coordinator with the profile picked, rea
   expect(new URL(start.url()).searchParams.get("session")).toBe("work");
   expect(requests()).toBe(1);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  // The page that asked refreshes itself; starting from it never navigates away.
+  expect(router.state.location.pathname).toBe("/project/nenu");
+});
+
+it("opens the one New flow on the project's thread, a Back away from everything else it can start", async () => {
+  serveOptions();
+  const { user } = renderActions(project);
+  await user.click(await screen.findByRole("button", { name: "New thread" }));
+  expect(await screen.findByRole("dialog", { name: "New thread" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Project")).toHaveValue("nenu");
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("dialog", { name: "New" })).toBeInTheDocument();
+  expect(within(screen.getByRole("navigation", { name: "Create" })).getByRole("button", { name: /^Thread/ })).toBeInTheDocument();
 });
 
 it("starts a thread from a template, which carries its own profile", async () => {
-  const user = userEvent.setup();
   serveOptions({ templates: [template, { ...template, name: "planner", role: "coordinator" }] });
   const start = recordStart();
-  render(<NewNodeActions project={project} onStarted={() => {}} />);
+  const { user } = renderActions(project);
 
-  await user.click(screen.getByRole("button", { name: "New thread" }));
-  const dialog = within(screen.getByRole("dialog", { name: "New thread" }));
+  await user.click(await screen.findByRole("button", { name: "New thread" }));
+  const dialog = within(await screen.findByRole("dialog", { name: "New thread" }));
   // Only templates of this role are offered.
   const select = await dialog.findByLabelText("Template");
   expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["None", "review-worker · project"]);
@@ -100,13 +132,12 @@ it("starts a thread from a template, which carries its own profile", async () =>
 });
 
 it("offers only a top-level thread when upstream herdr-projects runs the project", async () => {
-  const user = userEvent.setup();
   serveOptions({ profiles: [] });
-  render(<NewNodeActions project={{ ...project, nodeActions: false }} onStarted={() => {}} />);
+  const { user } = renderActions({ ...project, nodeActions: false });
 
+  await user.click(await screen.findByRole("button", { name: "New thread" }));
   expect(screen.queryByRole("button", { name: "New coordinator" })).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "New thread" }));
-  const dialog = within(screen.getByRole("dialog", { name: "New thread" }));
+  const dialog = within(await screen.findByRole("dialog", { name: "New thread" }));
   expect(dialog.queryByLabelText("Parent")).not.toBeInTheDocument();
   await waitFor(() => expect(dialog.getByLabelText("Profile")).toBeEnabled());
   expect(within(dialog.getByLabelText("Profile")).getAllByRole("option").map((option) => option.textContent)).toEqual(["Project default"]);
@@ -118,13 +149,12 @@ it("offers nothing to start in a paused project, which Organizations would refus
 });
 
 it("keeps the dialog open with Organizations' refusal", async () => {
-  const user = userEvent.setup();
   serveOptions();
   server.use(http.post("/api/org/node/start", () => HttpResponse.json({ ok: false, error: "there is no profile `codex` allowed for coordinators" }, { status: 502 })));
-  render(<NewNodeActions project={project} onStarted={() => {}} />);
+  const { user } = renderActions(project);
 
-  await user.click(screen.getByRole("button", { name: "New coordinator" }));
-  const dialog = within(screen.getByRole("dialog", { name: "New coordinator" }));
+  await user.click(await screen.findByRole("button", { name: "New coordinator" }));
+  const dialog = within(await screen.findByRole("dialog", { name: "New coordinator" }));
   await user.type(dialog.getByLabelText("Title"), "Billing");
   await user.type(dialog.getByLabelText("Task"), "Coordinate billing.");
   await user.click(dialog.getByRole("button", { name: "Create coordinator" }));
