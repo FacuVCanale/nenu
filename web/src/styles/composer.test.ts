@@ -9,11 +9,13 @@ import { declarations } from "@/test/css-rules";
 const css = readFileSync(resolve(import.meta.dirname, "composer.css"), "utf8");
 
 describe("the composer", () => {
-  // The box bleeds 8px into a phone's gutter, as the strips' pills do: its + and Send sit on the column
-  // the prose starts on, and the draft keeps its width. Tried at the 16px gutter on the bench: the
-  // draft lost 16px, and a four-line draft wrapped to five under the keyboard, taking 24px of thread.
-  it("bleeds 8px into a phone's gutter so the draft keeps its width, and sits on the gutter on a desk", () => {
-    expect(declarations(css, ".workbench-composer").width).toBe("calc(100% - 16px)");
+  // Below a desk the box bleeds 8px into the page gutter, whatever the gutter is, as the strips' pills
+  // and the queue strip do: its + and Send sit on the column the prose starts on, and the draft keeps
+  // its width. Tried at the full 16px gutter on a phone: the draft lost 16px, and a four-line draft
+  // wrapped to five under the keyboard, taking 24px of thread. A fixed 8px from the edge left the box
+  // 24px outside the 32px column from 640px (744px on the bench).
+  it("bleeds 8px into the page gutter below a desk so the draft keeps its width, and sits on the gutter on a desk", () => {
+    expect(declarations(css, ".workbench-composer").width).toBe("calc(100% - 2 * var(--page-gutter) + 16px)");
     expect(declarations(css, ".workbench-composer", ["@media (min-width: 1024px)"]).width).toBe("calc(100% - 2 * var(--page-gutter))");
   });
 
