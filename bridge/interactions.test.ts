@@ -77,6 +77,7 @@ const EXPECTED: Record<string, string> = {
   "claude-lab--tasks-panel--w82.txt": "menu: View=neutral | Close=deny",
   "codex--approval-exec.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
   "codex--ask-fruit.txt": "question: Apple (Recommended)=neutral | Pear=neutral | None of the above=neutral",
+  "codex--ask-notes-focused.txt": "question: Tabs (Recommended)=neutral | Spaces=neutral | None of the above=neutral",
   "codex--ask-wizard-q1.txt": "question: Tabs (Recommended)=neutral | Spaces=neutral | None of the above=neutral",
   "codex--ask-wizard-q2.txt": "question: Yes (Recommended)=neutral | No=neutral | None of the above=neutral",
   "codex--trust-prompt.txt": "permission: Yes, continue=persistent | No, quit=deny",
@@ -118,7 +119,9 @@ const EXPECTED: Record<string, string> = {
   "plan-approval-v2296.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   // web/src/lib/harness/codex/fixtures
   "approval-exec-v0160.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
+  "ask-notes-open-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-notes-row-pointed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
+  "ask-notes-typed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-plan-mode-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "model-picker.txt": "menu: Confirm=neutral | Go back=deny",
   "model-reasoning.txt": "menu: Confirm=neutral | Go back=deny",
@@ -389,6 +392,14 @@ describe("push actions", () => {
   test("a question's No is an answer, not a deny the notification leaves out", () => {
     expect(pushActions(detect("grok--ask-wizard-q2.txt"))).toEqual([{ optionIndex: 0, title: "Yes" }, { optionIndex: 1, title: "No" }]);
     expect(pushActions(detect("codex--ask-wizard-q2.txt"))).toEqual([]);
+  });
+
+  test("Codex's notes box with the keyboard is the same question, typing, and answers nothing", () => {
+    const i = detect("codex--ask-notes-focused.txt");
+    expect(i.kind).toBe("question");
+    expect(i.question).toBe("Tabs or spaces?");
+    expect(i.typing).toBe(true);
+    expect(pushActions(i)).toEqual([]);
   });
 
   test("nothing while a preview question's note is being typed", () => {
