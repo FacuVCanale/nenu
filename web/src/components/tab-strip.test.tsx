@@ -71,6 +71,14 @@ describe("TabStrip", () => {
     await user.click(screen.getByRole("button", { name: /new tab/i }));
     expect(onNewTab).toHaveBeenCalledWith("w1");
   });
+
+  // The + used to end the row that scrolls: on a desk, once the tabs overflowed, it went out of view.
+  it("keeps New tab beside the row that scrolls, so it stays in reach however many tabs there are", () => {
+    render(<TabStrip workspaceId="w1" tabs={tabs} agents={[]} selected="w1:t1" onSelect={vi.fn()} onNewTab={vi.fn()} />);
+    const row = screen.getByRole("button", { name: "Tab 1" }).closest(".strip-scroller")!;
+    expect(row).not.toBeNull();
+    expect(row.contains(screen.getByRole("button", { name: "New tab" }))).toBe(false);
+  });
 });
 
 describe("TabStrip — long-press actions", () => {

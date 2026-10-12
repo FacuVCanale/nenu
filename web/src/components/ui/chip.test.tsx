@@ -105,3 +105,25 @@ describe("ChipStrip keeps the open chip in view", () => {
     expect(scroller().scrollLeft).toBe(100);
   });
 });
+
+describe("ChipStrip on a desk", () => {
+  // The strip has no scrollbar, and a mouse wheel only turns vertically.
+  it("turns a mouse wheel into a sideways scroll, and leaves a trackpad's sideways swipe alone", () => {
+    render(<Strip chips={items("a", "b", "c", "d", "e")} open="a" />);
+    const wheel = new WheelEvent("wheel", { deltaY: 60, bubbles: true, cancelable: true });
+    scroller().dispatchEvent(wheel);
+    expect(scroller().scrollLeft).toBe(60);
+    expect(wheel.defaultPrevented).toBe(true);
+
+    const swipe = new WheelEvent("wheel", { deltaX: 40, deltaY: 4, bubbles: true, cancelable: true });
+    scroller().dispatchEvent(swipe);
+    expect(swipe.defaultPrevented).toBe(false);
+  });
+
+  it("lets a wheel through when nothing overflows", () => {
+    render(<Strip chips={items("a", "b")} open="a" />);
+    const wheel = new WheelEvent("wheel", { deltaY: 60, bubbles: true, cancelable: true });
+    scroller().dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+  });
+});
