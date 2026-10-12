@@ -1,18 +1,16 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { House, Inbox, PanelLeft, Plus, Search, Settings } from "lucide-react";
+import { PanelLeft, Plus, Search } from "lucide-react";
 
 import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
-import { looseWorkspaces, needsYou, WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
+import { SidebarRail } from "@/components/sidebar-rail";
+import { needsYou, WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
 import { BottomSheet, SideSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { isCatchingUp, isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
-import { projectForPane } from "@/lib/projects";
-import { workspaceName } from "@/lib/spaces";
+import { homePath } from "@/lib/nav";
 import { canCreate } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 /** What the phone's tab bar opened its navigation sheet for; null while it is closed. */
@@ -171,52 +169,5 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
           request={drawerSearch ? { target: "search", seq: drawerSearch } : undefined} />
       </SideSheet>
     </div>
-  );
-}
-
-/** The collapsed sidebar: the same actions as icons, then a letter per project and loose workspace. */
-function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch, onNeedsYou }: {
-  data: HomeData;
-  attention: number;
-  expandRef: RefObject<HTMLButtonElement | null>;
-  sidebarId: string;
-  onExpand: () => void;
-  onNewChat?: () => void;
-  onSearch: () => void;
-  onNeedsYou: () => void;
-}) {
-  const { paneId, projectSlug, spaceId } = useParams();
-  const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-  const currentSpace = spaceId ?? [...data.agents, ...data.shellPanes].find((pane) => pane.paneId === paneId)?.workspaceId;
-  const initial = (name: string) => name.trim().charAt(0).toUpperCase() || "·";
-  return (
-    <nav className="workbench-sidebar-rail" aria-label="Collapsed sidebar">
-      <button ref={expandRef} type="button" className="workbench-expand workbench-icon-button" aria-label="Expand sidebar" aria-expanded="false" aria-controls={sidebarId} onClick={onExpand}>
-        <PanelLeft aria-hidden="true" size={18} />
-      </button>
-      <button type="button" className="workbench-icon-button" aria-label="New" onClick={onNewChat} disabled={!onNewChat}><Plus aria-hidden size={17} /></button>
-      <button type="button" className="workbench-icon-button" aria-label="Search" onClick={onSearch}><Search aria-hidden size={17} /></button>
-      <button type="button" className="workbench-icon-button rail-attention" aria-label={attention ? `Needs you, ${attention}` : "Needs you"} onClick={onNeedsYou}>
-        <Inbox aria-hidden size={17} />{attention > 0 && <span className="rail-dot" aria-hidden />}
-      </button>
-      <Link className="workbench-icon-button" to={homePath(data.session)} aria-label="Home"><House aria-hidden size={17} /></Link>
-      <span className="rail-divider" aria-hidden />
-      {(data.projects ?? []).map((project) => (
-        <Link key={project.slug} className={cn("rail-letter", currentProject === project.slug && "rail-letter-current")} to={projectPath(project.slug, data.session)}
-          aria-label={project.name} aria-current={currentProject === project.slug ? "page" : undefined} title={project.name}>
-          <span className="nav-avatar">{initial(project.name)}</span>
-        </Link>
-      ))}
-      {looseWorkspaces(data).workspaces.map((workspace) => {
-        const name = workspaceName(workspace);
-        return (
-          <Link key={workspace.workspaceId} className={cn("rail-letter rail-letter-outline", currentSpace === workspace.workspaceId && "rail-letter-current")}
-            to={workspacePath(workspace.workspaceId, data, data.session)} aria-label={name} title={name}
-            aria-current={currentSpace === workspace.workspaceId ? "page" : undefined}>{initial(name)}</Link>
-        );
-      })}
-      <span className="flex-1" />
-      <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings"><Settings aria-hidden size={17} /></Link>
-    </nav>
   );
 }
