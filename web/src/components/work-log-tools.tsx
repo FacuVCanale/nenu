@@ -20,13 +20,13 @@ import { Elapsed, LiveGlyph } from "./work-activity-label";
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
 
 /** Whether `text` holds the searched words: a folded body that does opens, so the hit is on screen. */
-export function holds(text: string, query: string): boolean {
+export function containsQuery(text: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
   return needle !== "" && text.toLowerCase().includes(needle);
 }
 
 function matches(part: ToolPart, query: string) {
-  return [part.name, part.summary, part.result?.text ?? ""].some((text) => holds(text, query));
+  return [part.name, part.summary, part.result?.text ?? ""].some((text) => containsQuery(text, query));
 }
 
 export function Highlight({ text, query }: { text: string; query: string }) {
@@ -169,7 +169,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live }: { id
 export function ThinkingStep({ text, truncated = false, query, focused = false, live }: { text: string; truncated?: boolean; query: string; focused?: boolean; live?: Live }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
-  const open = expanded || focused || holds(text, query);
+  const open = expanded || focused || containsQuery(text, query);
   const preview = firstLine(text);
   // Open, the thought is below in full, so its line names it instead of repeating its start. One
   // being written names itself ahead of its opening words.

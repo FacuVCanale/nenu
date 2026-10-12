@@ -12,7 +12,7 @@ import { ChevronRight } from "lucide-react";
 import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
 import { searchableText } from "@/lib/transcript-search";
-import { Highlight, holds, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
+import { containsQuery, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
 import { buildWorkTimeline, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -50,7 +50,7 @@ function ContextLine({ label, text, truncated, query, focused = false }: { label
     <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-current" /></span>
     {caption}
   </div>;
-  const open = expanded || focused || holds(text, query);
+  const open = expanded || focused || containsQuery(text, query);
   return <div data-notice>
     <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)} className={`${META_LINE} hover:text-foreground`}>
       <ChevronRight aria-hidden="true" className={`size-4 shrink-0 p-px ${open ? "rotate-90" : ""}`} />
@@ -64,7 +64,7 @@ function ContextLine({ label, text, truncated, query, focused = false }: { label
 /** Compaction marks where the session's earlier context was summarised: a divider, with the summary behind it. */
 function CompactionLine({ text, time, truncated, query, focused = false }: { text: string; time: string; truncated: boolean; query: string; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const open = expanded || focused || holds(text, query);
+  const open = expanded || focused || containsQuery(text, query);
   const rule = <span aria-hidden="true" className="h-px min-w-6 flex-1 bg-border" />;
   const caption = <span className="shrink-0"><Highlight text="Context compacted" query={query} />{time && ` · ${time}`}</span>;
   if (!text) return <div data-notice className="flex min-h-8 items-center gap-3 text-footnote text-muted-foreground">{rule}{caption}{rule}</div>;
