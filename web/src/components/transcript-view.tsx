@@ -7,7 +7,7 @@ import { ChatMedia } from "./chat-media";
 import { MediaViewerContext } from "./file-preview-provider";
 import { ImageStrip, JournalImages, type StripImage } from "./message-images";
 import { useContext, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
@@ -40,7 +40,7 @@ function dayKey(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
-const META_LINE = "flex min-h-8 max-w-full items-center gap-2 text-left text-footnote text-muted-foreground coarse:min-h-11";
+const META_LINE = "flex min-h-8 max-w-full items-center gap-2 text-left text-footnote text-muted-foreground";
 
 /** Injected text as one quiet line: a loaded skill, a notification. It opens onto its body when it has more than its caption. */
 function ContextLine({ label, text, truncated, query, focused = false }: { label: string; text: string; truncated?: boolean; query: string; focused?: boolean }) {
@@ -52,7 +52,7 @@ function ContextLine({ label, text, truncated, query, focused = false }: { label
   </div>;
   const open = expanded || focused || containsQuery(text, query);
   return <div data-notice>
-    <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)} className={`${META_LINE} hover:text-foreground`}>
+    <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)} className={`${META_LINE} hover:text-foreground coarse:min-h-11`}>
       <ChevronRight aria-hidden="true" className={`size-4 shrink-0 p-px ${open ? "rotate-90" : ""}`} />
       {caption}
     </button>
@@ -71,7 +71,11 @@ function CompactionLine({ text, time, truncated, query, focused = false }: { tex
   return <div data-notice>
     <button type="button" data-work-toggle aria-expanded={open} onClick={() => setExpanded((value) => !value)}
       className="flex min-h-8 w-full items-center gap-3 text-footnote text-muted-foreground hover:text-foreground coarse:min-h-11">
-      {rule}{caption}{rule}
+      {rule}
+      <span className="flex shrink-0 items-center gap-1">{caption}
+        <ChevronDown aria-hidden="true" className={`size-3.5 shrink-0 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      </span>
+      {rule}
     </button>
     {open && <div className="pb-2 text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={text} query={query} />
       {truncated && <p className="text-footnote">… truncated</p>}</div>}
