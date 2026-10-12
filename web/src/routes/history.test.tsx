@@ -51,6 +51,12 @@ describe("history header", () => {
     expect(screen.queryByText(/w9:ghost/)).not.toBeInTheDocument();
   });
 
+  it("offers Find only when there is something to find", async () => {
+    setup("w2:codex", { unavailable: "no-session" }, [pane("w2:codex", { paneLabel: "Codex" })]);
+    await screen.findByRole("heading", { name: "No conversation yet" });
+    expect(screen.queryByRole("button", { name: "Find in history" })).not.toBeInTheDocument();
+  });
+
   it("leaves the count out of the header", async () => {
     setup("w1:idle", { entries: turns(4), total: 4 }, [pane("w1:idle", { paneLabel: "Idle Claude" })]);
     expect((await header()).queryByText(/\d+\s*\/\s*\d+/)).not.toBeInTheDocument();
