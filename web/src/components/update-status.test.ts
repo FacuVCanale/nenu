@@ -43,8 +43,10 @@ describe("updateStatus", () => {
   });
 
   it("names the consent command for a major, and ranks it below a routine release", () => {
+    // The badge says which of the two ways to be behind this is (ADR 0020): the routine update
+    // will not take a major.
     expect(updateStatus(someUpdate({ majorAvailable: "1.0.0", majorUrl: MAJOR_URL }), idle)).toMatchObject({
-      badge: "1.0.0 available",
+      badge: "Major 1.0.0 available",
       command: MAJOR_COMMAND,
       action: { kind: "notes", href: MAJOR_URL },
     });
@@ -90,6 +92,15 @@ describe("updateStatus", () => {
       tone: "error",
       action: { kind: "check" },
     });
+  });
+
+  it("spins only beside the check's own badge", () => {
+    expect(updateStatus(someUpdate({ checkedAt: 1 }), { ...idle, check: "checking" }).working).toBe(true);
+    expect(updateStatus(undefined, { ...idle, check: "checking" }).working).toBe(true);
+    // A snapshot that lands mid-check with something pending outranks the check; that badge is still.
+    expect(updateStatus(someUpdate({ releaseAvailable: true }), { ...idle, check: "checking" }).working).toBeFalsy();
+    expect(updateStatus(someUpdate({ bridgeStale: true }), { ...idle, check: "checking" }).working).toBeFalsy();
+    expect(updateStatus(someUpdate({}), { ...idle, check: "failed" }).working).toBeFalsy();
   });
 
   it("phrases every update instruction as a Herdr plugin action", () => {
