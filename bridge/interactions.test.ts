@@ -255,7 +255,9 @@ describe("what a permission asks for, as the dialog draws it", () => {
 
   test("a command taller than the old twelve-row window keeps its tool, description and every row", () => {
     const rows = ["cat > notes.md <<'EOF'", ...Array.from({ length: 10 }, (_, n) => `- note ${n + 1}`), "EOF"];
-    const screen = fixture("permission-bash-v2296.txt", CLAUDE_P0).replace(" echo hi > hello.txt\n", rows.map((r) => ` ${r}\n`).join(""));
+    const plain = fixture("permission-bash-v2296.txt", CLAUDE_P0).replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
+    const screen = plain.replace(/^ echo hi > hello\.txt *$/m, rows.map((r) => ` ${r}`).join("\n"));
+    expect(screen).toContain(" - note 10\n");
     const hint: InteractionHint = { source: "claude-hook", observedAt: 1, question: "Bash", detail: rows.join("\n") };
     const i = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", screen)!, 0, [hint], 0).interaction;
     expect(i.subject).toEqual({ tool: "Bash", description: "Write hi into hello.txt in the project directory", command: rows.join("\n") });
