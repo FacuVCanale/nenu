@@ -132,6 +132,25 @@ describe("FakeHerdr", () => {
     stream.close();
   });
 
+  // HERDR_API.md "Move methods": array order moves, `number` stays, and insert_index counts the
+  // workspace's tabs before the moved one is taken out (so toward the end is target + 1).
+  test("moves a tab within its workspace the way Herdr's tab.move does", async () => {
+    fake.addWorkspace("w2", "other")
+      .addPane({ paneId: "w1:p2", workspaceId: "w1", tabId: "w1:t2", agent: null, lines: [] })
+      .addPane({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1", agent: null, lines: [] })
+      .addPane({ paneId: "w1:p3", workspaceId: "w1", tabId: "w1:t3", agent: null, lines: [] });
+    const order = async () => (await client.sessionSnapshot()).tabs.map((t) => `${t.tab_id}#${t.number}`);
+    expect(await order()).toEqual(["w1:t1#1", "w1:t2#2", "w2:t1#1", "w1:t3#3"]);
+    await client.moveTab("w1:t3", 0);
+    expect(await order()).toEqual(["w1:t3#3", "w1:t1#1", "w2:t1#1", "w1:t2#2"]);
+    await client.moveTab("w1:t3", 1); // its own gap: nothing moves
+    expect(await order()).toEqual(["w1:t3#3", "w1:t1#1", "w2:t1#1", "w1:t2#2"]);
+    await client.moveTab("w1:t3", 3);
+    expect(await order()).toEqual(["w1:t1#1", "w1:t2#2", "w2:t1#1", "w1:t3#3"]);
+    await expect(client.moveTab("w9:t1", 0)).rejects.toThrow("tab_not_found");
+    expect(fake.writes().map((c) => c.method)).toEqual(["tab.move", "tab.move", "tab.move", "tab.move"]);
+  });
+
   test("rejects a method it does not implement the way Herdr rejects an unknown variant", async () => {
     await expect(client.createTab("w1")).rejects.toThrow("unknown variant");
     expect(fake.writes().map((c) => c.method)).toEqual(["tab.create"]);
