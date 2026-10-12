@@ -6,7 +6,9 @@ import { cn } from "@/lib/utils";
 const CONFIRM_MS = 2000;
 const COPY_LABEL = { idle: "Copy", copied: "Copied", failed: "Failed" } as const;
 
-const HEADER_BUTTON = "hit-area inline-flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-caption text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:bg-accent aria-pressed:bg-accent aria-pressed:text-foreground [&_svg]:size-3.5";
+// Pressed and the press itself take the neutral selected fill the nav rows use: --accent all but
+// vanished on the block's muted header in light (244 on 248).
+const HEADER_BUTTON = "hit-area inline-flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-caption text-muted-foreground transition-colors hover:bg-[var(--workbench-row-hover)] hover:text-foreground active:bg-[var(--workbench-row-selected)] aria-pressed:bg-[var(--workbench-row-selected)] aria-pressed:text-foreground [&_svg]:size-3.5";
 
 /**
  * A fenced block from agent prose: a 32px header with the language, Wrap and Copy over the code at
