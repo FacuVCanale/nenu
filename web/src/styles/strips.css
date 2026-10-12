@@ -14,8 +14,10 @@
 .strip[data-workbench-navigation-band="panes"] { z-index: 2; }
 
 /* An edge the row can still scroll toward fades out, so a chip past it is seen to exist. The row
-   is only as wide as its chips, so a trailing + sits right after the last one until they overflow. */
-.strip-scroller { --fade-start: 0px; --fade-end: 0px; position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
+   is only as wide as its chips, so a trailing + sits right after the last one until they overflow.
+   It clips 4px past its chips on each side, where the focus ring (2px, 2px out) of the first and
+   last one draws. */
+.strip-scroller { --fade-start: 0px; --fade-end: 0px; position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 0; height: 100%; padding-inline: 4px; margin-inline: -4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
 .strip-scroller::-webkit-scrollbar { display: none; }
 .strip-scroller[data-overflow~="start"] { --fade-start: 24px; }
 .strip-scroller[data-overflow~="end"] { --fade-end: 24px; }
