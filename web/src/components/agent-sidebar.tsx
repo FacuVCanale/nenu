@@ -1,16 +1,19 @@
-import { TerminalSquare } from "lucide-react";
+import { useId, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { AgentIcon } from "@/components/agent-icon";
-import { SectionHeader } from "@/components/section-header";
-import { paneParts } from "@/lib/pane-name";
-import { isAttention, sectionHeaderProps, triage } from "@/lib/triage";
-import type { AgentView } from "@/lib/types";
+import { PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
+import { displayName, displayPlace } from "@/lib/display-name";
+import { byRecency } from "@/lib/projects";
+import { isAttention } from "@/lib/triage";
+import { STATUS_LABEL, type AgentView, type ProjectView } from "@/lib/types";
 
 interface ThreadSidebarProps {
   agents: AgentView[];
-  /** Bare shell panes (no agent) — listed in a trailing "Shells" group so fresh spaces are reachable. */
+  /** Bare shell panes (no agent): the open workspace's sit with it, the rest under a trailing "Shells". */
   shellPanes?: AgentView[];
+  /** So a project's pane is called what every other view calls it (lib/display-name.ts). */
+  projects?: readonly ProjectView[];
   currentPaneId: string;
   onSelect: (paneId: string) => void;
   /** Whether the Recent section is expanded, and how to fold it. Omit to leave it always open. */
@@ -23,18 +26,18 @@ interface ThreadSidebarProps {
   className?: string;
 }
 
-// The pane switcher behind the swipe-up "Switch pane" sheet: every agent pane grouped and sorted
-// exactly like the dashboard (lib/triage.ts — the two must not disagree about what needs you), then
-// any bare shell panes under a trailing "Shells" group, with the open one highlighted. Switching is
-// the ONLY action here — closing a pane lives in the pane pill's long-press sheet (with its own
-// confirm), so a fat-thumbed switch can never destroy a pane.
+// The pane switcher: Browse's rows (a state dot, the agent's one name, where it lives) under three
+// sections: what needs you (the dashboard's own rule, lib/triage.ts), the open pane's workspace, and
+// everything else newest first; then the other workspaces' bare shells. Switching is the ONLY action
+// here. Closing a pane lives in the pane pill's long-press sheet (with its own confirm), so a
+// fat-thumbed switch can never destroy a pane.
 //
-// This sheet sees the WHOLE herd, so it has the same problem the dashboard had: the two long tails
-// (Recent, and 30-odd bare shells) bury the handful of agents you actually came to switch to. Both
-// fold, and both remember it, using the dashboard's own header primitive.
+// This sheet sees the WHOLE herd, so its two long tails (Recent, and 30-odd bare shells) fold, and
+// the parent remembers the folds.
 export function ThreadSidebar({
   agents,
   shellPanes = [],
+  projects,
   currentPaneId,
   onSelect,
   recentOpen = true,
@@ -45,155 +48,73 @@ export function ThreadSidebar({
 }: ThreadSidebarProps) {
   if (agents.length === 0 && shellPanes.length === 0) {
     return (
-      <div className="px-4 py-12 text-center text-sm text-muted-foreground">No agents running.</div>
+      <div className="px-4 py-12 text-center text-subhead text-muted-foreground">No agents running.</div>
     );
   }
 
-  return (
-    <div className={cn("flex flex-col gap-4 px-2 py-3", className)}>
-      {triage(agents).map((g) => {
-        const members = g.agents;
-        if (members.length === 0) return null;
-        // Recent is the only foldable triage section, and only where the parent wired the state.
-        const foldable = !!g.collapsible && onRecentOpenChange !== undefined;
-        const open = foldable ? recentOpen : true;
-        return (
-          <Section
-            key={g.key}
-            id={`switch-${g.key}`}
-            {...sectionHeaderProps(g)}
-            {...(foldable ? { open, onToggle: onRecentOpenChange } : {})}
-          >
-            {members.map((a) => (
-              <PaneRow
-                key={a.paneId}
-                pane={a}
-                active={a.paneId === currentPaneId}
-                onSelect={onSelect}
-              />
-            ))}
-          </Section>
-        );
-      })}
+  const here = [...agents, ...shellPanes].find((pane) => pane.paneId === currentPaneId)?.workspaceId;
+  const needs = agents.filter((pane) => isAttention(pane.status));
+  const inWorkspace = (pane: AgentView) => here !== undefined && pane.workspaceId === here && !isAttention(pane.status);
+  const workspace = [...agents, ...shellPanes].filter(inWorkspace);
+  const recent = byRecency(agents.filter((pane) => !isAttention(pane.status) && !inWorkspace(pane)));
+  const shells = shellPanes.filter((pane) => !inWorkspace(pane));
+  const row = (pane: AgentView) => <PaneRow key={pane.paneId} pane={pane} projects={projects} active={pane.paneId === currentPaneId} onSelect={onSelect} />;
 
-      {shellPanes.length > 0 && (
-        <Section
-          id="switch-shells"
-          label="Shells"
-          count={shellPanes.length}
-          dot="bg-status-unknown"
-          {...(onShellsOpenChange ? { open: shellsOpen, onToggle: onShellsOpenChange } : {})}
-        >
-          {shellPanes.map((p) => (
-            <PaneRow
-              key={p.paneId}
-              pane={p}
-              active={p.paneId === currentPaneId}
-              onSelect={onSelect}
-            />
-          ))}
+  return (
+    <div className={cn("-mx-2.5 flex flex-col gap-2 py-3", className)}>
+      {needs.length > 0 && <Section label="Needs you" count={needs.length}>{needs.map(row)}</Section>}
+      {workspace.length > 0 && <Section label="This workspace" count={workspace.length}>{workspace.map(row)}</Section>}
+      {recent.length > 0 && (
+        <Section label="Recent" count={recent.length} {...(onRecentOpenChange ? { open: recentOpen, onToggle: onRecentOpenChange } : {})}>
+          {recent.map(row)}
+        </Section>
+      )}
+      {shells.length > 0 && (
+        <Section label="Shells" count={shells.length} {...(onShellsOpenChange ? { open: shellsOpen, onToggle: onShellsOpenChange } : {})}>
+          {shells.map(row)}
         </Section>
       )}
     </div>
   );
 }
 
-// Uses the dashboard's own header primitive so the fold affordance is identical in both places —
-// level 3 because the sheet's own title is the h2. Passing no `open`/`onToggle` renders a plain
-// pinned heading with nothing to press.
-function Section({
-  id,
-  label,
-  count,
-  accent,
-  dot,
-  open,
-  onToggle,
-  children,
-}: {
-  id: string;
+/**
+ * A sentence-case heading over its rows. Passing `open` and `onToggle` makes the heading a fold; an
+ * attention section never gets one, since collapsing an alert defeats the alert.
+ */
+function Section({ label, count, open, onToggle, children }: {
   label: string;
   count: number;
-  accent?: boolean;
-  /** Status-palette bullet beside the header — the same colors the status badges use, so each
-   *  section carries its at-a-glance color key. */
-  dot: string;
   open?: boolean;
   onToggle?: (open: boolean) => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
+  const bodyId = useId();
   const foldable = open !== undefined && onToggle !== undefined;
   return (
-    <section className="flex flex-col gap-0.5">
-      <SectionHeader
-        level={3}
-        label={label}
-        count={count}
-        dot={dot}
-        className="px-2"
-        {...(accent ? { accent } : {})}
-        {...(foldable ? { open, onToggle, controls: id } : {})}
-      />
-      {(!foldable || open) && <div id={id}>{children}</div>}
+    <section aria-label={label} className="nav-group">
+      <h3 className="nav-label">
+        {foldable ? (
+          <button type="button" className="nav-fold" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => onToggle(!open)}>
+            <ChevronRight aria-hidden size={14} />{label}<span className="nav-count">{count}</span>
+          </button>
+        ) : <>{label}<span className="nav-count">{count}</span></>}
+      </h3>
+      {(!foldable || open) && <div id={bodyId}>{children}</div>}
     </section>
   );
 }
 
-function PaneRow({
-  pane,
-  active,
-  onSelect,
-}: {
+function PaneRow({ pane, projects, active, onSelect }: {
   pane: AgentView;
+  projects?: readonly ProjectView[];
   active: boolean;
   onSelect: (paneId: string) => void;
 }) {
-  const isShell = pane.kind === "shell";
-  // project · tab as separate spans so the TAB survives truncation — see paneParts. The agent's
-  // identity stays in the icon, which is why the title line is free to say where the work is.
-  const { project, tab, secondary } = paneParts(pane);
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(pane.paneId)}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-        active ? "bg-accent text-accent-foreground" : "hover:bg-muted/60 active:bg-muted",
-        // The switcher is exactly where you jump TO the thing that needs you, so it must be able to
-        // SHOW that — it renders every pane identically otherwise. Staying denser than the dashboard
-        // is fine; being unable to mark a blocked pane is not. (isAttention, so the rule isn't
-        // re-derived here.)
-        //
-        // The border is applied even to the ACTIVE row, so the two cues compose: the pane you're in
-        // AND blocked keeps both its accent fill and its alarm edge. Only the fill is withheld,
-        // because two backgrounds can't both win.
-        isAttention(pane.status) && "border border-status-blocked/40",
-        !active && isAttention(pane.status) && "bg-status-blocked/5",
-      )}
-    >
-      {isShell ? (
-        <TerminalSquare className="size-3.5 shrink-0 text-muted-foreground" />
-      ) : (
-        // Status is conveyed by the section grouping; the row leads with the agent's logo.
-        <AgentIcon agent={pane.agent} className="size-5" />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-baseline gap-1 text-sm">
-          <span className="max-w-[45%] shrink truncate text-muted-foreground">{project}</span>
-          {tab && (
-            <>
-              <span className="shrink-0 text-muted-foreground/60" aria-hidden>
-                ·
-              </span>
-              <span className="min-w-0 flex-1 truncate font-medium">{tab}</span>
-            </>
-          )}
-        </div>
-        {secondary && (
-          <div className="truncate font-mono text-[11px] text-muted-foreground">{secondary}</div>
-        )}
-      </div>
+    <button type="button" className="nav-pane" onClick={() => onSelect(pane.paneId)} aria-current={active ? "page" : undefined}>
+      <RowBody mark={<PaneMark pane={pane} />} title={displayName(pane, projects)} detail={<PlaceText place={displayPlace(pane, projects)} />}
+        end={pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>} />
     </button>
   );
 }

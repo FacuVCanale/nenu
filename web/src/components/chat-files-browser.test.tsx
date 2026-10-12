@@ -108,3 +108,29 @@ it("sorts by latest mention and filters file names and extensions", async () => 
   await userEvent.type(screen.getByLabelText("Search files"), "missing");
   expect(screen.getByText("No matching files")).toBeInTheDocument();
 });
+
+describe("first focus on a desk", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  function pointer(kind: "fine" | "coarse") {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === `(pointer: ${kind})`, media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }));
+  }
+
+  it("puts the cursor in the search when a list with one is picked", async () => {
+    pointer("fine");
+    render(<ChatFilesBrowser paneId="w1:p1" history={available([entry("one", "a.pdf")])} />);
+    await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+    await userEvent.click(screen.getByRole("button", { name: /Files/ }));
+    expect(screen.getByLabelText("Search files")).toHaveFocus();
+  });
+
+  it("leaves the search for a tap on a touch screen", async () => {
+    pointer("coarse");
+    render(<ChatFilesBrowser paneId="w1:p1" history={available([entry("one", "a.pdf")])} />);
+    await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+    await userEvent.click(screen.getByRole("button", { name: /Files/ }));
+    expect(screen.getByLabelText("Search files")).not.toHaveFocus();
+  });
+});

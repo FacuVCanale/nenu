@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentView, ProjectView } from "@/lib/types";
+import type { AgentView } from "@/lib/types";
 import { drawerSections, RECENT_CHATS } from "./nav-drawer";
 
 function pane(paneId: string, status: AgentView["status"], active: number, extra: Partial<AgentView> = {}): AgentView {
@@ -23,17 +23,11 @@ describe("drawerSections", () => {
     expect(needsYou.map((row) => row.pane.paneId)).toEqual(["asks-new", "asks-old"]);
     // A chat waiting on you is already above; Recent does not list it twice.
     expect(recent.map((row) => [row.pane.paneId, row.current])).toEqual([["here", true], ["done", false], ["quiet", false]]);
-    expect(recent[0]).toMatchObject({ title: "here", place: "Developer", at: 95 });
   });
 
-  it("keeps Recent short and names a project's chat after its thread and project", () => {
+  it("keeps Recent short", () => {
     const agents = Array.from({ length: RECENT_CHATS + 3 }, (_, i) => pane(`p${i}`, "idle", 100 - i));
-    const projects = [{
-      slug: "awam", name: "AWAM", goal: "", status: "active",
-      threads: [{ id: "t-1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "p0" }],
-    }] as ProjectView[];
-    const { recent } = drawerSections({ agents, projects }, undefined);
-    expect(recent).toHaveLength(RECENT_CHATS);
-    expect(recent[0]).toMatchObject({ title: "Panel depósito", place: "AWAM" });
+    const { recent } = drawerSections({ agents, projects: [] }, undefined);
+    expect(recent.map((row) => row.pane.paneId)).toEqual(["p0", "p1", "p2", "p3", "p4"]);
   });
 });

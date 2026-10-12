@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
-import { ExternalLink, MessageSquare } from "lucide-react";
+import { ExternalLink, MessageSquare, MessageSquareOff } from "lucide-react";
 
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
 import { NodeDot } from "@/components/node-row";
+import { ProjectMissing } from "@/components/project-missing";
 import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { nodePath, panePath, projectPath } from "@/lib/nav";
+import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { STATE_LABEL, flatten, orgTree } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
@@ -29,8 +31,13 @@ export function NodeRoute() {
   let body;
   // Back climbs one level: to the node's parent, else to its project, else Home.
   let back: HeaderBack | undefined = project && { to: projectPath(project.slug, data.session), label: project.name };
-  if (!project || !node) {
-    body = <p className="py-16 text-center text-sm text-muted-foreground">{project ? "This node is not in the project any more." : "Project not found in this Herdr session."}</p>;
+  if (!project) {
+    body = <ProjectMissing session={data.session} />;
+  } else if (!node) {
+    body = <EmptyState icon={MessageSquareOff} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
+      <Link to={projectPath(project.slug, data.session)} className={buttonVariants()}>Open project</Link>
+      <Link to={homePath(data.session)} className={buttonVariants({ variant: "outline" })}>Go to Home</Link>
+    </div>}>{project.name} no longer lists it.</EmptyState>;
   } else {
     const { thread, state } = node;
     const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
@@ -40,9 +47,8 @@ export function NodeRoute() {
     const age = threadAge(thread, Date.now());
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
-        {coordinator ? "Coordinator" : "Thread"} under {parent
-          ? <Link className="underline-offset-2 hover:underline" to={nodePath(project.slug, parent.id, data.session)}>{parent.title}</Link>
-          : <Link className="underline-offset-2 hover:underline" to={projectPath(project.slug, data.session)}>{project.name}</Link>}
+        {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
+          to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
@@ -55,7 +61,8 @@ export function NodeRoute() {
         {(live || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {live && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <MessageSquare aria-hidden className="size-4" />Open chat</Button>}
-          {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="ghost" onClick={() => setClosing(true)}>
+          {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
+            className="border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive">
             Close {coordinator ? "coordinator" : "thread"}</Button>}
         </div>}
       </section>

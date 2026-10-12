@@ -12,7 +12,6 @@ import type { HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 /** What a project gives the chat it wraps. */
@@ -55,7 +54,7 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
   const subtitle = parent
     ? `Coordinator under ${project.name} · ${threads.length} ${threads.length === 1 ? "thread" : "threads"}`
     : project.goal;
-  return { coordinating, threads, siblings, coordinatorPane: live ? coordinatorPane : undefined, panelTitle, subtitle };
+  return { coordinating, threads, siblings, coordinator: parent, coordinatorPane: live ? coordinatorPane : undefined, panelTitle, subtitle };
 }
 
 /**
@@ -142,30 +141,33 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   ) : undefined;
 
   const phoneTabs = !wide && scope.coordinating ? (
-    <div role="tablist" aria-label="Project" className="mx-3 my-2 grid shrink-0 grid-cols-3 rounded-xl bg-muted/50 p-1">
-      {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
-        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
-          className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-lg text-[13px]", view === key ? "bg-background font-medium text-foreground ring-1 ring-border" : "text-muted-foreground")}>
-          {label}{count !== null && count > 0 && <span className="tabular-nums text-muted-foreground">{count}</span>}
-        </button>
-      ))}
+    <div className="project-segmented-band">
+      <div role="tablist" aria-label="Project" className="project-segmented">
+        {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className="project-segment">
+            {label}{count !== null && count > 0 && <span className="project-segment-count">{count}</span>}
+          </button>
+        ))}
+      </div>
     </div>
   ) : undefined;
 
   const chipCoordinator = scope.coordinatorPane ? { paneId: scope.coordinatorPane, label: "coordinator" } : undefined;
-  const chips = !scope.coordinating && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
+  // The panel lists the siblings (and their coordinator) already; chips take its place when it is put away.
+  const chips = !scope.coordinating && !panelShown && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
     <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
-  const tasks = <ProjectTasks project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
+  const tasks = <ProjectTasks project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
-      {view === "threads" ? tasks : <PrList threads={scope.threads} onOpenPane={openPane} onOpenNode={openNode} />}
+      {view === "threads" ? tasks : <PrList project={project} threads={scope.threads} session={data.session} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />}
     </div></div>
   ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
 
-  const cards = scope.coordinating ? (
+  // Beside the panel the cards would list every thread a second time; they come back when it is put away.
+  const cards = scope.coordinating && !panelShown ? (
     <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
       onOpen={(target) => { if (!target.paneId) openNode(target.id); else if (wide) setDocked(target.paneId); else openPane(target.paneId); }} />
   ) : undefined;
@@ -177,7 +179,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
         headerAction,
         overlay,
         conversationFooter: cards,
-        // Project chips or tabs replace the workspace tabs; on a wide coordinator the panel stands in for them.
+        // Project chips or tabs replace the workspace tabs; on a wide screen the panel stands in for them.
         strip: phoneTabs ?? chips ?? (wide ? null : undefined),
         composerTop: thread?.pr && !scope.coordinating
           ? <PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={refresh} />
@@ -192,7 +194,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
       )}
       {panelShown && (
         <aside className="flex min-h-0 w-[400px] shrink-0 flex-col border-l border-border" aria-label="Project">
-          <ThreadsPanel project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle}
+          <ThreadsPanel project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle}
             activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
             onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }}
             onOpenNode={openNode} onChanged={refresh}

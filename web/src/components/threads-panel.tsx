@@ -4,7 +4,9 @@ import { Activity, ArrowLeft, BookText, GitPullRequest, MessageSquare } from "lu
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
 import { NodeDot } from "@/components/node-row";
-import { ProjectTasks, prSummary, threadAge } from "@/components/project-tasks";
+import { ProjectTasks, canMerge, prSummary, threadAge } from "@/components/project-tasks";
+import { MergeDialog } from "@/components/thread-cards";
+import { Button } from "@/components/ui/button";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { nodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
@@ -18,15 +20,21 @@ export function prThreads(threads: readonly ProjectThreadView[]): ProjectThreadV
   return threads.filter((thread) => thread.pr).sort((a, b) => rank[a.pr!.state] - rank[b.pr!.state]);
 }
 
-export function PrList({ threads, onOpenPane, onOpenNode, now = Date.now() }: {
+/** The pull requests of a set of threads; one Organizations can merge offers Merge, which asks first. */
+export function PrList({ project, threads, session, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }: {
+  project: ProjectView;
   threads: readonly ProjectThreadView[];
+  session?: string;
+  readOnly: boolean;
   onOpenPane: (paneId: string) => void;
   onOpenNode: (id: string) => void;
+  onChanged: () => void;
   now?: number;
 }) {
+  const [merging, setMerging] = useState<ProjectThreadView | null>(null);
   const list = prThreads(threads);
   if (list.length === 0) return <p className="py-3 text-sm text-muted-foreground">No pull requests yet.</p>;
-  return (
+  return <>
     <ul className="task-list">
       {list.map((thread) => {
         const body = <>
@@ -43,11 +51,15 @@ export function PrList({ threads, onOpenPane, onOpenNode, now = Date.now() }: {
         return (
           <li key={thread.id} className="task-row">
             <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>{body}</button>
+            {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
+            {!readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
+              onClick={() => setMerging(thread)}>Merge</Button>}
           </li>
         );
       })}
     </ul>
-  );
+    <MergeDialog project={project} thread={merging} session={session} onMerged={() => { setMerging(null); onChanged(); }} onCancel={() => setMerging(null)} />
+  </>;
 }
 
 /**
@@ -86,9 +98,11 @@ const TABS: Array<[PanelTab, string, typeof MessageSquare]> = [
  * The project's side panel beside a coordinator or thread: its organization, their pull requests,
  * the coordinator session's background activity, and what every thread shares.
  */
-export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, action }: {
+export function ThreadsPanel({ project, threads, coordinator, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, action }: {
   project: ProjectView;
   threads: ProjectThreadView[];
+  /** The coordinator under the project that runs them; the project's own when omitted. */
+  coordinator?: ProjectThreadView;
   title: string;
   subtitle?: ReactNode;
   /** The Claude pane whose activity the Activity tab shows. */
@@ -107,18 +121,17 @@ export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId
     <div className="flex min-h-0 flex-1 flex-col">
       <div role="tablist" aria-label="Project panel" className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-3">
         {TABS.map(([key, label, Icon]) => (
-          <button key={key} type="button" role="tab" aria-selected={tab === key} aria-label={label} title={label} onClick={() => setTab(key)}
-            className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px]", tab === key ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
-            <Icon aria-hidden className="size-3.5" />{tab === key && label}
+          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className="panel-tab">
+            <Icon aria-hidden className="size-3.5" />{label}
           </button>
         ))}
         <span className="flex-1" />
         {action}
       </div>
       <div role="tabpanel" aria-label={TABS.find(([key]) => key === tab)![1]} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
-        {tab === "threads" && <ProjectTasks project={project} threads={threads} title={title} subtitle={subtitle} panes={panes} session={session}
+        {tab === "threads" && <ProjectTasks project={project} threads={threads} coordinator={coordinator} title={title} subtitle={subtitle} panes={panes} session={session}
           currentPaneId={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} />}
-        {tab === "prs" && <PrList threads={threads} onOpenPane={onOpenPane} onOpenNode={onOpenNode} />}
+        {tab === "prs" && <PrList project={project} threads={threads} session={session} readOnly={readOnly} onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} />}
         {tab === "activity" && (activityPaneId
           ? <PaneActivity paneId={activityPaneId} session={session} />
           : <p className="text-sm text-muted-foreground">The coordinator is not running, so there is no activity to show.</p>)}

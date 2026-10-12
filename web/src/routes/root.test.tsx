@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { BootSplash, RootError, shownLastSeenAt } from "./root";
@@ -39,10 +39,10 @@ describe("BootSplash", () => {
 
   it("draws the app's own tab bar, so it does not change under the thumb when the app arrives", () => {
     const { container } = renderSplash("/?s=qa");
-    const bar = container.querySelector(".bottom-tab-bar")!;
+    const bar = container.querySelector<HTMLElement>(".bottom-tab-bar")!;
     expect(bar.querySelector("[aria-current=page]")).toHaveTextContent("Home");
     expect(bar.querySelector("a")).toHaveAttribute("href", "/?s=qa");
-    expect(bar.querySelector(".bottom-tab-new")).toBeDisabled();
+    expect(within(bar).getByRole("button", { name: "New", hidden: true })).toBeDisabled();
     // Drawn, not usable: nothing to open until the first snapshot lands.
     expect(bar.closest("[inert]")).not.toBeNull();
   });

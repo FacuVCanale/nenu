@@ -172,3 +172,30 @@ describe("CommandPalette", () => {
     expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith("/deploy");
   });
 });
+
+/** The pointer the page reports, for the media query that decides first focus. */
+function pointer(kind: "fine" | "coarse") {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === `(pointer: ${kind})`, media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  }));
+}
+
+describe("CommandPalette first focus", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("on a desk opens with the cursor in the search, so typing filters at once", async () => {
+    pointer("fine");
+    const user = userEvent.setup();
+    setup();
+    expect(screen.getByPlaceholderText(/Search \d+ commands/)).toHaveFocus();
+    await user.keyboard("doctor");
+    expect(screen.getByText("/doctor")).toBeInTheDocument();
+  });
+
+  it("on a touch screen leaves the search for a tap, so the keyboard does not cover the list", () => {
+    pointer("coarse");
+    setup();
+    expect(screen.getByPlaceholderText(/Search \d+ commands/)).not.toHaveFocus();
+  });
+});

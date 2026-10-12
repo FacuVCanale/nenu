@@ -3,7 +3,7 @@ import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
-import { BottomSheet } from "@/components/ui/sheet";
+import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { fetchHistory, paneFileUrl } from "@/lib/api";
 import { chatFileReferences, fileExtension, artifactKind, type ChatFileKind } from "@/lib/chat-files";
@@ -211,7 +211,19 @@ export function ChatFilesBrowser({
   useLayoutEffect(() => {
     if (openedFromMenu) begin();
   }, [openedFromMenu]);
-  function changeFilter(next: typeof filter) { setFilter(next); setExtension("all"); }
+  // Project opens first and has no search; picking a list that has one puts the cursor there on a
+  // desk, as the sheet does for Commands. A touch screen keeps its keyboard down until a tap.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const searchNext = useRef(false);
+  useEffect(() => {
+    if (searchNext.current) searchRef.current?.focus({ preventScroll: true });
+    searchNext.current = false;
+  }, [filter]);
+  function changeFilter(next: typeof filter) {
+    setFilter(next);
+    setExtension("all");
+    searchNext.current = next !== "project" && finePointer();
+  }
 
   return (
     <>
@@ -225,7 +237,7 @@ export function ChatFilesBrowser({
         <Paperclip aria-hidden="true" className="size-4" />
       </button>}
 
-      <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" className="max-h-[82dvh]">
+      <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" desktop="dialog">
         <div className="mb-4 grid grid-cols-4 gap-1" role="group" aria-label="File type">
           <FilterButton active={filter === "artifacts"} onClick={() => changeFilter("artifacts")} icon={null}>Artifacts</FilterButton>
           <FilterButton active={filter === "project"} onClick={() => changeFilter("project")} icon={null}>Project</FilterButton>
@@ -239,7 +251,7 @@ export function ChatFilesBrowser({
 
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
         <div className="mb-3 flex flex-wrap gap-2">
-          <input aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
+          <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
           {filter === "artifacts" && <select aria-label="Artifact type" value={artifactType} onChange={event => { setArtifactType(event.target.value); setExtension("all"); }} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
             <option value="all">All types</option><option value="designboard">Designboards</option><option value="document">Documents</option><option value="media">Media</option>
           </select>}

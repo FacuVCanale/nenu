@@ -5,6 +5,7 @@ import { Maximize2, MessageSquare, TerminalSquare, X } from "lucide-react";
 import { AgentChat, type DockedHeaderView } from "@/components/agent-chat";
 import { PrBar } from "@/components/pr-bar";
 import { NodeDot } from "@/components/node-row";
+import { Chip, ChipStrip } from "@/components/ui/chip";
 import { isLocked, useLocked } from "@/lib/idle";
 import { concerns, isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { fetchPane } from "@/lib/api";
@@ -105,31 +106,27 @@ export function threadChipsShown(threads: readonly ProjectThreadView[], withCoor
   return chipThreads(threads).length + (withCoordinator ? 1 : 0) >= 2;
 }
 
-/** A coordinator's threads as chips: tap one to switch, the current one is raised. */
-export function ThreadChips({ threads, coordinator, currentPaneId, onOpen, className }: {
+/**
+ * A coordinator's threads as chips in the strip a workspace's tabs would take, drawn with the same
+ * chip and strip as the tabs and panes: tap one to switch, the open one wears the neutral fill.
+ */
+export function ThreadChips({ threads, coordinator, currentPaneId, onOpen }: {
   threads: readonly ProjectThreadView[];
   /** The coordinator's pane, offered as the last chip. */
   coordinator?: { paneId: string; label: string };
   currentPaneId?: string;
   onOpen: (paneId: string) => void;
-  className?: string;
 }) {
   if (!threadChipsShown(threads, coordinator !== undefined)) return null;
-  const live = chipThreads(threads);
-  const chip = (key: string, paneId: string, label: string, dot: ReactNode) => {
-    const current = paneId === currentPaneId;
-    return (
-      <button key={key} type="button" aria-current={current ? "page" : undefined} onClick={() => !current && onOpen(paneId)}
-        className={cn("inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-[13px] lg:h-7 lg:rounded-md lg:px-2.5", "relative after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] lg:after:hidden",
-          current ? "bg-muted font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground")}>
-        {dot}{label}
-      </button>
-    );
-  };
+  const chip = (key: string, paneId: string, label: string, dot: ReactNode) => (
+    <Chip key={key} label={label} active={paneId === currentPaneId} icon={dot} onClick={() => { if (paneId !== currentPaneId) onOpen(paneId); }} />
+  );
   return (
-    <nav aria-label="Threads" className={cn("flex shrink-0 gap-1.5 overflow-x-auto border-b border-border/60 px-3 py-2 [scrollbar-width:none]", className)}>
-      {live.map((thread) => chip(thread.id, thread.paneId!, thread.title, <NodeDot state={nodeState(thread)} />))}
-      {coordinator && chip("coordinator", coordinator.paneId, coordinator.label, <span aria-hidden className="size-2 shrink-0 rounded-full border border-muted-foreground" />)}
+    <nav aria-label="Threads" className="flex shrink-0 flex-col">
+      <ChipStrip band="tabs" activeKey={currentPaneId ?? ""}>
+        {chipThreads(threads).map((thread) => chip(thread.id, thread.paneId!, thread.title, <NodeDot state={nodeState(thread)} />))}
+        {coordinator && chip("coordinator", coordinator.paneId, coordinator.label, <span aria-hidden className="size-2 shrink-0 rounded-full border border-muted-foreground" />)}
+      </ChipStrip>
     </nav>
   );
 }
