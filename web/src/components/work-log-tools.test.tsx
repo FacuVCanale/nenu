@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 import { LiveStepRow, ThinkingStep, ToolStep } from "./work-log-tools";
@@ -37,6 +37,15 @@ it("shows a failed call as Failed on its own line, and opens its output with one
   await userEvent.click(failed);
   expect(screen.getByText("file contents")).toBeInTheDocument();
   expect(screen.getByText(/output truncated/)).toBeInTheDocument();
+});
+
+// A tool the timeline has no verb for is named by itself, and that name can be long. On a phone it
+// must give way, so the Failed chip and the chevron stay on the row.
+it("keeps a failed call's chip on its row when the tool's own name is long", () => {
+  render(<Steps calls={[{ kind: "tool", name: "mcp__plugin_playwright_playwright__browser_take_screenshot", summary: "home-phone.png", result: { text: "Error: Browser is not installed.", isError: true } }]} />);
+  const row = screen.getByRole("button", { name: /^browser_take_screenshot home-phone\.png Failed/ });
+  expect(within(row).getByText("browser_take_screenshot")).toHaveClass("min-w-0", "truncate");
+  expect(within(row).getByText("Failed")).toHaveClass("shrink-0");
 });
 
 it("keeps a file's name whole and drops the temp folders in front of it", () => {

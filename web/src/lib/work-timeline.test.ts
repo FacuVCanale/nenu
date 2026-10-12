@@ -194,6 +194,13 @@ describe("describeTool", () => {
   it("names a tool it does not know by its own name, with the summary as plain text", () => {
     expect(describeTool("SendUserFile")).toEqual({ kind: "tool", done: "SendUserFile", doing: "SendUserFile", target: "text" });
   });
+
+  // Claude Code names an MCP tool mcp__<server>__<tool>; the server's part is most of the length
+  // and says nothing about what the step did.
+  it("names an MCP tool by its own tool name, without the mcp__ prefix and the server", () => {
+    expect(describeTool("mcp__plugin_playwright_playwright__browser_take_screenshot")).toEqual(
+      { kind: "tool", done: "browser_take_screenshot", doing: "browser_take_screenshot", target: "text" });
+  });
 });
 
 describe("firstLine", () => {
