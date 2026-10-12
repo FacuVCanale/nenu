@@ -1,6 +1,6 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, ChevronRight, Copy, Download, FileText, Globe, Loader2, MoreHorizontal, RefreshCw, X } from "lucide-react";
+import { Check, ChevronLeft, Copy, Download, FileText, Globe, Loader2, MoreHorizontal, RefreshCw, X } from "lucide-react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchArtifactMetadata, fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
 import { displayPath } from "@/lib/display-path";
@@ -15,7 +15,7 @@ import { ActionGroups } from "./conversation-actions";
 import { MarkdownText } from "./markdown-text";
 import { HtmlViewer } from "./html-viewer";
 import { FileUnavailable, type FileFailure } from "./file-unavailable";
-import { ImageViewer, type ViewerImage } from "./image-viewer";
+import { ImageViewer, reducedMotion, type ViewerImage } from "./image-viewer";
 import { WorkbenchPopover } from "./ui/workbench-popover";
 import type { PreviewItem } from "./file-preview-provider";
 import "./file-preview.css";
@@ -29,11 +29,8 @@ const isImage = (item: PreviewItem | undefined) => item?.kind === "journal" || (
 const keyOf = (item: PreviewItem | undefined) => item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${item?.path ?? ""}`;
 const fileName = (path: string) => path.split("/").pop() || "Document";
 
-/** How long the layer stays mounted for its exit: a fade, or nothing where motion is off. */
-function exitMs(): number {
-  if (typeof window.matchMedia !== "function") return 0;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 120 : 150;
-}
+/** How long the layer stays mounted for its exit: a fade and a fall, or the fade alone. */
+const exitMs = () => reducedMotion() ? 120 : 150;
 
 /** The folder that holds a file, from the folder of the pane it is read through; "" at its top. */
 function folderOf(path: string, cwd: string | undefined): string {
@@ -255,11 +252,6 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
           : <div className="file-preview-content">
             <DocumentContent data={data} name={name} openRelated={openRelated} onError={(message) => setError({ message, outside: false })} />
           </div>}
-        {list.length > 1 && <nav aria-label="Gallery" className="file-preview-gallery">
-          <button type="button" aria-label="Previous" onClick={() => step(-1)} className="file-preview-action"><ChevronLeft className="size-5" /></button>
-          <span aria-live="polite" className="min-w-28 text-center text-sm">{name} <span className="text-muted-foreground">· {at + 1} of {list.length}</span></span>
-          <button type="button" aria-label="Next" onClick={() => step(1)} className="file-preview-action"><ChevronRight className="size-5" /></button>
-        </nav>}
       </>}
     </div>
   </div>, document.body);

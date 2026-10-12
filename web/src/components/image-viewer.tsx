@@ -24,7 +24,7 @@ const DOUBLE_TAP_MS = 280;
 const HANDOFF = "cubic-bezier(0.25, 0.5, 0.5, 1)";
 const SETTLE = "cubic-bezier(0.2, 0.9, 0.3, 1)";
 
-const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+export const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
 /** A release's animation length: the finger's own speed when it had one, kept between 180 and 300ms. */
 function handoffMs(distance: number, speed: number): number {
