@@ -1069,6 +1069,23 @@ describe("AgentChat — a pane that is gone", () => {
   });
 });
 
+// A pane opened on the page's last text (its read still on the way) may show an input-box draft that
+// is gone by now; only the fresh read may offer it to Take over.
+describe("AgentChat — a pane opened on its last text", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const box = "─".repeat(40);
+  const withDraft = `hello from the pane\n${box}\n❯ a message recalled an hour ago\n${box}`;
+
+  it.each([[false, true], [true, false]])("pending %s offers the terminal's draft: %s", async (pending, offered) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderChat({ text: withDraft, pending });
+    act(() => vi.advanceTimersByTime(1600));
+    if (offered) expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    else expect(screen.queryByText(/draft in terminal/i)).toBeNull();
+  });
+});
+
 it("says the terminal is on its way, not that it printed nothing, while the pane's first read is pending", () => {
   const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
   renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "", pending: true });
