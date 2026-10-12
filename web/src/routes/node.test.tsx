@@ -23,11 +23,12 @@ const project: ProjectView = {
   ],
 };
 
-function setup(path: string) {
-  const data: HomeData = { bridge: "connected", agents: [pane("lead")], shellPanes: [], workspaces: [], tabs: [], projects: [project], device: undefined,
-    sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
+const data: HomeData = { bridge: "connected", agents: [pane("lead")], shellPanes: [], workspaces: [], tabs: [], projects: [project], device: undefined,
+  sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
+
+function setup(path: string, loader: () => HomeData | Promise<HomeData> = () => data) {
   const router = createMemoryRouter([{
-    id: ROOT_ROUTE_ID, path: "/", loader: () => data, element: <Outlet />,
+    id: ROOT_ROUTE_ID, path: "/", loader, element: <Outlet />,
     children: [
       { index: true, element: <p>HOME</p> },
       { path: "project/:projectSlug", element: <ProjectRoute /> },
@@ -103,6 +104,22 @@ it("says a project is not in this Herdr session and offers Home or another look"
     expect(router.state.location.pathname).toBe("/");
     cleanup();
   }
+});
+
+it("shows Check again at work until the read answers, then offers it again", async () => {
+  let answer: (() => void) | undefined;
+  let hold = false;
+  const { user } = setup("/project/nope", () => hold ? new Promise<HomeData>((resolve) => { answer = () => resolve(data); }) : data);
+  const main = within(await screen.findByRole("main"));
+  hold = true;
+  await user.click(main.getByRole("button", { name: "Check again" }));
+  const checking = await main.findByRole("button", { name: "Checking…" });
+  expect(checking).toHaveAttribute("aria-busy", "true");
+  expect(checking).toBeDisabled();
+  hold = false;
+  answer!();
+  expect(await main.findByRole("button", { name: "Check again" }, { timeout: 2000 })).toBeEnabled();
+  expect(main.getByRole("heading", { name: "Project not found" })).toBeInTheDocument();
 });
 
 it("goes back one level, to the node's parent or its project, and names the node in the bar", async () => {
