@@ -161,7 +161,9 @@ it("on a phone, details replace the sheet's content with Back: one sheet, never 
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   const sheet = screen.getByRole("dialog", { name: runningRun.name });
-  expect(await within(sheet).findByRole("heading", { name: runningRun.name })).toBeVisible();
+  // The sheet's header is a heading named by the run, and the detail still repeats the name in its
+  // own: processes.tsx can hand the sheet its Back and drop the repeat (sheet-system follow-up).
+  expect(await within(sheet).findAllByRole("heading", { name: runningRun.name })).not.toHaveLength(0);
   await user.click(within(sheet).getByRole("button", { name: "Back" }));
   expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
 });
