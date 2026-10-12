@@ -1,12 +1,12 @@
 import { Pencil, RotateCcw, Send, TerminalSquare, Trash2, Zap, type LucideIcon } from "lucide-react";
 
-import { QueuedMessage, type QueuedAction } from "@/components/queued-message";
+import { QueuedMessage, type QueuedAction, type QueuedTone } from "@/components/queued-message";
 import { queueRowStatus } from "@/hooks/use-message-queue";
 import type { LocalSend, LocalSendActions } from "@/lib/local-sends";
 
 /** What a pending bubble says about itself, and which of its buttons make sense right now. */
 export function pendingStatus(send: LocalSend): {
-  tone: "busy" | "waiting" | "done" | "problem";
+  tone: QueuedTone;
   label: string;
   actions: Array<keyof LocalSendActions>;
 } {

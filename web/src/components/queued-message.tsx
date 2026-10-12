@@ -5,10 +5,12 @@ import { ActionGroups } from "@/components/conversation-actions";
 import { MarkdownText } from "@/components/markdown-text";
 import { MessageImages } from "@/components/message-images";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
+import type { queueRowStatus } from "@/hooks/use-message-queue";
 import { splitMessageImages } from "@/lib/message-images";
 import { cn } from "@/lib/utils";
 
-export type QueuedTone = "busy" | "waiting" | "done" | "problem";
+// One tone vocabulary for both devices: the queue's own status decides it (hooks/use-message-queue.ts).
+export type QueuedTone = ReturnType<typeof queueRowStatus>["tone"];
 
 export interface QueuedAction {
   id: string;
