@@ -19,7 +19,7 @@ describe("displayPath", () => {
     const tmp = "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-kSVt1n/web/src/hooks/use-app-viewport.ts";
     const shown = displayPath(tmp, "/Users/fran/collie", 32);
     expect(shown.base).toBe("use-app-viewport.ts");
-    expect(shown.dir).toBe("…/hooks/");
+    expect(shown.dir).toBe("…/src/hooks/");
     expect(join(shown).length).toBeLessThanOrEqual(32);
   });
 
