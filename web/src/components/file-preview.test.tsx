@@ -71,7 +71,7 @@ it("follows a name the pane's folder lacks to the file the bridge finds, and say
     : { path: path!, state: "missing" as const }]);
   const { unmount } = render(<FilePreview paneId="w1:p1" path="assets/notes.md" onClose={() => {}} />);
   expect(await screen.findByText("Found it")).toBeInTheDocument();
-  expect(screen.getByText("/repo/assets/notes.md")).toBeInTheDocument();
+  expect(screen.getByText("/repo/assets")).toBeInTheDocument();
   unmount();
   render(<FilePreview paneId="w1:p1" path="gone.md" onClose={() => {}} />);
   expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
@@ -217,41 +217,51 @@ it("steps through a gallery of journal images with previous, next and the arrow 
   expect(fetchFile).not.toHaveBeenCalled();
 });
 
-// T07: the agent's own folder is where the operator thinks from, so the header reads from there and
-// the file's name is never the part that gets cut.
-it("shows where a file is from the agent's folder, never cutting its name", async () => {
+// T07: the agent's own folder is where the operator thinks from. The heading is the file's name and
+// the line under it the folder that holds it, so neither repeats the other.
+it("names the file in the heading and its folder, from the agent's folder, under it", async () => {
   fetchFile.mockImplementation(async () => new Response("export {}", { headers: { "content-type": "text/plain" } }));
-  const panes = [{ paneId: "w1:p1", cwd: "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-s76Uzr", label: "coordinator" }];
-  const { unmount } = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
+  const cwd = "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-s76Uzr";
+  const panes = [{ paneId: "w1:p1", cwd, label: "coordinator" }];
+  const { unmount } = render(<FilePreview paneId="w1:p1" path={`${cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
   expect(screen.getByRole("heading", { name: "use-app-viewport.ts" })).toBeInTheDocument();
-  expect(screen.getByText("web/src/hooks/use-app-viewport.ts")).toBeInTheDocument();
+  expect(screen.getByText("web/src/hooks")).toBeInTheDocument();
+  expect(screen.getAllByText(/use-app-viewport/)).toEqual([screen.getByRole("heading", { name: "use-app-viewport.ts" })]);
   expect(screen.queryByText(/\/var\/folders/)).not.toBeInTheDocument();
   await screen.findByText("export {}");
   unmount();
-  // A phone's bar holds about 28 characters: the folders give way from the front, the name never.
-  const original = Object.getOwnPropertyDescriptor(window, "matchMedia");
-  Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: (query: string) => ({
-    matches: query === "(max-width: 639px)", media: query, onchange: null,
-    addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-  }) });
-  const narrow = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/hooks/use-app-viewport.ts`} panes={panes} onClose={() => {}} />);
-  expect(screen.getByText("…/hooks/use-app-viewport.ts")).toBeInTheDocument();
-  await screen.findByText("export {}");
-  narrow.unmount();
-  // A name longer than the line on its own: the line names the folder, the heading keeps the name.
-  const long = "informe-de-auditoria-de-la-interfaz-movil-completo.md";
-  const longer = render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/web/src/components/${long}`} panes={panes} onClose={() => {}} />);
-  expect(screen.getByText("web/src/components/")).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: long })).toHaveTextContent(/^informe-de-audito…\.md$/);
-  await screen.findByText("export {}");
-  longer.unmount();
-  if (original) Object.defineProperty(window, "matchMedia", original);
-  else Reflect.deleteProperty(window, "matchMedia");
-  // At the top of the folder the path is the name, which the heading already says.
-  render(<FilePreview paneId="w1:p1" path={`${panes[0]!.cwd}/reporte-auditoria.md`} panes={panes} onClose={() => {}} />);
-  expect(screen.getByRole("heading", { name: "reporte-auditoria.md" })).toBeInTheDocument();
+  // At the top of the folder there is no folder to name.
+  render(<FilePreview paneId="w1:p1" path={`${cwd}/reporte-auditoria.md`} panes={panes} onClose={() => {}} />);
   expect(screen.getAllByText("reporte-auditoria.md")).toEqual([screen.getByRole("heading", { name: "reporte-auditoria.md" })]);
   await screen.findByText("export {}");
+});
+
+// Both lines are cut to the width they are drawn in, measured in their own font: the folder gives way
+// from the front, and the name in the middle, keeping how it starts, how it ends and its extension.
+it("cuts the folder from the front and the name in the middle to the measured width of the bar", async () => {
+  fetchFile.mockImplementation(async () => new Response("export {}", { headers: { "content-type": "text/plain" } }));
+  // 160px of bar and 8px a character: twenty characters to a line.
+  const width = vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.classList.contains("file-preview-heading") ? 160 : 0;
+  });
+  const measure = vi.spyOn(HTMLCanvasElement.prototype, "getContext")
+    .mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 8 }) } as unknown as CanvasRenderingContext2D);
+  try {
+    const panes = [{ paneId: "w1:p1", cwd: "/repo", label: "coordinator" }];
+    const { unmount } = render(<FilePreview paneId="w1:p1" path="/repo/docs/rediseno/notas.md" panes={panes} onClose={() => {}} />);
+    expect(screen.getByRole("heading", { name: "notas.md" })).toHaveTextContent(/^notas\.md$/);
+    expect(screen.getByText("docs/rediseno")).toBeInTheDocument();
+    await screen.findByText("export {}");
+    unmount();
+    const long = "informe-de-auditoria-de-la-interfaz-movil-completo.md";
+    render(<FilePreview paneId="w1:p1" path={`/repo/docs/rediseno/2026/octubre/${long}`} panes={panes} onClose={() => {}} />);
+    expect(screen.getByRole("heading", { name: long })).toHaveTextContent(/^informe-de-a…leto\.md$/);
+    expect(screen.getByText("…/2026/octubre")).toBeInTheDocument();
+    await screen.findByText("export {}");
+  } finally {
+    width.mockRestore();
+    measure.mockRestore();
+  }
 });
 
 // T28: on a phone the viewer is a screen of its own: Done leaves it, and what a desk header shows as
