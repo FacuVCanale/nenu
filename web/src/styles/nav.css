@@ -135,6 +135,8 @@ button.nav-pane { width: 100%; text-align: left; cursor: pointer; }
   .nav-row { min-height: 44px; font-size: var(--text-body); }
   .nav-disclosure-end { right: 0; width: 36px; }
   .nav-disclosure::before { content: ""; position: absolute; inset-block: 0; left: 50%; width: 44px; transform: translateX(-50%); }
+  /* The end chevron sits on the row's edge: its target grows inward, so the list never scrolls sideways. */
+  .nav-disclosure-end::before { left: auto; right: 0; transform: none; }
   .nav-fold { position: relative; }
   .nav-fold::before { content: ""; position: absolute; inset: -13px -8px; }
   .nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 36px; }
