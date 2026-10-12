@@ -11,8 +11,11 @@ import { DetailRoute } from "./detail";
 // Stub the heavy terminal view: this test is about DetailRoute's routing/freshPane logic, not the
 // composer. The stub reports which pane it was handed and whether an agent resolved for it.
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, agent, text }: { paneId: string; agent?: AgentView; text: string }) => (
-    <div data-testid="chat" data-text={text}>{`pane:${paneId}:${agent ? "live" : "gone"}`}</div>
+  AgentChat: ({ paneId, agent, text, onSelect }: { paneId: string; agent?: AgentView; text: string; onSelect: (id: string) => void }) => (
+    <div data-testid="chat" data-text={text}>
+      {`pane:${paneId}:${agent ? "live" : "gone"}`}
+      <button type="button" onClick={() => onSelect("w1:p2")}>switch</button>
+    </div>
   ),
 }));
 
@@ -138,6 +141,17 @@ describe("DetailRoute — freshPane bootstrap", () => {
 
     await screen.findByTestId("home");
     expect(router.state.location.pathname).toBe("/");
+  });
+});
+
+describe("DetailRoute — switching panes", () => {
+  it("replaces the chat in history, so the back gesture leaves the chat rather than walking every pane", async () => {
+    const router = makeRouter(panePath("w1:p1"), () => connected([agentView("w1:p1", "agent"), agentView("w1:p2", "agent", "w1:t2")]));
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1:live");
+    await act(async () => screen.getByRole("button", { name: "switch" }).click());
+    expect(await screen.findByText("pane:w1:p2:live")).toBeInTheDocument();
+    expect(router.state.historyAction).toBe("REPLACE");
   });
 });
 

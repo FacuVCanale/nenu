@@ -275,10 +275,10 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     expect(await screen.findByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("Codex is ready")).not.toBeInTheDocument();
 
-    await openMenuItem(user, "Terminal mirror");
+    await openMenuItem(user, "Terminal view");
     expect(screen.getByText("Codex is ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.getByRole("button", { name: "Terminal mirror" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Terminal view" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("promotes a newly-created shell to the Codex workbench without remounting the pane", async () => {
@@ -729,7 +729,7 @@ describe("AgentChat — history affordance", () => {
     expect(screen.queryByRole("button", { name: /conversation history/i })).not.toBeInTheDocument();
   });
 
-  it("keeps a phone header to one ⋯ of five views, with no group headings", async () => {
+  it("keeps a phone header to one ⋯ of five views beside the pane's own actions", async () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true };
     renderChat({ agent, agents: [agent] });
     for (const name of [/conversation history/i, "Show raw terminal", "Artifacts and files", /^Subagents/]) {
@@ -738,8 +738,8 @@ describe("AgentChat — history affordance", () => {
     await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     const menu = screen.getByRole("dialog", { name: "Conversation actions" });
     expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
-      expect.arrayContaining(["Find in chat", "Conversation history", "Artifacts and files", "Terminal mirror", "Display"]));
-    for (const heading of ["Terminal", "Shortcuts", "View"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
+      expect.arrayContaining(["Find in chat", "Conversation history", "Artifacts and files", "Terminal view", "Display"]));
+    for (const heading of ["Terminal", "Shortcuts"]) expect(within(menu).queryByText(heading)).not.toBeInTheDocument();
     // Message tools stay under the composer's chevron, background work behind the processes chip.
     for (const name of ["Keys", "Type into terminal", "Quick replies", "Background activity", "Subagents", "Context and usage"]) {
       expect(within(menu).queryByRole("button", { name })).not.toBeInTheDocument();
@@ -756,7 +756,7 @@ describe("AgentChat — history affordance", () => {
       expect(screen.getByRole("button", { name: "Show raw terminal" })).toBeVisible();
       expect(screen.queryByRole("button", { name: /^Subagents/ })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-      expect(screen.queryByRole("button", { name: "Terminal mirror" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Terminal view" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Artifacts and files" })).toBeVisible();
     } finally {
       window.matchMedia = original;
@@ -804,7 +804,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal mirror" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
     expect(loadOlder()).not.toBeInTheDocument();
   });
@@ -841,7 +841,7 @@ describe("AgentChat — top-of-mirror history affordance", () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true, readableLines: 6946 };
     renderChat({ agent, agents: [agent], requestedLines: 600 });
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal mirror" }));
+    fireEvent.click(screen.getByRole("button", { name: "Terminal view" }));
     expect(showHistory()).toBeInTheDocument();
     expect(loadOlder()).not.toBeInTheDocument();
   });
@@ -1052,6 +1052,38 @@ it("says the terminal is on its way, not that it printed nothing, while the pane
   renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "", pending: true });
   expect(screen.getByRole("status", { name: "Reading the terminal" })).toBeInTheDocument();
   expect(screen.queryByText("(no recent output)")).toBeNull();
+});
+
+// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11).
+describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", () => {
+  const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
+  const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
+
+  it("opens the pane's and the tab's actions from the menu", async () => {
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent], tabs });
+    await openMenuItem(user, "Rename or close pane…");
+    const paneSheet = screen.getByRole("dialog", { name: "Working Claude" });
+    expect(within(paneSheet).getByRole("button", { name: /Rename/ })).toBeInTheDocument();
+    expect(within(paneSheet).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
+    await user.click(within(paneSheet).getByRole("button", { name: "Close" }));
+    await openMenuItem(user, "Rename or close tab…");
+    expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
+  });
+
+  it("offers neither on a device that cannot write", async () => {
+    renderChat({ agent, agents: [agent], tabs, device: { enforced: true, device: "spare-phone", authorized: false } });
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
+  });
+});
+
+it("names a project's pane in the pane strip as its rows do", () => {
+  const coordinator = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
+  const projects = [{ slug: "shop", name: "Shop", status: "active" as const, coordinator: { paneId: "w1:p2", agent: "claude", liveStatus: "idle" as const }, threads: [] }];
+  renderChat({ agents: [fixtureAgents[0]!, coordinator], projects });
+  expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
 });
 
 // Find names what it searches, in the menu and in the bar (T31).
