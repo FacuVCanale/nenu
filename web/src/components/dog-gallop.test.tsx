@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 
 import { DogGallop } from "./dog-gallop";
@@ -34,5 +36,13 @@ describe("DogGallop", () => {
   it("forwards className for placement", () => {
     const { container } = render(<DogGallop className="mr-2" />);
     expect(container.querySelector(".dog-gallop")).toHaveClass("mr-2");
+  });
+
+  it("ships a mark with its own transparency, so no surface shows a square tile behind the dog", () => {
+    // The generated mark was black on an off-white (254) tile; every surface had to blend it away,
+    // and the boot splash, which only inverts it, drew the tile. PNG colour type 6 is RGBA.
+    const png = readFileSync(resolve(import.meta.dirname, "../../public/nenu-mark.png"));
+    expect(png.subarray(1, 4).toString("ascii")).toBe("PNG");
+    expect(png[25]).toBe(6);
   });
 });
