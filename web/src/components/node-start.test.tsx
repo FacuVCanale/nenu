@@ -149,6 +149,25 @@ it("offers nothing to start in a paused project, which Organizations would refus
   expect(container).toBeEmptyDOMElement();
 });
 
+it("opens the project a thread went to when the person picked another one", async () => {
+  serveOptions();
+  const start = recordStart();
+  const api: ProjectView = { slug: "api", name: "API", status: "active", nodeActions: true, threads: [] };
+  const { user, onStarted, router } = renderActions(project, { others: [api] });
+
+  await user.click(await screen.findByRole("button", { name: "New thread" }));
+  const dialog = within(await screen.findByRole("dialog", { name: "New thread" }));
+  await user.selectOptions(dialog.getByLabelText("Project"), "api");
+  await user.type(dialog.getByLabelText("Title"), "Docs");
+  await user.type(dialog.getByLabelText("Task"), "Write the docs.");
+  await user.click(dialog.getByRole("button", { name: "Create thread" }));
+
+  await waitFor(() => expect(router.state.location.pathname).toBe("/project/api"));
+  expect(start.posted).toEqual([{ project: "api", role: "worker", title: "Docs", parent: "root", task: "Write the docs." }]);
+  expect(onStarted).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
 it("lets a start the person dismissed land without closing or moving what they opened next", async () => {
   serveOptions();
   let release!: () => void;
