@@ -370,9 +370,19 @@ describe("the sidebar", () => {
     const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={empty} variant="sheet" onNewChat={onNewChat} /> }]);
     render(<RouterProvider router={router} />);
     expect(screen.getByText("No agents yet")).toBeInTheDocument();
-    expect(screen.getByText(/Agents you start in Herdr show up here too\./)).toBeInTheDocument();
+    // The button below names the way to start; the words only add where else agents come from.
+    expect(screen.getByText("Agents you start in Herdr show up here too.")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "New agent" }));
     expect(onNewChat).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an empty desk sidebar to one quiet line, since Home beside it leads the start", () => {
+    const empty = { ...herd, agents: [], workspaces: [], tabs: [], projects: [] } as unknown as HomeData;
+    const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={empty} onNewChat={vi.fn()} /> }]);
+    render(<RouterProvider router={router} />);
+    expect(screen.getByText("No agents yet.")).toHaveClass("nav-empty");
+    expect(screen.queryByRole("heading", { name: /No agents yet/ })).toBeNull();
+    expect(screen.queryByText(/show up here/)).toBeNull();
   });
 
   it("names the host and what it holds in the footer, beside Settings", () => {
