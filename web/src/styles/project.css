@@ -7,7 +7,8 @@
    would take, on the strips' chrome. A segment is 28px to the eye; on a coarse pointer its target
    spans the whole band, 44px. The open one takes the neutral selection fill the chips use. */
 .project-segmented-band { flex-shrink: 0; padding: 4px calc(var(--page-gutter) - 4px); background: var(--chrome); }
-.project-segmented { display: grid; grid-template-columns: repeat(3, 1fr); height: 36px; padding: 4px; border-radius: var(--radius-lg); background: var(--muted); }
+/* As wide as the chat column under it (48rem), not the whole pane of a narrow desk. */
+.project-segmented { display: grid; grid-template-columns: repeat(3, 1fr); max-width: 48rem; height: 36px; margin-inline: auto; padding: 4px; border-radius: var(--radius-lg); background: var(--muted); }
 .project-segment { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 150ms ease-out, color 150ms ease-out; }
 .project-segment[aria-selected="true"] { background: var(--workbench-row-selected); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
 @media (hover: hover) { .project-segment[aria-selected="false"]:hover { color: var(--foreground); } }
