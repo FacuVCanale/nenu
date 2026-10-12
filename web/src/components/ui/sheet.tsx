@@ -181,11 +181,15 @@ export function BottomSheet({ open, onClose, title, children, className }: Botto
 }
 
 // A left-edge drawer — same no-deps approach as BottomSheet, but slides in from the side and fills
-// the viewport height with a scrollable body. Used for the thread sidebar (TUI-style switcher).
+// the viewport height from the top. The phone's navigation opens here from the Nenu mark in the
+// header's top-left corner, so it starts where the finger was instead of rising from the bottom.
 interface SideSheetProps {
   open: boolean;
   onClose: () => void;
-  title?: string;
+  /** The dialog's accessible name; shown as the heading unless `heading` replaces it. */
+  title: string;
+  /** A visible heading in place of the title text (the brand row); the title still names the dialog. */
+  heading?: React.ReactNode;
   /** Optional action(s) rendered in the header, to the left of the close (✕) button. */
   headerAction?: React.ReactNode;
   children: React.ReactNode;
@@ -197,12 +201,15 @@ export function SideSheet({
   open,
   onClose,
   title,
+  heading,
   headerAction,
   children,
   footer,
   className,
 }: SideSheetProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const [dragX, setDragX] = React.useState(0);
+  const dragging = React.useRef(false);
   const titleId = React.useId();
   useDialogFocus(open, panelRef);
 
@@ -227,6 +234,61 @@ export function SideSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // Swipe left to dismiss, as a native drawer closes. The gesture engages only once it is clearly
+  // horizontal, so a vertical scroll of the list never moves the panel; the move listener is
+  // non-passive so an engaged swipe can stop iOS from scrolling underneath it.
+  React.useEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !panel) return;
+    setDragX(0);
+    const SLOP = 8;
+    const CLOSE = 72;
+    let start: { x: number; y: number } | null = null;
+    let engaged = false;
+    let dx = 0;
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      const editing = e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable=true]");
+      start = t && !editing ? { x: t.clientX, y: t.clientY } : null;
+      engaged = false;
+      dx = 0;
+    };
+    const onMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!start || !t) return;
+      const x = t.clientX - start.x;
+      const y = t.clientY - start.y;
+      if (!engaged) {
+        if (Math.abs(y) > SLOP && Math.abs(y) >= Math.abs(x)) return void (start = null);
+        if (x > -SLOP || Math.abs(x) <= Math.abs(y)) return;
+        engaged = true;
+        dragging.current = true;
+      }
+      e.preventDefault();
+      dx = Math.min(0, x);
+      setDragX(dx);
+    };
+    const onEnd = () => {
+      const shut = engaged && dx < -CLOSE;
+      start = null;
+      engaged = false;
+      dragging.current = false;
+      dx = 0;
+      if (shut) onClose();
+      else setDragX(0);
+    };
+    panel.addEventListener("touchstart", onStart, { passive: true });
+    panel.addEventListener("touchmove", onMove, { passive: false });
+    panel.addEventListener("touchend", onEnd);
+    panel.addEventListener("touchcancel", onEnd);
+    return () => {
+      panel.removeEventListener("touchstart", onStart);
+      panel.removeEventListener("touchmove", onMove);
+      panel.removeEventListener("touchend", onEnd);
+      panel.removeEventListener("touchcancel", onEnd);
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
@@ -234,34 +296,41 @@ export function SideSheet({
       className="sheet-viewport fixed inset-x-0 z-50 flex"
       role="dialog"
       aria-modal="true"
-      aria-labelledby={title ? titleId : undefined}
+      aria-labelledby={heading ? undefined : titleId}
+      aria-label={heading ? title : undefined}
     >
       <div
         ref={panelRef}
         tabIndex={-1}
+        style={{
+          transform: dragX ? `translateX(${dragX}px)` : undefined,
+          transition: dragging.current ? "none" : undefined,
+        }}
         className={cn(
-          "relative z-10 flex h-full w-[86%] max-w-sm flex-col border-r border-border bg-background shadow-2xl duration-200 animate-in slide-in-from-left-4 motion-reduce:animate-none",
+          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col border-r border-border bg-background shadow-2xl duration-200 animate-in slide-in-from-left-4 motion-reduce:animate-none",
           className,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-md [padding-top:calc(env(safe-area-inset-top)_+_0.75rem)]">
-          <span id={title ? titleId : undefined} className="text-sm font-semibold">
-            {title}
-          </span>
-          <div className="flex items-center gap-1">
-            {headerAction}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-11"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              <X className="size-4" />
-            </Button>
+        <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 pt-[env(safe-area-inset-top)]">
+          <div className="flex min-h-13 min-w-0 flex-1 items-center pl-2">
+            {heading ?? (
+              <span id={titleId} className="text-sm font-semibold">
+                {title}
+              </span>
+            )}
           </div>
+          {headerAction}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-11"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{children}</div>
         {footer && (
           <div className="shrink-0 border-t border-border/60 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)_+_0.5rem)]">
             {footer}

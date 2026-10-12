@@ -4,7 +4,7 @@ import { House, Inbox, PanelLeft, Plus, Search, Settings } from "lucide-react";
 
 import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
 import { looseWorkspaces, needsYou, WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
-import { BottomSheet } from "@/components/ui/sheet";
+import { BottomSheet, SideSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { isCatchingUp, isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
@@ -15,7 +15,7 @@ import { canCreate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-/** What the phone's navigation sheet opened for; null while it is closed. */
+/** What the phone's tab bar opened its navigation sheet for; null while it is closed. */
 type Sheet = "browse" | "needs-you" | "search" | null;
 const SHEET_TITLE = { browse: "Navigation", "needs-you": "Needs you", search: "Search" } as const;
 
@@ -66,8 +66,12 @@ function useSidebarCollapse() {
 export function WorkbenchShell({ data, children }: { data: HomeData; children: ReactNode }) {
   const { collapsed, choose: setCollapsed, setDocked } = useSidebarCollapse();
   const [sheet, setSheet] = useState<Sheet>(null);
+  // The drawer the header's Nenu mark opens; its Search bumps `drawerSearch`.
+  const [drawer, setDrawer] = useState(false);
+  const [drawerSearch, setDrawerSearch] = useState(0);
   const [request, setRequest] = useState<SidebarRequest>();
-  const newChat = canCreate(data) ? () => { setSheet(null); openNewDialog(); } : undefined;
+  const closeDrawer = () => { setDrawer(false); setDrawerSearch(0); };
+  const newChat = canCreate(data) ? () => { setSheet(null); closeDrawer(); openNewDialog(); } : undefined;
   const attention = needsYou(data).length;
   const sidebarId = useId();
   const expandButton = useRef<HTMLButtonElement>(null);
@@ -89,6 +93,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   if (drawerLocation !== location.key) {
     setDrawerLocation(location.key);
     if (sheet) setSheet(null);
+    if (drawer) closeDrawer();
   }
 
   function reveal(target: SidebarRequest["target"]) {
@@ -141,7 +146,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
         onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} onNeedsYou={() => reveal("needs-you")} />}
 
       <div className="workbench-main">
-        <WorkbenchNavigationContext value={{ open: sheet !== null, onOpen: () => setSheet("browse"), onNewChat: newChat, onDock: setDocked }}>
+        <WorkbenchNavigationContext value={{ open: drawer, onOpen: () => setDrawer(true), onNewChat: newChat, onDock: setDocked }}>
           {children}
         </WorkbenchNavigationContext>
         {tabBar && <BottomTabBar active={active} homeTo={homePath(data.session)} attention={attention} onNew={newChat}
@@ -149,9 +154,21 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
       </div>
 
       <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet ? SHEET_TITLE[sheet] : undefined}>
-        <WorkbenchSidebar key={sheet} data={data} onNavigate={() => setSheet(null)} onNewChat={newChat} actions={!tabBar}
+        <WorkbenchSidebar key={sheet} data={data} onNavigate={() => setSheet(null)} onNewChat={newChat} variant="sheet"
           request={sheet === "search" || sheet === "needs-you" ? { target: sheet, seq: 1 } : undefined} />
       </BottomSheet>
+
+      <SideSheet open={drawer} onClose={closeDrawer} title="Navigation"
+        heading={<Link to={homePath(data.session)} className="workbench-brand" onClick={closeDrawer} aria-label="Nenu home">
+          <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" /><span>Nenu</span>
+        </Link>}
+        headerAction={<>
+          <button type="button" className="workbench-icon-button" aria-label="Search" onClick={() => setDrawerSearch((n) => n + 1)}><Search aria-hidden size={18} /></button>
+          <button type="button" className="workbench-icon-button" aria-label="New" onClick={newChat} disabled={!newChat}><Plus aria-hidden size={18} /></button>
+        </>}>
+        <WorkbenchSidebar data={data} onNavigate={closeDrawer} onNewChat={newChat} variant="drawer"
+          request={drawerSearch ? { target: "search", seq: drawerSearch } : undefined} />
+      </SideSheet>
     </div>
   );
 }

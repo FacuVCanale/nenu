@@ -40,14 +40,16 @@ function save(prefs: SidebarPrefs): void {
   }
 }
 
-export function useSidebarPrefs() {
-  const [prefs, setPrefs] = useState(load);
+/** `persist: false` keeps the folds in memory from a clean start: the phone's sheets, compact on every open. */
+export function useSidebarPrefs({ persist = true } = {}) {
+  const [prefs, setPrefs] = useState(() => (persist ? load() : coerceSidebarPrefs(null)));
 
   const update = useCallback((change: (latest: SidebarPrefs) => SidebarPrefs) => {
+    if (!persist) return setPrefs(change);
     const next = change(load());
     save(next);
     setPrefs(next);
-  }, []);
+  }, [persist]);
 
   const setExpanded = useCallback((slug: string, open: boolean) =>
     update((latest) => ({ ...latest, expanded: { ...latest.expanded, [slug]: open } })), [update]);
