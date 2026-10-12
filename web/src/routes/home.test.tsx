@@ -96,6 +96,18 @@ const sustained = () => {
   return since;
 };
 
+/** Home under the app's connection banner, as RootLayout draws it. */
+async function underBanner(value: HomeData) {
+  function Layout() {
+    const d = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+    return <><ConnectionBanner bridge={d.bridge} error={d.error} authError={d.authError} lastSeenAt={d.lastSeenAt} /><WorkbenchShell data={d}><Outlet /></WorkbenchShell></>;
+  }
+  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => value, element: <Layout />, children: [{ path: "/", element: <HomeRoute /> }] }], { initialEntries: ["/"] });
+  render(<RouterProvider router={router} />);
+  await screen.findByRole("heading", { level: 1 });
+  return within(document.querySelector("main")!);
+}
+
 const headline = () => screen.getByRole("heading", { level: 1 }).textContent;
 /** The line under the headline: the facts the headline leaves out. */
 const subline = () => screen.getByRole("heading", { level: 1 }).nextElementSibling?.textContent;
@@ -580,6 +592,15 @@ describe("an outage", () => {
     expect(screen.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Sign in again to start an agent");
   });
 
+  // A refused read leaves the last herd on screen, which can be a cold boot's hours-old copy: the
+  // banner dates it, once, as it does an outage.
+  it("dates the herd it keeps under a refusal, once, in the banner", async () => {
+    await underBanner({ ...data, error: true, authError: true, lastSeenAt: Date.now() - 3 * 60_000 });
+    expect(headline()).toBe("1 thread needs you");
+    expect(screen.getAllByText(/Last synced/)).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent(/Last synced \d/);
+  });
+
   it("says why the composer is locked the moment Herdr goes down, before the outage is sustained", async () => {
     const { update, main } = await setup();
     await update({ ...data, bridge: "disconnected" });
@@ -618,18 +639,6 @@ describe("a first load that never reached Nenu", () => {
     expect(main.queryByRole("textbox")).not.toBeInTheDocument();
     expect(main.queryByText(/snapshot/)).not.toBeInTheDocument();
   });
-
-  /** Home under the app's connection banner, as RootLayout draws it. */
-  async function underBanner(value: HomeData) {
-    function Layout() {
-      const d = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
-      return <><ConnectionBanner bridge={d.bridge} error={d.error} authError={d.authError} /><WorkbenchShell data={d}><Outlet /></WorkbenchShell></>;
-    }
-    const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => value, element: <Layout />, children: [{ path: "/", element: <HomeRoute /> }] }], { initialEntries: ["/"] });
-    render(<RouterProvider router={router} />);
-    await screen.findByRole("heading", { level: 1, name: "Home" });
-    return within(document.querySelector("main")!);
-  }
 
   it("leaves the problem and its one Retry to the banner once the outage is sustained", async () => {
     sustained();

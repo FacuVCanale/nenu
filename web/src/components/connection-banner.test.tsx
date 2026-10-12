@@ -109,10 +109,16 @@ it("Retry refreshes data without reloading the page", async () => {
 
 it("shows access refusal immediately with the real sign-in escape", () => {
   const h = renderBanner({ authError: true });
-  expect(screen.getByRole("alert")).toHaveTextContent("Access refused. Sign in again. Not a network problem.");
+  expect(screen.getByRole("alert")).toHaveTextContent("Access refused. Not a network problem.");
   expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/");
   expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  h.close();
+});
+
+it("dates the herd a refusal leaves on screen, in the two lines a phone's banner has", () => {
+  const h = renderBanner({ authError: true, lastSeenAt: new Date(2026, 0, 2, 14, 32).getTime() });
+  expect(screen.getByRole("alert")).toHaveTextContent(/^Access refused\. Not a network problem\. Last synced \d/);
   h.close();
 });
 
