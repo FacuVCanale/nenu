@@ -75,7 +75,8 @@ export interface QuestionCardProps {
   approveNeedsDetail?: boolean;
 }
 
-/** A refusal shown next to what was tapped; a walk that never reached its row can be tried again. */
+/** A refusal shown next to what was tapped: `warn` when the question changed, `error` otherwise. A
+ *  walk that never reached its row can be tried again. */
 type Notice = { tone: "warn" | "error"; text: string; retry?: InteractionOption; at: "options" | "reply" };
 /** The text box open on the card: a text row's reply (required), or a note other answers may carry. */
 type Writing = { to: "reply"; option: InteractionOption } | { to: "note" } | null;
@@ -174,12 +175,9 @@ export function QuestionCard({
       }
       return;
     }
+    // The armed row says what a second tap applies to; the bridge's own words would repeat it.
+    if (outcome.code === "confirm_required") return setArmed(option.index);
     const at = extra.text !== undefined && writing?.to === "reply" ? "reply" : "options";
-    if (outcome.code === "confirm_required") {
-      setArmed(option.index);
-      setNotice({ tone: "warn", text: outcome.error, at });
-      return;
-    }
     setFailed(option.index);
     if (outcome.code === "interaction_changed") setNotice({ tone: "warn", text: outcome.error || "The question changed in the terminal.", at });
     else if (outcome.code === "not_reached") setNotice({ tone: "error", text: outcome.error, retry: option, at });
