@@ -5,7 +5,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -20,7 +20,7 @@ import { NavTray } from "@/components/nav-tray";
 import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
 import { DisplayPrefsContent } from "@/components/display-prefs";
-import { SectionLabel } from "@/components/ui/section-label";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
@@ -180,9 +180,10 @@ const KEY_REVALIDATE_MS = 300;
 // Shared in-flow dock chrome for Keys/Quick — an IN-FLOW panel (never an overlay), so the terminal
 // mirror's flex-1 box shrinks and its tail stays visible while the dock is open (a covering sheet
 // hid exactly the prompt you were driving). Full-bleed top border + capped height keep the mirror
-// usable on a phone. The header (title + Close X) is a NON-scrolling child of a flex column; only the
-// body below it scrolls (max-h + overflow), so the Close X can never scroll out of reach on a short
-// viewport with a tall tray. One wrapper so Keys and Quick can't drift apart.
+// usable on a phone. The header is the popovers' PanelHeader, titled with the + row that opened the
+// dock, and a NON-scrolling child of a flex column; only the body below it scrolls (max-h +
+// overflow), so the Close X can never scroll out of reach on a short viewport with a tall tray. One
+// wrapper so Keys and Quick replies can't drift apart.
 function ComposerDock({
   title,
   onClose,
@@ -194,18 +195,7 @@ function ComposerDock({
 }) {
   return (
     <div className="mb-2 flex flex-col overflow-hidden rounded-xl border border-border/65 bg-card">
-      <div className="flex items-center justify-between px-3">
-        <SectionLabel>{title}</SectionLabel>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11 text-muted-foreground"
-          onClick={onClose}
-          aria-label={`Close ${title}`}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
+      <PanelHeader title={title} onClose={onClose} className="pl-3" />
       <div className="max-h-[45dvh] min-h-0 overflow-y-auto">{children}</div>
     </div>
   );
@@ -1257,7 +1247,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </ComposerDock>
         )}
         {drawer === "quick" && (
-          <ComposerDock title="Quick" onClose={closeDrawer}>
+          <ComposerDock title="Quick replies" onClose={closeDrawer}>
             <QuickActionsContent
               onSend={(t) => send(t, false)}
               onClose={closeDrawer}
