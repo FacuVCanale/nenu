@@ -19,9 +19,11 @@ describe("BootSplash", () => {
     __resetConnectionHealth(); // module-load anchor == frozen clock: a dead cold start escalates ~15s in
   });
   afterEach(() => vi.useRealTimers());
+  // The router's HydrateFallback renders inside the router, so the splash can draw the app's own links.
+  const renderSplash = (path = "/") => render(<RouterProvider router={createMemoryRouter([{ path: "*", element: <BootSplash /> }], { initialEntries: [path] })} />);
 
   it("draws the app's frame and says which host it is connecting to", () => {
-    const { container } = render(<BootSplash />);
+    const { container } = renderSplash();
     expect(screen.getByRole("status")).toHaveTextContent(`Connecting to ${window.location.host}…`);
     expect(container.querySelector(".workbench-app-header")).not.toBeNull();
     expect(container.querySelector(".bottom-tab-bar")).not.toBeNull();
@@ -30,8 +32,18 @@ describe("BootSplash", () => {
     expect(screen.queryByText(/Can.t reach Nenu/)).not.toBeInTheDocument();
   });
 
+  it("draws the app's own tab bar, so it does not change under the thumb when the app arrives", () => {
+    const { container } = renderSplash("/?s=qa");
+    const bar = container.querySelector(".bottom-tab-bar")!;
+    expect(bar.querySelector("[aria-current=page]")).toHaveTextContent("Home");
+    expect(bar.querySelector("a")).toHaveAttribute("href", "/?s=qa");
+    expect(bar.querySelector(".bottom-tab-new")).toBeDisabled();
+    // Drawn, not usable: nothing to open until the first snapshot lands.
+    expect(bar.closest("[inert]")).not.toBeNull();
+  });
+
   it("says it cannot reach the host, with a Retry, once stuck past the threshold", () => {
-    const { container } = render(<BootSplash />);
+    const { container } = renderSplash();
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
     expect(screen.queryByText(/Connecting to/)).not.toBeInTheDocument();
     expect(screen.getByText(`Can’t reach Nenu at ${window.location.host}`)).toBeInTheDocument();
