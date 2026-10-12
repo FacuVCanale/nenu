@@ -6,6 +6,7 @@ import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context
 import { localFilePath } from "@/lib/file-links";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { IMAGE_EDGE } from "./message-images";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
 // NODE — there is no `dangerouslySetInnerHTML` here and there must never be one. That is the repo's
@@ -109,7 +110,7 @@ function InlineImage({ path, alt }: { path: string; alt: string }) {
   const name = alt || (path.split("/").at(-1) ?? path);
   if (!url || failed) return <Span span={{ kind: "file", path, spans: [{ kind: "text", text: name }] }} />;
   const image = <img src={url(path)} alt={name} loading="lazy" decoding="async" onError={() => setFailed(true)}
-    className="my-1 inline-block max-h-80 max-w-full rounded-lg border border-border/50 object-contain align-top" />;
+    className={cn("my-1 inline-block max-h-80 max-w-full rounded-lg object-contain align-top", IMAGE_EDGE)} />;
   return openFile ? <button type="button" aria-label={`Open ${name}`} className="inline-block max-w-full text-left" onClick={() => openFile(path)}>{image}</button> : image;
 }
 
