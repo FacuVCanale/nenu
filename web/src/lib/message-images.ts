@@ -3,8 +3,9 @@ import type { TranscriptEntry, TranscriptImagePart } from "./types";
 
 // A message that carries images is plain text on the wire: the agent CLIs (Claude Code, Codex) read
 // an image by its absolute path, so the composer appends each uploaded path to the text it sends.
-// Everything the operator LOOKS at, though, shows the images as images ("Image 1", "Image 2", …), never
-// as paths. These helpers are the one place that converts between the two shapes.
+// Everything the operator LOOKS at, though, shows the images as images, never as paths, each named
+// "Image 1", "Image 2", … in its alt text and in the viewer. These helpers are the one place that
+// converts between the two shapes.
 
 export const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
 /** Nenu's own generated upload names (bridge/chat-upload-preview.ts UPLOAD_NAME), in an uploads dir. */
@@ -52,7 +53,8 @@ export function messageMatchKey(text: string): string {
   return `${prose.replace(IMAGE_TOKEN, " ").replace(/\s+/g, " ").trim()}\u0000${images.length + tokens}`;
 }
 
-/** "Image 1", "Image 2", … — numbered per message, the way the agent CLIs label attachments. */
+/** "Image 1", "Image 2", … — numbered per message, the way the agent CLIs label attachments. An image's
+ * accessible name and the viewer's title, never a caption printed under its thumbnail. */
 export function imageLabel(index: number): string {
   return `Image ${index + 1}`;
 }

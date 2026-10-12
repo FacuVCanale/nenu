@@ -10,6 +10,14 @@ import { MediaViewerContext, type PreviewItem } from "./file-preview-provider";
 
 export interface StripImage { src?: string; label: string; item: PreviewItem }
 
+/**
+ * An image's edge: one pixel of pure black or white at a tenth, drawn over the picture, so a white
+ * screenshot keeps its shape on the light page and a dark one on the dark page. A tinted border
+ * picks up the surface under it instead.
+ */
+export const IMAGE_EDGE = "outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10";
+const BOX = { sm: "size-10", md: "size-20" } as const;
+
 /** Thumbnails that open together as one gallery, so previous and next walk the same set. */
 export function ImageStrip({ images, size = "md", className, label = "Images", max }: {
   images: readonly StripImage[];
@@ -37,7 +45,7 @@ export function ImageStrip({ images, size = "md", className, label = "Images", m
         </li>
       ))}
       {more > 0 && <li><button type="button" onClick={open(shown.length)} aria-label={`Open ${more} more images`}
-        className={cn("grid min-h-11 place-items-center rounded-lg border border-border/60 bg-muted text-xs text-muted-foreground", size === "sm" ? "size-10" : "size-20")}>+{more}</button></li>}
+        className={cn("hit-area grid place-items-center rounded-lg border bg-muted text-caption text-muted-foreground", BOX[size])}>+{more}</button></li>}
     </ul>
   );
 }
@@ -68,25 +76,18 @@ export function JournalImages({ entry, images, size = "md", className, label }: 
 
 function Thumbnail({ src, label, size, onOpen }: { src?: string; label: string; size: "sm" | "md"; onOpen?: () => void }) {
   const [failed, setFailed] = useState(false);
-  const box = size === "sm" ? "size-10" : "size-20";
-  const content = (
-    <>
-      <span className={cn("grid place-items-center overflow-hidden rounded-lg border border-border/60 bg-muted", box)}>
-        {src && !failed ? (
-          <img src={src} alt={label} loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
-        ) : (
-          <ImageIcon aria-label={label} className="size-4 text-muted-foreground" />
-        )}
-      </span>
-      {size === "md" && <span className="text-[11px] text-muted-foreground">{label}</span>}
-    </>
+  const frame = (
+    <span className={cn("grid place-items-center overflow-hidden rounded-lg bg-muted", IMAGE_EDGE, BOX[size])}>
+      {src && !failed ? (
+        <img src={src} alt={label} loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        <ImageIcon aria-label={label} className="size-4 text-muted-foreground" />
+      )}
+    </span>
   );
-  const shape = "flex flex-col items-start gap-1";
   return onOpen ? (
-    <button type="button" className={cn(shape, "min-h-11 rounded-lg")} onClick={onOpen} aria-label={`Open ${label}`}>
-      {content}
+    <button type="button" className="hit-area block rounded-lg" onClick={onOpen} aria-label={`Open ${label}`}>
+      {frame}
     </button>
-  ) : (
-    <span className={shape}>{content}</span>
-  );
+  ) : frame;
 }
