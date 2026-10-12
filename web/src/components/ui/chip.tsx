@@ -80,48 +80,75 @@ interface ChipStripProps {
 // still scroll toward fades, so a sibling past it is seen to exist.
 export function ChipStrip({ band, activeKey, lead, children }: ChipStripProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const revealed = useRef<ChipSpot | null>(null);
 
+  // Another chip opens: bring it into view.
   useLayoutEffect(() => {
-    const scroller = scrollerRef.current;
-    const chip = scroller?.querySelector<HTMLElement>('[aria-current="true"]');
-    if (!scroller || !chip) return;
-    const left = revealScrollLeft({
-      scrollLeft: scroller.scrollLeft,
-      width: scroller.clientWidth,
-      max: scroller.scrollWidth - scroller.clientWidth,
-      fade: EDGE_FADE,
-      start: chip.offsetLeft,
-      end: chip.offsetLeft + chip.offsetWidth,
-    });
-    if (left !== null) scroller.scrollLeft = left;
+    if (scrollerRef.current) revealOpenChip(scrollerRef.current, revealed);
   }, [activeKey]);
 
-  // Which edges fade follows every scroll frame and every resize, written straight to the DOM.
+  // The chips change size on a rename, a chip that comes or goes, or a late web font: if that moved
+  // the open one, it comes back into view. Which edges fade follows every scroll and every resize.
   useEffect(() => {
     const scroller = scrollerRef.current;
-    if (!scroller) return;
+    const chips = chipsRef.current;
+    if (!scroller || !chips) return;
     const update = () => markFadingEdges(scroller);
     scroller.addEventListener("scroll", update, { passive: true });
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    const resize =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            revealOpenChip(scroller, revealed);
+            update();
+          });
     resize?.observe(scroller);
+    resize?.observe(chips);
+    update();
     return () => {
       scroller.removeEventListener("scroll", update);
       resize?.disconnect();
     };
   }, []);
-  // A rename or a new chip changes what overflows without resizing the strip.
-  useEffect(() => {
-    if (scrollerRef.current) markFadingEdges(scrollerRef.current);
-  });
 
   return (
     <div data-workbench-navigation-band={band} className="strip">
       {lead}
       <div ref={scrollerRef} className="strip-scroller">
-        {children}
+        <div ref={chipsRef} className="strip-chips">
+          {children}
+        </div>
       </div>
     </div>
   );
+}
+
+/** Where the open chip sat, in the strip's scroll coordinates, when the strip last brought it in. */
+interface ChipSpot {
+  chip: HTMLElement;
+  start: number;
+  end: number;
+}
+
+/** Scrolls the open chip into view, unless it sits where it sat the last time: a strip the user
+ *  scrolled by hand stays put until the open chip changes, moves or resizes. */
+function revealOpenChip(scroller: HTMLElement, last: { current: ChipSpot | null }) {
+  const chip = scroller.querySelector<HTMLElement>('[aria-current="true"]');
+  if (!chip) return;
+  const spot = { chip, start: chip.offsetLeft, end: chip.offsetLeft + chip.offsetWidth };
+  const prev = last.current;
+  if (prev && prev.chip === chip && prev.start === spot.start && prev.end === spot.end) return;
+  last.current = spot;
+  const left = revealScrollLeft({
+    scrollLeft: scroller.scrollLeft,
+    width: scroller.clientWidth,
+    max: scroller.scrollWidth - scroller.clientWidth,
+    fade: EDGE_FADE,
+    start: spot.start,
+    end: spot.end,
+  });
+  if (left !== null) scroller.scrollLeft = left;
 }
 
 /** Marks the edges a strip can still scroll toward, which strips.css fades. */

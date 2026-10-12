@@ -14,10 +14,12 @@
 .strip[data-workbench-navigation-band="panes"] { z-index: 2; }
 
 /* An edge the row can still scroll toward fades out, so a chip past it is seen to exist. */
-.strip-scroller { --fade-start: 0px; --fade-end: 0px; position: relative; display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
+.strip-scroller { --fade-start: 0px; --fade-end: 0px; position: relative; display: flex; flex: 1; align-items: center; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
 .strip-scroller::-webkit-scrollbar { display: none; }
 .strip-scroller[data-overflow~="start"] { --fade-start: 24px; }
 .strip-scroller[data-overflow~="end"] { --fade-end: 24px; }
+/* The chips, as wide as they need: the strip watches this box to keep the open one in view. */
+.strip-chips { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
 
 /* One chip for a tab and a pane. The open one takes the neutral selection fill: the accent is for
    focus and on-states, not for where you are. A name past the cap truncates. */
