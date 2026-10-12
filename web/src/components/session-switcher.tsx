@@ -69,7 +69,7 @@ export function SessionSwitcher({ sessions, current }: SessionSwitcherProps) {
                   disabled={!s.reachable}
                   onClick={() => select(s)}
                   aria-current={isActive(s) ? "page" : undefined}
-                  className="nav-pane disabled:cursor-default disabled:text-disabled-foreground disabled:hover:bg-transparent"
+                  className="nav-pane"
                 >
                   <RowBody mark={<StatusDot status={sessionState(s)} surface="bg-transparent" className="size-2" />}
                     title={s.name} detail={sessionDetail(s) || undefined} />
