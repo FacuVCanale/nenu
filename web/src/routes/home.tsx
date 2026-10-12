@@ -4,7 +4,7 @@ import { ArrowUp, Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
-import { HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
@@ -105,8 +105,8 @@ type Sent = { tone: "ok" | "error"; text: string; paneId?: string };
 
 /**
  * Type here and pick where it goes. A project sends to its live coordinator through the shared
- * queue; while the coordinator is mid-turn you choose to steer it now or queue for after the turn
- * (the bridge maps each to the CLI's own key). A workspace or "New workspace" opens the new-chat
+ * queue; while the coordinator is mid-turn an action sheet asks, at every send, whether it reads the
+ * message now or after this turn (ADR 0056; the bridge maps each to the CLI's own key). A workspace or "New workspace" opens the new-chat
  * sheet with the message filled in, to pick agent and folder.
  */
 function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: readonly ProjectView[]; disabled: boolean }) {
@@ -202,13 +202,9 @@ function HomeComposer({ data, projects, disabled }: { data: HomeData; projects: 
           </Button>
         </div>
       </form>
-      {asking && target.kind === "project" && (
-        <div role="group" aria-label="The coordinator is working" className="flex flex-wrap items-center gap-2 text-[13px]">
-          <span className="text-muted-foreground">The coordinator is working.</span>
-          <button type="button" onClick={() => void send("asap")} className="inline-flex min-h-9 items-center rounded-lg bg-foreground px-3 font-medium text-background max-sm:min-h-10">Send now</button>
-          <button type="button" onClick={() => void send("afterTurn")} className="inline-flex min-h-9 items-center rounded-lg border border-border bg-secondary px-3 font-medium max-sm:min-h-10">Queue for later</button>
-          <button type="button" onClick={() => setAsking(false)} className="inline-flex min-h-9 items-center px-2 text-muted-foreground max-sm:min-h-10">Cancel</button>
-        </div>
+      {target.kind === "project" && (
+        <BusySendSheet open={asking} name={`${target.project.name}'s coordinator`} agent={target.coordinator.agent}
+          onPick={(mode) => void send(mode)} onCancel={() => setAsking(false)} />
       )}
       {sent && (
         <p role="status" className={cn("flex flex-wrap items-center gap-x-2 text-[13px]", sent.tone === "error" ? "text-destructive" : "text-muted-foreground")}>

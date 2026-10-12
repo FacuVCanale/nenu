@@ -4,11 +4,13 @@ import { ChevronRight, Workflow } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
+import { BottomSheet } from "@/components/ui/sheet";
+import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
-import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** A Home section's heading: its name, how many, and an optional note at the far end. */
@@ -117,5 +119,41 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now }: { pan
       )}
       <span className="text-[11.5px] text-muted-foreground">{workflow.doneCount} of {workflow.agentCount} agents done</span>
     </Link>
+  );
+}
+
+const SHEET_ROW = "flex min-h-14 w-full flex-col items-start justify-center gap-0.5 px-4 py-2 text-left transition-colors hover:bg-accent active:bg-muted";
+
+/**
+ * The send-time choice for a busy coordinator, as an action sheet: asked at every send and never
+ * remembered (ADR 0056). Each row says what the coordinator's CLI does with it, in the composer's words.
+ */
+export function BusySendSheet({ open, name, agent, onPick, onCancel }: {
+  open: boolean;
+  /** Who is working, as a sentence subject ("Hub's coordinator"). */
+  name: string;
+  agent: string | null | undefined;
+  onPick: (mode: DeliveryMode) => void;
+  onCancel: () => void;
+}) {
+  const choice = busyChoiceFor(agent);
+  return (
+    <BottomSheet open={open} onClose={onCancel} title={`${name} is working`} className="sm:mx-auto sm:my-auto sm:max-w-sm sm:rounded-2xl sm:border sm:pb-4">
+      <p className="pb-3 text-footnote text-muted-foreground">When should it read this?</p>
+      <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <button type="button" className={SHEET_ROW} onClick={() => onPick(choice?.now ?? "asap")}>
+          <span className="text-body font-medium">Send now</span>
+          {choice && <span className="text-footnote text-pretty text-muted-foreground">{choice.nowHint}</span>}
+        </button>
+        <button type="button" className={SHEET_ROW} onClick={() => onPick("afterTurn")}>
+          <span className="text-body font-medium">Send after this turn</span>
+          {choice && <span className="text-footnote text-pretty text-muted-foreground">{choice.laterHint}</span>}
+        </button>
+      </div>
+      <button type="button" onClick={onCancel}
+        className="mt-2 flex min-h-14 w-full items-center justify-center rounded-xl border border-border bg-card text-body font-medium transition-colors hover:bg-accent active:bg-muted">
+        Cancel
+      </button>
+    </BottomSheet>
   );
 }
