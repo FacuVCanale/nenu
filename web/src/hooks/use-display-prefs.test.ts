@@ -1,4 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { renderHook, act } from "@testing-library/react";
+
+import { cssRules } from "@/test/css-rules";
 import { useDisplayPrefs } from "./use-display-prefs";
 
 // Minimal localStorage stub — Vitest/jsdom includes a real one but this ensures it's clean per test.
@@ -103,12 +108,12 @@ describe("useDisplayPrefs", () => {
   });
 });
 
-// Chat text drives the type scale's body step, so the prose (and anything else set in text-body)
-// follows it; the terminal mirror keeps its own Text size.
+// Chat text sizes the conversation's turns: the hook puts the choice on the root, and the chat
+// stylesheet hands a step around the root's own body size to the turns only. The app's row titles
+// keep their body size, and the terminal mirror keeps its own Text size.
 describe("useChatText", () => {
   const CHAT_TEXT_KEY = "collie:chat-text:v1";
   const root = document.documentElement;
-  const token = (name: string) => root.style.getPropertyValue(name);
 
   beforeEach(async () => {
     localStorage.clear();
@@ -118,28 +123,25 @@ describe("useChatText", () => {
     localStorage.clear();
   });
 
-  it("starts at Default and leaves --text-body to the stylesheet", async () => {
+  it("starts at Default, with nothing on the root", async () => {
     const { useChatText } = await import("./use-display-prefs");
     const { result } = renderHook(() => useChatText());
     expect(result.current[0]).toBe("default");
-    expect(token("--text-body")).toBe("");
-    expect(token("--text-body--line-height")).toBe("");
+    expect(root.dataset.chatText).toBeUndefined();
   });
 
-  it("Large sets body two px over the pointer's own size, Small one under, Default clears it", async () => {
+  it("puts Small or Large on the root and never overrides the app's own body size", async () => {
     const { useChatText } = await import("./use-display-prefs");
     const { result } = renderHook(() => useChatText());
-    // jsdom reports a fine pointer, whose body step is 15px.
     act(() => result.current[1]("large"));
     expect(result.current[0]).toBe("large");
-    expect(token("--text-body")).toBe("1.0625rem");
-    expect(token("--text-body--line-height")).toBe("1.625rem");
+    expect(root.dataset.chatText).toBe("large");
     act(() => result.current[1]("small"));
-    expect(token("--text-body")).toBe("0.875rem");
-    expect(token("--text-body--line-height")).toBe("1.375rem");
+    expect(root.dataset.chatText).toBe("small");
+    expect(root.style.getPropertyValue("--text-body")).toBe("");
+    expect(root.style.getPropertyValue("--text-body--line-height")).toBe("");
     act(() => result.current[1]("default"));
-    expect(token("--text-body")).toBe("");
-    expect(token("--text-body--line-height")).toBe("");
+    expect(root.dataset.chatText).toBeUndefined();
   });
 
   it("is saved, and applied again as soon as the app loads", async () => {
@@ -148,10 +150,10 @@ describe("useChatText", () => {
     act(() => result.current[1]("large"));
     expect(localStorage.getItem(CHAT_TEXT_KEY)).toBe("large");
 
-    root.style.removeProperty("--text-body");
+    delete root.dataset.chatText;
     vi.resetModules();
     await import("./use-display-prefs");
-    expect(token("--text-body")).toBe("1.0625rem");
+    expect(root.dataset.chatText).toBe("large");
   });
 
   it("ignores a stored value it does not know", async () => {
@@ -160,7 +162,7 @@ describe("useChatText", () => {
     const { useChatText } = await import("./use-display-prefs");
     const { result } = renderHook(() => useChatText());
     expect(result.current[0]).toBe("default");
-    expect(token("--text-body")).toBe("");
+    expect(root.dataset.chatText).toBeUndefined();
   });
 
   it("keeps every mounted reader in step", async () => {
@@ -169,5 +171,30 @@ describe("useChatText", () => {
     const b = renderHook(() => useChatText());
     act(() => a.result.current[1]("small"));
     expect(b.result.current[0]).toBe("small");
+  });
+});
+
+describe("the chat stylesheet's Chat text", () => {
+  const rules = cssRules(readFileSync(resolve(import.meta.dirname, "../styles/chat.css"), "utf8"));
+  const decls = (selector: string) => rules.find((rule) => rule.selectors.includes(selector))?.decls ?? {};
+
+  it("steps one px under or two over the root's own body size, so it follows the pointer and the stylesheet", () => {
+    expect(decls(':root[data-chat-text="small"]')).toMatchObject({
+      "--chat-text": "calc(var(--text-body) - 1px)",
+      "--chat-text--line-height": "calc(var(--text-body--line-height) - 2px)",
+    });
+    expect(decls(':root[data-chat-text="large"]')).toMatchObject({
+      "--chat-text": "calc(var(--text-body) + 2px)",
+      "--chat-text--line-height": "calc(var(--text-body--line-height) + 2px)",
+    });
+  });
+
+  it("hands that size to the conversation's turns only: the thread's, this device's pending ones and the queue's", () => {
+    expect(decls(":root[data-chat-text] :is([data-speaker], [data-pending-send], [data-queue-row])")).toEqual({
+      "--text-body": "var(--chat-text)",
+      "--text-body--line-height": "var(--chat-text--line-height)",
+    });
+    const rootBody = rules.filter((rule) => rule.selectors.some((s) => s.startsWith(":root") && !s.includes(" ")) && "--text-body" in rule.decls);
+    expect(rootBody).toEqual([]);
   });
 });

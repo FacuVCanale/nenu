@@ -18,7 +18,7 @@ describe("DisplayPrefsContent", () => {
     act(() => result.current[1]("default"));
   });
 
-  it("offers Chat text as Small, Default and Large, and the pick sets the body text size", async () => {
+  it("offers Chat text as Small, Default and Large, and the pick sizes the conversation", async () => {
     const user = userEvent.setup();
     renderDock();
     const group = screen.getByRole("radiogroup", { name: "Chat text" });
@@ -29,7 +29,7 @@ describe("DisplayPrefsContent", () => {
     await user.click(within(group).getByRole("radio", { name: "Large" }));
     expect(within(group).getByRole("radio", { name: "Large" })).toHaveAttribute("aria-checked", "true");
     expect(within(group).getByRole("radio", { name: "Default" })).toHaveAttribute("aria-checked", "false");
-    expect(document.documentElement.style.getPropertyValue("--text-body")).not.toBe("");
+    expect(document.documentElement.dataset.chatText).toBe("large");
   });
 
   it("puts the mirror's own settings under Terminal view", () => {
