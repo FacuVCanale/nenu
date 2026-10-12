@@ -291,6 +291,22 @@ describe("LiveConversation", () => {
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
   });
 
+  // T18: two paragraphs said different things above the recovery form. One card, one line.
+  it("offers one card for a pane with no conversation linked and a way to link one", () => {
+    render(<MemoryRouter><LiveConversation paneId="w2:codex" history={{ paneId: "w2:codex", available: false, reason: "no-session" }} loading={false} error={false}
+      recovery={<button type="button">Find Codex conversations</button>} /></MemoryRouter>);
+    const card = screen.getByRole("region", { name: "No conversation linked" });
+    expect(card).toHaveTextContent("Send a message to start, or link the one already running.");
+    expect(screen.getByRole("button", { name: "Find Codex conversations" })).toBeInTheDocument();
+    expect(screen.queryByText(/connect an existing session/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer to connect a session where nothing can be connected", () => {
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" history={{ paneId: "w1:p1", available: false, reason: "no-session" }} loading={false} error={false} /></MemoryRouter>);
+    expect(screen.getByText("Send the first message to start the conversation.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
+  });
+
   // iOS rubber-bands past the end; on the way back the list moves up while still past the bottom.
   it("counts a bounce past the bottom as the bottom", () => {
     const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
