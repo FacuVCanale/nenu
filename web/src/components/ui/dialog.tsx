@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * the top layer and Escape for free, and closing returns focus to the opener. Engines without
  * `showModal` (old WebViews, jsdom) still get an open, labelled dialog rather than nothing. It comes
  * in and goes out with a fade and a 0.98 scale in 150 ms, a 120 ms fade alone under reduced motion,
- * and stays open with the words it showed until its exit ends (presence.ts).
+ * and stays open with the words it showed, inert, until its exit ends (presence.ts).
  */
 export function Dialog({ open, onClose, title, description, children, className }: {
   open: boolean;
@@ -40,10 +40,13 @@ export function Dialog({ open, onClose, title, description, children, className 
       ref={ref}
       aria-labelledby={titleId}
       aria-describedby={content.description ? descriptionId : undefined}
+      // While it fades out it shows the buttons it had open, wired to that moment: out of reach, so a
+      // second press cannot confirm what Escape just cancelled.
+      inert={closing}
       // Escape fires `cancel`; keep React's `open` the single source of truth.
-      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onCancel={(event) => { event.preventDefault(); if (!closing) onClose(); }}
       // A press on the backdrop targets the <dialog> itself; the panel inside stops it.
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      onClick={(event) => { if (!closing && event.target === event.currentTarget) onClose(); }}
       className={cn(
         "app-dialog duration-150 ease-out backdrop:duration-150 backdrop:ease-out motion-reduce:duration-120 motion-reduce:backdrop:duration-120",
         closing
