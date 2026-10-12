@@ -97,7 +97,10 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(screen.getByRole("heading", { name: "Build" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "worker");
   const chips = within(screen.getByRole("navigation", { name: "Threads" }));
-  expect(chips.getByRole("button", { name: /Build/ })).toHaveAttribute("aria-current", "page");
+  const build = chips.getByRole("button", { name: /Build/ });
+  expect(build).toHaveAttribute("aria-current", "true");
+  // The shared strip, which steps aside with the tab and pane strips while a phone keyboard is up.
+  expect(build.closest("[data-workbench-navigation-band]")).not.toBeNull();
   expect(chips.getByRole("button", { name: /coordinator/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
 });
