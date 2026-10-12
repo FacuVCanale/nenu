@@ -316,12 +316,14 @@ export function AgentChat({
   // drift; null when raw-terminal is on, there's no adapter, no box is at the tail, or the line is empty.
   const modelSource = useModelMenuSource({ paneId, session, agent: agent?.agent, requestedLines, text, revision });
   const inputLines = useMemo(() => splitLines(parseAnsi(modelSource.text)), [modelSource.text]);
+  // A pane opened on the page's last text (`pending`) offers no draft: that line may be long gone, so
+  // only the fresh read can put one up for Take over.
   const rawTerminalDraft = useMemo(
     () =>
-      grammarsOn
+      grammarsOn && !pending
         ? adapterFor(agent?.agent)?.extractInputDraft(inputLines) ?? null
         : null,
-    [inputLines, agent?.agent, grammarsOn],
+    [inputLines, agent?.agent, grammarsOn, pending],
   );
   // Is a dialog (prompt/wizard/preview/multi-select) on screen right now? Any non-raw block means
   // the TUI's keyboard belongs to it, so the composer must refuse a free-text send: the text would
