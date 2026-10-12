@@ -4,10 +4,6 @@
 /* `dark:` must fire for BOTH an explicitly-pinned dark root and a system-dark root the user hasn't
    pinned to light — otherwise the handful of literal `dark:` utilities silently stop working for
    everyone on System (the default). Token-driven colors don't need this; these are the literals. */
-/* `coarse:` styles a touch-first pointer by capability, never by screen width: a phone, a tablet, a
-   touchscreen laptop held as one. Controls use it to reach 44px. */
-@custom-variant coarse (@media (pointer: coarse));
-
 @custom-variant dark {
   &:is(.dark *) {
     @slot;
@@ -18,6 +14,10 @@
     }
   }
 }
+
+/* `coarse:` styles a touch-first pointer by capability, never by screen width: a phone, a tablet, a
+   touchscreen laptop held as one. Controls use it to reach 44px. */
+@custom-variant coarse (@media (pointer: coarse));
 
 /* ImageGen delivers the black Nenu mark on white. Blending drops that tile on any surface: multiply
    turns the white to the surface colour, and on dark the exact inverse plus screen does the same for
@@ -365,19 +365,6 @@
 .workbench-icon-button {
   transition: background-color 120ms ease-out, color 120ms ease-out, scale 120ms ease-out;
 }
-
-/* Button sizes (components/ui/button). In the components layer, so a caller's own h-6 or size-9
-   utility still wins; on a coarse pointer the defaults reach the 44px touch floor. */
-@layer components {
-  .ui-button-default { height: 2.25rem; }
-  .ui-button-sm { height: 2rem; }
-  .ui-button-lg { height: 2.75rem; }
-  .ui-button-icon { width: 2.25rem; height: 2.25rem; }
-  @media (pointer: coarse) {
-    .ui-button-default, .ui-button-sm { height: 2.75rem; }
-    .ui-button-icon { width: 2.75rem; height: 2.75rem; }
-  }
-}
 .workbench-icon-button:active { scale: 0.96; }
 [data-workbench-popover] {
   opacity: 1;
@@ -390,6 +377,19 @@
 @media (prefers-reduced-motion: reduce) {
   .workbench-icon-button, [data-workbench-popover] { transition: none; }
   .workbench-icon-button:active { scale: none; }
+}
+
+/* Button sizes (components/ui/button). In the components layer, so a caller's own h-6 or size-9
+   utility still wins; on a coarse pointer the defaults reach the 44px touch floor. */
+@layer components {
+  .ui-button-default { height: 2.25rem; }
+  .ui-button-sm { height: 2rem; }
+  .ui-button-lg { height: 2.75rem; }
+  .ui-button-icon { width: 2.25rem; height: 2.25rem; }
+  @media (pointer: coarse) {
+    .ui-button-default, .ui-button-sm { height: 2.75rem; }
+    .ui-button-icon { width: 2.75rem; height: 2.75rem; }
+  }
 }
 
 /* We don't use view transitions (removed). But React Router can still fire document.startViewTransition
