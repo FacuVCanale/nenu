@@ -284,6 +284,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // place, the effect below saves the outgoing pane's draft and loads the incoming one, so pane A's
   // text can never surface in pane B.
   const draftPaneRef = useRef({ session, paneId });
+  // The last send that did not go through, said above the box. It describes that draft only, so any
+  // change to the draft (typed, taken over, answered from a card, put back by Edit) or a new send
+  // takes it down: Try again must never send text it did not refuse.
+  const [failure, setFailure] = useState<SendFailure | null>(null);
 
   /**
    * Set the draft AND persist it. Every write to `input` goes through here — an empty value removes
@@ -306,6 +310,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const value = typeof next === "function" ? next(inputValueRef.current) : next;
     inputValueRef.current = value;
     setInput(value);
+    setFailure(null);
     persistDraft(value, readyPaths(attachments.current()));
   }
 
@@ -318,7 +323,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const attachments = useComposerAttachments({
     upload: (file) => api.uploadImage(paneId, file, session),
     previewUrl: (path) => api.paneFileUrl(paneId, path, session),
-    onPathsChange: (paths) => persistDraft(inputValueRef.current, paths),
+    onPathsChange: (paths) => {
+      setFailure(null);
+      persistDraft(inputValueRef.current, paths);
+    },
     initialPaths: restoredDraft.uploads,
   });
   const hasDraft = input.trim() !== "" || attachments.paths.length > 0;
@@ -474,7 +482,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
   // "Sending…" for the terminal view, which has no bubble to say it.
   const [deliveryPhase, setDeliveryPhase] = useState<"queued" | null>(null);
-  const [failure, setFailure] = useState<SendFailure | null>(null);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -745,6 +752,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   async function send(value: string, isDraft: boolean, force = false, action?: "model" | "compact"): Promise<boolean> {
     const t = value.trim();
     if (!t || locked || sending) return false;
+    setFailure(null);
     const queueable = nativeWorkbench && queue.page?.available && !action && !force;
     // A dialog owns the TUI's keyboard: Nenu's queue holds the message until the dialog is answered.
     if (queueable && dialogPresent) return enqueueDraft(t, isDraft, "afterTurn");
@@ -766,7 +774,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return false;
     }
     setSending(true);
-    setFailure(null);
     // Slash commands are not conversation turns, so they get no bubble.
     const started = beginSend(t, isDraft, !action && nativeWorkbench && !t.startsWith("/"));
     const previous = pendingDeliveryRef.current;
@@ -899,33 +906,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     });
   }
 
+  /** A refused draft goes again the way Send sends it, guards and all; a quick reply as it was tapped. */
   function retryFailed() {
     const retry = failure?.retry;
     if (!retry) return;
-    setFailure(null);
-    void send(retry.isDraft ? draftMessage() : retry.text, retry.isDraft);
+    if (retry.isDraft) sendDraft();
+    else void send(retry.text, false);
   }
 
-  // Gate the composer's Send through the destructive-input confirm: a matching command arms the
-  // "Really send?" state instead of sending; the confirming second tap goes through. Non-destructive
-  // input sends immediately (and any stray armed state is cleared).
-  function onSendClick() {
-    // Never send a message without an image the operator attached to it.
+  /** Never send a message without an image the operator attached to it. */
+  function attachmentsSettled(): boolean {
     if (attachments.uploading) {
       setStatus("Wait for the image to finish uploading.", "info");
-      return;
+      return false;
     }
     if (attachments.failed) {
       setStatus("An image didn't upload. Tap it to retry, or remove it.", "error");
-      return;
+      return false;
     }
-    // An armed override takes precedence: this tap IS the deliberate "type anyway", so it skips the
-    // destructive re-confirm (already answered on the tap that got blocked) and the pre-flight.
-    if (forceConfirm.pending === "force") {
-      forceConfirm.reset();
-      send(draftMessage(), true, true);
-      return;
-    }
+    return true;
+  }
+
+  // Send the draft through the destructive-input confirm: a matching command arms the "Really send?"
+  // state instead of sending; the confirming second tap goes through. Non-destructive input sends
+  // immediately (and any stray armed state is cleared).
+  function sendDraft() {
+    if (!attachmentsSettled()) return;
     const command = commands.find((candidate) => candidate.command === input.trimStart().split(/\s/, 1)[0]);
     const reason = isDestructiveInput(input) ?? (command?.dangerous ? command.command : null);
     if (reason && !sendConfirm.confirm("send")) {
@@ -933,7 +939,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return;
     }
     sendConfirm.reset();
-    send(draftMessage(), true);
+    void send(draftMessage(), true);
+  }
+
+  function onSendClick() {
+    // An armed override takes precedence: this tap IS the deliberate "type anyway", so it skips the
+    // destructive re-confirm (already answered on the tap that got blocked) and the pre-flight.
+    // Only Send's slot offers it; Try again is the ordinary send.
+    if (forceConfirm.pending === "force") {
+      if (!attachmentsSettled()) return;
+      forceConfirm.reset();
+      void send(draftMessage(), true, true);
+      return;
+    }
+    sendDraft();
   }
 
   // The bubbles' buttons. A queued message is handled through its server queue row; a failed one
@@ -1311,7 +1330,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}
-              onChange={direct.active ? direct.onChange : (e) => { setFailure(null); skills.onChange(e.target.value, e.target.selectionStart); }}
+              onChange={direct.active ? direct.onChange : (e) => skills.onChange(e.target.value, e.target.selectionStart)}
               onSelect={(e) => skills.onSelect(e.currentTarget.selectionStart)}
               onFocus={() => { skills.onFocus(); onInputFocus?.(); }}
               onBlur={skills.onBlur}
