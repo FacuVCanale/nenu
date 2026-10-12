@@ -10,7 +10,7 @@ import { PendingTurns } from "@/components/pending-turns";
 import { atTail, isTextField, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
-import { ScrollToLatest, scrollToLatestIsPill } from "@/components/ui/chat/scroll-to-latest";
+import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
 import { cn } from "@/lib/utils";
 
 interface LiveConversationProps {
@@ -467,8 +467,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             sheets that open from inside the thread. */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-3 bg-linear-to-b from-background" />
         {paused && <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-(--page-gutter)">
-          <div className={cn("mx-auto flex max-w-(--chat-column)", scrollToLatestIsPill({ waiting, count: newCount }) ? "justify-center" : "justify-end")}>
-            <ScrollToLatest onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />
+          <div className="mx-auto max-w-(--chat-column)">
+            <ScrollToLatest corner onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />
           </div>
         </div>}
       </div>

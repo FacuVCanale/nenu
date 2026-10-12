@@ -57,7 +57,7 @@ const ChatMessageList = React.forwardRef<ChatMessageListHandle, ChatMessageListP
 
         {/* Centred: the history page keeps its prompt stepper in the bottom-right corner. */}
         {!isAtBottom && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10">
             <ScrollToLatest onClick={() => scrollToBottom()} changed={hasNew} />
           </div>
         )}
