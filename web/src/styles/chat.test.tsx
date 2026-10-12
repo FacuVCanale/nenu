@@ -34,6 +34,17 @@ it("draws the header and the strips as one bar of the chrome material, blurred, 
   expect(chrome?.querySelector('[data-workbench-navigation-band="tabs"]')).not.toBeNull();
 });
 
+it("blurs a line entering the bar's bottom edge: the material reaches past the bar, masked back to it, and lets taps through", () => {
+  // A backdrop blur samples only its own box, so the material must reach below the bar to blur the
+  // line crossing its edge; the mask keeps it drawn only over the bar, and the hairline stays at the edge.
+  const material = declarations(css, ".chat-chrome::before", [PHONE]);
+  expect(material["pointer-events"]).toBe("none");
+  expect(material["mask-image"]).toMatch(/transparent/);
+  expect(material["-webkit-mask-image"]).toBe(material["mask-image"]);
+  expect(material["border-bottom"]).toBeUndefined();
+  expect(declarations(css, ".chat-chrome::after", [PHONE])).toMatchObject({ "border-bottom": "1px solid var(--border)", "pointer-events": "none" });
+});
+
 it("starts the live conversation below the chrome, on the conversation's own scroller", async () => {
   renderChat();
   const section = await screen.findByRole("region", { name: "Live conversation" });
