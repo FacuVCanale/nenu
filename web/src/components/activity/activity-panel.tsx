@@ -61,7 +61,7 @@ function PhaseBlock({ phase, workflow, now, onOpenWorkflow }: { phase: ActivityP
           <StateDot state={agent.state} />
           <span className="whitespace-nowrap text-footnote">{agent.label}</span>
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{agent.state === "running" ? agent.lastTool : agent.resultPreview}</span>
-          <span className="whitespace-nowrap text-caption tabular-nums text-muted-foreground">{formatDuration(agentElapsed(agent, now))}</span>
+          <span className="whitespace-nowrap text-footnote tabular-nums text-muted-foreground">{formatDuration(agentElapsed(agent, now))}</span>
         </button>
       ))}
     </div>
@@ -81,7 +81,7 @@ function RunningWorkflow({ workflow, now, initiallyOpen, onOpenWorkflow }: { wor
           <Workflow aria-hidden="true" className="size-4 shrink-0 text-status-working" />
           <span className="min-w-0 flex-1 truncate text-footnote font-medium">{workflow.name}</span>
           {!open && <AgentBar states={states} className="h-1 w-14 shrink-0" />}
-          <span className="whitespace-nowrap text-caption tabular-nums text-muted-foreground">{formatDuration(workflowElapsed(workflow, now))}</span>
+          <span className="whitespace-nowrap text-footnote tabular-nums text-muted-foreground">{formatDuration(workflowElapsed(workflow, now))}</span>
         </button>
       </div>
       {open && (
@@ -100,14 +100,14 @@ function FinishedWorkflowRow({ workflow, onOpen }: { workflow: ActivityWorkflow;
       <Workflow aria-hidden="true" className={cn("mt-0.5 size-3.5 shrink-0", workflow.status === "failed" ? "text-destructive" : "text-status-done")} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-snug">
         <span className="truncate text-footnote">{workflow.name}</span>
-        <Meta className="text-caption" items={[
+        <Meta className="text-footnote" items={[
           workflow.status === "failed" ? <span className="text-destructive">failed</span> : workflow.status === "unknown" ? "ended" : "",
           `${workflow.agentCount} agents`,
           formatDuration(workflow.durationMs),
           workflow.totalTokens !== undefined ? `${formatCount(workflow.totalTokens)} tokens` : "",
         ]} />
       </span>
-      <span className="whitespace-nowrap text-caption tabular-nums text-muted-foreground">{formatClock(workflow.startedAt !== undefined && workflow.durationMs !== undefined ? workflow.startedAt + workflow.durationMs : workflow.updatedAt)}</span>
+      <span className="whitespace-nowrap text-footnote tabular-nums text-muted-foreground">{formatClock(workflow.startedAt !== undefined && workflow.durationMs !== undefined ? workflow.startedAt + workflow.durationMs : workflow.updatedAt)}</span>
     </button>
   );
 }
@@ -126,9 +126,9 @@ export function TaskRow({ task, now, onOpenTask }: { task: ActivityTask; now: nu
       <Icon aria-hidden="true" className={cn("mt-0.5 size-3.5 shrink-0", task.status === "failed" ? "text-destructive" : task.status === "running" ? "text-status-working" : "text-muted-foreground")} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-snug">
         <span className="truncate text-footnote">{task.title}</span>
-        <Meta className="text-caption" items={[taskResult(task, now)]} />
+        <Meta className="text-footnote" items={[taskResult(task, now)]} />
       </span>
-      <span className="whitespace-nowrap text-caption tabular-nums text-muted-foreground">{formatClock(task.at)}</span>
+      <span className="whitespace-nowrap text-footnote tabular-nums text-muted-foreground">{formatClock(task.at)}</span>
     </>
   );
   const row = "flex min-h-11 w-full items-start gap-2.5 rounded-md py-1.5 pl-3 pr-2.5 text-left";
@@ -227,7 +227,7 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
         </Group>
       )}
       {data.truncated && (
-        <p className="px-1 text-caption text-muted-foreground">Older activity in this session is not shown.</p>
+        <p className="px-1 text-footnote text-muted-foreground">Older activity in this session is not shown.</p>
       )}
     </div>
   );
