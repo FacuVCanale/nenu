@@ -33,7 +33,7 @@ describe("AppHeader — the one shared header shell", () => {
         </WorkbenchNavigationContext>
       </MemoryRouter>,
     );
-    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to Home" })).toBeInTheDocument(); // a chat goes back like any screen
     expect(screen.queryByRole("status")).toBeNull(); // no connection pill of any kind
     expect(container.querySelector(".dog-gallop")).toBeNull(); // mark at rest (static icon)
     expect(screen.getByText("webapp › main")).toBeInTheDocument(); // the breadcrumb slot
@@ -106,7 +106,7 @@ describe("AppHeader — the one shared header shell", () => {
 });
 
 // A phone has no browser back in an installed PWA, so every screen but Home leads with one, and Home
-// keeps the mark. The chat keeps the mark too until its title opens the switcher.
+// keeps the mark. A chat goes back too: its title opens the navigation the mark used to.
 describe("AppHeader — the phone's leading control", () => {
   function renderAt(path: string, ui: ReactElement) {
     const onOpen = vi.fn();
@@ -148,10 +148,24 @@ describe("AppHeader — the phone's leading control", () => {
     expect(within(screen.getByRole("banner")).queryByText("Home")).toBeNull();
   });
 
-  it("keeps the mark in a chat until the chat's title opens the switcher", () => {
-    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} onHome={() => {}}><span>Working Claude</span></AppHeader>);
-    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  it("leads a chat with a back, not the mark: the chat's title opens the navigation", () => {
+    renderAt("/pane/p1", <AppHeader bridge="connected" error={false}><span>Working Claude</span></AppHeader>);
+    expect(screen.getByRole("link", { name: "Back to Home" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+  });
+
+  it("runs a back that leaves to a parent the caller routes to itself", async () => {
+    const onClick = vi.fn();
+    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} back={{ label: "Home", onClick }}><span>Working Claude</span></AppHeader>);
+    await userEvent.click(screen.getByRole("button", { name: "Back to Home" }));
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("names a parent shown in place beside the chevron, and keeps that back on a desk", () => {
+    renderAt("/pane/p1", <AppHeader bridge="connected" error={false} back={{ label: "Main", onClick: () => {}, inPlace: true }}><span>Explore</span></AppHeader>);
+    const back = screen.getByRole("button", { name: "Back to Main" });
+    expect(back).toHaveTextContent("Main");
+    expect(back).not.toHaveClass("lg:hidden");
   });
 });
 

@@ -24,6 +24,7 @@ vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
 import { submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
+import { WorkbenchNavigationContext, type WorkbenchNavigation } from "@/lib/workbench-navigation";
 import { AgentChat } from "./agent-chat";
 import { StatusArea } from "./status-area";
 
@@ -68,7 +69,7 @@ async function openMenuItem(user: ReturnType<typeof userEvent.setup>, name: stri
   await user.click(screen.getByRole("button", { name }));
 }
 
-function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
+function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation) {
   const agent = fixtureAgents[0]!; // a blocked claude agent
   const props: ComponentProps<typeof AgentChat> = {
     paneId: agent.paneId,
@@ -81,7 +82,10 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
     onSelect: vi.fn(),
     ...overrides,
   };
-  const router = createMemoryRouter([{ path: "/", element: <><AgentChat {...props} /><StatusArea /></> }]);
+  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar.
+  const element = <><AgentChat {...props} /><StatusArea /></>;
+  const router = createMemoryRouter([{ path: "/pane/:paneId", element: navigation ? <WorkbenchNavigationContext value={navigation}>{element}</WorkbenchNavigationContext> : element }],
+    { initialEntries: [`/pane/${encodeURIComponent(props.paneId)}`] });
   render(<RouterProvider router={router} />);
   return props;
 }
@@ -140,16 +144,53 @@ function ProjectSentinel() {
 const neighbourShell = { ...fixtureAgents[0]!, paneId: "w1:shell", tabId: "w1:t9", kind: "shell" as const, agent: "shell", status: "idle" as const };
 
 describe("AgentChat — header title block", () => {
-  it("leads with the space, puts the directory on the subline, and drops the redundant agent name", () => {
-    renderChat({ shellPanes: [neighbourShell] }); // claude @ /home/you/webapp → ~/webapp
-    expect(screen.getByText("webapp")).toBeInTheDocument(); // space leads
-    expect(screen.getByText("~/webapp")).toBeInTheDocument(); // directory on the subline
-    // The agent is conveyed by its icon (aria-label only), so its name isn't repeated as text.
-    expect(screen.queryByText(/claude/i)).toBeNull();
+  const named = { ...fixtureAgents[0]!, paneLabel: "Working Claude", tabLabel: "review" };
+
+  it("names the pane as every row does and says where it lives under the name", () => {
+    renderChat({ agent: named, agents: [named] });
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent(/^Working Claude/);
+    expect(within(header).getByText("webapp")).toBeInTheDocument();
+    expect(within(header).getByText("review")).toBeInTheDocument();
+    // The folder is no longer the second line; the place is.
+    expect(within(header).queryByText("~/webapp")).toBeNull();
+  });
+
+  it("leads a phone chat with a back to Home instead of the brand mark", async () => {
+    const props = renderChat({ agent: named, agents: [named] }, { open: false, onOpen: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Back to Home" }));
+    expect(props.onBack).toHaveBeenCalledOnce();
+  });
+
+  it("opens the navigation sheet from the title, where every workspace, tab and pane is one tap away", async () => {
+    const onOpen = vi.fn();
+    renderChat({ agent: named, agents: [named] }, { open: false, onOpen });
+    const title = screen.getByRole("button", { name: /^Working Claude/ });
+    expect(title).toHaveAttribute("aria-haspopup", "dialog");
+    await userEvent.click(title);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("says under the title that Herdr isn't responding as soon as Herdr reports disconnected", () => {
+    renderChat({ agent: named, agents: [named], bridge: "disconnected" });
+    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+  });
+
+  it("keeps the folder one tap away in the ⋯ menu", async () => {
+    renderChat({ agent: named, agents: [named] });
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
+  });
+
+  it("drops the unlabeled grab handle: the terminal view switches panes from the title too", () => {
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell] });
+    expect(screen.queryByRole("button", { name: "Switch pane" })).toBeNull();
   });
 
   // A workspace has no page: its tabs and panes are the strips above the conversation.
-  it("opens nothing from a workspace pane's title, however many panes the workspace holds", () => {
+  it("opens no workspace page from a workspace pane's title, however many panes the workspace holds", () => {
     renderChat({ shellPanes: [neighbourShell] });
     expect(screen.getByText("webapp")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
