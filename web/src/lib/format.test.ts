@@ -50,6 +50,11 @@ describe("shortCwd", () => {
     expect(out.length).toBeLessThanOrEqual(10);
     expect(out.startsWith("…")).toBe(true);
   });
+
+  it("counts the leading …/ as the two characters it is", () => {
+    const path = "/srv/aa/bb/cc/dd/ee/ff/gg/hh/last";
+    for (let max = 7; max <= path.length; max++) expect(shortCwd(path, max).length, `max ${max}`).toBeLessThanOrEqual(max);
+  });
 });
 
 describe("initials", () => {

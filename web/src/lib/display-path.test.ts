@@ -23,6 +23,11 @@ describe("displayPath", () => {
     expect(join(shown).length).toBeLessThanOrEqual(32);
   });
 
+  it("fits in max whenever the basename leaves room for a folder", () => {
+    const tmp = "/var/folders/zd/7_1tqb1n5s7fbmsk0dqnzsk40000gn/T/nenu-e2e-kSVt1n/web/src/hooks/use-app-viewport.ts";
+    for (let max = 28; max <= 40; max++) expect(join(displayPath(tmp, "/Users/fran/collie", max)).length, `max ${max}`).toBeLessThanOrEqual(max);
+  });
+
   it("never cuts the basename, even when it alone is longer than the room", () => {
     const name = "a-very-long-generated-report-name-that-does-not-fit.html";
     expect(displayPath(`/srv/out/${name}`, "/home/fran", 20).base).toBe(name);
