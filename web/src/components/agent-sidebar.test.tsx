@@ -186,7 +186,7 @@ describe("ThreadSidebar — folding the long tails", () => {
         onShellsOpenChange={onShellsOpenChange}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /shells/i }));
+    await user.click(screen.getByRole("button", { name: /^Shells\d+$/ }));
     expect(onShellsOpenChange).toHaveBeenCalledExactlyOnceWith(false);
   });
 
