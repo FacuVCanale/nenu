@@ -1,44 +1,87 @@
-import { act, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router";
 
-import { BootSplash, shownLastSeenAt } from "./root";
+import { BootSplash, RootError, shownLastSeenAt } from "./root";
+import { BUILD } from "@/lib/build";
 import { CONNECTION_LOST_MS } from "@/hooks/use-connection-lost";
 import { __resetConnectionHealth } from "@/lib/connection-health";
 import type { HomeData, PaneData } from "@/lib/loaders";
 
 // BootSplash is the router's HydrateFallback: it stays mounted until the FIRST loader run settles, so
-// over a dead tailnet (a hanging initial fetch) it can otherwise gallop the dog forever with no way
-// out. It must escalate to an actionable "Not connected" state once stuck past CONNECTION_LOST_MS.
+// over a dead tailnet (a hanging initial fetch) it could otherwise wait forever with no way out. It
+// draws the app's own frame while it connects, so the app arrives without a jump, and it says which
+// host it cannot reach once stuck past CONNECTION_LOST_MS.
 // Fake timers drive the wall-clock hook (Vitest advances Date.now with them).
-describe("BootSplash — escalates a stuck cold start", () => {
+describe("BootSplash", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     __resetConnectionHealth(); // module-load anchor == frozen clock: a dead cold start escalates ~15s in
   });
   afterEach(() => vi.useRealTimers());
 
-  it("shows the galloping-dog splash before the threshold", () => {
-    render(<BootSplash />);
-    expect(screen.getByText("Connecting to the herd…")).toBeInTheDocument();
-    // still the plain splash a beat before the threshold
+  it("draws the app's frame and says which host it is connecting to", () => {
+    const { container } = render(<BootSplash />);
+    expect(screen.getByRole("status")).toHaveTextContent(`Connecting to ${window.location.host}…`);
+    expect(container.querySelector(".workbench-app-header")).not.toBeNull();
+    expect(container.querySelector(".bottom-tab-bar")).not.toBeNull();
+    expect(screen.queryByText(/herd/)).not.toBeInTheDocument();
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS - 1));
-    expect(screen.getByText("Connecting to the herd…")).toBeInTheDocument();
-    expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Can.t reach Nenu/)).not.toBeInTheDocument();
   });
 
-  it("escalates to 'Not connected' with a Retry once stuck past the threshold", () => {
+  it("says it cannot reach the host, with a Retry, once stuck past the threshold", () => {
     const { container } = render(<BootSplash />);
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
-    expect(screen.queryByText("Connecting to the herd…")).not.toBeInTheDocument();
-    expect(screen.getByText("Not connected")).toBeInTheDocument();
-    expect(screen.getByText(/Can.t reach Nenu/)).toBeInTheDocument();
+    expect(screen.queryByText(/Connecting to/)).not.toBeInTheDocument();
+    expect(screen.getByText(`Can’t reach Nenu at ${window.location.host}`)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    // The galloping mascot is gone — the loading sprite is unmounted and the rest state is the muted
-    // static app icon (never a frozen gallop frame, which reads as stuck mid-run).
-    expect(screen.queryByLabelText("Loading")).not.toBeInTheDocument();
-    expect(container.querySelector(".dog-gallop")).toBeNull();
-    const icon = container.querySelector("img");
-    expect(icon).toHaveAttribute("src", "/nenu-mark.png");
-    expect(icon?.className).toMatch(/grayscale/);
+    // The frame stays, so the screen does not jump when Retry or the network brings the app back.
+    expect(container.querySelector(".workbench-app-header")).not.toBeNull();
+  });
+});
+
+describe("RootError", () => {
+  function Boom(): never {
+    throw new Error("Cannot read properties of undefined (reading 'charAt')");
+  }
+  function crash(route: { loader?: () => never; element?: ReactNode }, path = "/") {
+    const router = createMemoryRouter([{ path: "*", errorElement: <RootError />, ...route }], { initialEntries: [path] });
+    render(<RouterProvider router={router} />);
+    return router;
+  }
+  beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reads as Nenu's problem, with a 44px Reload, and keeps the raw message behind a disclosure", async () => {
+    const router = crash({ element: <Boom /> });
+    expect(await screen.findByRole("heading", { name: "Nenu hit a problem" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    const raw = screen.getByText(/reading 'charAt'/);
+    expect(raw).not.toBeVisible();
+    fireEvent.click(screen.getByText("Technical details"));
+    expect(raw).toBeVisible();
+    router.dispose();
+  });
+
+  it("copies the message, the stack and the build for a bug report", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const router = crash({ element: <Boom /> });
+    await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Copy details" })); });
+    const copied = writeText.mock.calls[0]?.[0] as string;
+    expect(copied).toContain("Cannot read properties of undefined (reading 'charAt')");
+    expect(copied).toContain("Boom");
+    expect(copied).toContain(BUILD.version);
+    router.dispose();
+  });
+
+  it("answers a 404 with Page not found, not the crash screen", async () => {
+    const router = crash({ loader: () => { throw new Response(null, { status: 404 }); }, element: <p>never</p> }, "/gone?s=qa");
+    expect(await screen.findByText("Page not found")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/?s=qa");
+    expect(screen.queryByText("Nenu hit a problem")).not.toBeInTheDocument();
+    router.dispose();
   });
 });
 
