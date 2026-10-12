@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
@@ -431,4 +431,19 @@ it("folds every workspace to two letters no other tile shares, and names it on h
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument();
   expect(tiles[6]).toHaveFocus();
+});
+
+it("keeps a rail item's name up when the pointer slips into the gap and back", async () => {
+  desktop();
+  const { sidebar, user } = setup(fleet);
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const nav = screen.getByRole("navigation", { name: "Collapsed sidebar" });
+  const tile = within(nav).getByRole("link", { name: /^client-alpha-portal\b/ });
+  await user.hover(tile);
+  expect(await screen.findByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
+  // A browser moving within the rail sends only pointerover; user-event's pointerout would read as leaving it.
+  fireEvent.pointerOver(nav);
+  fireEvent.pointerOver(tile);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("client-alpha-portal");
 });
