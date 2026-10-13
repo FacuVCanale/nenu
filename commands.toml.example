@@ -1,5 +1,5 @@
 # Your own rows for Nenu's Agent-commands palette. Copy to your plugin config dir, next to `.env`:
-#   cp commands.toml.example "$(herdr plugin config-dir herdr.collie)/commands.toml"
+#   cp commands.toml.example "$(herdr plugin config-dir herdr.nenu)/commands.toml"
 #
 # On a pane your rows address, YOUR rows are the whole palette — the shipped catalog is replaced,
 # not merged into (ADR 0018). A pane none of them address keeps its catalog untouched, and this file

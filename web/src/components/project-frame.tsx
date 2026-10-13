@@ -6,7 +6,7 @@ import { PrBar } from "@/components/pr-bar";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { ThreadCards } from "@/components/thread-cards";
-import { PrList, ThreadsPanel, prThreads } from "@/components/threads-panel";
+import { PrList, ThreadsPanel, prLists } from "@/components/threads-panel";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
@@ -121,7 +121,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   }
 
   const openCount = scope.threads.filter(isOpenThread).length;
-  const prCount = prThreads(scope.threads).filter((candidate) => candidate.pr!.state === "open" || candidate.pr!.state === "draft").length;
+  const prCount = prLists(scope.threads).open.length;
   // A phone thread switches between its chat and the project's threads with one header button.
   const phoneWorker = !wide && !scope.coordinating;
   const tasksShown = phoneWorker && view === "threads";

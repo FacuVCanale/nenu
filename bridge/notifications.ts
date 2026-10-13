@@ -1,3 +1,4 @@
+import { describeAlert, type AlertDetail, type NotifiableStatus } from "./alert-detail.ts";
 import { pushActions } from "./interactions.ts";
 import type { PushMessage } from "./push.ts";
 import type { AgentStatus, AgentView, Interaction } from "./types.ts";
@@ -11,13 +12,16 @@ import type { AgentStatus, AgentView, Interaction } from "./types.ts";
 //   • Coalesce — instead of N stacked notifications, we keep ONE summary of everything currently
 //     outstanding: the named agent when exactly one needs you, or "N agents need you" for several.
 //     Each change re-renders that single summary; when the last one resolves, we clear it.
-//   • Retract — clearing an agent at the PC (or its pane closing) updates or removes the summary, so
-//     handled work never lingers on your lock screen.
+//   • Retract — clearing the last outstanding agent (at the PC, or its pane closing) removes the
+//     summary. Clearing one of several sends nothing: a phone re-alerts on every replacement, so a
+//     shrinking digest buzzed once per handled agent. The next new alert re-renders the herd as it is.
+//   • Name — each alert says who it is to the operator (a project's thread or coordinator, else the
+//     pane's own label), what started its turn, and the first line of what it answered
+//     (alert-detail.ts). A turn a subagent's result started answers to its own switch.
 //
 // Pure and clock-injected so `bun test` drives it without real timers: the bridge passes
 // setTimeout/clearTimeout (see server.ts); tests pass a fake clock they fire on demand.
 
-type NotifiableStatus = "blocked" | "done";
 
 /** The timer primitive the coordinator schedules against — real setTimeout in the bridge, fake in tests. */
 export interface NotifyClock<H> {
@@ -27,9 +31,9 @@ export interface NotifyClock<H> {
 
 /** The current state of the herd's single notification, derived from everything outstanding. */
 export interface HerdSummary {
-  /** Headline: "claude needs you" for one, or "3 agents need you" for several. */
+  /** Headline: "t-0093 Mi Cúcula pedidos finished" for one, or "3 agents need you" for several. */
   title: string;
-  /** Sub-line: "demo · /path" for one outstanding alert, or the agent names for a digest. */
+  /** Sub-line: what it answered and where for one outstanding alert, or who for a digest. */
   body: string;
   /** Deep-link target when exactly one alert is outstanding; undefined for a multi-agent digest. */
   paneId?: string;
@@ -107,32 +111,54 @@ export function interactionAlert(msg: PushMessage, interaction: Interaction): Pu
   };
 }
 
-interface Alert {
-  agent: string;
-  workspaceLabel: string;
-  cwd: string;
+/** Which alerts push: `maybe` before the debounce (by status), `wants` once the alert is described. */
+export interface NotifyPolicy {
+  maybe(status: AgentStatus): boolean;
+  wants(alert: AlertDetail): boolean;
+}
+
+/** Who an alert is about; may answer later (it reads the pane's journal). */
+export type DescribeAlert = (agent: AgentView, status: NotifiableStatus) => AlertDetail | Promise<AlertDetail>;
+
+/** Late-bound {@link DescribeAlert}: coordinators exist before the server's projects and journals do. */
+export class AlertDescriber {
+  private impl: ((session: string, agent: AgentView, status: NotifiableStatus) => Promise<AlertDetail>) | null = null;
+  use(impl: (session: string, agent: AgentView, status: NotifiableStatus) => Promise<AlertDetail>): void {
+    this.impl = impl;
+  }
+  for(session: string): DescribeAlert {
+    return (agent, status) => this.impl?.(session, agent, status) ?? describeAlert(agent, status);
+  }
+}
+
+/** An alert still in its debounce window (`handle`), or past it and being described (`handle` null). */
+interface Pending<H> {
+  handle: H | null;
   status: NotifiableStatus;
 }
 
 export class NotificationCoordinator<H = unknown> {
-  /** paneId → debouncing alert (timer + its kind) that hasn't entered the summary yet. */
-  private readonly pending = new Map<string, { handle: H; status: NotifiableStatus }>();
+  /** paneId → alert that hasn't entered the summary yet. */
+  private readonly pending = new Map<string, Pending<H>>();
   /** paneId → alert that has fired and is reflected in the current summary (insertion-ordered). */
-  private readonly outstanding = new Map<string, Alert>();
+  private readonly outstanding = new Map<string, AlertDetail>();
+  /** Whether the herd slot shows something a clear would close. */
+  private shown = false;
 
   constructor(
     private readonly clock: NotifyClock<H>,
     private readonly sink: NotifySink,
     private readonly delayMs: number,
-    // Whether a transition into a status should notify, read live from the prefs store so a runtime
-    // change is honoured. A disabled kind behaves exactly like a non-notifiable status (idle/working).
-    private readonly isNotifiable: (status: AgentStatus) => boolean,
+    // Read live from the prefs store so a runtime change is honoured. A status no kind would push
+    // behaves exactly like a non-notifiable one (idle/working).
+    private readonly policy: NotifyPolicy,
+    private readonly describe: DescribeAlert = describeAlert,
   ) {}
 
   /** Wire to `StateEngine.onTransition`. */
   onTransition(agent: AgentView, _from: AgentStatus, to: AgentStatus): void {
     const id = agent.paneId;
-    if (!this.isNotifiable(to)) {
+    if (!this.policy.maybe(to)) {
       // Resolved to a non-notifiable (or preference-disabled) state: drop a still-pending alert,
       // retract a delivered one.
       this.resolve(id);
@@ -140,18 +166,26 @@ export class NotificationCoordinator<H = unknown> {
     }
     // (Re)arm the debounce. A blocked→done flip lands here too, so only the latest verb survives.
     this.cancelPending(id);
-    const alert: Alert = {
-      agent: agent.agent,
-      workspaceLabel: agent.workspaceLabel,
-      cwd: agent.cwd,
-      status: to as NotifiableStatus,
-    };
-    const handle = this.clock.schedule(() => {
+    const status = to as NotifiableStatus;
+    const entry: Pending<H> = { handle: null, status };
+    entry.handle = this.clock.schedule(() => {
+      entry.handle = null;
+      this.admitWhenDescribed(id, entry, this.describe(agent, status), agent);
+    }, this.delayMs);
+    this.pending.set(id, entry);
+  }
+
+  /** Enter the summary once the alert is described, unless it resolved or re-armed meanwhile. */
+  private admitWhenDescribed(id: string, entry: Pending<H>, detail: AlertDetail | Promise<AlertDetail>, agent: AgentView): void {
+    const admit = (alert: AlertDetail) => {
+      if (this.pending.get(id) !== entry) return;
       this.pending.delete(id);
+      if (!this.policy.wants(alert)) return;
       this.outstanding.set(id, alert);
       this.emit(true);
-    }, this.delayMs);
-    this.pending.set(id, { handle, status: alert.status });
+    };
+    if (detail instanceof Promise) detail.then(admit, () => admit(describeAlert(agent, entry.status)));
+    else admit(detail);
   }
 
   /** Wire to `StateEngine.onRemove` — a vanished pane is implicitly resolved. */
@@ -166,19 +200,16 @@ export class NotificationCoordinator<H = unknown> {
    * store is updated (see the /api/notifications/prefs route).
    */
   applyPrefs(): void {
-    // Drop pending timers for a now-disabled kind — nothing was shown yet, so no re-emit is needed.
+    // Drop pending alerts no kind of their status would push — nothing was shown yet. One that may
+    // still push is re-checked against `wants` when it is described.
     for (const [id, p] of [...this.pending]) {
-      if (!this.isNotifiable(p.status)) this.cancelPending(id);
+      if (!this.policy.maybe(p.status)) this.cancelPending(id);
     }
-    // Retract delivered alerts of a now-disabled kind; re-emit the shrunk summary once if any went.
-    let removed = false;
+    // Retract delivered alerts of a now-disabled kind. Only an emptied herd sends anything (a clear).
     for (const [id, a] of [...this.outstanding]) {
-      if (!this.isNotifiable(a.status)) {
-        this.outstanding.delete(id);
-        removed = true;
-      }
+      if (!this.policy.wants(a)) this.outstanding.delete(id);
     }
-    if (removed) this.emit(false);
+    if (this.outstanding.size === 0) this.sinkClearIfShown();
   }
 
   /**
@@ -188,22 +219,24 @@ export class NotificationCoordinator<H = unknown> {
    */
   clearAll(): void {
     for (const id of [...this.pending.keys()]) this.cancelPending(id);
-    const had = this.outstanding.size > 0;
     this.outstanding.clear();
-    if (had) this.sink.clear();
+    this.sinkClearIfShown();
   }
 
   private resolve(id: string): void {
     this.cancelPending(id);
-    if (this.outstanding.delete(id)) this.emit(false);
+    if (this.outstanding.delete(id) && this.outstanding.size === 0) this.sinkClearIfShown();
   }
 
-  /** Re-render the single herd summary from whatever's outstanding (or clear it when empty). */
+  private sinkClearIfShown(): void {
+    if (!this.shown) return;
+    this.shown = false;
+    this.sink.clear();
+  }
+
+  /** Render the single herd summary from whatever's outstanding. */
   private emit(renotify: boolean): void {
-    if (this.outstanding.size === 0) {
-      this.sink.clear();
-      return;
-    }
+    this.shown = true;
     this.sink.render(this.summarize(renotify));
   }
 
@@ -211,11 +244,11 @@ export class NotificationCoordinator<H = unknown> {
     const entries = [...this.outstanding.entries()];
     if (entries.length === 1) {
       const [paneId, a] = entries[0]!;
-      const verb = a.status === "blocked" ? "needs you" : "is done";
+      const verb = a.status === "blocked" ? "needs you" : a.background ? "got a subagent's result" : "finished";
       // One outstanding agent → deep-link straight to its pane on tap.
       return {
-        title: `${a.agent} ${verb}`,
-        body: `${a.workspaceLabel} · ${a.cwd}`,
+        title: `${a.name} ${verb}`,
+        body: a.summary ? `${a.summary}\n${a.where}` : a.where,
         paneId,
         renotify,
       };
@@ -227,15 +260,15 @@ export class NotificationCoordinator<H = unknown> {
     const title = allBlocked
       ? `${n} agents need you`
       : allDone
-        ? `${n} agents done`
+        ? `${n} agents finished`
         : `${n} agents need attention`;
-    return { title, body: alerts.map((a) => a.agent).join(", "), renotify };
+    return { title, body: alerts.map((a) => a.name).join(", "), renotify };
   }
 
   private cancelPending(id: string): void {
     const p = this.pending.get(id);
     if (!p) return;
-    this.clock.cancel(p.handle);
+    if (p.handle !== null) this.clock.cancel(p.handle);
     this.pending.delete(id);
   }
 }

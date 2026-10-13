@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { FilePreviewContext } from "@/lib/file-preview-context";
@@ -69,6 +69,21 @@ describe("inline code", () => {
     for (const control of [screen.getByRole("button", { name: "index.css" }), screen.getByRole("button", { name: "las notas del rediseño" }), screen.getByRole("link", { name: "la guía" })]) {
       expect(control).not.toHaveClass("break-all");
     }
+  });
+});
+
+describe("file links", () => {
+  it("opens a bare file:// URL an agent writes in prose, by the path it names", () => {
+    // The coordinator's message as it sits in the journal: the URL alone on its line, no Markdown.
+    const path = "/Users/fran/.herdr-projects/awam/library/t-0093/micucula-pedidos-20261013.html";
+    const openFile = vi.fn();
+    render(
+      <FilePreviewContext.Provider value={openFile}>
+        <MarkdownText text={`El HTML de avance ya está abierto en tu navegador desde las 17:50:\nfile://${path}\n\nQué tiene:`} />
+      </FilePreviewContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: `file://${path}` }));
+    expect(openFile).toHaveBeenCalledWith(path);
   });
 });
 
@@ -217,3 +232,38 @@ describe("tables", () => {
   });
 });
 
+
+// The math itself is drawn by the browser from MathML, loaded on first use; these pin what reaches
+// the DOM. The pixels are checked in WebKit (see the PR), not here.
+describe("math", () => {
+  it("renders inline and block math as MathML", async () => {
+    const { container } = render(<MarkdownText text={"La energía: $E = mc^2$.\n\n$$\n\\frac{a}{b}\n$$"} />);
+    await waitFor(() => expect(container.querySelectorAll("math")).toHaveLength(2));
+    const [inline, block] = [...container.querySelectorAll("math")];
+    expect(inline!.namespaceURI).toBe("http://www.w3.org/1998/Math/MathML");
+    expect(inline!.getAttribute("display")).toBeNull();
+    expect(block!.getAttribute("display")).toBe("block");
+    expect(block!.querySelector("mfrac")).not.toBeNull();
+  });
+
+  it("leaves prices, shell variables and code literal", () => {
+    const { container } = render(<MarkdownText text={"it costs $5 and $10, echo $HOME and `$x$`\n\n```\n$$x$$\n```"} />);
+    expect(container.textContent).toContain("it costs $5 and $10, echo $HOME and $x$");
+    expect(container.querySelector("pre")).toHaveTextContent("$$x$$");
+    expect(container.querySelector("math")).toBeNull();
+  });
+
+  it("puts no markup from the formula in the DOM", async () => {
+    const { container } = render(<MarkdownText text={"$\\text{<img src=x onerror=alert(1)>}$ y $\\href{javascript:alert(1)}{x}$"} />);
+    await waitFor(() => expect(container.querySelector("math")).not.toBeNull());
+    expect(container.querySelector("img, a, script")).toBeNull();
+    expect(container.querySelector("[href], [onerror]")).toBeNull();
+    // Temml sets \\text's spaces as no-break spaces.
+    expect(container.textContent!.replace(/\s/g, " ")).toContain("<img src=x onerror=alert(1)>");
+  });
+
+  it("shows a formula that does not parse as its source", async () => {
+    render(<MarkdownText text={"roto: $\\frac{a$"} />);
+    expect(await screen.findByText("\\frac{a")).toBeInTheDocument();
+  });
+});

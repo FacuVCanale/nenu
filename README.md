@@ -13,12 +13,16 @@
   <img alt="Linux and macOS" src="https://img.shields.io/badge/host-Linux%20%7C%20macOS-18181b">
 </p>
 
-Nenu turns live terminal sessions managed by [Herdr](https://herdr.dev) into a focused web
-workbench. It renders conversations, model controls, tool activity, prompts, context usage, skills,
-and documents as native UI while keeping the terminal session as the source of truth.
+Nenu is a self-hosted workbench for [Herdr](https://herdr.dev), the terminal multiplexer for coding
+agents. It shows every agent you run in Herdr (Claude Code, Codex, Pi, OpenCode, Grok) as a chat you
+can read, answer and steer from your phone or browser, and it shows the projects you run with
+[Herdr Organizations](https://github.com/frizynn/herdr-organizations): a coordinator, its threads and
+their pull requests.
 
-Nenu runs on your machine and is normally exposed only inside your
-[Tailscale](https://tailscale.com) network. There is no Nenu account and no hosted relay.
+The terminal stays the source of truth. Nenu reads each agent's own session log and screen, and every
+action it takes is a keystroke into the same pane you would use at your desk. It runs on your machine
+and is reached only inside your [Tailscale](https://tailscale.com) network. There is no Nenu account
+and no hosted relay.
 
 > [!WARNING]
 > Nenu can type into terminal panes with your user permissions. Anyone who can control the app can
@@ -28,29 +32,45 @@ Nenu runs on your machine and is normally exposed only inside your
 
 ## What it provides
 
-- Conversation-first timelines with compact thinking and tool-call groups.
-- Automatic Herdr Projects discovery, with project overviews, coordinators, and thread status.
-  `COLLIE_HERDR_ORGANIZATIONS_BIN` points at the binary when it is
-  not on the service `PATH`; `HERDR_PROJECTS_ROOT` overrides the project registry folder.
-- A per-chat files and photos browser for references in the available conversation history.
-- A Stop control for interrupting an active Claude or Codex turn without closing its terminal.
-- Local, cached model and reasoning selectors for Codex CLI and Claude Code.
-- Searchable skills and command palettes tailored to each agent.
-- Context-window and reported-usage visibility.
-- Native rendering for Markdown, images, PDFs, and sandboxed offline HTML previews.
-- Guarded replies, approvals, special keys, direct typing, and image uploads.
-- Mobile-safe navigation, installable PWA support, and optional push notifications.
-- Multi-session discovery from one bridge, with per-device write authorization available behind a
-  conforming proxy.
+| Area | What you get |
+| --- | --- |
+| Conversations | Each agent as a chat: its answers, compact thinking and tool calls, files and photos it touched, subagents it started, context and account usage. Start Claude Code or Codex in any folder, recover a session's history, stop a running turn. |
+| Answering | Approve or deny permission prompts, pick menu options, reply, queue messages, type special keys or straight into the terminal, attach images. Every send is verified against the screen. |
+| Projects | With Herdr Organizations installed: each project's coordinator chat, its thread tree, open pull requests with their state, starting threads and coordinators, merging a PR once checks and review allow it. |
+| Rendering | Markdown, tables with Copy, LaTeX math, images, PDFs and sandboxed offline HTML previews. A `file://` path in an answer opens the file. |
+| Phone | An installable PWA built for one hand: native navigation, a folder picker for new agents, a composer that leaves room for the keyboard. |
+| Notifications | Optional Web Push that says who finished, what it answered and where, with one switch per kind: needs input, agents, threads, coordinators, subagent results and app updates. |
+| Access | Loopback bind behind `tailscale serve` or a conforming reverse proxy, identity and per-device gates, strict CSP. |
 
 Nenu preserves Herdr and the underlying agent CLIs. It does not replace their runtime, permissions,
 or model authentication.
+
+## Projects with Herdr Organizations
+
+[Herdr Organizations](https://github.com/frizynn/herdr-organizations) runs a project as a coordinator
+conversation that delegates to parallel worker threads, with shared memory and an overview of what
+needs you. Nenu is its phone and web front end:
+
+- Every registered project gets a page with the coordinator's chat and **Threads** and **PRs** tabs.
+  The thread tree is drawn the way Organizations' own popup draws it.
+- The PRs tab lists the open pull requests of open threads, each with its state in words (checks
+  running or failing, needs review, approved, ready to merge). Pull requests of resolved threads fold
+  into History.
+- From the phone you can start a thread or a coordinator (from a template when the project has them),
+  replace a coordinator, close a node, merge a pull request (Organizations refuses unless its checks
+  pass and it is approved) and toggle auto-fix and auto-merge.
+
+Nenu only asks Organizations to do these things through its CLI and reads its `overview --json`
+contract. Projects, threads and memory live in Organizations. Without it installed, Nenu works as
+before on plain Herdr workspaces. `COLLIE_HERDR_ORGANIZATIONS_BIN` points at the binary when it is
+not on the service `PATH`, and `HERDR_PROJECTS_ROOT` overrides the project registry folder.
 
 ## Requirements
 
 - [Bun](https://bun.sh)
 - [Herdr](https://herdr.dev) 0.7.0 or newer
 - [Tailscale](https://tailscale.com) for the recommended private-network setup
+- [Herdr Organizations](https://github.com/frizynn/herdr-organizations), optional, for projects
 - Linux or macOS as the host; Windows support is experimental
 
 ## Install
@@ -59,15 +79,17 @@ Run this on the machine where Herdr and your coding agents are running:
 
 ```bash
 herdr plugin install frizynn/nenu
-herdr plugin action invoke start --plugin herdr.collie
-herdr plugin action invoke url --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
+herdr plugin action invoke url --plugin herdr.nenu
 ```
 
 Open the printed HTTPS URL on a device connected to the same tailnet. On iPhone, use
 **Share → Add to Home Screen** to install the PWA.
 
-The plugin ID remains `herdr.collie` for compatibility with existing installations. Product copy,
-icons, metadata, and release names use Nenu.
+The plugin ID is `herdr.nenu` since 1.0 (it was `herdr.collie`). An install from before 1.0 carries
+its config and service over on the first `start` after the update. Internal names such as `COLLIE_*`
+settings, `collie-ctl.sh` and the state directory keep the old name so existing setups keep working
+([ADR 0068](./.adr/0068-the-plugin-is-herdr-nenu-and-internal-names-stay.md)).
 
 For a development checkout:
 
@@ -77,19 +99,32 @@ cd nenu
 bun install --frozen-lockfile
 cd web && bun install --frozen-lockfile && cd ..
 herdr plugin link "$(pwd)"
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
 See the [complete user guide](docs/USER_GUIDE.md) for configuration, first-run output, Web Push,
 updates, uninstalling, and troubleshooting.
 
+To finish the setup with Claude Code or Codex, link the
+[onboarding skill](skills/nenu-onboarding/SKILL.md) from the plugin checkout and run it on this
+host. It checks the bridge, the tailnet front door, the access gates, Web Push, the Claude hooks and
+status line, your operator files and updates, reports what is done and what is missing, and offers
+to complete each missing item through the plugin actions:
+
+```bash
+ROOT="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.plugin_id == "herdr.nenu") | .plugin_root')"
+mkdir -p ~/.claude/skills ~/.codex/skills
+ln -s "$ROOT/skills/nenu-onboarding" ~/.claude/skills/   # Claude Code: /nenu-onboarding
+ln -s "$ROOT/skills/nenu-onboarding" ~/.codex/skills/    # Codex: $nenu-onboarding
+```
+
 ## Common operations
 
 ```bash
-herdr plugin action invoke status  --plugin herdr.collie
-herdr plugin action invoke restart --plugin herdr.collie
-herdr plugin action invoke update  --plugin herdr.collie
-herdr plugin action invoke stop    --plugin herdr.collie
+herdr plugin action invoke status  --plugin herdr.nenu
+herdr plugin action invoke restart --plugin herdr.nenu
+herdr plugin action invoke update  --plugin herdr.nenu
+herdr plugin action invoke stop    --plugin herdr.nenu
 ```
 
 A routine update stays within the installed major version. Read the release notes before crossing a
@@ -126,8 +161,9 @@ restart. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Releases
 
-Nenu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) while it remains in the
-`0.x` public-preview line. Every published version has:
+Nenu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). A change the operator must act
+on ships only in a major version, with the upgrade command in its release notes. Every published
+version has:
 
 1. matching versions in the Herdr manifest and both package manifests;
 2. a curated entry in [CHANGELOG.md](CHANGELOG.md);
@@ -140,9 +176,9 @@ Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md); never push inh
 
 ## Project status
 
-Nenu is a single-operator, self-hosted public preview. Interfaces and configuration may still evolve
-before 1.0, with breaking operator changes reserved for a major release. The compatibility surface
-includes the Herdr plugin actions, environment variables, stored state, and bridge HTTP API.
+Nenu 1.0 is a stable, single-operator, self-hosted tool. Breaking operator changes ship only in a
+major version. The compatibility surface includes the Herdr plugin actions, environment variables,
+stored state, and the bridge HTTP API.
 
 ## Acknowledgements
 
@@ -175,111 +211,3 @@ Security vulnerabilities must follow [SECURITY.md](SECURITY.md) and must not be 
 
 Nenu is available under the [MIT License](LICENSE). Original copyright and third-party notices are
 preserved.
-
-## Starting and recovering conversations
-
-Open an empty terminal in Nenu and tap **Start Codex** or **Start Claude Code**. The buttons wait for terminal output before enabling. Complete any native trust or login prompts, then send the first message. Use the terminal icon to switch between conversation and terminal views.
-
-New Codex launches use `--no-daemon`, keeping the session hook in the terminal's own process. Claude launches get an explicit session ID. Both views control the same native session; Nenu does not start a second agent when switching views.
-
-If an existing Codex terminal has no connected history, tap **Find Codex conversations** and select the conversation already running there, or enter the session ID shown by `/status`. **Connect history** restores the chat without sending a prompt or resuming another process. **Change connected conversation** lets you correct that choice later. The connection survives a bridge restart but is discarded if the terminal process or hook identity changes.
-
-Recovery uses the existing local Codex daemon socket under `$CODEX_HOME/app-server-control/`; it does not expose that socket over the network. Claude background sessions can be identified by `claude agents --json` and their exact `attach` target. Older CLIs can still be launched manually and read through their installed Herdr integration.
-
-See [the session architecture decision](.adr/0022-native-agent-sessions-and-explicit-history-recovery.md) for verified versions and limitations.
-
-### Mobile editor
-
-The chat header keeps **Terminal / Chat** visible while writing. **Conversation actions**
-contains search, files, history, display settings and the option to reconnect an existing
-Codex conversation. Typing no longer hides navigation behind a separate button.
-
-The message box keeps attachments, model selection and Send together. **More message
-actions** opens commands, quick replies, terminal keys and usage/context details. Drafts
-survive switching between chat and terminal. If verification fails, keep the draft and
-retry after inspecting the terminal; a typing acknowledgement is not a model response.
-
-### Subagents within a conversation
-
-The **Agents** button beside Terminal opens the current conversation's delegated tasks. Each row
-shows its last known state, task and reported model. Open a row to read that child's conversation;
-the parent terminal and draft remain in place. The list includes nested children when their parent
-relationship is available. A disconnected or unobserved runtime is shown as unknown, not working.
-
-Codex uses its local App Server and native journal lifecycle events. Claude discovers transcripts under the exact parent
-session and can additionally track live start/finish events. To enable those events while preserving
-your other Claude hooks, run:
-
-```sh
-herdr plugin action invoke subagent-hooks --plugin herdr.collie
-```
-
-The action backs up Claude's user settings before adding Nenu's hooks. Existing sessions that have
-not loaded the hooks can still expose history, but their live status may remain unknown. The hook
-stores session/agent IDs, agent type, event and timestamp, never prompts or tool arguments. Custom
-profiles can run `bun run scripts/install-subagent-hooks.ts /path/to/settings.json /path/to/nenu-state`.
-See [the subagent inspector decision](.adr/0024-session-subagent-inspector.md) for scope and limits.
-
-
-### Artifacts, media and queued messages
-
-Use the paperclip in the session header to open **Project**, a folder tree rooted at the agent's
-working directory. Expand folders in place; each folder loads only when first opened.
-**Artifacts** collects verified designboard canvases and documents explicitly linked by the agent.
-Editing a source file or mentioning an HTML path does not make it an artifact. **Files** and **Media**
-keep all conversation references. Search names and paths, filter by artifact type and extension, and sort by the most
-recent conversation mention (default), extension or name. Designboard titles come from their embedded
-`canvas-doc` data; inspection reads at most 20 contained HTML files per request, with 60 per UI batch.
-Older candidates can be inspected on demand. Images and MP4/WebM videos also appear
-inside messages. Videos support seeking, and file previews can be refreshed or downloaded.
-HTML has Render and Code views in an isolated offline document. Styles, scripts and images in the
-same folder are inlined into that document (set `COLLIE_HTML_INLINE_ASSETS=off` to render the bare
-file); anything else stays blocked.
-Designboards open in view mode; downloading preserves the original editable document.
-
-Use **Add to queue** beside Attach to stage a message. While an agent works, Send queues the
-current draft. The list above the composer lets you edit, remove or send an individual message now.
-The bridge saves the queue and dispatches when the agent is ready even with the browser closed.
-Questions, host drafts and uncertain deliveries pause sending; inspect Terminal before retrying.
-Queues stay attached to the connected conversation and never migrate to a replacement session.
-See [the implementation decision](.adr/0025-artifacts-and-server-message-queue.md) for limits.
-
-The **Agents** switcher keeps **Main · Parent** available alongside its children. Running agents
-are expanded; Finished and other inactive groups start collapsed each time the switcher opens.
-Selecting a child opens its live journal in the main chat. Main's draft stays intact when returning.
-Child journals currently have no independent input transport: send instructions through Main.
-
-
-### Claude context and account usage
-
-The composer shows context, five-hour usage and weekly usage without opening More actions.
-Claude supplies these values through its native status line. Enable the local capture from this
-checkout with `bun scripts/install-claude-statusline.ts`. It backs up user settings, preserves the
-existing status-line command and its output, and is safe to run again. Custom profiles may pass
-`/path/to/settings.json /path/to/nenu-state` as the two arguments. Project overrides of `statusLine`
-need the same installer applied to that settings file. No credentials or conversation text are stored.
-
-The bridge reads a bounded per-session metadata file alongside the existing pane refresh, so the
-phone makes no extra polling requests and does not wait for the conversation history. Values remain
-provider-reported, with their observation time and reset times in the usage popover. Claude versions
-or accounts that omit a limit leave it unavailable; Nenu never estimates account limits from tokens.
-
-### Knowing whether an agent is working
-
-Nenu reads each agent's own record of its turn: Claude's per-process session file
-(`~/.claude/sessions/<pid>.json`, plus its transcript while busy) and Codex's rollout file. The phone's
-Stop button and the Stop action both follow it, so Stop works with a custom Claude status line, and it
-stays hidden while only a background agent runs (Escape would not reach it). Nothing needs installing.
-
-Optional: Claude hooks make the bridge re-read that state the moment Claude reports an event. Install
-them with `herdr plugin action invoke claude-hooks --plugin herdr.collie` and remove them with
-`herdr plugin action invoke claude-hooks-remove --plugin herdr.collie`. The installer only touches
-Nenu's own `type: "http"` hooks in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), backs up the
-file first (`settings.json.nenu-hooks-backup-<time>`), keeps every other hook and setting, and running
-it twice changes nothing. Hooks never allow, deny or block anything, and only new Claude sessions
-load them.
-
-For background Claude sessions, subagent lifecycle hooks are matched to the live runtime's native
-start time. Long tools stay running without a two-minute activity timeout; restarting the parent
-cannot revive children from its previous process. If that runtime cannot be verified, stale children
-remain Unconfirmed. Explicit stop/completion records still take precedence.

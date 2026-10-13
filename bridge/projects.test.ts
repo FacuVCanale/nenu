@@ -180,6 +180,19 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(project.threads[0]!.pr).toEqual({ url: "https://github.com/acme/demo/pull/9", number: 9, state: "open", mergeBlocker: "the ticker has not read this pull request yet" });
   });
 
+  test("a diff Organizations counts as no lines is not carried, as its own popup draws none", async () => {
+    // Measured 2026-10-13: a summary the ticker stored before it counted lines reads back as 0/0;
+    // GitHub has #1618 at +755 −629.
+    const registry = registryFor(fixture(), {
+      run: overviewRun([overviewThread({
+        status: "resolved", group: "resolved",
+        pr: { url: "https://github.com/acme/demo/pull/1618", state: "OPEN", review: "", checks: { passed: 0, pending: 0, failed: 0 }, additions: 0, deletions: 0, failing: [], comment_count: 0, draft: false, mergeable: "", merge_blocker: "the thread is not open" },
+      })]),
+    });
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.threads[0]!.pr).not.toHaveProperty("diff");
+  });
+
   test("falls back to the files when the installed Organizations has no --json", async () => {
     const run: OrgRun = async () => ({ code: 2, stdout: "", stderr: "error: unexpected argument '--json'" });
     const registry = registryFor(fixture(), { run });

@@ -59,7 +59,7 @@ watching the TUI. A long-lived network daemon must be supervised independently.
   restarts on failure, survives Herdr restarts.
 - **The Herdr plugin stays — as a thin registration/launcher,** so the bridge shows up in
   `herdr plugin list` and Herdr conventions still apply. Its `[[actions]]` do things like
-  `systemctl --user start collie` and **print the tailnet URL**; they do *not* host the server. A
+  `systemctl --user start nenu` and **print the tailnet URL**; they do *not* host the server. A
   `[[build]]` step builds the web UI on `herdr plugin install` (GitHub); local `link` installs skip
   it and build lazily on first `start`. Concretely that's `[[actions]]` + `[[build]]` and nothing
   else: `[[panes]]` is what this section argues against, and `[[events]]` would duplicate the

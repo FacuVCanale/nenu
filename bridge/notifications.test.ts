@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { AlertDetail } from "./alert-detail.ts";
 import {
   interactionAlert,
   NotificationCoordinator,
@@ -67,28 +68,37 @@ function agentNamed(paneId: string, name: string, status: AgentStatus): AgentVie
     workspaceLabel: "demo",
     workspaceNumber: 1,
     tabId: "w1:t1",
-    agent: name,
+    agent: "claude",
+    paneLabel: name,
     status,
     cwd: "/home/you/demo",
     focused: false,
     kind: "agent",
   };
 }
-const agent = (paneId: string, status: AgentStatus) => agentNamed(paneId, "claude", status);
+const agent = (paneId: string, status: AgentStatus) => agentNamed(paneId, "api", status);
 
-// `prefs` is a live, mutable object the injected `isNotifiable` reads on every call — so a test can
-// flip a preference and call `coord.applyPrefs()` to exercise the runtime-change path. Defaults to
-// both kinds enabled, matching the coordinator's old static {blocked,done} set (keeps the existing
-// debounce/coalesce/retract suites unchanged).
-function setup(prefs: { blocked: boolean; done: boolean } = { blocked: true, done: true }) {
+// `prefs` is a live, mutable object the injected policy reads on every call — so a test can flip a
+// preference and call `coord.applyPrefs()` to exercise the runtime-change path. Defaults to both
+// kinds enabled (keeps the debounce/coalesce/retract suites about timing, not preferences). A test
+// can pass `describe` to stand in for the bridge's project + journal lookup.
+function setup(
+  prefs: { blocked: boolean; done: boolean; subagents?: boolean } = { blocked: true, done: true },
+  describe?: (agent: AgentView, status: "blocked" | "done") => AlertDetail | Promise<AlertDetail>,
+) {
   const clock = new FakeClock();
   const sink = new RecordingSink();
-  const live = { ...prefs };
-  const isNotifiable = (s: AgentStatus): boolean =>
-    s === "blocked" ? live.blocked : s === "done" ? live.done : false;
-  const coord = new NotificationCoordinator(clock, sink, 30_000, isNotifiable);
+  const live = { subagents: false, ...prefs };
+  const policy = {
+    maybe: (s: AgentStatus): boolean => (s === "blocked" ? live.blocked : s === "done" ? live.done || live.subagents : false),
+    wants: (d: AlertDetail): boolean => (d.status === "blocked" ? live.blocked : d.background ? live.subagents : live.done),
+  };
+  const coord = new NotificationCoordinator(clock, sink, 30_000, policy, describe);
   return { clock, sink, coord, prefs: live };
 }
+
+/** Let an asynchronous describe answer. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("NotificationCoordinator — debounce", () => {
   test("does not render until the debounce window elapses, then renders once", () => {
@@ -97,8 +107,8 @@ describe("NotificationCoordinator — debounce", () => {
     expect(sink.events).toEqual([]); // armed, not yet fired
     clock.fireAll();
     expect(sink.last).toEqual({
-      title: "claude needs you",
-      body: "demo · /home/you/demo",
+      title: "api needs you",
+      body: "demo",
       paneId: "p1",
       renotify: true,
     });
@@ -113,24 +123,24 @@ describe("NotificationCoordinator — debounce", () => {
     expect(clock.armed).toBe(0);
   });
 
-  test("'done' uses the 'is done' verb", () => {
+  test("'done' uses the 'finished' verb", () => {
     const { clock, sink, coord } = setup();
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude is done");
+    expect(sink.last?.title).toBe("api finished");
   });
 });
 
 describe("NotificationCoordinator — coalescing", () => {
   test("two outstanding agents collapse into one digest that buzzes", () => {
     const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "claude", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "codex", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p2", "web", "blocked"), "working", "blocked");
     clock.fireAll();
     // p1 renders as a single, then p2 promotes it to a digest.
     expect(sink.renders.at(-1)).toEqual({
       title: "2 agents need you",
-      body: "claude, codex",
+      body: "api, web",
       paneId: undefined,
       renotify: true,
     });
@@ -138,24 +148,24 @@ describe("NotificationCoordinator — coalescing", () => {
 
   test("a mixed blocked+done herd reads as 'need attention'", () => {
     const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "claude", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "codex", "done"), "working", "done");
+    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p2", "web", "done"), "working", "done");
     clock.fireAll();
     expect(sink.last?.title).toBe("2 agents need attention");
   });
 
-  test("resolving one of two falls back to the named single, silently", () => {
+  test("resolving one of two sends nothing: a phone re-alerts on every replacement", () => {
     const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "claude", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "codex", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p2", "web", "blocked"), "working", "blocked");
     clock.fireAll();
-    coord.onTransition(agentNamed("p2", "codex", "idle"), "blocked", "idle"); // codex handled
-    expect(sink.last).toEqual({
-      title: "claude needs you",
-      body: "demo · /home/you/demo",
-      paneId: "p1",
-      renotify: false, // a retraction update must not re-buzz
-    });
+    const before = sink.events.length;
+    coord.onTransition(agentNamed("p2", "web", "idle"), "blocked", "idle"); // web handled
+    expect(sink.events.length).toBe(before);
+    // The next new alert still renders the herd as it is now.
+    coord.onTransition(agentNamed("p3", "docs", "blocked"), "working", "blocked");
+    clock.fireAll();
+    expect(sink.last?.body).toBe("api, docs");
   });
 });
 
@@ -208,7 +218,7 @@ describe("NotificationCoordinator — type preferences", () => {
     coord.onTransition(agent("p1", "done"), "working", "done");
     expect(sink.events).toEqual([]); // still debouncing
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude is done");
+    expect(sink.last?.title).toBe("api finished");
   });
 
   test("with blocked disabled, a blocked transition doesn't push", () => {
@@ -223,7 +233,7 @@ describe("NotificationCoordinator — type preferences", () => {
     const { clock, sink, coord, prefs } = setup({ blocked: true, done: true });
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude is done"); // delivered
+    expect(sink.last?.title).toBe("api finished"); // delivered
     prefs.done = false; // preference changes at runtime…
     coord.applyPrefs(); // …and the API hook re-evaluates the herd
     expect(sink.events.at(-1)).toEqual({ kind: "clear" }); // the done alert is retracted
@@ -244,11 +254,64 @@ describe("NotificationCoordinator — type preferences", () => {
     const { clock, sink, coord } = setup({ blocked: true, done: false });
     coord.onTransition(agent("p1", "blocked"), "working", "blocked");
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude needs you");
+    expect(sink.last?.title).toBe("api needs you");
     // The agent completes, but done pushes are disabled — so this is a non-notifiable transition
     // that resolves (retracts) the outstanding blocked alert rather than replacing it.
     coord.onTransition(agent("p1", "done"), "blocked", "done");
     expect(sink.events.at(-1)).toEqual({ kind: "clear" });
+  });
+});
+
+describe("NotificationCoordinator — who, what and where", () => {
+  const thread = (status: "blocked" | "done", over: Partial<AlertDetail> = {}): AlertDetail => ({
+    status, kind: "thread", background: false, name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", ...over,
+  });
+
+  test("a finished thread is named by its title and says what it answered, then where", async () => {
+    const { clock, sink, coord } = setup(undefined, async (_a, status) => thread(status, { summary: "El HTML de avance ya está abierto." }));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    await settle();
+    expect(sink.last).toEqual({
+      title: "t-0093 Mi Cúcula pedidos finished",
+      body: "El HTML de avance ya está abierto.\nAWAM Comercio",
+      paneId: "p1",
+      renotify: true,
+    });
+  });
+
+  test("a turn a subagent's result started stays quiet while Subagents is off", async () => {
+    const { clock, sink, coord, prefs } = setup(undefined, (_a, status) => thread(status, { background: true }));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    await settle();
+    expect(sink.events).toEqual([]);
+    prefs.subagents = true;
+    coord.onTransition(agent("p2", "done"), "working", "done");
+    clock.fireAll();
+    await settle();
+    expect(sink.last?.title).toBe("t-0093 Mi Cúcula pedidos got a subagent's result");
+  });
+
+  test("a digest lists who, not the CLI's name over and over", async () => {
+    const names: Record<string, string> = { p1: "pedidos", p2: "AWAM Comercio coordinator" };
+    const { clock, sink, coord } = setup(undefined, (a, status) => thread(status, { name: names[a.paneId]! }));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    coord.onTransition(agent("p2", "done"), "working", "done");
+    clock.fireAll();
+    await settle();
+    expect(sink.last).toMatchObject({ title: "2 agents finished", body: "pedidos, AWAM Comercio coordinator" });
+  });
+
+  test("an alert resolved while it was being described never shows", async () => {
+    let answer: (d: AlertDetail) => void = () => {};
+    const { clock, sink, coord } = setup(undefined, () => new Promise<AlertDetail>((resolve) => (answer = resolve)));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    coord.onTransition(agent("p1", "working"), "done", "working");
+    answer(thread("done"));
+    await settle();
+    expect(sink.events).toEqual([]);
   });
 });
 

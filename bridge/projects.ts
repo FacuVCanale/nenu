@@ -246,7 +246,9 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
   const pr = raw && pullRequest(raw.url, raw.state, raw.review, status, {
     draft: raw.draft === true,
     ...(raw.checks ? { checks: { ...raw.checks, failing: raw.failing } } : {}),
-    ...(raw.additions !== null && raw.deletions !== null ? { diff: { additions: raw.additions, deletions: raw.deletions } } : {}),
+    // Organizations' popup draws no diff of zero lines: a summary its ticker stored before it counted
+    // lines reads back as 0/0 (measured 2026-10-13), and a real one says nothing worth a column.
+    ...(raw.additions !== null && raw.deletions !== null && raw.additions + raw.deletions > 0 ? { diff: { additions: raw.additions, deletions: raw.deletions } } : {}),
     ...(raw.comment_count !== null ? { commentCount: raw.comment_count } : {}),
     ...(raw.mergeable ? { mergeable: raw.mergeable } : {}),
     mergeBlocker: raw.merge_blocker,

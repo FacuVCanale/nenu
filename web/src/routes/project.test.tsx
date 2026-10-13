@@ -85,7 +85,7 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
   expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Docs", "Build"]);
   await user.click(tabs.getByRole("tab", { name: /PRs/ }));
-  expect(screen.getByRole("button", { name: /^Docs/ })).toHaveTextContent("PR #9 · approved · checks passed");
+  expect(screen.getByRole("button", { name: /^Docs/ })).toHaveTextContent("PR #9 · Ready to merge");
   await user.click(tabs.getByRole("tab", { name: "Chat" }));
   expect(screen.getByTestId("conversation")).toBeInTheDocument();
 
@@ -103,6 +103,14 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(build.closest("[data-workbench-navigation-band]")).not.toBeNull();
   expect(chips.getByRole("button", { name: /coordinator/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
+});
+
+it("counts on a phone's PRs tab only the pull requests still open, never a resolved thread's", async () => {
+  // A resolved thread's PR is no longer read by Organizations, so its "open" is as of when the thread closed.
+  const stale: ProjectView = { ...project, threads: [...project.threads,
+    { id: "T3", title: "Old", parentId: "root", role: "worker", status: "resolved", pr: { number: 1618, state: "open" } }] };
+  setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")], [stale]));
+  expect(await screen.findByRole("tab", { name: /^PRs/ })).toHaveTextContent(/^PRs2$/);
 });
 
 it("merges a thread's PR from its card only after confirming", async () => {

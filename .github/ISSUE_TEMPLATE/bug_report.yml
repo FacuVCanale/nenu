@@ -18,7 +18,7 @@ body:
   - type: input
     attributes:
       label: Nenu version
-      description: Run `herdr plugin action invoke version --plugin herdr.collie`.
+      description: Run `herdr plugin action invoke version --plugin herdr.nenu`.
       placeholder: 0.37.0+abcdef0
     validations:
       required: true

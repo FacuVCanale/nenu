@@ -3,7 +3,7 @@ import { ChevronRight, Folder, History } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { fetchHomeDirs, type HomeDirs } from "@/lib/api";
-import { baseName, crumbs, expandPath, matchDirs, parseQuery, tildePath } from "@/lib/dir-picker";
+import { baseName, crumbs, expandPath, matchDirs, parseQuery, shortcutLabels, tildePath } from "@/lib/dir-picker";
 import { cn } from "@/lib/utils";
 
 interface DirPickerProps {
@@ -53,6 +53,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
   const target = exact ?? dirs?.path ?? (listing.state === "error" ? expandPath(query.trim().replace(/(.)\/+$/, "$1"), home) : null);
   const shown = dirs ? tildePath(dirs.path, dirs.home) : dir.replace(/(.)\/+$/, "$1") || "~";
   const showShortcuts = query === "~/" && shortcuts.length > 0;
+  const labels = shortcutLabels(shortcuts, home);
 
   const enter = (name: string) => {
     setQuery(`${dir}${name}/`);
@@ -96,24 +97,26 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
         ))}
       </nav>
 
+      {/* One row that scrolls sideways: as a column, five recent folders pushed home's own folders
+          below the Use button on a phone. */}
       {showShortcuts && (
         <section aria-label="Recent folders">
           <h3 className="px-2 pb-1 text-footnote font-medium text-muted-foreground">Recent</h3>
-          <ul>
-            {shortcuts.map((path) => {
-              const short = tildePath(path, home);
-              return (
-                <li key={path}>
-                  <button type="button" className={row} aria-label={short} onClick={() => onPick(path)}>
-                    <History className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="font-medium">{baseName(short)}</span>{" "}
-                      <span className="text-footnote text-muted-foreground">{short.slice(0, -baseName(short).length - 1) || "/"}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+          <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] lg:-mx-5 lg:px-5 [&::-webkit-scrollbar]:hidden">
+            {shortcuts.map((path, i) => (
+              <li key={path} className="shrink-0">
+                <button
+                  type="button"
+                  aria-label={tildePath(path, home)}
+                  title={tildePath(path, home)}
+                  onClick={() => onPick(path)}
+                  className="flex h-9 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-subhead hover:bg-accent/60 active:bg-accent coarse:h-11"
+                >
+                  <History className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="truncate">{labels[i]}</span>
+                </button>
+              </li>
+            ))}
           </ul>
         </section>
       )}

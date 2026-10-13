@@ -99,6 +99,18 @@ describe("NewAgentForm", () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ cwd: `${HOME}/code/awam`, permission: "ask" }));
   });
 
+  it("keeps recent folders to one row of names, so the folders of home come straight after", async () => {
+    const user = userEvent.setup();
+    rememberDir("/srv/code");
+    renderSheet();
+    await user.click(directory());
+    await screen.findByRole("button", { name: "code" });
+    const recent = within(screen.getByRole("region", { name: "Recent folders" }));
+    expect(recent.getAllByRole("button").map((b) => b.textContent)).toEqual(["api", "web", "code"]);
+    await user.click(recent.getByRole("button", { name: "/srv/code" }));
+    expect(directory()).toHaveAccessibleName("Directory: /srv/code");
+  });
+
   it("filters as you type and takes the folder the filter names exactly", async () => {
     const user = userEvent.setup();
     renderSheet();

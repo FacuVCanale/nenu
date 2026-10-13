@@ -125,6 +125,29 @@ describe("parseInline", () => {
   });
 });
 
+describe("bare file URLs", () => {
+  const path = "/Users/fran/notes/report.html";
+
+  it("reads a file:// URL in prose as a link to the path it names, leaving trailing punctuation as text", () => {
+    expect(parseInline(`Listo: file://${path}. Abrilo.`)).toEqual([
+      { kind: "text", text: "Listo: " },
+      { kind: "file", path, spans: [{ kind: "text", text: `file://${path}` }] },
+      { kind: "text", text: ". Abrilo." },
+    ]);
+    expect(parseInline(`(file://${path})`)).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "file", path, spans: [{ kind: "text", text: `file://${path}` }] },
+      { kind: "text", text: ")" },
+    ]);
+  });
+
+  it("leaves a file URL for another host, a web URL and a bare path as text", () => {
+    for (const text of ["file://server/share/report.html", "https://example.com/report.html", `see ${path}`]) {
+      expect(parseInline(text)).toEqual([{ kind: "text", text }]);
+    }
+  });
+});
+
 describe("parseMarkdown", () => {
   it("parses headings by level", () => {
     expect(parseMarkdown("## Two\n### Three")).toEqual([
@@ -328,5 +351,110 @@ describe("images", () => {
     expect(parseInline("![spec](docs/spec.pdf)")).toEqual([
       { kind: "file", path: "docs/spec.pdf", spans: [{ kind: "text", text: "spec" }] },
     ]);
+  });
+});
+
+// Agents write formulas in LaTeX. Math is a leaf like code: its TeX is kept verbatim for the
+// renderer. A dollar sign is also currency and a shell variable, so the delimiters follow the usual
+// rules (no space just inside, no digit or word right after the closing `$`), and anything inside
+// backticks or a fence is never math.
+describe("math", () => {
+  const inline = (text: string) => ({ kind: "math", text, display: false });
+  const display = (text: string) => ({ kind: "math", text, display: true });
+
+  it("reads $…$ and \\(…\\) as inline math", () => {
+    expect(parseInline("el área es $\\pi r^2$, y \\(e^{i\\pi} = -1\\).")).toEqual([
+      { kind: "text", text: "el área es " },
+      inline("\\pi r^2"),
+      { kind: "text", text: ", y " },
+      inline("e^{i\\pi} = -1"),
+      { kind: "text", text: "." },
+    ]);
+  });
+
+  it("reads $$…$$ and \\[…\\] inside a line as display math", () => {
+    expect(parseInline("antes $$\\sum_i x_i$$ y \\[\\frac{a}{b}\\] después")).toEqual([
+      { kind: "text", text: "antes " },
+      display("\\sum_i x_i"),
+      { kind: "text", text: " y " },
+      display("\\frac{a}{b}"),
+      { kind: "text", text: " después" },
+    ]);
+  });
+
+  it("keeps an escaped brace or dollar inside the formula", () => {
+    expect(parseInline("$\\{x\\}$ y $\\$5$")).toEqual([inline("\\{x\\}"), { kind: "text", text: " y " }, inline("\\$5")]);
+  });
+
+  it("nests inside emphasis", () => {
+    expect(parseInline("**$x$**")).toEqual([{ kind: "bold", spans: [inline("x")] }]);
+  });
+
+  it.each([
+    ["prices", "it costs $5 and $10"],
+    ["a price range", "between $5-$10 or $5/$10"],
+    ["thousands", "from $1,000 to $2,000"],
+    ["shell variables", "echo $HOME and $PATH"],
+    ["joined shell variables", "cd $HOME/$USER and $PATH:$HOME"],
+    ["braced shell variables", "cp ${HOME}/${USER} here"],
+    ["command substitutions", "run $(pwd)/$(whoami) now"],
+    ["a space inside the delimiters", "$ x $ and $x $"],
+    ["a word right before the dollar", "US$5 and a$b$"],
+    ["an escaped dollar", "\\$x$ stays"],
+    ["an empty display", "$$ $$"],
+    ["a lone pair", "costs $$ to run"],
+  ])("leaves %s as text", (_label, text) => {
+    expect(parseInline(text)).toEqual([{ kind: "text", text }]);
+  });
+
+  it("never reads math inside a code span, nor lets math swallow one", () => {
+    expect(parseInline("`$x$` y `echo $HOME`")).toEqual([
+      { kind: "code", text: "$x$" },
+      { kind: "text", text: " y " },
+      { kind: "code", text: "echo $HOME" },
+    ]);
+    expect(parseInline("costs $5 and `x$` later")).toEqual([
+      { kind: "text", text: "costs $5 and " },
+      { kind: "code", text: "x$" },
+      { kind: "text", text: " later" },
+    ]);
+  });
+
+  it("keeps a bare file URL next to math working", () => {
+    expect(parseInline("ver file:///tmp/a.txt y $x$")).toEqual([
+      { kind: "text", text: "ver " },
+      { kind: "file", path: "/tmp/a.txt", spans: [{ kind: "text", text: "file:///tmp/a.txt" }] },
+      { kind: "text", text: " y " },
+      inline("x"),
+    ]);
+  });
+
+  it("reads a $$ block on its own lines as one display block, ending the paragraph above", () => {
+    expect(parseMarkdown("La energía:\n$$\nE = mc^2\n$$\ny listo.")).toEqual([
+      { kind: "paragraph", spans: [{ kind: "text", text: "La energía:" }] },
+      { kind: "math", text: "E = mc^2" },
+      { kind: "paragraph", spans: [{ kind: "text", text: "y listo." }] },
+    ]);
+  });
+
+  it("never reads a block's lines as Markdown: a leading minus is not a bullet", () => {
+    const tex = "\\begin{aligned}\na &= b \\\\\n- c &= d\n\\end{aligned}";
+    expect(parseMarkdown(`\\[\n${tex}\n\\]`)).toEqual([{ kind: "math", text: tex }]);
+    expect(parseMarkdown(`$$${tex}$$`)).toEqual([{ kind: "math", text: tex }]);
+  });
+
+  it("reads a one-line $$…$$ as a block", () => {
+    expect(parseMarkdown("$$\\int_0^1 x\\,dx = \\tfrac12$$")).toEqual([{ kind: "math", text: "\\int_0^1 x\\,dx = \\tfrac12" }]);
+  });
+
+  it("leaves an unclosed $$ as prose instead of swallowing the rest of the message", () => {
+    expect(parseMarkdown("$$\nx + y\n\nmás texto")).toEqual([
+      { kind: "paragraph", spans: [{ kind: "text", text: "$$ x + y" }] },
+      { kind: "paragraph", spans: [{ kind: "text", text: "más texto" }] },
+    ]);
+  });
+
+  it("keeps $x$ and $$ inside a fenced block as code", () => {
+    expect(parseMarkdown("```sh\necho $x$\n$$\n```")).toEqual([{ kind: "code", lang: "sh", text: "echo $x$\n$$" }]);
   });
 });

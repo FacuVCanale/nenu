@@ -8,13 +8,16 @@ import type { NotifyPrefs } from "@/lib/api";
 
 // Which lifecycle events are worth a push. Bridge-wide (fans out to every device, like the snooze),
 // so the footer says so, and says where THIS device stands: a blocked phone still sees these rows
-// live, because they decide what every other device gets. Three switches: "Needs input" (blocked,
-// default on), "Finished" (done, default off), and "App updates" (updates, default on). Optimistic
-// toggle with revert on failure — see useNotifyPrefs.
+// live, because they decide what every other device gets. One switch per kind the bridge tells apart
+// (bridge/notify-prefs.ts); a finished turn a subagent's result started answers only to Subagent
+// results, which is off by default. Optimistic toggle with revert on failure — see useNotifyPrefs.
 
 const ROWS: ReadonlyArray<{ key: keyof NotifyPrefs; label: string; hint: string }> = [
-  { key: "blocked", label: "Needs input", hint: "When an agent is waiting on you." },
-  { key: "done", label: "Finished", hint: "When an agent completes its task." },
+  { key: "blocked", label: "Needs input", hint: "Any agent waiting on you." },
+  { key: "done", label: "Agents finish", hint: "An agent outside a project ends a turn you started." },
+  { key: "threads", label: "Threads finish", hint: "One of a project's threads ends a turn." },
+  { key: "coordinators", label: "Coordinators answer", hint: "A project's coordinator ends a turn." },
+  { key: "subagents", label: "Subagent results", hint: "An agent ends a turn its subagent's result started. Usually noise." },
   { key: "updates", label: "App updates", hint: "When a new Nenu version is out." },
 ];
 

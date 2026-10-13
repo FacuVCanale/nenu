@@ -1,9 +1,9 @@
 # CLAUDE.md — working agreement for this repo
 
-**Nenu** (repo `AltanS/collie`) — a phone web UI for your Herdr agent herd, served over
+**Nenu** (repo `frizynn/nenu`, born as `AltanS/collie`) — a phone web UI for your Herdr agent herd, served over
 Tailscale. A mobile-first PWA (Vite + React + TS + Tailwind v4 + shadcn) plus a Bun/TS bridge that
 talks to Herdr's Unix socket, letting you monitor and reply to agents from a phone. The Herdr
-plugin id is `herdr.collie` (manifest: `herdr-plugin.toml`). Orientation:
+plugin id is `herdr.nenu` (manifest: `herdr-plugin.toml`). Orientation:
 [`README.md`](./README.md) · [`ARCHITECTURE.md`](./ARCHITECTURE.md) · verified API
 [`HERDR_API.md`](./HERDR_API.md) · decisions [`.adr/`](./.adr/) · adding a harness
 [`HARNESS_CONTRIBUTING.md`](./HARNESS_CONTRIBUTING.md).
@@ -76,8 +76,8 @@ a doc-only change and needs no version bump.)
 **Update notice (user-facing).** The app's in-app update banner links to the newest release's GitHub
 page and shows the command to run. Pushing a `v*` tag auto-creates that GitHub Release (with the
 commands) via `.github/workflows/release.yml`. **Always express user-facing update/restart
-instructions as Herdr plugin actions** — `herdr plugin action invoke update --plugin herdr.collie`
-(or `restart`) — never `collie-ctl.sh …` / `systemctl … collie`, which depend on the caller's cwd and
+instructions as Herdr plugin actions** — `herdr plugin action invoke update --plugin herdr.nenu`
+(or `restart`) — never `collie-ctl.sh …` / `systemctl … nenu`, which depend on the caller's cwd and
 the unit name; the Herdr action runs from anywhere.
 
 ## Build / run (operational facts that are easy to forget)
@@ -92,7 +92,7 @@ the unit name; the Herdr action runs from anywhere.
   The bridge serves `web/dist` **from disk at request time**, so on the deployment host
   a rebuild is **immediately live — no restart**.
 - **Backend changes** (`bridge/*.ts`): Bun does **not** hot-reload the service — you must
-  `systemctl --user restart collie`. Forgetting this is the #1 "my change didn't take" trap.
+  `systemctl --user restart nenu`. Forgetting this is the #1 "my change didn't take" trap.
 - `bun run build` (root) and `collie-ctl.sh build` **typecheck both sides first** (root tsc + web
   tsc), then build web to `dist-staging` and swap it in atomically — a failed build never empties a
   live `web/dist`. Root `build:web` uses that same staged pipeline. Bare `cd web && bun run build`
@@ -111,7 +111,7 @@ the unit name; the Herdr action runs from anywhere.
   every push — override once with `SKIP_TESTS=1 git push`. The bits that genuinely need `Bun.serve` /
   `Bun.connect` (HTTP handlers, the socket client) stay unit-untested — Vitest-on-Node can't run them,
   so keep new backend logic pure/injectable enough for `bun test`, or exercise it through `web/`.
-- Service: `systemd --user` unit `collie` on the deployment host; logs `journalctl --user -u collie -f`.
+- Service: `systemd --user` unit `nenu` on the deployment host; logs `journalctl --user -u nenu -f`.
 - **Dependencies must be 7 days old to install** (`bunfig.toml` + `web/bunfig.toml`, mirrored in
   `.npmrc` for npm users) — a compromised release is usually pulled within hours. A brand-new
   version resolving to an older one is the rule working, not a bug; CI's `--frozen-lockfile` is

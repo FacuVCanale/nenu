@@ -535,10 +535,16 @@ export interface BridgeConfig {
  * bridge-wide (fans out to every device, like the snooze). Mirrors NotifyPrefs in bridge/notify-prefs.ts.
  */
 export interface NotifyPrefs {
-  /** Push when an agent becomes blocked (waiting on your input). Default on. */
+  /** Push when any agent becomes blocked (waiting on your input). Default on. */
   blocked: boolean;
-  /** Push when an agent finishes its task. Default off. */
+  /** Push when a loose agent (outside a project) finishes a turn you started. Default off. */
   done: boolean;
+  /** Push when a project's thread finishes a turn. */
+  threads: boolean;
+  /** Push when a project's coordinator finishes a turn. */
+  coordinators: boolean;
+  /** Push when a turn a subagent's result started finishes. Default off. */
+  subagents: boolean;
   /** Push when a new Nenu version is available (a restart or upgrade is waiting). Default on. */
   updates: boolean;
 }

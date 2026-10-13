@@ -17,7 +17,7 @@ import { object } from "../bridge/subagent-files.ts";
 // Opt-in installer for Nenu's observer Claude hooks (ADR 0057): `type: "http"` hooks that POST to the
 // bridge on loopback, time out fast and continue on failure, so a stopped bridge never slows Claude
 // down and no hook ever decides. Run through `herdr plugin action invoke claude-hooks --plugin
-// herdr.collie`; `--remove` takes them out again. Other hooks and settings are kept as they are.
+// herdr.nenu`; `--remove` takes them out again. Other hooks and settings are kept as they are.
 
 export const defaultSettingsPath = () => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
 
@@ -115,7 +115,7 @@ export async function setObserverHooks(settingsPath: string, stateDir: string, u
 
 /**
  * The checkout a command hook or status line should run from: COLLIE_PLUGIN_ROOT, else the root Herdr
- * reports for herdr.collie, else this checkout. A worktree that ran the installer is not a stable
+ * reports for herdr.nenu, else this checkout. A worktree that ran the installer is not a stable
  * home: once it is removed, the hook breaks silently. Herdr's root follows `link` and `install`.
  */
 export function pluginRoot(script: string, herdrRoot: () => string | null = herdrPluginRoot): string {
@@ -131,7 +131,7 @@ function herdrPluginRoot(): string | null {
     const result = Bun.spawnSync(["herdr", "plugin", "list", "--json"], { stdout: "pipe", stderr: "ignore", timeout: 4_000 });
     if (result.exitCode !== 0) return null;
     const plugins = object(object(JSON.parse(result.stdout.toString())).result).plugins;
-    const nenu = (Array.isArray(plugins) ? plugins : []).map(object).find((p) => p.plugin_id === "herdr.collie");
+    const nenu = (Array.isArray(plugins) ? plugins : []).map(object).find((p) => p.plugin_id === "herdr.nenu");
     return typeof nenu?.plugin_root === "string" ? nenu.plugin_root : null;
   } catch {
     return null;

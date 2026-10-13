@@ -13,11 +13,17 @@ $ErrorActionPreference = "Stop"
 
 # Community-maintained. This script lives in contrib/windows/, two levels below the plugin root.
 $script:PluginRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
-$script:PluginId = "herdr.collie"
-$script:TaskName = if ($env:COLLIE_TASK_NAME) { $env:COLLIE_TASK_NAME } else { "herdr.collie" }
+$script:PluginId = "herdr.nenu"
+# Before 1.0 the plugin and its task were herdr.collie; an upgraded install still has both.
+$script:LegacyPluginId = "herdr.collie"
+$script:TaskName = if ($env:COLLIE_TASK_NAME) { $env:COLLIE_TASK_NAME } else { "herdr.nenu" }
 
 function Resolve-CollieConfigDir {
   if ($env:HERDR_PLUGIN_CONFIG_DIR) {
+    # update-major runs under the old id, so Herdr hands that run the herdr.collie dir; take its sibling.
+    if ((Split-Path -Leaf $env:HERDR_PLUGIN_CONFIG_DIR) -eq $script:LegacyPluginId) {
+      return Join-Path (Split-Path -Parent $env:HERDR_PLUGIN_CONFIG_DIR) $script:PluginId
+    }
     return $env:HERDR_PLUGIN_CONFIG_DIR
   }
 
@@ -36,6 +42,24 @@ function Resolve-CollieConfigDir {
 }
 
 $script:ConfigDir = if ($TaskConfigDir) { $TaskConfigDir } else { Resolve-CollieConfigDir }
+
+# Herdr keys the config dir by plugin id, so the first run as herdr.nenu starts empty. Copy what the
+# herdr.collie dir holds that the new one lacks, once; the old dir stays as it was. Only a run Herdr or
+# the task hands a config dir is the installed plugin; a dev checkout must not snapshot the live config.
+function Copy-LegacyCollieConfig {
+  if (-not ($env:HERDR_PLUGIN_CONFIG_DIR -or $TaskConfigDir)) { return }
+  if ((Split-Path -Leaf $script:ConfigDir) -ne $script:PluginId) { return }
+  $legacy = Join-Path (Split-Path -Parent $script:ConfigDir) $script:LegacyPluginId
+  $marker = Join-Path $script:ConfigDir ".migrated-from-$($script:LegacyPluginId)"
+  if (-not (Test-Path -LiteralPath $legacy) -or (Test-Path -LiteralPath $marker)) { return }
+  New-Item -ItemType Directory -Force -Path $script:ConfigDir | Out-Null
+  foreach ($entry in Get-ChildItem -LiteralPath $legacy -Force) {
+    $target = Join-Path $script:ConfigDir $entry.Name
+    if (-not (Test-Path -LiteralPath $target)) { Copy-Item -LiteralPath $entry.FullName -Destination $target -Recurse }
+  }
+  New-Item -ItemType File -Force -Path $marker | Out-Null
+}
+Copy-LegacyCollieConfig
 $script:EnvFile = Join-Path $script:ConfigDir ".env"
 $script:LogFile = Join-Path $script:ConfigDir "collie.log"
 $script:ErrorLogFile = Join-Path $script:ConfigDir "collie-error.log"
@@ -241,6 +265,11 @@ function Register-CollieTask {
     -RestartInterval (New-TimeSpan -Minutes 1) `
     -StartWhenAvailable
 
+  # The pre-1.0 task would keep the port; take it down before registering this one.
+  if ($script:TaskName -ne $script:LegacyPluginId -and (Get-ScheduledTask -TaskName $script:LegacyPluginId -ErrorAction SilentlyContinue)) {
+    Stop-ScheduledTask -TaskName $script:LegacyPluginId -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $script:LegacyPluginId -Confirm:$false
+  }
   Register-ScheduledTask -TaskName $script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Nenu mobile bridge for Herdr" -Force | Out-Null
   Enable-ScheduledTask -TaskName $script:TaskName | Out-Null
 }

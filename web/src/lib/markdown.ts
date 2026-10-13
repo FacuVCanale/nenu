@@ -8,8 +8,9 @@
 // no dependency to a phone bundle that currently has seven.
 //
 // SCOPE. The subset agents actually emit: headings, fenced code, lists, blockquotes, rules,
-// paragraphs, GFM tables; inline bold/italic/code/links, and images that name a LOCAL file (shown
-// through the pane's file route, never fetched from the network). Not HTML passthrough.
+// paragraphs, GFM tables; inline bold/italic/code/links, images that name a LOCAL file (shown
+// through the pane's file route, never fetched from the network), and LaTeX math (kept as its TeX
+// source; the renderer draws it). Not HTML passthrough.
 //
 // FLAT BY DESIGN. Blocks don't nest: a table or a list inside a blockquote or a list item is read as
 // the outer block's text, so a quoted table still collapses into a run-on line. Closing that means a
@@ -34,6 +35,8 @@ import { localFilePath } from "./file-links";
 export type MdSpan =
   | { kind: "text"; text: string }
   | { kind: "code"; text: string }
+  /** LaTeX, verbatim like code: `$…$` and `\(…\)` inline, `$$…$$` and `\[…\]` as display. */
+  | { kind: "math"; text: string; display: boolean }
   | { kind: "file"; path: string; spans: MdSpan[] }
   /** `![alt](local-image)`. Only a local raster path; a remote image stays a link. */
   | { kind: "image"; path: string; alt: string }
@@ -47,6 +50,8 @@ export type MdBlock =
   | { kind: "paragraph"; spans: MdSpan[] }
   /** Fenced code. `text` is verbatim — never inline-parsed. */
   | { kind: "code"; lang: string; text: string }
+  /** A display formula on lines of its own. `text` is its TeX, never inline-parsed. */
+  | { kind: "math"; text: string }
   | { kind: "list"; ordered: boolean; items: MdSpan[][] }
   | { kind: "quote"; spans: MdSpan[] }
   /**
@@ -73,7 +78,14 @@ export function safeHref(raw: string): string | null {
   return SAFE_SCHEME.test(href) ? href : null;
 }
 
-// Ordered so the greedier delimiters win: ``code`` before **bold** before *italic*.
+// TeX inside math delimiters: an escaped character (so `\$` and `\}` stay in the formula), or anything
+// but a dollar, a backslash, a backtick or a newline. No backtick means a formula never swallows a
+// code span, and code is never math.
+const TEX = String.raw`\\[^\n]|[^\\$\`\n]`;
+// Its first and last characters: the same, minus whitespace.
+const TEX_EDGE = String.raw`\\[^\n]|[^\\$\`\s]`;
+
+// Ordered so the greedier delimiters win: ``code`` before **bold** before *italic*, `$$` before `$`.
 // Emphasis bodies forbid a leading/trailing space (see the glob note above) and can't span a newline.
 const INLINE_RE = new RegExp(
   [
@@ -81,6 +93,16 @@ const INLINE_RE = new RegExp(
     "\\*\\*(\\S(?:[^\\n]*?\\S)?)\\*\\*", // 3    bold
     "\\*(\\S(?:[^\\n*]*?\\S)?)\\*", // 4    italic
     "(!?)\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6,7 image or link
+    // 8,9  a bare file:// URL in prose, after a space or an opening bracket, short of the punctuation
+    // that ends a sentence. An agent writes it meaning a link, so it reads as one.
+    "(^|[\\s([{])(file:\\/\\/[^\\s\"'`<>()[\\]{}|\\\\*]*[^\\s\"'`<>()[\\]{}|\\\\*.,;:!?])",
+    String.raw`\$\$((?:${TEX})+?)\$\$`, // 10   display math
+    String.raw`\\\[((?:${TEX})+?)\\\]`, // 11   display math
+    String.raw`\\\(((?:${TEX})+?)\\\)`, // 12   inline math
+    // 13   inline math. A dollar is also a price and a shell variable, so `$5 and $10`, `$HOME/$USER`
+    // and `${A}/${B}` are not formulas: no space just inside, and nothing word-like after the
+    // closing `$`. The opening `$` must not follow a word character either (checked below).
+    String.raw`\$((?:${TEX_EDGE})(?:(?:${TEX})*?(?:${TEX_EDGE}))?)\$(?![\w\${(])`,
   ].join("|"),
   "g",
 );
@@ -95,7 +117,10 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
   const spans: MdSpan[] = [];
   const push = (span: MdSpan) => {
     if (span.kind === "text" && span.text === "") return;
-    spans.push(span);
+    // Text that a refused delimiter split stays one run, so find highlights can span it.
+    const prev = spans.at(-1);
+    if (span.kind === "text" && prev?.kind === "text") prev.text += span.text;
+    else spans.push(span);
   };
   if (depth >= MAX_INLINE_DEPTH) {
     push({ kind: "text", text });
@@ -109,7 +134,14 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
-    push({ kind: "text", text: text.slice(last, m.index) });
+    // `US$5` or `\$x$`: a dollar after a word character or a backslash opens nothing. Keep it as text
+    // and scan on from the next character, where a real formula may still start.
+    if (m[13] !== undefined && /[\w\\$]/.test(text[m.index - 1] ?? "")) {
+      re.lastIndex = m.index + 1;
+      continue;
+    }
+    // A bare file URL's match starts at the space or bracket before it, which stays text.
+    push({ kind: "text", text: text.slice(last, m.index + (m[8]?.length ?? 0)) });
     if (m[2] !== undefined) push({ kind: "code", text: m[2] }); // leaf: content is verbatim
     else if (m[3] !== undefined) push({ kind: "bold", spans: parseInline(m[3], depth + 1) });
     else if (m[4] !== undefined) push({ kind: "italic", spans: parseInline(m[4], depth + 1) });
@@ -121,6 +153,13 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
       else if (path) push({ kind: "file", path, spans: parseInline(m[6] || path, depth + 1) });
       else if (href) push({ kind: "link", href, spans: parseInline(m[6] || href, depth + 1) });
       else push({ kind: "text", text: m[0] });
+    } else if (m[9] !== undefined) {
+      const path = localFilePath(m[9]);
+      push(path ? { kind: "file", path, spans: [{ kind: "text", text: m[9] }] } : { kind: "text", text: m[9] });
+    } else {
+      const tex = m[10] ?? m[11] ?? m[12] ?? m[13] ?? "";
+      const display = m[10] !== undefined || m[11] !== undefined;
+      push(tex.trim() ? { kind: "math", text: tex.trim(), display } : { kind: "text", text: m[0] });
     }
     last = m.index + m[0].length;
   }
@@ -202,6 +241,31 @@ const startsTable = (line: string, next: string | undefined) =>
   TABLE_DELIM.test(next) &&
   splitRow(next).length === splitRow(line).length;
 
+// A display formula on lines of its own: `$$` or `\[` opens a line, the matching `$$` or `\]` ends
+// one, and the TeX between is never read as Markdown (a `- c &= d` row is not a bullet). A blank line
+// ends the search, as it ends a formula in TeX, so an unclosed `$$` stays prose instead of swallowing
+// the rest of the message. `$$x$$ is …` on one line is prose with a formula in it, for parseInline.
+const MATH_CLOSE: Record<string, string> = { "$$": "$$", "\\[": "\\]" };
+
+function mathBlock(lines: string[], start: number): { text: string; end: number } | null {
+  const first = lines[start]!.trim();
+  const close = MATH_CLOSE[first.slice(0, 2)];
+  if (!close) return null;
+  const body: string[] = [];
+  for (let j = start; j < lines.length; j++) {
+    const line = j === start ? first.slice(2) : lines[j]!.trim();
+    if (j > start && line === "") return null;
+    if (line.endsWith(close)) {
+      body.push(line.slice(0, -close.length));
+      const text = body.join("\n").trim();
+      return text ? { text, end: j + 1 } : null;
+    }
+    if (line.includes(close)) return null;
+    body.push(line);
+  }
+  return null;
+}
+
 /**
  * Parse Markdown into blocks. Pure — no React, no DOM — so the whole grammar is unit-testable and
  * the renderer stays a dumb mapping from AST to elements.
@@ -228,6 +292,13 @@ export function parseMarkdown(source: string): MdBlock[] {
       while (i < lines.length && !FENCE.test(lines[i]!)) body.push(lines[i++]!);
       i++; // consume the closing fence (or run off the end on an unterminated block)
       blocks.push({ kind: "code", lang, text: body.join("\n") });
+      continue;
+    }
+
+    const math = mathBlock(lines, i);
+    if (math) {
+      blocks.push({ kind: "math", text: math.text });
+      i = math.end;
       continue;
     }
 
@@ -309,7 +380,8 @@ export function parseMarkdown(source: string): MdBlock[] {
         RULE.test(l) ||
         QUOTE.test(l) ||
         isItem(l) ||
-        startsTable(l, lines[i + 1])
+        startsTable(l, lines[i + 1]) ||
+        mathBlock(lines, i)
       )
         break;
       para.push(l.trim());

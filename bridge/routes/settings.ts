@@ -1,4 +1,4 @@
-import type { NotifyPrefs } from "../notify-prefs.ts";
+import { NOTIFY_PREF_KEYS, type NotifyPrefs } from "../notify-prefs.ts";
 import type { PushSubscription } from "../push.ts";
 import { herdTagFor } from "../sessions.ts";
 import type { BridgeConfig } from "../types.ts";
@@ -144,7 +144,7 @@ export function parseNotifyPrefsPatch(v: unknown): Partial<NotifyPrefs> | null {
   if (typeof v !== "object" || v === null) return null;
   const o = v as Record<string, unknown>;
   const patch: Partial<NotifyPrefs> = {};
-  for (const key of ["blocked", "done", "updates"] as const) {
+  for (const key of NOTIFY_PREF_KEYS) {
     if (!(key in o)) continue;
     if (typeof o[key] !== "boolean") return null;
     patch[key] = o[key] as boolean;

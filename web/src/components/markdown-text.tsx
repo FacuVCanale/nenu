@@ -8,6 +8,7 @@ import { tableHtml, tableMarkdown } from "@/lib/table-copy";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
 import { CopyButton, QUIET_ACTION } from "./copy-button";
+import { TexMath } from "./math";
 import { IMAGE_EDGE } from "./message-images";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
@@ -65,6 +66,8 @@ function Span({ span }: { span: MdSpan }) {
   switch (span.kind) {
     case "image":
       return <InlineImage path={span.path} alt={span.alt} />;
+    case "math":
+      return <TexMath tex={span.text} display={span.display} />;
     case "file":
       return openFile ? <button type="button" className="text-left text-primary underline underline-offset-2 [overflow-wrap:anywhere]" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
     case "bold":
@@ -219,6 +222,8 @@ function Block({ block }: { block: MdBlock }) {
           </div>
         </div>
       );
+    case "math":
+      return <TexMath tex={block.text} display />;
     case "rule":
       return <hr className="border-border" />;
     default:

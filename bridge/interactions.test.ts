@@ -780,7 +780,7 @@ describe("the interactions routes", () => {
     const server = startServer({
       cfg,
       registry: { get: (name?: string) => (!name || name === "default" ? runtime : undefined), list: () => [], all: () => [runtime] },
-      push: { enabled: false, publicKey: "", useInteractions: (fn: InteractionLookup) => void (lookup = fn) }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
+      push: { enabled: false, publicKey: "", useInteractions: (fn: InteractionLookup) => void (lookup = fn) }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) }, alerts: { use: () => {} },
       updateMonitor: { status: () => ({}), checkRelease: async () => {} },
       audit: { record: () => {} },
       activity: { get: () => undefined, noteSeen: () => {} },

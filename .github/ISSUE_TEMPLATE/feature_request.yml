@@ -26,4 +26,4 @@ body:
   - type: textarea
     attributes:
       label: Alternatives and compatibility
-      description: Note other approaches and any impact on `herdr.collie`, `COLLIE_*`, stored state, or existing installs.
+      description: Note other approaches and any impact on `herdr.nenu`, `COLLIE_*`, stored state, or existing installs.

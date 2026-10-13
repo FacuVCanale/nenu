@@ -66,13 +66,17 @@ jobs:
             echo "Update the plugin — advances the checkout, rebuilds, restarts (runs from any directory):"
             echo
             echo '```'
-            echo "herdr plugin action invoke update --plugin herdr.collie"
+            # A routine update stays inside its major (ADR 0020); crossing into x.0.0 takes update-major.
+            case "$version" in
+              *.0.0) echo "herdr plugin action invoke update-major --plugin herdr.nenu" ;;
+              *) echo "herdr plugin action invoke update --plugin herdr.nenu" ;;
+            esac
             echo '```'
             echo
             echo "Or just restart the bridge to pick up an already-built change:"
             echo
             echo '```'
-            echo "herdr plugin action invoke restart --plugin herdr.collie"
+            echo "herdr plugin action invoke restart --plugin herdr.nenu"
             echo '```'
           } > "$notes"
           echo "file=$notes" >> "$GITHUB_OUTPUT"

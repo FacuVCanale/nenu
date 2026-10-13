@@ -7,6 +7,7 @@ import { FileGrants } from "./file-open.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
 import { JournalWatch } from "./journal-watch.ts";
+import { describeAlert } from "./alert-detail.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
 import { TranscriptStore } from "./journal/store.ts";
 import { createOperatorCommands } from "./operator-commands.ts";
@@ -38,6 +39,9 @@ export const SERVER_IDLE_TIMEOUT_S = 120;
 // upload cap + overhead so the handler's own 413 fires first for honest clients; this cuts off a
 // chunked or lying client that never sends an accurate Content-Length.
 const MAX_REQUEST_BODY_BYTES = 12 * 1024 * 1024; // 12 MB
+
+/** Enough of a journal's tail to reach the row that started its last turn. */
+const ALERT_JOURNAL_ENTRIES = 40;
 
 export function startServer(opts: ServerDeps) {
   const { cfg, registry, audit, live } = opts;
@@ -134,6 +138,18 @@ export function startServer(opts: ServerDeps) {
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.
   services.interactions.follow(registry, live, (rt) => interactionHints(services, rt));
+  // An agent alert names who it is from the session's projects, and a finished turn reads the pane's
+  // journal for what started it and what it answered (alert-detail.ts).
+  opts.alerts.use(async (session, agent, status) => {
+    const rt = registry.get(session);
+    const snap = rt?.engine.current();
+    const projects = rt && snap ? services.projects.list(rt.name, rt.isPrimary, [...snap.agents, ...snap.shellPanes]) : [];
+    const adapter = status === "done" && agent.agentSession && journals ? adapterFor(journals, agent.agent) : undefined;
+    const page = adapter && transcripts && agent.agentSession
+      ? await transcripts.page(adapter, agent.agentSession, { limit: ALERT_JOURNAL_ENTRIES }).catch(() => null)
+      : null;
+    return describeAlert(agent, status, projects, page?.entries ?? null);
+  });
   // An agent alert carries the pane's dialog. The alert usually fires before anything read the
   // pane, so the lookup reads it first.
   opts.push.useInteractions(async (session, paneId) => {

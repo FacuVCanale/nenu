@@ -150,6 +150,9 @@ export interface TranscriptEntry {
   /** Present only when the journal explicitly distinguishes narration from a final answer. */
   phase?: "commentary" | "final_answer";
   turn?: TranscriptTurn;
+  /** A background task or subagent finishing wrote this row, not the operator (Claude's
+   *  `task-notification`). Lets a notification tell the turns it started from the operator's. */
+  background?: true;
 }
 
 export interface TranscriptTurn {

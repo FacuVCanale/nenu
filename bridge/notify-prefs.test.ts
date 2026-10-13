@@ -21,19 +21,43 @@ afterAll(async () => {
 });
 
 describe("coerceNotifyPrefs", () => {
+  const off = { blocked: true, done: false, threads: false, coordinators: false, subagents: false, updates: true };
   test("fills missing / non-boolean keys from defaults", () => {
-    expect(coerceNotifyPrefs(undefined)).toEqual({ blocked: true, done: false, updates: true });
-    expect(coerceNotifyPrefs(null)).toEqual({ blocked: true, done: false, updates: true });
-    expect(coerceNotifyPrefs({})).toEqual({ blocked: true, done: false, updates: true });
-    expect(coerceNotifyPrefs({ blocked: false })).toEqual({ blocked: false, done: false, updates: true });
-    expect(coerceNotifyPrefs({ done: true })).toEqual({ blocked: true, done: true, updates: true });
+    expect(coerceNotifyPrefs(undefined)).toEqual(off);
+    expect(coerceNotifyPrefs(null)).toEqual(off);
+    expect(coerceNotifyPrefs({})).toEqual(off);
+    expect(coerceNotifyPrefs({ blocked: false })).toEqual({ ...off, blocked: false });
     // `updates` is a first-class key: an explicit false sticks, non-booleans fall back to the default.
-    expect(coerceNotifyPrefs({ updates: false })).toEqual({ blocked: true, done: false, updates: false });
-    expect(coerceNotifyPrefs({ blocked: "yes", done: 1, updates: 0 })).toEqual({
-      blocked: true,
-      done: false,
-      updates: true,
-    });
+    expect(coerceNotifyPrefs({ updates: false })).toEqual({ ...off, updates: false });
+    expect(coerceNotifyPrefs({ blocked: "yes", done: 1, updates: 0, subagents: "on" })).toEqual(off);
+  });
+
+  test("a file from before the split keeps its Finished choice for threads and coordinators, not subagents", () => {
+    expect(coerceNotifyPrefs({ done: true })).toEqual({ ...off, done: true, threads: true, coordinators: true });
+    expect(coerceNotifyPrefs({ done: true, threads: false })).toEqual({ ...off, done: true, threads: false, coordinators: true });
+  });
+});
+
+describe("NotifyPrefsStore.wants", () => {
+  test("each kind of alert answers to its own switch, and subagent work only to Subagents", async () => {
+    const store = new NotifyPrefsStore(await tempCfg());
+    await store.set({ done: false, threads: true, coordinators: false, subagents: false });
+    const done = { status: "done" as const, background: false, name: "x", where: "y" };
+    expect(store.wants({ ...done, kind: "agent" })).toBe(false);
+    expect(store.wants({ ...done, kind: "thread" })).toBe(true);
+    expect(store.wants({ ...done, kind: "coordinator" })).toBe(false);
+    expect(store.wants({ ...done, kind: "thread", background: true })).toBe(false);
+    await store.set({ subagents: true });
+    expect(store.wants({ ...done, kind: "agent", background: true })).toBe(true);
+    expect(store.wants({ ...done, kind: "agent", status: "blocked" })).toBe(true);
+  });
+
+  test("a finished turn may notify while any finished kind is on", async () => {
+    const store = new NotifyPrefsStore(await tempCfg());
+    expect(store.maybe("done")).toBe(false);
+    await store.set({ subagents: true });
+    expect(store.maybe("done")).toBe(true);
+    expect(store.maybe("working")).toBe(false);
   });
 });
 
@@ -44,27 +68,16 @@ describe("NotifyPrefsStore", () => {
     expect(store.current()).toEqual(DEFAULT_NOTIFY_PREFS);
   });
 
-  test("isNotifiable follows the current prefs; other statuses are never notifiable", async () => {
-    const store = new NotifyPrefsStore(await tempCfg());
-    await store.load();
-    expect(store.isNotifiable("blocked")).toBe(true);
-    expect(store.isNotifiable("done")).toBe(false);
-    expect(store.isNotifiable("working")).toBe(false);
-    expect(store.isNotifiable("idle")).toBe(false);
-    await store.set({ done: true });
-    expect(store.isNotifiable("done")).toBe(true);
-  });
-
   test("set merges a partial patch, persists, and returns the updated prefs", async () => {
     const cfg = await tempCfg();
     const store = new NotifyPrefsStore(cfg);
     const updated = await store.set({ done: true, updates: false });
-    expect(updated).toEqual({ blocked: true, done: true, updates: false });
+    expect(updated).toEqual({ blocked: true, done: true, threads: false, coordinators: false, subagents: false, updates: false });
 
     // Round-trips through disk: a fresh store reloads the same values (survives a restart).
     const reloaded = new NotifyPrefsStore(cfg);
     await reloaded.load();
-    expect(reloaded.current()).toEqual({ blocked: true, done: true, updates: false });
+    expect(reloaded.current()).toEqual({ blocked: true, done: true, threads: false, coordinators: false, subagents: false, updates: false });
   });
 
   test("current() returns a copy — callers can't mutate the store's state", async () => {
@@ -88,7 +101,7 @@ describe("NotifyPrefsStore", () => {
     await writeFile(join(cfg.stateDir, "notify-prefs.json"), JSON.stringify({ blocked: false }));
     const store = new NotifyPrefsStore(cfg);
     await store.load();
-    expect(store.current()).toEqual({ blocked: false, done: false, updates: true });
+    expect(store.current()).toEqual({ blocked: false, done: false, threads: false, coordinators: false, subagents: false, updates: true });
   });
 
   test("load tolerates a missing file (keeps defaults)", async () => {

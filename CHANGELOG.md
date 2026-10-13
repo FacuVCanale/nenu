@@ -8,6 +8,34 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-13
+
+**Upgrade from 0.x once with the old id:** `herdr plugin action invoke update-major --plugin herdr.collie`.
+From then on every command takes `--plugin herdr.nenu`.
+
+### Added
+- Settings → Notify when has a switch per kind: Needs input, Agents finish, Threads finish, Coordinators answer, Subagent results (off) and App updates. (0b4191e9)
+- Agent messages render LaTeX math (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) as MathML, loaded with the first formula. (799d9d8c)
+- `skills/nenu-onboarding`: an agent skill that checks an install and finishes what is missing. (d60bcb77)
+
+### Changed
+- The plugin id is `herdr.nenu`, the LaunchAgent `herdr.nenu`, the systemd unit `nenu`, the Windows task `herdr.nenu` (were `herdr.collie` / `collie`). (6c72d4b5)
+- The first start as `herdr.nenu` copies the `herdr.collie` config once and retires the old service; a linked checkout drops the stale registry key. Only the installed plugin migrates. (6c72d4b5, 9cb18022)
+- A notification names who finished (thread title, project coordinator, pane label), the first line of its answer and where; a prefs file from before keeps Finished for threads and coordinators. (0b4191e9, 633e8849)
+- A herd notification that shrinks sends nothing; a phone re-alerted on every replacement. (0b4191e9)
+- `COLLIE_*` settings, `collie-ctl.sh` and the state directory keep their names (ADR 0068). (3cf68d47)
+
+### Fixed
+- Release notes for an `x.0.0` print `update-major`, which is what crosses a major. (3cf68d47)
+- `push-test` reads the subscriptions the service saved; it reported no devices with a phone subscribed. (ffd02428)
+- The PRs tab lists open PRs of open threads with their state in words; resolved threads' PRs fold into History, and a 0/0 diff is no longer drawn. (349abdcd)
+
+## [0.65.2] - 2026-10-13
+
+### Fixed
+- Choose a folder shows home's folders at once on a phone: recent folders are one row of chips instead of a column that pushed the list below Use. (62be8db0)
+- A bare `file:///…` path in an agent's reply is a link that opens the file in Nenu. (911f2f15)
+
 ## [0.65.1] - 2026-10-12
 
 ### Added

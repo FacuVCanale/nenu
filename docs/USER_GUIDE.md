@@ -4,9 +4,10 @@ This guide covers installation, security, configuration, daily operation, update
 and troubleshooting. Start with the shorter [project overview](../README.md) if you are evaluating
 Nenu, or jump directly to [installation](#install).
 
-> Compatibility note: the public product is **Nenu**. Existing identifiers such as `herdr.collie`,
-> `COLLIE_*`, `collie-ctl.sh`, and the `collie` service remain stable so current installations keep
-> their configuration and state.
+> Compatibility note: since 1.0 the plugin id is `herdr.nenu` and the services are `herdr.nenu`
+> (launchd) and `nenu` (systemd); before that they were `herdr.collie` and `collie`. The first `start`
+> after the update carries an older install's config over and retires its old service. `COLLIE_*`
+> settings, `collie-ctl.sh` and the state directory keep their names.
 
 ## ⚠️ Security — read before you run it
 
@@ -75,7 +76,7 @@ On the host, not your phone. Two ways in.
 
 ```bash
 herdr plugin install frizynn/nenu
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
 **From a local clone (for development)** — registered by path:
@@ -83,7 +84,7 @@ herdr plugin action invoke start --plugin herdr.collie
 ```bash
 git clone https://github.com/frizynn/nenu.git && cd nenu
 herdr plugin link "$(pwd)"
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
 Either way, `start` does four things:
@@ -102,7 +103,7 @@ Either way, `start` does four things:
 
 The transcripts below are the control script's inline output. **Through `invoke start` you get
 Herdr's JSON envelope instead** — the same text is the action's *captured stdout*, read with
-`herdr plugin log list --plugin herdr.collie`.
+`herdr plugin log list --plugin herdr.nenu`.
 
 ```console
 $ scripts/collie-ctl.sh start
@@ -181,9 +182,142 @@ On the phone: your agents are listed, and the footer build stamp (`vX.Y.Z · deb
 `scripts/collie-ctl.sh version`. If the page loads but stays empty, that's the same-origin gate —
 see [Troubleshooting](#troubleshooting).
 
+An agent can walk the rest of the setup for you: the
+[onboarding skill](../skills/nenu-onboarding/SKILL.md) checks identity, Web Push, the Claude hooks
+and status line, your operator files and updates on this host, and offers to finish each missing
+item. The [README](../README.md#install) shows how to make it available to Claude Code and Codex.
+
+## Using conversations
+
+### Starting and recovering conversations
+
+Open an empty terminal in Nenu and tap **Start Codex** or **Start Claude Code**. The buttons wait for terminal output before enabling. Complete any native trust or login prompts, then send the first message. Use the terminal icon to switch between conversation and terminal views.
+
+New Codex launches use `--no-daemon`, keeping the session hook in the terminal's own process. Claude launches get an explicit session ID. Both views control the same native session; Nenu does not start a second agent when switching views.
+
+If an existing Codex terminal has no connected history, tap **Find Codex conversations** and select the conversation already running there, or enter the session ID shown by `/status`. **Connect history** restores the chat without sending a prompt or resuming another process. **Change connected conversation** lets you correct that choice later. The connection survives a bridge restart but is discarded if the terminal process or hook identity changes.
+
+Recovery uses the existing local Codex daemon socket under `$CODEX_HOME/app-server-control/`; it does not expose that socket over the network. Claude background sessions can be identified by `claude agents --json` and their exact `attach` target. Older CLIs can still be launched manually and read through their installed Herdr integration.
+
+See [the session architecture decision](.adr/0022-native-agent-sessions-and-explicit-history-recovery.md) for verified versions and limitations.
+
+### Mobile editor
+
+The chat header keeps **Terminal / Chat** visible while writing. **Conversation actions**
+contains search, files, history, display settings and the option to reconnect an existing
+Codex conversation. Typing no longer hides navigation behind a separate button.
+
+The message box keeps attachments, model selection and Send together. **More message
+actions** opens commands, quick replies, terminal keys and usage/context details. Drafts
+survive switching between chat and terminal. If verification fails, keep the draft and
+retry after inspecting the terminal; a typing acknowledgement is not a model response.
+
+### Subagents within a conversation
+
+The **Agents** button beside Terminal opens the current conversation's delegated tasks. Each row
+shows its last known state, task and reported model. Open a row to read that child's conversation;
+the parent terminal and draft remain in place. The list includes nested children when their parent
+relationship is available. A disconnected or unobserved runtime is shown as unknown, not working.
+
+Codex uses its local App Server and native journal lifecycle events. Claude discovers transcripts under the exact parent
+session and can additionally track live start/finish events. To enable those events while preserving
+your other Claude hooks, run:
+
+```sh
+herdr plugin action invoke subagent-hooks --plugin herdr.nenu
+```
+
+The action backs up Claude's user settings before adding Nenu's hooks. Existing sessions that have
+not loaded the hooks can still expose history, but their live status may remain unknown. The hook
+stores session/agent IDs, agent type, event and timestamp, never prompts or tool arguments. Custom
+profiles can run `bun run scripts/install-subagent-hooks.ts /path/to/settings.json /path/to/nenu-state`.
+See [the subagent inspector decision](.adr/0024-session-subagent-inspector.md) for scope and limits.
+
+
+### Artifacts, media and queued messages
+
+Use the paperclip in the session header to open **Project**, a folder tree rooted at the agent's
+working directory. Expand folders in place; each folder loads only when first opened.
+**Artifacts** collects verified designboard canvases and documents explicitly linked by the agent.
+Editing a source file or mentioning an HTML path does not make it an artifact. **Files** and **Media**
+keep all conversation references. Search names and paths, filter by artifact type and extension, and sort by the most
+recent conversation mention (default), extension or name. Designboard titles come from their embedded
+`canvas-doc` data; inspection reads at most 20 contained HTML files per request, with 60 per UI batch.
+Older candidates can be inspected on demand. Images and MP4/WebM videos also appear
+inside messages. Videos support seeking, and file previews can be refreshed or downloaded.
+HTML has Render and Code views in an isolated offline document. Styles, scripts and images in the
+same folder are inlined into that document (set `COLLIE_HTML_INLINE_ASSETS=off` to render the bare
+file); anything else stays blocked.
+Designboards open in view mode; downloading preserves the original editable document.
+
+Use **Add to queue** beside Attach to stage a message. While an agent works, Send queues the
+current draft. The list above the composer lets you edit, remove or send an individual message now.
+The bridge saves the queue and dispatches when the agent is ready even with the browser closed.
+Questions, host drafts and uncertain deliveries pause sending; inspect Terminal before retrying.
+Queues stay attached to the connected conversation and never migrate to a replacement session.
+See [the implementation decision](.adr/0025-artifacts-and-server-message-queue.md) for limits.
+
+The **Agents** switcher keeps **Main · Parent** available alongside its children. Running agents
+are expanded; Finished and other inactive groups start collapsed each time the switcher opens.
+Selecting a child opens its live journal in the main chat. Main's draft stays intact when returning.
+Child journals currently have no independent input transport: send instructions through Main.
+
+
+### Claude context and account usage
+
+The composer shows context, five-hour usage and weekly usage without opening More actions.
+Claude supplies these values through its native status line. Enable the local capture from this
+checkout with `bun scripts/install-claude-statusline.ts`. It backs up user settings, preserves the
+existing status-line command and its output, and is safe to run again. Custom profiles may pass
+`/path/to/settings.json /path/to/nenu-state` as the two arguments. Project overrides of `statusLine`
+need the same installer applied to that settings file. No credentials or conversation text are stored.
+
+The bridge reads a bounded per-session metadata file alongside the existing pane refresh, so the
+phone makes no extra polling requests and does not wait for the conversation history. Values remain
+provider-reported, with their observation time and reset times in the usage popover. Claude versions
+or accounts that omit a limit leave it unavailable; Nenu never estimates account limits from tokens.
+
+### Knowing whether an agent is working
+
+Nenu reads each agent's own record of its turn: Claude's per-process session file
+(`~/.claude/sessions/<pid>.json`, plus its transcript while busy) and Codex's rollout file. The phone's
+Stop button and the Stop action both follow it, so Stop works with a custom Claude status line, and it
+stays hidden while only a background agent runs (Escape would not reach it). Nothing needs installing.
+
+Optional: Claude hooks make the bridge re-read that state the moment Claude reports an event. Install
+them with `herdr plugin action invoke claude-hooks --plugin herdr.nenu` and remove them with
+`herdr plugin action invoke claude-hooks-remove --plugin herdr.nenu`. The installer only touches
+Nenu's own `type: "http"` hooks in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), backs up the
+file first (`settings.json.nenu-hooks-backup-<time>`), keeps every other hook and setting, and running
+it twice changes nothing. Hooks never allow, deny or block anything, and only new Claude sessions
+load them.
+
+For background Claude sessions, subagent lifecycle hooks are matched to the live runtime's native
+start time. Long tools stay running without a two-minute activity timeout; restarting the parent
+cannot revive children from its previous process. If that runtime cannot be verified, stale children
+remain Unconfirmed. Explicit stop/completion records still take precedence.
+
+### Math in answers
+
+Nenu renders LaTeX in an agent's answer as math, loaded the first time a formula appears. To have an
+agent write math that renders, ask it to use these forms:
+
+| Write | Renders as |
+| --- | --- |
+| `$E = mc^2$` or `\(E = mc^2\)` | Inline math |
+| `$$` or `\[` on its own line, the formula, then `$$` or `\]` on its own line | A block |
+
+- No space right inside the delimiters: `$x$` is math, `$ x $` is text, so prices like `$5 and $10`
+  stay text.
+- Write `\$` for a literal dollar sign next to math.
+- Code spans and code blocks are never read as math.
+- Colors (`\textcolor`) and boxes (`\boxed`) render without the color or the border, because inline
+  styles are dropped for safety. A formula that fails to parse shows its TeX source.
+
 ## Projects and chat controls
 
-Nenu discovers registered Herdr Projects automatically. Open a project from Overview or the sidebar
+Projects come from [Herdr Organizations](https://github.com/frizynn/herdr-organizations) (or the
+upstream herdr-projects it grew from). Nenu discovers registered projects automatically. Open a project from Overview or the sidebar
 to see its coordinator and threads. Only currently matched panes get chat links; a registered project
 still appears when its agents are offline. Ordinary workspaces remain available alongside projects.
 Discovery follows `HERDR_PROJECTS_ROOT`, then `root` in `~/.config/herdr-projects/config.toml`, then
@@ -201,7 +335,9 @@ a live pane, and its detail page otherwise; nothing jumps elsewhere.
 report. A coordinator that still runs open work is refused until those are closed. **Replace
 coordinator** (on the coordinator's row) stops the project coordinator and starts a new one on the
 agent you choose (`herdr-organizations coordinator replace`). **New thread** and **New coordinator**
-start nodes, from a template when the project has them. These actions need a device with write
+start nodes, from a template when the project has them. The **PRs** tab lists the open pull requests of open threads with their
+state in words; pull requests of resolved threads fold into **History**, since Organizations stops
+re-reading a pull request once its thread is resolved. These actions need a device with write
 access and Herdr Organizations; upstream herdr-projects can only close and start top-level threads.
 
 In a chat, open **Files and photos** to browse file references and images from its available journal.
@@ -231,12 +367,12 @@ COLLIE_TRUSTED_USER=you@example.com           # your tailnet login — the bridg
 ```
 
 Config is a `.env` in the plugin's config dir — find it with
-`herdr plugin config-dir herdr.collie` (typically `~/.config/herdr/plugins/config/herdr.collie`;
+`herdr plugin config-dir herdr.nenu` (typically `~/.config/herdr/plugins/config/herdr.nenu`;
 without Herdr, `~/.config/collie`). `collie-ctl.sh` resolves this same dir whether you run it
 directly or via a Herdr action:
 
 ```bash
-cp .env.example "$(herdr plugin config-dir herdr.collie)/.env"
+cp .env.example "$(herdr plugin config-dir herdr.nenu)/.env"
 ```
 
 The bridge reads `.env` only at startup — after any edit, `scripts/collie-ctl.sh restart`. See
@@ -275,7 +411,7 @@ Commands only this machine has (a plugin's `/fork-in-herdr`, your own `/deploy`)
 `commands.toml`:
 
 ```bash
-cp commands.toml.example "$(herdr plugin config-dir herdr.collie)/commands.toml"
+cp commands.toml.example "$(herdr plugin config-dir herdr.nenu)/commands.toml"
 ```
 
 ```toml
@@ -288,14 +424,14 @@ description = "Fork this conversation into a new herdr tab"
 A pane your rows match shows only your rows (narrowest row wins,
 [ADR 0018](../.adr/0018-operator-command-rows-replace-the-catalog.md)). Add `confirm = true` for a
 two-tap confirm. No restart — edits are live. Verify: open a pane, tap **/**, your rows are on the
-first screen. Syntax error? `journalctl --user -u collie -n 20` names the line.
+first screen. Syntax error? `journalctl --user -u nenu -n 20` names the line.
 
 ### Your own key presets
 
 The Keys tray's **Presets** row is yours to replace, in `keys.toml` next to `commands.toml`:
 
 ```bash
-cp keys.toml.example "$(herdr plugin config-dir herdr.collie)/keys.toml"
+cp keys.toml.example "$(herdr plugin config-dir herdr.nenu)/keys.toml"
 ```
 
 ```toml
@@ -311,14 +447,14 @@ two-tap confirm. The rest of the tray — Esc, arrows, Enter/Tab/Space, modifier
 is fixed and not configurable. Chords are herdr's spelling: `ctrl+c` (never `C-c`), `shift+tab`,
 `ctrl+F7`; `PageUp`/`Home`/`End`/`Delete` are not accepted. No restart — edits are live. Verify:
 open a pane, tap **Keys → Presets**, your buttons are there. Rejected row?
-`journalctl --user -u collie -n 20` names it and why.
+`journalctl --user -u nenu -n 20` names it and why.
 
 ### Your own quick replies
 
 The Quick dock's one-tap phrases are yours to replace, in `quick-replies.toml` next to the other two:
 
 ```bash
-cp quick-replies.toml.example "$(herdr plugin config-dir herdr.collie)/quick-replies.toml"
+cp quick-replies.toml.example "$(herdr plugin config-dir herdr.nenu)/quick-replies.toml"
 ```
 
 ```toml
@@ -333,7 +469,7 @@ A pane your rows match shows only your groups, in place of the shipped ones
 English (`yes`, `commit and push`); this is the way to work in another language, or to give a
 harness that wants `approve` the word it wants. `scope = "shell"` reaches a plain shell pane, which
 otherwise gets only `y`/`n`. No restart — edits are live. Verify: open a pane, open **⋯ → Quick replies**, your
-groups are there. Rejected row? `journalctl --user -u collie -n 20` names it and why.
+groups are there. Rejected row? `journalctl --user -u nenu -n 20` names it and why.
 
 ### Multi-session
 
@@ -358,7 +494,7 @@ apps no way to change that at runtime.)
 ## Commands
 
 Every command works two ways: the **control script** on the host (`scripts/collie-ctl.sh <cmd>`) or
-the equivalent **Herdr action** (`herdr plugin action invoke <cmd> --plugin herdr.collie`, written
+the equivalent **Herdr action** (`herdr plugin action invoke <cmd> --plugin herdr.nenu`, written
 below as `invoke <cmd>`). The ones you'll actually use:
 
 | Action | Control script | Herdr action |
@@ -377,14 +513,14 @@ below as `invoke <cmd>`). The ones you'll actually use:
 | **Push test** — send one notification to prove it works | `scripts/collie-ctl.sh push-test` | `invoke push-test` |
 
 The actions are declared in `herdr-plugin.toml` and each one shells out to the control script; list
-them live with `herdr plugin action list --plugin herdr.collie`. `build` · `serve` · `unserve` are
+them live with `herdr plugin action list --plugin herdr.nenu`. `build` · `serve` · `unserve` are
 script-only too.
 
 `start` and `status` end with the **Nenu is running** banner — annotated line by line in
 [First run](#first-run--what-youll-see). Its version comes from the *served* bundle stamp, so it is
 the authoritative "what's running". **Through a Herdr action you get Herdr's JSON envelope, not the
 banner** — the human-readable output is the action's *captured stdout*, read with
-`herdr plugin log list --plugin herdr.collie` (or run the control script directly to see it inline).
+`herdr plugin log list --plugin herdr.nenu` (or run the control script directly to see it inline).
 
 ## Manage & update
 
@@ -393,7 +529,7 @@ banner** — the human-readable output is the action's *captured stdout*, read w
 Pause the bridge without removing anything (a later `start` brings it right back):
 
 ```bash
-scripts/collie-ctl.sh stop      # or: herdr plugin action invoke stop --plugin herdr.collie
+scripts/collie-ctl.sh stop      # or: herdr plugin action invoke stop --plugin herdr.nenu
 ```
 
 To tear the service down completely — stop + disable it, remove the service definition (the
@@ -402,10 +538,10 @@ Nenu's own `tailscale serve` mapping (port-scoped, so other tailnet mappings on 
 use `uninstall`. It leaves your `.env` and the checkout untouched:
 
 ```bash
-scripts/collie-ctl.sh uninstall # or: herdr plugin action invoke uninstall --plugin herdr.collie
+scripts/collie-ctl.sh uninstall # or: herdr plugin action invoke uninstall --plugin herdr.nenu
 ```
 
-Then `herdr plugin uninstall herdr.collie` (or, for a linked clone, just deleting the directory)
+Then `herdr plugin uninstall herdr.nenu` (or, for a linked clone, just deleting the directory)
 removes the plugin registration itself.
 
 ### Update to a new release
@@ -413,7 +549,7 @@ removes the plugin registration itself.
 The checkout *is* the plugin, and Herdr has no `plugin update` of its own. One command does the lot:
 
 ```bash
-scripts/collie-ctl.sh update    # or: herdr plugin action invoke update --plugin herdr.collie
+scripts/collie-ctl.sh update    # or: herdr plugin action invoke update --plugin herdr.nenu
 ```
 
 It advances the checkout, rebuilds the UI and restarts the bridge (re-execing itself, so it's safe
@@ -425,7 +561,7 @@ means you have to change something, so it is never inherited from a routine upda
 a new major is out and names the one that takes it —
 
 ```bash
-herdr plugin action invoke update-major --plugin herdr.collie   # or: scripts/collie-ctl.sh update --major
+herdr plugin action invoke update-major --plugin herdr.nenu   # or: scripts/collie-ctl.sh update --major
 ```
 
 The flag is the whole consent; there is no prompt, because a Herdr action has no terminal to answer
@@ -454,7 +590,7 @@ One command handles both ([ADR 0006](../.adr/0006-update-advances-the-checkout-h
   which is your recovery path if this checkout ever breaks.
 
 By hand: frontend (`web/`) → `collie-ctl.sh build` (live, no restart — served from disk); backend
-(`bridge/`) → `systemctl --user restart collie`. Run `scripts/install-hooks.sh` once to enable the
+(`bridge/`) → `systemctl --user restart nenu`. Run `scripts/install-hooks.sh` once to enable the
 repo's pre-commit / pre-push checks.
 
 ## Major-version upgrades
@@ -463,7 +599,7 @@ A major release means the operator must change something. Routine updates remain
 installed major. Read the newer major's release notes and migration steps, then cross explicitly:
 
 ```bash
-herdr plugin action invoke update-major --plugin herdr.collie
+herdr plugin action invoke update-major --plugin herdr.nenu
 ```
 
 ### Surviving reboots
@@ -477,12 +613,12 @@ loginctl enable-linger $USER
 
 The unit is `enable`d, so with lingering it starts at boot with your user manager; the
 `tailscale serve` mapping is persistent (`--bg`) and comes back on its own. Inspect the unit with
-`systemctl --user status collie`.
+`systemctl --user status nenu`.
 
 **On macOS there's nothing to enable.** `start` installs a launchd agent
-(`~/Library/LaunchAgents/herdr.collie.plist`) with `RunAtLoad`, so the bridge comes back when you log
+(`~/Library/LaunchAgents/herdr.nenu.plist`) with `RunAtLoad`, so the bridge comes back when you log
 in and launchd restarts it if it exits abnormally. Inspect it with
-`launchctl print gui/$(id -u)/herdr.collie`. It's a *LaunchAgent*, not a daemon, so it starts at
+`launchctl print gui/$(id -u)/herdr.nenu`. It's a *LaunchAgent*, not a daemon, so it starts at
 **login** rather than at boot — a Mac sitting at the login window is not serving Nenu. (Neither
 supervisor? A `nohup` process with a pidfile in the config dir instead.)
 
@@ -551,8 +687,8 @@ Off unless you opt in. Three steps, and nothing to install — the sender (`web-
 optional dependency, installed by the build:
 
 ```bash
-herdr plugin action invoke push-keys --plugin herdr.collie   # 1. generate + write the VAPID keys
-herdr plugin action invoke restart   --plugin herdr.collie   # 2. the bridge reads them at start
+herdr plugin action invoke push-keys --plugin herdr.nenu   # 1. generate + write the VAPID keys
+herdr plugin action invoke restart   --plugin herdr.nenu   # 2. the bridge reads them at start
 #                                                              3. on your phone: Settings → notifications
 ```
 
@@ -595,8 +731,13 @@ default `tailscale serve` (Tailscale manages the MagicDNS cert; nothing to obtai
 terminates TLS. Plain-HTTP modes (`COLLIE_SERVE_MODE=http`) are **not** a secure context, so the
 browser won't even offer the subscribe button — Settings flags it `insecure`.
 
-Nenu pushes when an agent goes **blocked** or **done**, with the agent's message in the body;
-**tapping it opens Nenu at that agent**.
+Nenu pushes when an agent goes **blocked** or **done**; **tapping it opens Nenu at that agent**. The
+title says who: a project's thread by its title, a coordinator as its project's, any other agent by
+its pane, session or tab label. A finished turn's body is the first line of the agent's answer and
+where it runs. Settings → **Notify when** has one switch per kind: Needs input, Agents finish,
+Threads finish, Coordinators answer, Subagent results and App updates. **Subagent results** covers a
+turn that a subagent's or background task's result started, not you; it is off by default, since a
+delegation wakes its parent once per result.
 
 ## Troubleshooting
 
@@ -626,8 +767,8 @@ repairs, so it takes one reinstall to land; `update` works normally from then on
 
 ```bash
 herdr plugin install frizynn/nenu --yes          # replaces the checkout, rebuilds the UI
-herdr plugin action invoke restart --plugin herdr.collie   # reinstall doesn't restart the service
-herdr plugin action invoke version --plugin herdr.collie   # expect 0.23.1 or newer
+herdr plugin action invoke restart --plugin herdr.nenu   # reinstall doesn't restart the service
+herdr plugin action invoke version --plugin herdr.nenu   # expect 0.23.1 or newer
 ```
 
 Your `.env` and `tailscale serve` state live in the plugin config dir, outside the checkout, so they
@@ -643,8 +784,8 @@ Headscale / `.internal` tailnet domains — HTTPS certs aren't available, which 
 
 **Banner shows `⚠ Nenu isn't answering on :8787 yet`** (service won't start, connection
 refused)**.** The service was started but the HTTP server isn't answering the probe. Check the unit
-first — `systemctl --user status collie` — then `scripts/collie-ctl.sh logs` (or
-`journalctl --user -u collie -f` to watch live) for why: most commonly the port is already taken
+first — `systemctl --user status nenu` — then `scripts/collie-ctl.sh logs` (or
+`journalctl --user -u nenu -f` to watch live) for why: most commonly the port is already taken
 (set `COLLIE_PORT` in `.env`, then `scripts/collie-ctl.sh restart`, which also re-runs
 `tailscale serve` against the new port) or the first build failed (the log says so; fix and run `scripts/collie-ctl.sh build`). The unit
 auto-restarts every 5 s, so once the cause is fixed it usually comes back on its own.
@@ -689,7 +830,7 @@ plain-HTTP origin, which is not a secure context — Settings flags it `insecure
 **Nenu is gone after a reboot.** On Linux this is almost always lingering — see
 [Surviving reboots](#surviving-reboots) for the one command. On macOS the launchd agent starts at
 **login**, so check you're actually logged in (not sitting at the login window) and that the agent is
-loaded: `launchctl print gui/$(id -u)/herdr.collie`.
+loaded: `launchctl print gui/$(id -u)/herdr.nenu`.
 
 **`herdr plugin list` shows the old version after an `update`.** Expected — Herdr caches the manifest
 it read at install or link time. The authority on what's running is the footer build stamp, or
@@ -739,7 +880,7 @@ Clone it and `herdr plugin link` it ([Install](#install) above), then edit in pl
   [Commands](#commands), and each one shells out to `scripts/collie-ctl.sh`. Both are
   commented — read them, not a paraphrase of them here.
 - **One asymmetry in the dev loop:** `web/` rebuilds go live with no restart (the bridge serves
-  `web/dist` from disk); `bridge/` changes need `systemctl --user restart collie`. Build, test and
+  `web/dist` from disk); `bridge/` changes need `systemctl --user restart nenu`. Build, test and
   versioning rules are in [`CLAUDE.md`](../CLAUDE.md) — versioning is hook-enforced, so skim it before
   your first commit.
 - **Why a supervised service and not a plugin pane** — [`ARCHITECTURE.md`](../ARCHITECTURE.md) §3.
