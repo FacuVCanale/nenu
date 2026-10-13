@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-13
+
+### Fixed
+- An unchanged herd reads unchanged: pane tokens come out in a fixed order, so the bridge stops publishing ~130 false change events a minute and the snapshot can answer 304. (2b515eaa)
+
+### Changed
+- The phone revalidates the snapshot with its ETag and keeps the herd it holds on a 304; Home moves 76% fewer bytes and renders 68% less, a chat 50% and 42%. (a453756f, 1977c8b5)
+- The queue reads one pane from Herdr instead of the whole herd. (00c64040)
+- Activity and subagent reads that found nothing new no longer re-render. (1977c8b5)
+
 ## [1.0.0] - 2026-10-13
 
 **Upgrade from 0.x once with the old id:** `herdr plugin action invoke update-major --plugin herdr.collie`.
