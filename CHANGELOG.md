@@ -27,6 +27,8 @@ From then on every command takes `--plugin herdr.nenu`.
 
 ### Fixed
 - Release notes for an `x.0.0` print `update-major`, which is what crosses a major. (3cf68d47)
+- `push-test` reads the subscriptions the service saved; it reported no devices with a phone subscribed. (ffd02428)
+- The PRs tab lists open PRs of open threads with their state in words; resolved threads' PRs fold into History, and a 0/0 diff is no longer drawn. (349abdcd)
 
 ## [0.65.2] - 2026-10-13
 
