@@ -596,8 +596,13 @@ default `tailscale serve` (Tailscale manages the MagicDNS cert; nothing to obtai
 terminates TLS. Plain-HTTP modes (`COLLIE_SERVE_MODE=http`) are **not** a secure context, so the
 browser won't even offer the subscribe button — Settings flags it `insecure`.
 
-Nenu pushes when an agent goes **blocked** or **done**, with the agent's message in the body;
-**tapping it opens Nenu at that agent**.
+Nenu pushes when an agent goes **blocked** or **done**; **tapping it opens Nenu at that agent**. The
+title says who: a project's thread by its title, a coordinator as its project's, any other agent by
+its pane, session or tab label. A finished turn's body is the first line of the agent's answer and
+where it runs. Settings → **Notify when** has one switch per kind: Needs input, Agents finish,
+Threads finish, Coordinators answer, Subagent results and App updates. **Subagent results** covers a
+turn that a subagent's or background task's result started, not you; it is off by default, since a
+delegation wakes its parent once per result.
 
 ## Troubleshooting
 
