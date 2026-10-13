@@ -4,9 +4,10 @@ This guide covers installation, security, configuration, daily operation, update
 and troubleshooting. Start with the shorter [project overview](../README.md) if you are evaluating
 Nenu, or jump directly to [installation](#install).
 
-> Compatibility note: the public product is **Nenu**. Existing identifiers such as `herdr.collie`,
-> `COLLIE_*`, `collie-ctl.sh`, and the `collie` service remain stable so current installations keep
-> their configuration and state.
+> Compatibility note: since 1.0 the plugin id is `herdr.nenu` and the services are `herdr.nenu`
+> (launchd) and `nenu` (systemd); before that they were `herdr.collie` and `collie`. The first `start`
+> after the update carries an older install's config over and retires its old service. `COLLIE_*`
+> settings, `collie-ctl.sh` and the state directory keep their names.
 
 ## ⚠️ Security — read before you run it
 
@@ -75,7 +76,7 @@ On the host, not your phone. Two ways in.
 
 ```bash
 herdr plugin install frizynn/nenu
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
 **From a local clone (for development)** — registered by path:
@@ -83,7 +84,7 @@ herdr plugin action invoke start --plugin herdr.collie
 ```bash
 git clone https://github.com/frizynn/nenu.git && cd nenu
 herdr plugin link "$(pwd)"
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
 Either way, `start` does four things:
@@ -102,7 +103,7 @@ Either way, `start` does four things:
 
 The transcripts below are the control script's inline output. **Through `invoke start` you get
 Herdr's JSON envelope instead** — the same text is the action's *captured stdout*, read with
-`herdr plugin log list --plugin herdr.collie`.
+`herdr plugin log list --plugin herdr.nenu`.
 
 ```console
 $ scripts/collie-ctl.sh start
@@ -231,12 +232,12 @@ COLLIE_TRUSTED_USER=you@example.com           # your tailnet login — the bridg
 ```
 
 Config is a `.env` in the plugin's config dir — find it with
-`herdr plugin config-dir herdr.collie` (typically `~/.config/herdr/plugins/config/herdr.collie`;
+`herdr plugin config-dir herdr.nenu` (typically `~/.config/herdr/plugins/config/herdr.nenu`;
 without Herdr, `~/.config/collie`). `collie-ctl.sh` resolves this same dir whether you run it
 directly or via a Herdr action:
 
 ```bash
-cp .env.example "$(herdr plugin config-dir herdr.collie)/.env"
+cp .env.example "$(herdr plugin config-dir herdr.nenu)/.env"
 ```
 
 The bridge reads `.env` only at startup — after any edit, `scripts/collie-ctl.sh restart`. See
@@ -275,7 +276,7 @@ Commands only this machine has (a plugin's `/fork-in-herdr`, your own `/deploy`)
 `commands.toml`:
 
 ```bash
-cp commands.toml.example "$(herdr plugin config-dir herdr.collie)/commands.toml"
+cp commands.toml.example "$(herdr plugin config-dir herdr.nenu)/commands.toml"
 ```
 
 ```toml
@@ -288,14 +289,14 @@ description = "Fork this conversation into a new herdr tab"
 A pane your rows match shows only your rows (narrowest row wins,
 [ADR 0018](../.adr/0018-operator-command-rows-replace-the-catalog.md)). Add `confirm = true` for a
 two-tap confirm. No restart — edits are live. Verify: open a pane, tap **/**, your rows are on the
-first screen. Syntax error? `journalctl --user -u collie -n 20` names the line.
+first screen. Syntax error? `journalctl --user -u nenu -n 20` names the line.
 
 ### Your own key presets
 
 The Keys tray's **Presets** row is yours to replace, in `keys.toml` next to `commands.toml`:
 
 ```bash
-cp keys.toml.example "$(herdr plugin config-dir herdr.collie)/keys.toml"
+cp keys.toml.example "$(herdr plugin config-dir herdr.nenu)/keys.toml"
 ```
 
 ```toml
@@ -311,14 +312,14 @@ two-tap confirm. The rest of the tray — Esc, arrows, Enter/Tab/Space, modifier
 is fixed and not configurable. Chords are herdr's spelling: `ctrl+c` (never `C-c`), `shift+tab`,
 `ctrl+F7`; `PageUp`/`Home`/`End`/`Delete` are not accepted. No restart — edits are live. Verify:
 open a pane, tap **Keys → Presets**, your buttons are there. Rejected row?
-`journalctl --user -u collie -n 20` names it and why.
+`journalctl --user -u nenu -n 20` names it and why.
 
 ### Your own quick replies
 
 The Quick dock's one-tap phrases are yours to replace, in `quick-replies.toml` next to the other two:
 
 ```bash
-cp quick-replies.toml.example "$(herdr plugin config-dir herdr.collie)/quick-replies.toml"
+cp quick-replies.toml.example "$(herdr plugin config-dir herdr.nenu)/quick-replies.toml"
 ```
 
 ```toml
@@ -333,7 +334,7 @@ A pane your rows match shows only your groups, in place of the shipped ones
 English (`yes`, `commit and push`); this is the way to work in another language, or to give a
 harness that wants `approve` the word it wants. `scope = "shell"` reaches a plain shell pane, which
 otherwise gets only `y`/`n`. No restart — edits are live. Verify: open a pane, open **⋯ → Quick replies**, your
-groups are there. Rejected row? `journalctl --user -u collie -n 20` names it and why.
+groups are there. Rejected row? `journalctl --user -u nenu -n 20` names it and why.
 
 ### Multi-session
 
@@ -358,7 +359,7 @@ apps no way to change that at runtime.)
 ## Commands
 
 Every command works two ways: the **control script** on the host (`scripts/collie-ctl.sh <cmd>`) or
-the equivalent **Herdr action** (`herdr plugin action invoke <cmd> --plugin herdr.collie`, written
+the equivalent **Herdr action** (`herdr plugin action invoke <cmd> --plugin herdr.nenu`, written
 below as `invoke <cmd>`). The ones you'll actually use:
 
 | Action | Control script | Herdr action |
@@ -377,14 +378,14 @@ below as `invoke <cmd>`). The ones you'll actually use:
 | **Push test** — send one notification to prove it works | `scripts/collie-ctl.sh push-test` | `invoke push-test` |
 
 The actions are declared in `herdr-plugin.toml` and each one shells out to the control script; list
-them live with `herdr plugin action list --plugin herdr.collie`. `build` · `serve` · `unserve` are
+them live with `herdr plugin action list --plugin herdr.nenu`. `build` · `serve` · `unserve` are
 script-only too.
 
 `start` and `status` end with the **Nenu is running** banner — annotated line by line in
 [First run](#first-run--what-youll-see). Its version comes from the *served* bundle stamp, so it is
 the authoritative "what's running". **Through a Herdr action you get Herdr's JSON envelope, not the
 banner** — the human-readable output is the action's *captured stdout*, read with
-`herdr plugin log list --plugin herdr.collie` (or run the control script directly to see it inline).
+`herdr plugin log list --plugin herdr.nenu` (or run the control script directly to see it inline).
 
 ## Manage & update
 
@@ -393,7 +394,7 @@ banner** — the human-readable output is the action's *captured stdout*, read w
 Pause the bridge without removing anything (a later `start` brings it right back):
 
 ```bash
-scripts/collie-ctl.sh stop      # or: herdr plugin action invoke stop --plugin herdr.collie
+scripts/collie-ctl.sh stop      # or: herdr plugin action invoke stop --plugin herdr.nenu
 ```
 
 To tear the service down completely — stop + disable it, remove the service definition (the
@@ -402,10 +403,10 @@ Nenu's own `tailscale serve` mapping (port-scoped, so other tailnet mappings on 
 use `uninstall`. It leaves your `.env` and the checkout untouched:
 
 ```bash
-scripts/collie-ctl.sh uninstall # or: herdr plugin action invoke uninstall --plugin herdr.collie
+scripts/collie-ctl.sh uninstall # or: herdr plugin action invoke uninstall --plugin herdr.nenu
 ```
 
-Then `herdr plugin uninstall herdr.collie` (or, for a linked clone, just deleting the directory)
+Then `herdr plugin uninstall herdr.nenu` (or, for a linked clone, just deleting the directory)
 removes the plugin registration itself.
 
 ### Update to a new release
@@ -413,7 +414,7 @@ removes the plugin registration itself.
 The checkout *is* the plugin, and Herdr has no `plugin update` of its own. One command does the lot:
 
 ```bash
-scripts/collie-ctl.sh update    # or: herdr plugin action invoke update --plugin herdr.collie
+scripts/collie-ctl.sh update    # or: herdr plugin action invoke update --plugin herdr.nenu
 ```
 
 It advances the checkout, rebuilds the UI and restarts the bridge (re-execing itself, so it's safe
@@ -425,7 +426,7 @@ means you have to change something, so it is never inherited from a routine upda
 a new major is out and names the one that takes it —
 
 ```bash
-herdr plugin action invoke update-major --plugin herdr.collie   # or: scripts/collie-ctl.sh update --major
+herdr plugin action invoke update-major --plugin herdr.nenu   # or: scripts/collie-ctl.sh update --major
 ```
 
 The flag is the whole consent; there is no prompt, because a Herdr action has no terminal to answer
@@ -454,7 +455,7 @@ One command handles both ([ADR 0006](../.adr/0006-update-advances-the-checkout-h
   which is your recovery path if this checkout ever breaks.
 
 By hand: frontend (`web/`) → `collie-ctl.sh build` (live, no restart — served from disk); backend
-(`bridge/`) → `systemctl --user restart collie`. Run `scripts/install-hooks.sh` once to enable the
+(`bridge/`) → `systemctl --user restart nenu`. Run `scripts/install-hooks.sh` once to enable the
 repo's pre-commit / pre-push checks.
 
 ## Major-version upgrades
@@ -463,7 +464,7 @@ A major release means the operator must change something. Routine updates remain
 installed major. Read the newer major's release notes and migration steps, then cross explicitly:
 
 ```bash
-herdr plugin action invoke update-major --plugin herdr.collie
+herdr plugin action invoke update-major --plugin herdr.nenu
 ```
 
 ### Surviving reboots
@@ -477,12 +478,12 @@ loginctl enable-linger $USER
 
 The unit is `enable`d, so with lingering it starts at boot with your user manager; the
 `tailscale serve` mapping is persistent (`--bg`) and comes back on its own. Inspect the unit with
-`systemctl --user status collie`.
+`systemctl --user status nenu`.
 
 **On macOS there's nothing to enable.** `start` installs a launchd agent
-(`~/Library/LaunchAgents/herdr.collie.plist`) with `RunAtLoad`, so the bridge comes back when you log
+(`~/Library/LaunchAgents/herdr.nenu.plist`) with `RunAtLoad`, so the bridge comes back when you log
 in and launchd restarts it if it exits abnormally. Inspect it with
-`launchctl print gui/$(id -u)/herdr.collie`. It's a *LaunchAgent*, not a daemon, so it starts at
+`launchctl print gui/$(id -u)/herdr.nenu`. It's a *LaunchAgent*, not a daemon, so it starts at
 **login** rather than at boot — a Mac sitting at the login window is not serving Nenu. (Neither
 supervisor? A `nohup` process with a pidfile in the config dir instead.)
 
@@ -551,8 +552,8 @@ Off unless you opt in. Three steps, and nothing to install — the sender (`web-
 optional dependency, installed by the build:
 
 ```bash
-herdr plugin action invoke push-keys --plugin herdr.collie   # 1. generate + write the VAPID keys
-herdr plugin action invoke restart   --plugin herdr.collie   # 2. the bridge reads them at start
+herdr plugin action invoke push-keys --plugin herdr.nenu   # 1. generate + write the VAPID keys
+herdr plugin action invoke restart   --plugin herdr.nenu   # 2. the bridge reads them at start
 #                                                              3. on your phone: Settings → notifications
 ```
 
@@ -626,8 +627,8 @@ repairs, so it takes one reinstall to land; `update` works normally from then on
 
 ```bash
 herdr plugin install frizynn/nenu --yes          # replaces the checkout, rebuilds the UI
-herdr plugin action invoke restart --plugin herdr.collie   # reinstall doesn't restart the service
-herdr plugin action invoke version --plugin herdr.collie   # expect 0.23.1 or newer
+herdr plugin action invoke restart --plugin herdr.nenu   # reinstall doesn't restart the service
+herdr plugin action invoke version --plugin herdr.nenu   # expect 0.23.1 or newer
 ```
 
 Your `.env` and `tailscale serve` state live in the plugin config dir, outside the checkout, so they
@@ -643,8 +644,8 @@ Headscale / `.internal` tailnet domains — HTTPS certs aren't available, which 
 
 **Banner shows `⚠ Nenu isn't answering on :8787 yet`** (service won't start, connection
 refused)**.** The service was started but the HTTP server isn't answering the probe. Check the unit
-first — `systemctl --user status collie` — then `scripts/collie-ctl.sh logs` (or
-`journalctl --user -u collie -f` to watch live) for why: most commonly the port is already taken
+first — `systemctl --user status nenu` — then `scripts/collie-ctl.sh logs` (or
+`journalctl --user -u nenu -f` to watch live) for why: most commonly the port is already taken
 (set `COLLIE_PORT` in `.env`, then `scripts/collie-ctl.sh restart`, which also re-runs
 `tailscale serve` against the new port) or the first build failed (the log says so; fix and run `scripts/collie-ctl.sh build`). The unit
 auto-restarts every 5 s, so once the cause is fixed it usually comes back on its own.
@@ -689,7 +690,7 @@ plain-HTTP origin, which is not a secure context — Settings flags it `insecure
 **Nenu is gone after a reboot.** On Linux this is almost always lingering — see
 [Surviving reboots](#surviving-reboots) for the one command. On macOS the launchd agent starts at
 **login**, so check you're actually logged in (not sitting at the login window) and that the agent is
-loaded: `launchctl print gui/$(id -u)/herdr.collie`.
+loaded: `launchctl print gui/$(id -u)/herdr.nenu`.
 
 **`herdr plugin list` shows the old version after an `update`.** Expected — Herdr caches the manifest
 it read at install or link time. The authority on what's running is the footer build stamp, or
@@ -739,7 +740,7 @@ Clone it and `herdr plugin link` it ([Install](#install) above), then edit in pl
   [Commands](#commands), and each one shells out to `scripts/collie-ctl.sh`. Both are
   commented — read them, not a paraphrase of them here.
 - **One asymmetry in the dev loop:** `web/` rebuilds go live with no restart (the bridge serves
-  `web/dist` from disk); `bridge/` changes need `systemctl --user restart collie`. Build, test and
+  `web/dist` from disk); `bridge/` changes need `systemctl --user restart nenu`. Build, test and
   versioning rules are in [`CLAUDE.md`](../CLAUDE.md) — versioning is hook-enforced, so skim it before
   your first commit.
 - **Why a supervised service and not a plugin pane** — [`ARCHITECTURE.md`](../ARCHITECTURE.md) §3.

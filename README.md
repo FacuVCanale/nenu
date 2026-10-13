@@ -59,15 +59,17 @@ Run this on the machine where Herdr and your coding agents are running:
 
 ```bash
 herdr plugin install frizynn/nenu
-herdr plugin action invoke start --plugin herdr.collie
-herdr plugin action invoke url --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
+herdr plugin action invoke url --plugin herdr.nenu
 ```
 
 Open the printed HTTPS URL on a device connected to the same tailnet. On iPhone, use
 **Share → Add to Home Screen** to install the PWA.
 
-The plugin ID remains `herdr.collie` for compatibility with existing installations. Product copy,
-icons, metadata, and release names use Nenu.
+The plugin ID is `herdr.nenu` since 1.0 (it was `herdr.collie`). An install from before 1.0 carries
+its config and service over on the first `start` after the update. Internal names such as `COLLIE_*`
+settings, `collie-ctl.sh` and the state directory keep the old name so existing setups keep working
+([ADR 0068](./.adr/0068-the-plugin-is-herdr-nenu-and-internal-names-stay.md)).
 
 For a development checkout:
 
@@ -77,7 +79,7 @@ cd nenu
 bun install --frozen-lockfile
 cd web && bun install --frozen-lockfile && cd ..
 herdr plugin link "$(pwd)"
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
 See the [complete user guide](docs/USER_GUIDE.md) for configuration, first-run output, Web Push,
@@ -86,10 +88,10 @@ updates, uninstalling, and troubleshooting.
 ## Common operations
 
 ```bash
-herdr plugin action invoke status  --plugin herdr.collie
-herdr plugin action invoke restart --plugin herdr.collie
-herdr plugin action invoke update  --plugin herdr.collie
-herdr plugin action invoke stop    --plugin herdr.collie
+herdr plugin action invoke status  --plugin herdr.nenu
+herdr plugin action invoke restart --plugin herdr.nenu
+herdr plugin action invoke update  --plugin herdr.nenu
+herdr plugin action invoke stop    --plugin herdr.nenu
 ```
 
 A routine update stays within the installed major version. Read the release notes before crossing a
@@ -211,7 +213,7 @@ session and can additionally track live start/finish events. To enable those eve
 your other Claude hooks, run:
 
 ```sh
-herdr plugin action invoke subagent-hooks --plugin herdr.collie
+herdr plugin action invoke subagent-hooks --plugin herdr.nenu
 ```
 
 The action backs up Claude's user settings before adding Nenu's hooks. Existing sessions that have
@@ -272,8 +274,8 @@ Stop button and the Stop action both follow it, so Stop works with a custom Clau
 stays hidden while only a background agent runs (Escape would not reach it). Nothing needs installing.
 
 Optional: Claude hooks make the bridge re-read that state the moment Claude reports an event. Install
-them with `herdr plugin action invoke claude-hooks --plugin herdr.collie` and remove them with
-`herdr plugin action invoke claude-hooks-remove --plugin herdr.collie`. The installer only touches
+them with `herdr plugin action invoke claude-hooks --plugin herdr.nenu` and remove them with
+`herdr plugin action invoke claude-hooks-remove --plugin herdr.nenu`. The installer only touches
 Nenu's own `type: "http"` hooks in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`), backs up the
 file first (`settings.json.nenu-hooks-backup-<time>`), keeps every other hook and setting, and running
 it twice changes nothing. Hooks never allow, deny or block anything, and only new Claude sessions

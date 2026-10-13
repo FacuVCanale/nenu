@@ -26,12 +26,13 @@ herdr plugin link "$(pwd)"
 Run the bridge with `bun run dev`, or exercise the real service path with:
 
 ```bash
-herdr plugin action invoke start --plugin herdr.collie
+herdr plugin action invoke start --plugin herdr.nenu
 ```
 
-The public name is Nenu. Compatibility identifiers such as `herdr.collie`, `COLLIE_*`,
-`collie-ctl.sh`, storage keys, headers, and service names must remain stable unless a migration is
-part of an explicitly planned major release.
+The public name is Nenu, and so are the plugin id (`herdr.nenu`) and the service names since 1.0.
+Internal identifiers such as `COLLIE_*`, `collie-ctl.sh`, storage keys and headers must remain
+stable unless a migration is part of an explicitly planned major release
+([ADR 0068](./.adr/0068-the-plugin-is-herdr-nenu-and-internal-names-stay.md)).
 
 ## Make a focused change
 

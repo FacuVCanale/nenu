@@ -59,7 +59,7 @@ unvalidated commit and never move or overwrite a published tag.
 ```bash
 gh release view vX.Y.Z --repo frizynn/nenu
 herdr plugin install frizynn/nenu --ref vX.Y.Z --yes
-herdr plugin action invoke version --plugin herdr.collie
+herdr plugin action invoke version --plugin herdr.nenu
 ```
 
 Confirm the release URL, source archives, displayed Nenu version, clean install, and update from the
@@ -72,7 +72,7 @@ For immediate operator recovery, reinstall the last known-good tag:
 
 ```bash
 herdr plugin install frizynn/nenu --ref vPREVIOUS --yes
-herdr plugin action invoke restart --plugin herdr.collie
+herdr plugin action invoke restart --plugin herdr.nenu
 ```
 
 Document the failure and recovery in the patch release notes.

@@ -23,12 +23,12 @@ Prerequisites: **Bun**, **git**, Herdr's Windows build, and Tailscale (or your o
 
 ```powershell
 git clone https://github.com/frizynn/nenu.git
-cd collie
+cd nenu
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File contrib\windows\collie-ctl.ps1 build
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File contrib\windows\collie-ctl.ps1 start
 ```
 
-`start` registers a Task Scheduler job (`herdr.collie`, override with `COLLIE_TASK_NAME`) that runs
+`start` registers a Task Scheduler job (`herdr.nenu`, override with `COLLIE_TASK_NAME`; a pre-1.0 `herdr.collie` job is removed) that runs
 at logon, restarts after failures, and outlives Herdr. It launches through `conhost --headless`
 so the bridge gets a pseudoconsole with no window: a bare `powershell.exe` action would surface
 on Windows 11 as a Windows Terminal tab, which kills the bridge when someone closes it. `status` prints the same readiness banner the
