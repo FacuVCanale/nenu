@@ -1,6 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
+import type { AgentStatus } from "./types.ts";
 
 // When did each pane last DO something, and when did you last LOOK at it? Herdr answers neither —
 // its pane records carry no timestamps at all (HERDR_API.md) — so Nenu derives and owns both.
@@ -128,6 +129,19 @@ export function meaningfulTerminalTitle(
   if (fold === agent.trim().toLowerCase()) return undefined;
   if (fold === workspaceLabel.trim().toLowerCase()) return undefined;
   return cleaned;
+}
+
+/**
+ * The status the snapshot reports for a pane: Herdr's, except that `done` lasts only until you look
+ * in Nenu.
+ *
+ * Herdr's `done` is `idle` plus Herdr's own seen bit: its CLI help says a focus marks the pane seen
+ * and a read does not. Nenu only reads, so a pane opened from the phone stayed `done` until someone
+ * focused it at the desk, and every list kept drawing it green. Only what happens in Nenu counts
+ * as seeing (.adr/0003), so Nenu's ledger decides here. A pane with no entry keeps Herdr's status.
+ */
+export function shownStatus(status: AgentStatus, activity: PaneActivity | undefined): AgentStatus {
+  return status === "done" && activity && activity.seenAt >= activity.activeAt ? "idle" : status;
 }
 
 /**

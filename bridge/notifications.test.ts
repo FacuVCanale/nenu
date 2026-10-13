@@ -5,7 +5,7 @@ import {
   interactionAlert,
   NotificationCoordinator,
   makeNotifySink,
-  type HerdSummary,
+  type AgentNotice,
   type NotifyClock,
   type NotifySink,
 } from "./notifications.ts";
@@ -38,23 +38,23 @@ class FakeClock implements NotifyClock<number> {
   }
 }
 
-type Event = { kind: "render"; summary: HerdSummary } | { kind: "clear" };
+type Event = { kind: "render"; notice: AgentNotice } | { kind: "clear"; paneId: string };
 
 class RecordingSink implements NotifySink {
   readonly events: Event[] = [];
-  render(summary: HerdSummary): void {
-    this.events.push({ kind: "render", summary });
+  render(notice: AgentNotice): void {
+    this.events.push({ kind: "render", notice });
   }
-  clear(): void {
-    this.events.push({ kind: "clear" });
+  clear(paneId: string): void {
+    this.events.push({ kind: "clear", paneId });
   }
-  /** The most recently rendered summary, or undefined if the last event was a clear / none yet. */
-  get last(): HerdSummary | undefined {
+  /** The most recently rendered notice, or undefined if the last event was a clear / none yet. */
+  get last(): AgentNotice | undefined {
     const e = this.events.at(-1);
-    return e?.kind === "render" ? e.summary : undefined;
+    return e?.kind === "render" ? e.notice : undefined;
   }
-  get renders(): HerdSummary[] {
-    return this.events.flatMap((e) => (e.kind === "render" ? [e.summary] : []));
+  get renders(): AgentNotice[] {
+    return this.events.flatMap((e) => (e.kind === "render" ? [e.notice] : []));
   }
   get clears(): number {
     return this.events.filter((e) => e.kind === "clear").length;
@@ -131,41 +131,36 @@ describe("NotificationCoordinator — debounce", () => {
   });
 });
 
-describe("NotificationCoordinator — coalescing", () => {
-  test("two outstanding agents collapse into one digest that buzzes", () => {
-    const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "web", "blocked"), "working", "blocked");
-    clock.fireAll();
-    // p1 renders as a single, then p2 promotes it to a digest.
-    expect(sink.renders.at(-1)).toEqual({
-      title: "2 agents need you",
-      body: "api, web",
-      paneId: undefined,
-      renotify: true,
-    });
-  });
-
-  test("a mixed blocked+done herd reads as 'need attention'", () => {
+describe("NotificationCoordinator — one notification per agent", () => {
+  test("two agents get two notifications, each naming its own agent", () => {
     const { clock, sink, coord } = setup();
     coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
     coord.onTransition(agentNamed("p2", "web", "done"), "working", "done");
     clock.fireAll();
-    expect(sink.last?.title).toBe("2 agents need attention");
+    expect(sink.renders).toEqual([
+      { title: "api needs you", body: "demo", paneId: "p1", renotify: true },
+      { title: "web finished", body: "demo", paneId: "p2", renotify: true },
+    ]);
   });
 
-  test("resolving one of two sends nothing: a phone re-alerts on every replacement", () => {
+  test("another agent finishing never rewrites the first one's notification into a count", () => {
+    const { clock, sink, coord } = setup();
+    coord.onTransition(agentNamed("p1", "api", "done"), "working", "done");
+    clock.fireAll();
+    coord.onTransition(agentNamed("p2", "web", "done"), "working", "done");
+    clock.fireAll();
+    expect(sink.events.map((e) => (e.kind === "render" ? e.notice.paneId : `clear ${e.paneId}`))).toEqual(["p1", "p2"]);
+    expect(sink.renders.some((n) => /agents/.test(n.title))).toBe(false);
+  });
+
+  test("resolving one agent closes only its own notification", () => {
     const { clock, sink, coord } = setup();
     coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
     coord.onTransition(agentNamed("p2", "web", "blocked"), "working", "blocked");
     clock.fireAll();
-    const before = sink.events.length;
-    coord.onTransition(agentNamed("p2", "web", "idle"), "blocked", "idle"); // web handled
-    expect(sink.events.length).toBe(before);
-    // The next new alert still renders the herd as it is now.
-    coord.onTransition(agentNamed("p3", "docs", "blocked"), "working", "blocked");
-    clock.fireAll();
-    expect(sink.last?.body).toBe("api, docs");
+    coord.onTransition(agentNamed("p2", "web", "idle"), "blocked", "idle");
+    expect(sink.events.at(-1)).toEqual({ kind: "clear", paneId: "p2" });
+    expect(sink.clears).toBe(1);
   });
 });
 
@@ -175,7 +170,7 @@ describe("NotificationCoordinator — retraction", () => {
     coord.onTransition(agent("p1", "blocked"), "working", "blocked");
     clock.fireAll();
     coord.onTransition(agent("p1", "idle"), "blocked", "idle");
-    expect(sink.events.at(-1)).toEqual({ kind: "clear" });
+    expect(sink.events.at(-1)).toEqual({ kind: "clear", paneId: "p1" });
   });
 
   test("clears the herd when the pane disappears", () => {
@@ -183,7 +178,7 @@ describe("NotificationCoordinator — retraction", () => {
     coord.onTransition(agent("p1", "blocked"), "working", "blocked");
     clock.fireAll();
     coord.onRemove("p1");
-    expect(sink.events.at(-1)).toEqual({ kind: "clear" });
+    expect(sink.events.at(-1)).toEqual({ kind: "clear", paneId: "p1" });
   });
 
   test("removal before delivery cancels without rendering or clearing", () => {
@@ -236,7 +231,7 @@ describe("NotificationCoordinator — type preferences", () => {
     expect(sink.last?.title).toBe("api finished"); // delivered
     prefs.done = false; // preference changes at runtime…
     coord.applyPrefs(); // …and the API hook re-evaluates the herd
-    expect(sink.events.at(-1)).toEqual({ kind: "clear" }); // the done alert is retracted
+    expect(sink.events.at(-1)).toEqual({ kind: "clear", paneId: "p1" }); // the done alert is retracted
   });
 
   test("disabling a kind at runtime cancels a still-pending alert of that kind", () => {
@@ -258,7 +253,7 @@ describe("NotificationCoordinator — type preferences", () => {
     // The agent completes, but done pushes are disabled — so this is a non-notifiable transition
     // that resolves (retracts) the outstanding blocked alert rather than replacing it.
     coord.onTransition(agent("p1", "done"), "blocked", "done");
-    expect(sink.events.at(-1)).toEqual({ kind: "clear" });
+    expect(sink.events.at(-1)).toEqual({ kind: "clear", paneId: "p1" });
   });
 });
 
@@ -293,16 +288,6 @@ describe("NotificationCoordinator — who, what and where", () => {
     expect(sink.last?.title).toBe("t-0093 Mi Cúcula pedidos got a subagent's result");
   });
 
-  test("a digest lists who, not the CLI's name over and over", async () => {
-    const names: Record<string, string> = { p1: "pedidos", p2: "AWAM Comercio coordinator" };
-    const { clock, sink, coord } = setup(undefined, (a, status) => thread(status, { name: names[a.paneId]! }));
-    coord.onTransition(agent("p1", "done"), "working", "done");
-    coord.onTransition(agent("p2", "done"), "working", "done");
-    clock.fireAll();
-    await settle();
-    expect(sink.last).toMatchObject({ title: "2 agents finished", body: "pedidos, AWAM Comercio coordinator" });
-  });
-
   test("an alert resolved while it was being described never shows", async () => {
     let answer: (d: AlertDetail) => void = () => {};
     const { clock, sink, coord } = setup(undefined, () => new Promise<AlertDetail>((resolve) => (answer = resolve)));
@@ -316,12 +301,7 @@ describe("NotificationCoordinator — who, what and where", () => {
 });
 
 describe("makeNotifySink", () => {
-  const summary: HerdSummary = {
-    title: "claude needs you",
-    body: "demo · /home/you/demo",
-    paneId: "p1",
-    renotify: true,
-  };
+  const notice: AgentNotice = { title: "api needs you", body: "demo", paneId: "w1:p1", renotify: true };
   class RecordingPush {
     readonly sent: PushMessage[] = [];
     send(msg: PushMessage): void {
@@ -329,25 +309,23 @@ describe("makeNotifySink", () => {
     }
   }
 
-  test("render maps the summary onto a single herd-tagged push", () => {
+  test("each agent's notice is its own push, tagged by its pane", () => {
     const push = new RecordingPush();
-    makeNotifySink(push, { isMuted: () => false }, "collie:herd").render(summary);
-    expect(push.sent).toEqual([
-      { title: "claude needs you", body: "demo · /home/you/demo", tag: "collie:herd", paneId: "p1", renotify: true },
-    ]);
+    makeNotifySink(push, { isMuted: () => false }, "collie:herd").render(notice);
+    expect(push.sent).toEqual([{ title: "api needs you", body: "demo", tag: "collie:herd:w1:p1", paneId: "w1:p1", renotify: true }]);
   });
 
-  test("clear maps to a clear push on the herd tag", () => {
+  test("a clear closes that pane's notification only", () => {
     const push = new RecordingPush();
-    makeNotifySink(push, { isMuted: () => false }, "collie:herd").clear();
-    expect(push.sent).toEqual([{ type: "clear", tag: "collie:herd" }]);
+    makeNotifySink(push, { isMuted: () => false }, "collie:herd").clear("w1:p1");
+    expect(push.sent).toEqual([{ type: "clear", tag: "collie:herd:w1:p1" }]);
   });
 
   test("an active snooze suppresses both render and clear", () => {
     const push = new RecordingPush();
     const sink = makeNotifySink(push, { isMuted: () => true }, "collie:herd");
-    sink.render(summary);
-    sink.clear();
+    sink.render(notice);
+    sink.clear("w1:p1");
     expect(push.sent).toEqual([]);
   });
 });

@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-14
+
+### Fixed
+- A session opened in Nenu stops showing as finished-and-unseen (green): Herdr's `done` only clears on a desk focus, so the snapshot now reports `done` only until you look in Nenu (ADR 0071). (097d12df)
+- Each agent gets its own notification, saying who, what it answered and where, instead of a count like "2 agents finished"; each has its own push collapse topic, so a phone back online gets every agent's latest alert (ADR 0070). (4fe7de8c)
+
+### Changed
+- Issues and pull requests ask for versions, reproduction steps and visual evidence: before/after screenshots for a visible fix, a screen recording for a feature or interaction. (255b6652)
+
 ## [1.0.1] - 2026-10-13
 
 ### Fixed

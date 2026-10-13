@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
@@ -72,7 +73,8 @@ function coerceStored(v: unknown): StoredSubscription | null {
 // Delivery options passed to web-push on every send. Without them a message gets web-push's 4-week
 // default TTL and NO collapse key, so an offline device replays every queued herd update on reconnect.
 //   • `topic` is a collapse key — the push service keeps only the LATEST message per device with this
-//     topic, so a reconnecting phone gets one current summary instead of a burst of stale ones. Must
+//     topic. Each agent has its own (agentTopic), so a reconnecting phone gets every agent's latest
+//     alert instead of a burst of stale ones. Must
 //     match [A-Za-z0-9_-] and be ≤32 chars ("collie-herd" is valid) — and, for Apple, must also be a
 //     LENGTH BASE64 CAN PRODUCE: never ≡ 1 (mod 4). RFC 8030 §5.4 only calls the topic URL-safe
 //     base64; Apple enforces that by decoding it, while FCM and Mozilla treat it as opaque. A
@@ -100,6 +102,15 @@ const SEND_OPTIONS = { TTL: 21_600, topic: "collie-herd", urgency: "high" } as c
 // update stays relevant far longer than a transient "needs you". The trailing "s" is not a typo:
 // "collie-update" is 13 characters, which Apple refuses outright — see the base64 note above.
 const UPDATE_SEND_OPTIONS = { TTL: 259_200, topic: "collie-updates" } as const;
+
+/** Each agent's notification collapses only with itself, so a reconnecting phone receives the latest
+ *  alert of every agent rather than of the herd. The tag carries the pane; a hash keeps the topic in
+ *  RFC 8030's alphabet at a length Apple decodes (16 chars, ≡ 0 mod 4). A message without a tag keeps
+ *  the herd topic. */
+export function agentTopic(tag: string | undefined): string {
+  if (!tag) return SEND_OPTIONS.topic;
+  return createHash("sha256").update(tag).digest("base64url").slice(0, 16);
+}
 
 /** Whether a collapse topic is one every push service will accept: RFC 8030's alphabet and 32-char
  *  ceiling, plus the length base64 can actually produce (Apple decodes it; ≡ 1 mod 4 is impossible).
@@ -305,7 +316,7 @@ export class Push {
     if (msg.session !== undefined) data.session = msg.session;
     if (msg.target !== undefined) data.target = msg.target;
     // Per-message collapse topic — update alerts must not share the herd slot (see UPDATE_SEND_OPTIONS).
-    const options = msg.type === "update" ? UPDATE_SEND_OPTIONS : SEND_OPTIONS;
+    const options = msg.type === "update" ? UPDATE_SEND_OPTIONS : { ...SEND_OPTIONS, topic: agentTopic(msg.tag) };
     await this.broadcast(JSON.stringify({ ...msg, data }), options);
   }
 

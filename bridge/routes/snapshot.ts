@@ -1,3 +1,4 @@
+import { shownStatus } from "../activity.ts";
 import { computeEtag, JsonBody, notModified, notModifiedResponse } from "../http-cache.ts";
 import { looseWorkspaceIds } from "../projects.ts";
 import { toPaneWire, type AgentView, type SnapshotResponse } from "../types.ts";
@@ -18,15 +19,18 @@ export const snapshotRoutes: Route[] = [
       // Herdr poller, and Stop's button reads the same entry Stop's press re-reads.
       agentStates.sync(rt.name, rt.herdr, agents);
       const device = deviceAuth(req, cfg);
-      // Attach each pane's activity timestamps. Done here rather than in the state engine so the
-      // engine stays a pure Herdr-poller with no knowledge of the ledger — and so the two numbers
-      // are read at serialise time, i.e. as fresh as the request.
+      // Attach each pane's activity timestamps, and the status they imply (shownStatus). Done here
+      // rather than in the state engine so the engine stays a pure Herdr-poller with no knowledge of
+      // the ledger — and so the two numbers are read at serialise time, i.e. as fresh as the request.
       const withActivity = (p: AgentView): AgentView => {
         const a = activity.get(rt.name, p.paneId);
         const withTurn = agentStates.attach(rt.name, p);
-        return a ? { ...withTurn, lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : withTurn;
+        return a ? { ...withTurn, status: shownStatus(p.status, a), lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : withTurn;
       };
-      const projectViews = projects.list(rt.name, rt.isPrimary, [...agents, ...shellPanes]);
+      const shownAgents = agents.map(withActivity);
+      const shownShells = shellPanes.map(withActivity);
+      // Projects read the shown status too, so a thread's dot agrees with its row everywhere else.
+      const projectViews = projects.list(rt.name, rt.isPrimary, [...shownAgents, ...shownShells]);
       const view: Omit<SnapshotResponse, "ts"> & { looseWorkspaceIds: string[] } = {
         bridge,
         // Only report device state when the feature is on, so an off deployment sends nothing new.
@@ -37,8 +41,8 @@ export const snapshotRoutes: Route[] = [
         // journal for doesn't advertise a History button that can only ever come back empty.
         // withActivity runs FIRST: it returns an AgentView, which is what toPaneWire consumes,
         // and the two timestamps then ride through its rest-spread onto the wire shape.
-        agents: agents.map((p) => toPaneWire(withActivity(p), hasJournal)),
-        shellPanes: shellPanes.map((p) => toPaneWire(withActivity(p), hasJournal)),
+        agents: shownAgents.map((p) => toPaneWire(p, hasJournal)),
+        shellPanes: shownShells.map((p) => toPaneWire(p, hasJournal)),
         workspaces,
         tabs,
         projects: projectViews,

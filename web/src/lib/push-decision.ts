@@ -10,7 +10,7 @@ export interface PushPayload {
   type?: "clear";
   title?: string;
   body?: string;
-  /** Notification slot. The bridge sends one shared "collie:herd" tag so the herd coalesces. */
+  /** Notification slot. The bridge tags each agent's alert by its pane ("collie:herd:<paneId>"). */
   tag?: string;
   /** Re-alert when replacing the slot (a new agent arrived) vs. update it silently (a retraction). */
   renotify?: boolean;
@@ -41,8 +41,8 @@ export type PushDecision =
       renotify: boolean;
     };
 
-// Notifications share a slot so a replacement updates rather than stacks. The bridge sets the tag
-// explicitly ("collie:herd"); we only fall back to a per-pane tag for direct/manual pushes.
+// A tag is a slot: a push on the same tag replaces rather than stacks. The bridge sets one per agent
+// ("collie:herd:<paneId>"); we only fall back to a per-pane tag for direct/manual pushes.
 export const tagFor = (paneId?: string): string => (paneId ? `collie:${paneId}` : "collie");
 
 /**
