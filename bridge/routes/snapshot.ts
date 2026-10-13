@@ -19,9 +19,9 @@ export const snapshotRoutes: Route[] = [
       // Herdr poller, and Stop's button reads the same entry Stop's press re-reads.
       agentStates.sync(rt.name, rt.herdr, agents);
       const device = deviceAuth(req, cfg);
-      // Attach each pane's activity timestamps. Done here rather than in the state engine so the
-      // engine stays a pure Herdr-poller with no knowledge of the ledger — and so the two numbers
-      // are read at serialise time, i.e. as fresh as the request.
+      // Attach each pane's activity timestamps, and the status they imply (shownStatus). Done here
+      // rather than in the state engine so the engine stays a pure Herdr-poller with no knowledge of
+      // the ledger — and so the two numbers are read at serialise time, i.e. as fresh as the request.
       const withActivity = (p: AgentView): AgentView => {
         const a = activity.get(rt.name, p.paneId);
         const withTurn = agentStates.attach(rt.name, p);
