@@ -1753,4 +1753,29 @@ FAKE
 }
 test_migration_runs_only_as_the_installed_plugin
 
+# push-test reads the subscriptions the supervised bridge saved. Herdr hands every action its own
+# HERDR_PLUGIN_STATE_DIR, which the bridge's config prefers; the service never sees it, so a push-test
+# that kept it looked in an empty dir and reported "no subscribed devices" with a phone subscribed.
+test_push_test_reads_the_service_state() {
+  setup_case push-test-state
+  local seen="${CASE_DIR}/seen"
+  local harness="${CASE_DIR}/push-test.sh"
+  cat > "$harness" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export HOME="$HOME_DIR" HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR" PATH="$BIN_DIR:$BASE_PATH"
+export HERDR_PLUGIN_STATE_DIR="${CASE_DIR}/action-only"
+source "$CTL"
+have_systemd() { return 1; }
+have_launchd() { return 0; }
+BUN="${BIN_DIR}/fake-bun"
+printf '#!/bin/sh\necho "state=\${HERDR_PLUGIN_STATE_DIR:-unset}" > "$seen"\n' > "\$BUN"
+chmod +x "\$BUN"
+cmd_push_test
+EOF
+  bash "$harness" > /dev/null 2>&1 || fail "push-test failed"
+  assert_eq "$(cat "$seen")" "state=unset"
+}
+test_push_test_reads_the_service_state
+
 echo "collie-ctl lifecycle tests: passed"
