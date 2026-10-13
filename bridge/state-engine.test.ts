@@ -59,7 +59,7 @@ const ws = (id: string, number: number) => ({
   agent_status: "idle" as AgentStatus,
 });
 
-type FakeAgent = { pane_id: string; state_change_seq?: number | null; completion_seq?: number | null };
+type FakeAgent = { pane_id: string; state_change_seq?: number | null; completion_seq?: number | null; name?: string | null };
 
 class FakeHerdr {
   panes: FakePane[] = [];
@@ -906,6 +906,16 @@ describe("StateEngine — pane capability fields", () => {
     expect(byId("w1:p1").stateChangeSeq).toBe(6257);
     expect("completionSeq" in byId("w1:p1")).toBe(false);
     expect(byId("w1:p2")).toMatchObject({ stateChangeSeq: 12, completionSeq: 4 });
+  });
+
+  test("joins the agent's Herdr name, which `herdr agent start <name>` sets, absent when unnamed", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    herdr.panes = [pane("w1:p1", "w1", "idle", "claude"), pane("w1:p2", "w1", "idle", "claude")];
+    herdr.agents = [{ pane_id: "w1:p1", name: "perf-deep-dive" }, { pane_id: "w1:p2", name: null }];
+    await poll();
+    const byId = (id: string) => engine.current().agents.find((a) => a.paneId === id)!;
+    expect(byId("w1:p1").agentName).toBe("perf-deep-dive");
+    expect("agentName" in byId("w1:p2")).toBe(false);
   });
 
   test("the list-call fallback carries no counters", async () => {

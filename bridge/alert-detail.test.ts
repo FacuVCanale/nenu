@@ -81,6 +81,15 @@ describe("describeAlert", () => {
   });
 });
 
+describe("launched", () => {
+  test("a loose agent with a Herdr name was started by another agent; a project's panes never count", () => {
+    expect(describeAlert(pane({ agentName: "perf-deep-dive" }), "done").launched).toBe(true);
+    expect(describeAlert(pane(), "done").launched).toBe(false);
+    expect(describeAlert(pane({ paneId: "pt", agentName: "hp-awam-t-0093" }), "done", [project]).launched).toBe(false);
+    expect(describeAlert(pane({ paneId: "pc", agentName: "hpc-awam" }), "done", [project]).launched).toBe(false);
+  });
+});
+
 describe("turnOutcome", () => {
   test("a turn Herdr Organizations' inbox nudge started is the organization's, not yours", () => {
     const entries = parseClaudeTranscript(jsonl(human("u1", "[hp inbox] t-0093 new report"), answer("a1", "Leí el reporte de t-0093.")));

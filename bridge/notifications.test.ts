@@ -192,7 +192,7 @@ describe("NotificationCoordinator — type preferences", () => {
 
 describe("NotificationCoordinator — who, what and where", () => {
   const thread = (status: "blocked" | "done", over: Partial<AlertDetail> = {}): AlertDetail => ({
-    status, kind: "thread", startedBy: "person", requested: false, name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", ...over,
+    status, kind: "thread", startedBy: "person", requested: false, launched: false, name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", ...over,
   });
 
   test("a finished thread is named by its title and says what it answered, then where", async () => {
