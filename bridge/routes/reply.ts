@@ -35,18 +35,28 @@ function exclusive(write: (ctx: Services, r: PaneRouteRequest) => Promise<Respon
   };
 }
 
+/** Remember a message the operator sent, so the pane's next finish counts as a reply to them. Read off
+ *  the body: a refused reply still answers 200 with `ok: false`. */
+async function noteSent(res: Response, sent: () => void): Promise<Response> {
+  const body = (await res.clone().json().catch(() => null)) as { ok?: unknown } | null;
+  if (body?.ok === true) sent();
+  return res;
+}
+
 export const replyPaneActions: Record<string, PaneAction> = {
   // The whole guarded send in one request. Not wrapped in `exclusive`: the ledger answers a retry of
   // a send already in flight or done before the lock is asked, and the send takes the lock itself.
   send: {
     level: "write",
     marksSeen: true,
-    handle: ({ cfg, audit, input }, { req, rt, paneId, device }) => sendPane(rt, cfg, input, paneId, req, audit, device),
+    handle: async ({ cfg, audit, input, awaiting }, { req, rt, paneId, device }) =>
+      noteSent(await sendPane(rt, cfg, input, paneId, req, audit, device), () => awaiting.sent(rt.name, paneId)),
   },
   reply: {
     level: "write",
     marksSeen: true,
-    handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => replyPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
+    handle: exclusive(async ({ cfg, audit, awaiting }, { req, rt, paneId, device }) =>
+      noteSent(await replyPane(rt.herdr, cfg, paneId, req, audit, device, rt.name), () => awaiting.sent(rt.name, paneId))),
   },
   keys: {
     level: "write",

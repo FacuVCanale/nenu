@@ -8,6 +8,7 @@ import { useAppViewport } from "@/hooks/use-app-viewport";
 import { usePollBusy } from "@/hooks/use-poll-busy";
 import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
+import { useCloseStaleNotifications } from "@/hooks/use-close-stale-notifications";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
 import { isConnecting, linkPhrase } from "@/lib/connection";
@@ -86,6 +87,7 @@ export function RootLayout() {
   usePollBusy();
   useAgentTransitions(data.agents, paneId ?? null, data.session, data.projects);
   usePushSetup();
+  useCloseStaleNotifications(data.agents, paneId ?? null);
 
   // A viewport-height flex column: the top banners (when shown) are in-flow rows at the top and the
   // active route fills the rest (each route root is `min-h-0 flex-1`). This is what keeps a banner

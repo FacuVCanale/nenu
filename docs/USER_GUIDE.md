@@ -731,14 +731,14 @@ default `tailscale serve` (Tailscale manages the MagicDNS cert; nothing to obtai
 terminates TLS. Plain-HTTP modes (`COLLIE_SERVE_MODE=http`) are **not** a secure context, so the
 browser won't even offer the subscribe button — Settings flags it `insecure`.
 
-Nenu pushes when an agent goes **blocked** or **done**, one notification per agent;
-**tapping it opens Nenu at that agent**. The
-title says who: a project's thread by its title, a coordinator as its project's, any other agent by
-its pane, session or tab label. A finished turn's body is the first line of the agent's answer and
-where it runs. Settings → **Notify when** has one switch per kind: Needs input, Agents finish,
-Threads finish, Coordinators answer, Subagent results and App updates. **Subagent results** covers a
-turn that a subagent's or background task's result started, not you; it is off by default, since a
-delegation wakes its parent once per result.
+Nenu pushes when an agent **needs your input**, and when an agent **finishes something a person
+asked**: a message you sent from Nenu, or text typed into a loose agent or a coordinator. It does not
+push for Herdr Organizations' own back-and-forth (its inbox nudges and a coordinator's messages to
+its threads) or, unless you switch it on, for a subagent's result. Each agent gets its own
+notification, and only once until you look at it in Nenu; **tapping it opens Nenu at that agent**.
+Nothing is pushed while Nenu is open on a screen, and the app closes the notifications you have
+handled when it opens. Settings → **Notify when** has Needs input, Replies to you, Subagent results
+and App updates.
 
 ## Troubleshooting
 

@@ -163,8 +163,12 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
     schedule: (fn, ms) => setTimeout(fn, ms),
     cancel: (h) => clearTimeout(h),
   };
-  const sink = makeNotifySink(push, snooze, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
-  const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name));
+  // Nothing is pushed while a snooze runs or Nenu is open on a screen: the page already shows it, and
+  // a push the service worker then hid would count against iOS's silent-push quota (ADR 0072).
+  const quiet = { isMuted: () => snooze.isMuted() || live.watching() };
+  const sink = makeNotifySink(push, quiet, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
+  const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name),
+    (paneId) => activity.get(name, paneId)?.seenAt);
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));
   engine.onRemove((paneId) => notifications.onRemove(paneId));
 

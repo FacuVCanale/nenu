@@ -8,6 +8,7 @@ import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
 import { JournalWatch } from "./journal-watch.ts";
 import { describeAlert } from "./alert-detail.ts";
+import { AwaitingReplies } from "./awaiting-replies.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
 import { TranscriptStore } from "./journal/store.ts";
 import { createOperatorCommands } from "./operator-commands.ts";
@@ -109,6 +110,7 @@ export function startServer(opts: ServerDeps) {
   // index.ts, wired to its StateEngine transitions). The routes only fan preference changes and
   // snooze-clears across every live session's coordinator.
   const services: Services = {
+    awaiting: new AwaitingReplies(),
     ...opts,
     assets,
     // One reader per process; it owns the mtime cache that keeps commands.toml off the hot path.
@@ -147,7 +149,8 @@ export function startServer(opts: ServerDeps) {
     const page = adapter && transcripts && agent.agentSession
       ? await transcripts.page(adapter, agent.agentSession, { limit: ALERT_JOURNAL_ENTRIES }).catch(() => null)
       : null;
-    return describeAlert(agent, status, projects, page?.entries ?? null);
+    const requested = status === "done" && services.awaiting.take(session, agent.paneId);
+    return describeAlert(agent, status, projects, page?.entries ?? null, requested);
   });
   // An agent alert carries the pane's dialog. The alert usually fires before anything read the
   // pane, so the lookup reads it first.

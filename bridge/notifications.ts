@@ -12,7 +12,11 @@ import type { AgentStatus, AgentView, Interaction } from "./types.ts";
 //   • One per agent — each agent's alert is its own notification, tagged by its pane, saying who it is,
 //     what it answered and where. A herd digest ("3 agents finished") rewrote one slot on every new
 //     alert, so each agent's arrival buzzed a count that named nobody.
-//   • Retract — an agent handled at the PC (or its pane closing) closes its own notification only.
+//   • Once until seen — an agent that finishes again before you looked at it in Nenu does not notify
+//     again; a different kind (finished, then waiting on you) still does.
+//   • Never silent — every push shows a notification. iOS revokes a web-push subscription after a few
+//     pushes that show nothing, so nothing is retracted by push: the app closes what you handled when
+//     it opens, and nothing is sent while Nenu is open on a screen (the sink's mute gate). ADR 0072.
 //   • Name — each alert says who it is to the operator (a project's thread or coordinator, else the
 //     pane's own label), what started its turn, and the first line of what it answered
 //     (alert-detail.ts). A turn a subagent's result started answers to its own switch.
@@ -42,26 +46,23 @@ export interface AgentNotice {
 export interface NotifySink {
   /** Show (or replace) this agent's notification. */
   render(notice: AgentNotice): void;
-  /** Close this agent's notification. */
-  clear(paneId: string): void;
 }
 
 /** Just the transport the sink needs — "deliver this message to the devices". */
 export interface PushSender {
   send(msg: PushMessage): unknown;
 }
-/** Just the quiet-hours check the sink needs — "are we muted right now?". */
+/** Just the check the sink needs — "should nothing be pushed right now?": a snooze, or Nenu open on a screen. */
 export interface MuteGate {
   isMuted(): boolean;
 }
 
 /**
  * Build the {@link NotifySink} the coordinator drives. Each agent gets its own notification slot,
- * `<herdTag>:<paneId>`, so its render replaces only its own; an active snooze mutes both render and
- * clear (nothing is shown, so there's nothing to close). `sessionName` (the registry name) is stamped
- * into the push payload so the service worker can deep-link to the right session — omit it
- * (undefined) for the primary. Kept here, decoupled from `Push`/`Snooze`, so the gating and
- * notice→message mapping are unit-testable.
+ * `<herdTag>:<paneId>`, so its render replaces only its own; the mute gate (a snooze, or Nenu open on
+ * a screen) sends nothing. `sessionName` (the registry name) is stamped into the push payload so the
+ * service worker can deep-link to the right session — omit it (undefined) for the primary. Kept here,
+ * decoupled from `Push`/`Snooze`, so the gating and notice→message mapping are unit-testable.
  */
 export function makeNotifySink(
   push: PushSender,
@@ -75,10 +76,6 @@ export function makeNotifySink(
       const msg: PushMessage = { title: n.title, body: n.body, tag: `${herdTag}:${n.paneId}`, paneId: n.paneId, renotify: n.renotify };
       if (sessionName !== undefined) msg.session = sessionName;
       void push.send(msg);
-    },
-    clear: (paneId) => {
-      if (mute.isMuted()) return;
-      void push.send({ type: "clear", tag: `${herdTag}:${paneId}` });
     },
   };
 }
@@ -138,8 +135,10 @@ interface Pending<H> {
 export class NotificationCoordinator<H = unknown> {
   /** paneId → alert that hasn't entered the summary yet. */
   private readonly pending = new Map<string, Pending<H>>();
-  /** paneId → alert that has fired and whose notification is showing. */
+  /** paneId → alert that has fired and whose notification may still be showing. */
   private readonly outstanding = new Map<string, AlertDetail>();
+  /** paneId → when it last notified, and for what; survives its resolution (once until seen). */
+  private readonly notified = new Map<string, { at: number; status: NotifiableStatus }>();
 
   constructor(
     private readonly clock: NotifyClock<H>,
@@ -149,6 +148,9 @@ export class NotificationCoordinator<H = unknown> {
     // behaves exactly like a non-notifiable one (idle/working).
     private readonly policy: NotifyPolicy,
     private readonly describe: DescribeAlert = describeAlert,
+    /** When Nenu last showed this pane to the operator (the activity ledger); undefined when unknown. */
+    private readonly seenAt: (paneId: string) => number | undefined = () => undefined,
+    private readonly now: () => number = Date.now,
   ) {}
 
   /** Wire to `StateEngine.onTransition`. */
@@ -176,8 +178,9 @@ export class NotificationCoordinator<H = unknown> {
     const admit = (alert: AlertDetail) => {
       if (this.pending.get(id) !== entry) return;
       this.pending.delete(id);
-      if (!this.policy.wants(alert)) return;
+      if (!this.policy.wants(alert) || this.alreadyTold(id, alert.status)) return;
       this.outstanding.set(id, alert);
+      this.notified.set(id, { at: this.now(), status: alert.status });
       this.sink.render(notice(id, alert));
     };
     if (detail instanceof Promise) detail.then(admit, () => admit(describeAlert(agent, entry.status)));
@@ -187,6 +190,7 @@ export class NotificationCoordinator<H = unknown> {
   /** Wire to `StateEngine.onRemove` — a vanished pane is implicitly resolved. */
   onRemove(paneId: string): void {
     this.resolve(paneId);
+    this.notified.delete(paneId);
   }
 
   /**
@@ -200,28 +204,33 @@ export class NotificationCoordinator<H = unknown> {
     for (const [id, p] of [...this.pending]) {
       if (!this.policy.maybe(p.status)) this.cancelPending(id);
     }
-    // Close delivered alerts of a now-disabled kind.
+    // Forget delivered alerts of a now-disabled kind; the app closes their notifications when it opens.
     for (const [id, a] of [...this.outstanding]) {
-      if (this.policy.wants(a)) continue;
-      this.outstanding.delete(id);
-      this.sink.clear(id);
+      if (!this.policy.wants(a)) this.outstanding.delete(id);
     }
   }
 
   /**
-   * Tear down this session's notifications: cancel every pending timer and close every outstanding
-   * agent's notification. Called when a session is disposed (its socket vanished) so its alerts never
-   * linger on the lock screen with no live session behind them.
+   * Tear down this session's alerts: cancel every pending timer and forget every outstanding one.
+   * Called when a session is disposed (its socket vanished). Nothing is pushed; the app closes stale
+   * notifications when it opens.
    */
   clearAll(): void {
     for (const id of [...this.pending.keys()]) this.cancelPending(id);
-    for (const id of [...this.outstanding.keys()]) this.sink.clear(id);
     this.outstanding.clear();
   }
 
   private resolve(id: string): void {
     this.cancelPending(id);
-    if (this.outstanding.delete(id)) this.sink.clear(id);
+    this.outstanding.delete(id);
+  }
+
+  /** The same kind of alert for this pane already went out, and nobody has looked at it in Nenu since. */
+  private alreadyTold(id: string, status: NotifiableStatus): boolean {
+    const last = this.notified.get(id);
+    if (!last || last.status !== status) return false;
+    const seen = this.seenAt(id);
+    return seen === undefined || seen < last.at;
   }
 
   private cancelPending(id: string): void {
@@ -234,6 +243,6 @@ export class NotificationCoordinator<H = unknown> {
 
 /** What an agent's notification says: who and what in the title, its answer and where below. */
 function notice(paneId: string, a: AlertDetail): AgentNotice {
-  const verb = a.status === "blocked" ? "needs you" : a.background ? "got a subagent's result" : "finished";
+  const verb = a.status === "blocked" ? "needs you" : a.startedBy === "subagent" ? "got a subagent's result" : "finished";
   return { title: `${a.name} ${verb}`, body: a.summary ? `${a.summary}\n${a.where}` : a.where, paneId, renotify: true };
 }

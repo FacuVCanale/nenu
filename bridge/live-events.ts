@@ -14,6 +14,24 @@ export type { LiveEvent, LiveTopic } from "./types.ts";
 
 export class LiveEvents implements LivePublisher {
   private readonly listeners = new Set<(event: LiveEvent) => void>();
+  private viewers = 0;
+
+  /** Whether some browser has Nenu open on screen: a page closes its stream when it is hidden or
+   *  idle-locked, so an open stream means someone is looking. */
+  watching(): boolean {
+    return this.viewers > 0;
+  }
+
+  /** A page opened its stream; the returned function closes it (idempotent). */
+  joined(): () => void {
+    this.viewers++;
+    let left = false;
+    return () => {
+      if (left) return;
+      left = true;
+      this.viewers--;
+    };
+  }
 
   publish(event: LiveEvent): void {
     for (const listener of this.listeners) listener(event);
@@ -144,9 +162,11 @@ export function liveEventStream(hub: LiveEvents, session: string, options: Strea
         flushTimer ??= setTimeout(flush, flushMs);
       });
       const heartbeat = setInterval(() => send(": ping\n\n"), heartbeatMs);
+      const left = hub.joined();
       stop = () => {
         if (closed) return;
         closed = true;
+        left();
         unsubscribe();
         clearInterval(heartbeat);
         clearTimeout(flushTimer);

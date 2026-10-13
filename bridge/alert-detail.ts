@@ -11,11 +11,16 @@ export type NotifiableStatus = "blocked" | "done";
 /** Who a pane is to the operator: one of a project's threads, its coordinator, or a loose agent. */
 export type AlertKind = "agent" | "thread" | "coordinator";
 
+/** What started the turn that just ended: a person typing, Herdr Organizations' inbox nudge, or a
+ *  subagent's or background task's result. */
+export type TurnStarter = "person" | "organizations" | "subagent";
+
 export interface AlertDetail {
   status: NotifiableStatus;
   kind: AlertKind;
-  /** The turn that just ended was started by a subagent or background task finishing, not by the operator. */
-  background: boolean;
+  startedBy: TurnStarter;
+  /** Nenu sent this pane a message that this finish answers. */
+  requested: boolean;
   /** The thread's id and title, "<project> coordinator", or the pane's own label. */
   name: string;
   /** The project, or the workspace (and tab) the pane runs in. */
@@ -31,8 +36,9 @@ export function describeAlert(
   status: NotifiableStatus,
   projects: readonly OrgProjectView[] = [],
   entries: readonly TranscriptEntry[] | null = null,
+  requested = false,
 ): AlertDetail {
-  const outcome = status === "done" && entries ? turnOutcome(entries) : { background: false };
+  const outcome = { ...(status === "done" && entries ? turnOutcome(entries) : { startedBy: "person" as const }), requested };
   for (const project of projects) {
     if (project.coordinator?.paneId === agent.paneId) {
       return { status, kind: "coordinator", name: `${project.name} coordinator`, where: project.name, ...outcome };
@@ -55,24 +61,32 @@ function names(label: string | undefined, agent: string): label is string {
 /** Titles the CLIs set before the session has a name (measured: Claude Code's). */
 const CLI_TITLES = new Set(["claude code", "claude", "codex", "pi", "opencode", "grok"]);
 
+/** Herdr Organizations writes its inbox nudges into a coordinator's pane with this prefix (its
+ *  `steps.rs`, "the nudge line"), so they arrive as typed text. */
+const ORGANIZATIONS_NUDGE = "[hp inbox]";
+
 /**
  * What started the turn the journal ends with, and the first line of its last answer. Walks back
- * over the turn's answers to the row that started it: the operator's message, or a row a finished
- * background task wrote. Other notes (a skill's prompt, a command's output, "Interrupted") belong to
- * whatever turn they sit in, so the walk passes them.
+ * over the turn's answers to the row that started it: a typed message (a person's, or an
+ * Organizations nudge), or a row a finished background task wrote. Other notes (a skill's prompt, a
+ * command's output, "Interrupted") belong to whatever turn they sit in, so the walk passes them.
  */
-export function turnOutcome(entries: readonly TranscriptEntry[]): { background: boolean; summary?: string } {
+export function turnOutcome(entries: readonly TranscriptEntry[]): { startedBy: TurnStarter; summary?: string } {
   let summary: string | undefined;
+  const result = (startedBy: TurnStarter) => ({ startedBy, ...(summary ? { summary } : {}) });
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i]!;
     if (entry.role === "assistant") {
       summary ??= firstLine(entry.parts.flatMap((part) => (part.kind === "text" ? [part.text] : [])).join("\n"));
       continue;
     }
-    if (entry.role === "user") return { background: false, ...(summary ? { summary } : {}) };
-    if (entry.background) return { background: true, ...(summary ? { summary } : {}) };
+    if (entry.role === "user") {
+      const typed = entry.parts.map((part) => (part.kind === "text" ? part.text : "")).join("").trimStart();
+      return result(typed.startsWith(ORGANIZATIONS_NUDGE) ? "organizations" : "person");
+    }
+    if (entry.background) return result("subagent");
   }
-  return { background: false, ...(summary ? { summary } : {}) };
+  return result("person");
 }
 
 /** The first line that says something, without Markdown's marks, cut on a word to fit a lock screen. */
