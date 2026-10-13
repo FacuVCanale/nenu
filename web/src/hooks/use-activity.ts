@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchActivity, fetchWorkflowDetail, runningCount, type ActivityResponse, type WorkflowDetailResponse } from "@/lib/activity";
 import { concerns, isLiveHealthy, type LiveEvent } from "@/lib/live-events";
+import { keepUnchanged } from "@/lib/utils";
 import { useLivePoll } from "./use-live-poll";
 
 /** Fallback poll: brisk while something runs, relaxed when the session is quiet or the stream is up. */
@@ -44,7 +45,7 @@ export function useActivity(paneId: string, session?: string, enabled = true): A
     enabled,
     deps: [scope, tick],
     read: (signal) => fetchActivity(paneId, session, signal),
-    onRead: (next) => { setData(next); setStale(false); },
+    onRead: (next) => { setData((prev) => keepUnchanged(prev, next)); setStale(false); },
     onFail: () => setStale(true),
     delay: (last) => isLiveHealthy() ? ACTIVITY_POLL_MS.live : anyRunning(last) ? ACTIVITY_POLL_MS.running : ACTIVITY_POLL_MS.quiet,
     wakes: (event) => activityConcerns(event, paneId),

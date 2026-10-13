@@ -13,3 +13,11 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
+
+/**
+ * `next` unless it says exactly what `prev` already says, in which case `prev` — so a polled read that
+ * found nothing new keeps the object React holds and re-renders nothing. Meant for small JSON bodies.
+ */
+export function keepUnchanged<T>(prev: T | null | undefined, next: T): T {
+  return prev != null && JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+}

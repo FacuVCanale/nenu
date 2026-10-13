@@ -30,6 +30,25 @@ describe("useActivity", () => {
     live.stop();
   });
 
+  test("an unchanged re-read keeps the data object; a changed one replaces it", async () => {
+    let reads = 0;
+    let body: typeof fixture.list = fixture.list;
+    server.use(http.get("/api/pane/:id/activity", () => { reads++; return HttpResponse.json(body); }));
+    const live = fakeLiveStream();
+    live.open();
+    const { result } = renderHook(() => useActivity("w1:p1"));
+    await waitFor(() => expect(result.current.data).toEqual(fixture.list));
+    const first = result.current.data;
+    act(() => live.send({ topic: "activity", paneId: "w1:p1" }));
+    await waitFor(() => expect(reads).toBe(2));
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(result.current.data).toBe(first);
+    body = { ...fixture.list, truncated: !fixture.list.truncated };
+    act(() => live.send({ topic: "activity", paneId: "w1:p1" }));
+    await waitFor(() => expect(result.current.data).not.toBe(first));
+    live.stop();
+  });
+
   test("a failed refresh keeps the last data and marks it stale", async () => {
     let fail = false;
     server.use(http.get("/api/pane/:id/activity", () => fail ? new HttpResponse(null, { status: 503 }) : HttpResponse.json(fixture.list)));
