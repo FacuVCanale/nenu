@@ -19,6 +19,19 @@ export function baseName(path: string): string {
   return trimmed.slice(trimmed.lastIndexOf("/") + 1) || trimmed;
 }
 
+/** What each recent-folder chip says: the folder's name ("Home" for home), led by its parent's name
+ *  when another recent folder has the same name. */
+export function shortcutLabels(paths: readonly string[], home: string): string[] {
+  const names = paths.map((p) => baseName(tildePath(p, home)));
+  return paths.map((p, i) => {
+    const short = tildePath(p, home);
+    const name = names[i]!;
+    if (short === "~") return "Home";
+    const parent = short.slice(0, -name.length - 1);
+    return parent && names.indexOf(name) !== names.lastIndexOf(name) ? `${baseName(parent)}/${name}` : name;
+  });
+}
+
 /** The listed folder (as typed, up to the last "/") and the filter after it. "~" alone is home. */
 export function parseQuery(query: string): { dir: string; filter: string } {
   if (query === "~") return { dir: "~", filter: "" };
