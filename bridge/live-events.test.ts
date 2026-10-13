@@ -97,6 +97,19 @@ describe("liveEventStream", () => {
     hub.publish({ session: "s", topic: "snapshot" });
     expect((await reader.read()).done).toBe(true);
   });
+
+  it("counts a page as watching only while its stream is open", async () => {
+    // A page closes its stream when it is hidden or idle-locked, so an open stream means someone is
+    // looking at Nenu and a push to their phone would only repeat what is on screen.
+    const hub = new LiveEvents();
+    expect(hub.watching()).toBe(false);
+    const abort = new AbortController();
+    const reader = liveEventStream(hub, "s", { signal: abort.signal }).getReader();
+    await reader.read();
+    expect(hub.watching()).toBe(true);
+    abort.abort();
+    expect(hub.watching()).toBe(false);
+  });
 });
 
 describe("GET /api/events", () => {

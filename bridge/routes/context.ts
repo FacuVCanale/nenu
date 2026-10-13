@@ -13,6 +13,7 @@ import type { JournalAdapter } from "../journal/types.ts";
 import type { LiveEvents } from "../live-events.ts";
 import type { NotifyPrefsStore } from "../notify-prefs.ts";
 import type { AlertDescriber } from "../notifications.ts";
+import type { AwaitingReplies } from "../awaiting-replies.ts";
 import type { createOperatorCommands } from "../operator-commands.ts";
 import type { createOperatorKeys } from "../operator-keys.ts";
 import type { createOperatorQuickReplies } from "../operator-quick-replies.ts";
@@ -46,6 +47,8 @@ export interface ServerDeps {
 
 /** Everything a route handler may use, built once per server by startServer. */
 export interface Services extends ServerDeps {
+  /** What Nenu sent an agent and has not heard back about (notifications). */
+  awaiting: AwaitingReplies;
   assets: WebAssetArchive;
   operatorCommands: ReturnType<typeof createOperatorCommands>;
   operatorKeys: ReturnType<typeof createOperatorKeys>;

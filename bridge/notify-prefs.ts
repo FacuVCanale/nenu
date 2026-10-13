@@ -5,9 +5,9 @@ import type { AlertDetail } from "./alert-detail.ts";
 import type { AgentStatus } from "./types.ts";
 
 // Which agent lifecycle events are worth a push. A companion to Snooze (the do-not-disturb deadline):
-// where Snooze mutes everything for a while, this decides which *kinds* of alert ever fire. By default
-// only "agent needs your input" (blocked) pushes; every "finished" kind is off — most people don't
-// want a buzz for every completed task, least of all for each subagent result. Bridge-wide (not per-device), like Snooze, because a push fans out to
+// where Snooze mutes everything for a while, this decides which *kinds* of alert ever fire: an agent
+// waiting on you, and a finish that answers a person. Turns the organization runs by itself and
+// subagent results stay quiet (ADR 0072). Bridge-wide (not per-device), like Snooze, because a push fans out to
 // every subscribed device. Persisted to the state dir so a preference survives the `systemctl restart`
 // that backend changes require. Missing file / missing keys fall back to defaults.
 
@@ -15,15 +15,12 @@ import type { AgentStatus } from "./types.ts";
 export interface NotifyPrefs {
   /** Push when any agent becomes blocked (waiting on your input). Default on. */
   blocked: boolean;
-  /** Push when a loose agent (no project's thread or coordinator) finishes a turn you started. Default off. */
-  done: boolean;
-  /** Push when one of a project's threads finishes a turn. Default off; a file from before the split
-   *  keeps its `done` choice. */
-  threads: boolean;
-  /** Push when a project's coordinator finishes a turn. Same default as `threads`. */
-  coordinators: boolean;
+  /** Push when an agent finishes a turn a person started: a message you sent from Nenu, or one typed
+   *  into a loose agent or a coordinator. Never a turn Herdr Organizations' own nudge started, nor a
+   *  thread's turn its coordinator started. Default on. */
+  replies: boolean;
   /** Push when a turn a subagent's or background task's result started finishes. Default off: one
-   *  delegation wakes its parent once per result, which is the noise this switch exists to silence. */
+   *  delegation wakes its parent once per result. */
   subagents: boolean;
   /** Push when a newer Nenu release is available. Default on — the off-switch for update alerts,
    *  which otherwise bypass snooze (an update isn't quiet-hours material). Not an agent alert, so it
@@ -31,27 +28,25 @@ export interface NotifyPrefs {
   updates: boolean;
 }
 
-export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { blocked: true, done: false, threads: false, coordinators: false, subagents: false, updates: true };
+export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { blocked: true, replies: true, subagents: false, updates: true };
 
-export const NOTIFY_PREF_KEYS = ["blocked", "done", "threads", "coordinators", "subagents", "updates"] as const;
+export const NOTIFY_PREF_KEYS = ["blocked", "replies", "subagents", "updates"] as const;
 
 /**
  * Coerce an untrusted parsed value into a {@link NotifyPrefs}, filling any missing or non-boolean key
- * from the defaults. Before the split one `done` switch covered threads and coordinators too, so a
- * file that set it and predates their keys keeps that choice for them. Pure + exported so the
- * file-shape handling is unit-testable.
+ * from the defaults. Before 1.1 a finished turn had three switches (`done`, `threads`,
+ * `coordinators`); a file that set any of them and predates `replies` keeps that choice as `replies`.
+ * Pure + exported so the file-shape handling is unit-testable.
  */
 export function coerceNotifyPrefs(raw: unknown): NotifyPrefs {
   const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
-  const inherited = typeof o.done === "boolean" ? o.done : undefined;
-  const pick = (key: (typeof NOTIFY_PREF_KEYS)[number], fallback = DEFAULT_NOTIFY_PREFS[key]) => (typeof o[key] === "boolean" ? (o[key] as boolean) : fallback);
+  const flag = (key: string) => (typeof o[key] === "boolean" ? (o[key] as boolean) : undefined);
+  const before = ["done", "threads", "coordinators"].map(flag).filter((v): v is boolean => v !== undefined);
   return {
-    blocked: pick("blocked"),
-    done: pick("done"),
-    threads: pick("threads", inherited ?? DEFAULT_NOTIFY_PREFS.threads),
-    coordinators: pick("coordinators", inherited ?? DEFAULT_NOTIFY_PREFS.coordinators),
-    subagents: pick("subagents"),
-    updates: pick("updates"),
+    blocked: flag("blocked") ?? DEFAULT_NOTIFY_PREFS.blocked,
+    replies: flag("replies") ?? (before.length > 0 ? before.some(Boolean) : DEFAULT_NOTIFY_PREFS.replies),
+    subagents: flag("subagents") ?? DEFAULT_NOTIFY_PREFS.subagents,
+    updates: flag("updates") ?? DEFAULT_NOTIFY_PREFS.updates,
   };
 }
 
@@ -79,15 +74,18 @@ export class NotifyPrefsStore {
   /** Whether a transition into `status` could notify at all: the coordinator debounces only these. */
   maybe(status: AgentStatus): boolean {
     if (status === "blocked") return this.prefs.blocked;
-    if (status === "done") return this.prefs.done || this.prefs.threads || this.prefs.coordinators || this.prefs.subagents;
+    if (status === "done") return this.prefs.replies || this.prefs.subagents;
     return false;
   }
 
   /** Whether this alert, once the bridge knows who it is and what started its turn, should push. */
-  wants(alert: Pick<AlertDetail, "status" | "kind" | "background">): boolean {
+  wants(alert: Pick<AlertDetail, "status" | "kind" | "startedBy" | "requested">): boolean {
     if (alert.status === "blocked") return this.prefs.blocked;
-    if (alert.background) return this.prefs.subagents;
-    return alert.kind === "thread" ? this.prefs.threads : alert.kind === "coordinator" ? this.prefs.coordinators : this.prefs.done;
+    if (alert.startedBy === "subagent") return this.prefs.subagents;
+    if (alert.requested) return this.prefs.replies;
+    // Organizations' nudges are its own traffic, and a thread's typed turns come from its coordinator.
+    if (alert.startedBy === "organizations" || alert.kind === "thread") return false;
+    return this.prefs.replies;
   }
 
   /** Merge a partial patch (only booleans are applied), persist, and return the updated prefs. */

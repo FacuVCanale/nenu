@@ -92,18 +92,13 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
 });
 
 // ── Web Push ────────────────────────────────────────────────────────────────────────────────────
-// The branching (suppress vs show vs clear, tag/title/renotify) lives in lib/push-decision so it's
-// unit-tested; here we only parse the event, read client visibility, and run the side effect.
+// The branching (show vs a legacy clear, tag/title/renotify) lives in lib/push-decision so it's
+// unit-tested; here we only parse the event and run the side effect. Every push shows (ADR 0072).
 const ICON = "/nenu-pwa-192x192.png";
 
 self.addEventListener("push", (event: PushEvent) => {
   event.waitUntil(handlePush(event));
 });
-
-async function anyVisibleClient(): Promise<boolean> {
-  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  return windows.some((c) => c.visibilityState === "visible");
-}
 
 /** The dialog an agent alert carries (bridge/notifications.ts interactionAlert). */
 interface PushInteraction {
@@ -127,10 +122,10 @@ async function handlePush(event: PushEvent): Promise<void> {
     payload = { body: event.data?.text() };
   }
 
-  const decision = decidePush(payload, await anyVisibleClient());
-  if (decision.kind === "suppress") return; // a visible Nenu tab already surfaces it in-app
+  const decision = decidePush(payload);
   if (decision.kind === "clear") {
-    // Retraction: close the slot and show nothing. Chrome's silent-push budget tolerates this.
+    // A retraction from a bridge older than 1.1. This one sends none: each counts against iOS's
+    // silent-push quota, and the open app closes what was handled (lib/stale-notifications).
     const stale = await self.registration.getNotifications({ tag: decision.tag });
     for (const n of stale) n.close();
     return;

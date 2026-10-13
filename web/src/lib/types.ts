@@ -537,12 +537,9 @@ export interface BridgeConfig {
 export interface NotifyPrefs {
   /** Push when any agent becomes blocked (waiting on your input). Default on. */
   blocked: boolean;
-  /** Push when a loose agent (outside a project) finishes a turn you started. Default off. */
-  done: boolean;
-  /** Push when a project's thread finishes a turn. */
-  threads: boolean;
-  /** Push when a project's coordinator finishes a turn. */
-  coordinators: boolean;
+  /** Push when an agent finishes a turn a person started (from Nenu, or typed into a loose agent or a
+   *  coordinator); never the organization's own traffic. Default on. */
+  replies: boolean;
   /** Push when a turn a subagent's result started finishes. Default off. */
   subagents: boolean;
   /** Push when a new Nenu version is available (a restart or upgrade is waiting). Default on. */
