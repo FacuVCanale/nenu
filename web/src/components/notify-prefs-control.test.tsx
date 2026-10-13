@@ -11,11 +11,11 @@ import { NotifyPrefsControl } from "@/components/notify-prefs-control";
 // merged prefs back; a failing POST must leave the switch where it started (revert).
 
 let lastPatch: Record<string, unknown> | undefined;
-let currentPrefs: { blocked: boolean; done: boolean; threads: boolean; coordinators: boolean; subagents: boolean; updates: boolean };
+let currentPrefs: { blocked: boolean; replies: boolean; subagents: boolean; updates: boolean };
 
 beforeEach(() => {
   lastPatch = undefined;
-  currentPrefs = { blocked: true, done: false, threads: true, coordinators: false, subagents: false, updates: true };
+  currentPrefs = { blocked: true, replies: false, subagents: false, updates: true };
   server.use(
     http.get("/api/notifications/prefs", () => HttpResponse.json(currentPrefs)),
     http.post("/api/notifications/prefs", async ({ request }) => {
@@ -32,9 +32,7 @@ describe("NotifyPrefsControl", () => {
     const switches = await screen.findAllByRole("switch");
     expect(switches.map((s) => [s.getAttribute("aria-label"), s.getAttribute("aria-checked")])).toEqual([
       ["Needs input", "true"],
-      ["Agents finish", "false"],
-      ["Threads finish", "true"],
-      ["Coordinators answer", "false"],
+      ["Replies to you", "false"],
       ["Subagent results", "false"],
       ["App updates", "true"],
     ]);
@@ -61,11 +59,11 @@ describe("NotifyPrefsControl", () => {
   test("toggling a row POSTs the single-key partial update", async () => {
     const user = userEvent.setup();
     render(<NotifyPrefsControl />);
-    const finished = await screen.findByRole("switch", { name: "Agents finish" });
+    const finished = await screen.findByRole("switch", { name: "Replies to you" });
 
     await user.click(finished);
 
-    await waitFor(() => expect(lastPatch).toEqual({ done: true }));
+    await waitFor(() => expect(lastPatch).toEqual({ replies: true }));
     await waitFor(() => expect(finished).toBeChecked());
   });
 

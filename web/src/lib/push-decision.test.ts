@@ -9,10 +9,8 @@ describe("decidePush", () => {
     expect(decidePush({ type: "clear", tag: "collie:herd" }, true)).toEqual(expected);
   });
 
-  test("suppresses a show when a Nenu tab is visible", () => {
-    expect(decidePush({ title: "claude needs you", tag: "collie:herd" }, true)).toEqual({
-      kind: "suppress",
-    });
+  test("shows even when a Nenu tab is visible: iOS revokes a subscription after a few pushes that show nothing", () => {
+    expect(decidePush({ title: "claude needs you", tag: "collie:herd" }, true).kind).toBe("show");
   });
 
   test("shows with the bridge-provided tag, renotify, and deep-link paneId", () => {

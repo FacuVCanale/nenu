@@ -49,7 +49,7 @@ const taskDone = (uuid: string) => ({
 describe("describeAlert", () => {
   test("a project's thread is named by its title, and placed in its project", () => {
     const d = describeAlert(pane({ paneId: "pt" }), "done", [project]);
-    expect(d).toMatchObject({ kind: "thread", name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", background: false });
+    expect(d).toMatchObject({ kind: "thread", name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", startedBy: "person" });
   });
 
   test("a project's coordinator is named as the project's coordinator", () => {
@@ -72,18 +72,23 @@ describe("describeAlert", () => {
 
   test("a finished turn carries the first line of its last answer", () => {
     const entries = parseClaudeTranscript(jsonl(human("u1", "abrí el html"), answer("a1", "## Listo\n\nEl **HTML** de avance ya está abierto.\nDetalles abajo.")));
-    expect(describeAlert(pane(), "done", [], entries)).toMatchObject({ background: false, summary: "Listo" });
+    expect(describeAlert(pane(), "done", [], entries)).toMatchObject({ startedBy: "person", summary: "Listo" });
   });
 
   test("a turn a subagent's result started is background work", () => {
     const entries = parseClaudeTranscript(jsonl(human("u1", "investigá"), answer("a1", "Lanzo un agente."), taskDone("t1"), answer("a2", "El agente terminó: 3 fuentes.")));
-    expect(describeAlert(pane(), "done", [], entries)).toMatchObject({ background: true, summary: "El agente terminó: 3 fuentes." });
+    expect(describeAlert(pane(), "done", [], entries)).toMatchObject({ startedBy: "subagent", summary: "El agente terminó: 3 fuentes." });
   });
 });
 
 describe("turnOutcome", () => {
+  test("a turn Herdr Organizations' inbox nudge started is the organization's, not yours", () => {
+    const entries = parseClaudeTranscript(jsonl(human("u1", "[hp inbox] t-0093 new report"), answer("a1", "Leí el reporte de t-0093.")));
+    expect(turnOutcome(entries)).toEqual({ startedBy: "organizations", summary: "Leí el reporte de t-0093." });
+  });
+
   test("an empty or unreadable journal is the operator's turn with nothing to quote", () => {
-    expect(turnOutcome([])).toEqual({ background: false });
+    expect(turnOutcome([])).toEqual({ startedBy: "person" });
   });
 
   test("a long first line is cut on a word", () => {
