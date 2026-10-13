@@ -81,6 +81,9 @@ const INLINE_RE = new RegExp(
     "\\*\\*(\\S(?:[^\\n]*?\\S)?)\\*\\*", // 3    bold
     "\\*(\\S(?:[^\\n*]*?\\S)?)\\*", // 4    italic
     "(!?)\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6,7 image or link
+    // 8,9  a bare file:// URL in prose, after a space or an opening bracket, short of the punctuation
+    // that ends a sentence. An agent writes it meaning a link, so it reads as one.
+    "(^|[\\s([{])(file:\\/\\/[^\\s\"'`<>()[\\]{}|\\\\*]*[^\\s\"'`<>()[\\]{}|\\\\*.,;:!?])",
   ].join("|"),
   "g",
 );
@@ -109,7 +112,8 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
-    push({ kind: "text", text: text.slice(last, m.index) });
+    // A bare file URL's match starts at the space or bracket before it, which stays text.
+    push({ kind: "text", text: text.slice(last, m.index + (m[8]?.length ?? 0)) });
     if (m[2] !== undefined) push({ kind: "code", text: m[2] }); // leaf: content is verbatim
     else if (m[3] !== undefined) push({ kind: "bold", spans: parseInline(m[3], depth + 1) });
     else if (m[4] !== undefined) push({ kind: "italic", spans: parseInline(m[4], depth + 1) });
@@ -121,6 +125,9 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
       else if (path) push({ kind: "file", path, spans: parseInline(m[6] || path, depth + 1) });
       else if (href) push({ kind: "link", href, spans: parseInline(m[6] || href, depth + 1) });
       else push({ kind: "text", text: m[0] });
+    } else if (m[9] !== undefined) {
+      const path = localFilePath(m[9]);
+      push(path ? { kind: "file", path, spans: [{ kind: "text", text: m[9] }] } : { kind: "text", text: m[9] });
     }
     last = m.index + m[0].length;
   }
