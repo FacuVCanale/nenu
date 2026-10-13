@@ -40,10 +40,20 @@ export function describeAlert(
     const thread = project.threads.find((t) => t.paneId === agent.paneId);
     if (thread) return { status, kind: "thread", name: `${thread.id} ${thread.title}`.trim(), where: project.name, ...outcome };
   }
-  const name = agent.paneLabel ?? agent.sessionName ?? agent.tabLabel ?? agent.terminalTitle ?? agent.agent;
-  const tab = agent.tabLabel && agent.tabLabel !== name ? ` · ${agent.tabLabel}` : "";
-  return { status, kind: "agent", name, where: `${agent.workspaceLabel}${tab}`, ...outcome };
+  const label = [agent.paneLabel, agent.sessionName, agent.tabLabel, agent.terminalTitle].find((l) => names(l, agent.agent));
+  if (!label) return { status, kind: "agent", name: agent.workspaceLabel, where: "", ...outcome };
+  const tab = names(agent.tabLabel, agent.agent) && agent.tabLabel !== label ? ` · ${agent.tabLabel}` : "";
+  return { status, kind: "agent", name: label, where: `${agent.workspaceLabel}${tab}`, ...outcome };
 }
+
+/** A label that tells a pane apart: not a positional tab number, nor the title the CLI gives itself. */
+function names(label: string | undefined, agent: string): label is string {
+  const l = label?.trim().toLowerCase() ?? "";
+  return l !== "" && !/^\d+$/.test(l) && l !== agent.toLowerCase() && !CLI_TITLES.has(l);
+}
+
+/** Titles the CLIs set before the session has a name (measured: Claude Code's). */
+const CLI_TITLES = new Set(["claude code", "claude", "codex", "pi", "opencode", "grok"]);
 
 /**
  * What started the turn the journal ends with, and the first line of its last answer. Walks back

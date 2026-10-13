@@ -68,14 +68,15 @@ function agentNamed(paneId: string, name: string, status: AgentStatus): AgentVie
     workspaceLabel: "demo",
     workspaceNumber: 1,
     tabId: "w1:t1",
-    agent: name,
+    agent: "claude",
+    paneLabel: name,
     status,
     cwd: "/home/you/demo",
     focused: false,
     kind: "agent",
   };
 }
-const agent = (paneId: string, status: AgentStatus) => agentNamed(paneId, "claude", status);
+const agent = (paneId: string, status: AgentStatus) => agentNamed(paneId, "api", status);
 
 // `prefs` is a live, mutable object the injected policy reads on every call — so a test can flip a
 // preference and call `coord.applyPrefs()` to exercise the runtime-change path. Defaults to both
@@ -106,7 +107,7 @@ describe("NotificationCoordinator — debounce", () => {
     expect(sink.events).toEqual([]); // armed, not yet fired
     clock.fireAll();
     expect(sink.last).toEqual({
-      title: "claude needs you",
+      title: "api needs you",
       body: "demo",
       paneId: "p1",
       renotify: true,
@@ -126,20 +127,20 @@ describe("NotificationCoordinator — debounce", () => {
     const { clock, sink, coord } = setup();
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude finished");
+    expect(sink.last?.title).toBe("api finished");
   });
 });
 
 describe("NotificationCoordinator — coalescing", () => {
   test("two outstanding agents collapse into one digest that buzzes", () => {
     const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "claude", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "codex", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p2", "web", "blocked"), "working", "blocked");
     clock.fireAll();
     // p1 renders as a single, then p2 promotes it to a digest.
     expect(sink.renders.at(-1)).toEqual({
       title: "2 agents need you",
-      body: "claude, codex",
+      body: "api, web",
       paneId: undefined,
       renotify: true,
     });
@@ -147,24 +148,24 @@ describe("NotificationCoordinator — coalescing", () => {
 
   test("a mixed blocked+done herd reads as 'need attention'", () => {
     const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "claude", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "codex", "done"), "working", "done");
+    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p2", "web", "done"), "working", "done");
     clock.fireAll();
     expect(sink.last?.title).toBe("2 agents need attention");
   });
 
   test("resolving one of two sends nothing: a phone re-alerts on every replacement", () => {
     const { clock, sink, coord } = setup();
-    coord.onTransition(agentNamed("p1", "claude", "blocked"), "working", "blocked");
-    coord.onTransition(agentNamed("p2", "codex", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p1", "api", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p2", "web", "blocked"), "working", "blocked");
     clock.fireAll();
     const before = sink.events.length;
-    coord.onTransition(agentNamed("p2", "codex", "idle"), "blocked", "idle"); // codex handled
+    coord.onTransition(agentNamed("p2", "web", "idle"), "blocked", "idle"); // web handled
     expect(sink.events.length).toBe(before);
     // The next new alert still renders the herd as it is now.
-    coord.onTransition(agentNamed("p3", "pi", "blocked"), "working", "blocked");
+    coord.onTransition(agentNamed("p3", "docs", "blocked"), "working", "blocked");
     clock.fireAll();
-    expect(sink.last?.body).toBe("claude, pi");
+    expect(sink.last?.body).toBe("api, docs");
   });
 });
 
@@ -217,7 +218,7 @@ describe("NotificationCoordinator — type preferences", () => {
     coord.onTransition(agent("p1", "done"), "working", "done");
     expect(sink.events).toEqual([]); // still debouncing
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude finished");
+    expect(sink.last?.title).toBe("api finished");
   });
 
   test("with blocked disabled, a blocked transition doesn't push", () => {
@@ -232,7 +233,7 @@ describe("NotificationCoordinator — type preferences", () => {
     const { clock, sink, coord, prefs } = setup({ blocked: true, done: true });
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude finished"); // delivered
+    expect(sink.last?.title).toBe("api finished"); // delivered
     prefs.done = false; // preference changes at runtime…
     coord.applyPrefs(); // …and the API hook re-evaluates the herd
     expect(sink.events.at(-1)).toEqual({ kind: "clear" }); // the done alert is retracted
@@ -253,7 +254,7 @@ describe("NotificationCoordinator — type preferences", () => {
     const { clock, sink, coord } = setup({ blocked: true, done: false });
     coord.onTransition(agent("p1", "blocked"), "working", "blocked");
     clock.fireAll();
-    expect(sink.last?.title).toBe("claude needs you");
+    expect(sink.last?.title).toBe("api needs you");
     // The agent completes, but done pushes are disabled — so this is a non-notifiable transition
     // that resolves (retracts) the outstanding blocked alert rather than replacing it.
     coord.onTransition(agent("p1", "done"), "blocked", "done");

@@ -60,7 +60,14 @@ describe("describeAlert", () => {
     expect(describeAlert(pane({ paneLabel: "pedidos" }), "done").name).toBe("pedidos");
     expect(describeAlert(pane({ sessionName: "fix-login" }), "done").name).toBe("fix-login");
     expect(describeAlert(pane({ tabLabel: "api" }), "done")).toMatchObject({ kind: "agent", name: "api", where: "fisgon" });
-    expect(describeAlert(pane(), "done")).toMatchObject({ name: "claude", where: "fisgon" });
+    expect(describeAlert(pane({ terminalTitle: "Estado del RAG" }), "done")).toMatchObject({ name: "Estado del RAG", where: "fisgon" });
+  });
+
+  test("a positional tab number or the CLI's default title names nobody, so the workspace does", () => {
+    // Measured on a live herd: a tab labelled "1" and a pane titled "Claude Code".
+    expect(describeAlert(pane({ tabLabel: "1", terminalTitle: "Estado del RAG" }), "done").name).toBe("Estado del RAG");
+    expect(describeAlert(pane({ terminalTitle: "Claude Code" }), "done")).toMatchObject({ name: "fisgon", where: "" });
+    expect(describeAlert(pane(), "done")).toMatchObject({ name: "fisgon", where: "" });
   });
 
   test("a finished turn carries the first line of its last answer", () => {
