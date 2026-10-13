@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-14
+
+**Read this if notifications were noisy or stopped arriving on an iPhone.** iOS revokes a web-push subscription after a few pushes that show nothing, and Nenu sent some; it sends none now. Your phone may need Settings → Push notifications turned on once more.
+
+### Changed
+- A finished turn notifies only when a person started it (a message from Nenu, or typed into a loose agent or a coordinator), never Herdr Organizations' own nudges or a coordinator's messages to its threads; once per agent until you look at it. Settings: Needs input, Replies to you, Subagent results, App updates; your Finished choice carries over (ADR 0072). (71b51967)
+
+### Fixed
+- Every push shows a notification: no retraction pushes, no pushes hidden while a tab was visible. Nothing is pushed while Nenu is open on a screen, and the open app closes handled notifications. (71b51967)
+
 ## [1.0.2] - 2026-10-14
 
 ### Fixed
