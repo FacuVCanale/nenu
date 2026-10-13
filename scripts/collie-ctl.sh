@@ -26,7 +26,15 @@ AGENT_FILE="${HOME}/Library/LaunchAgents/${AGENT_LABEL}.plist"
 # fallback), so a setting like COLLIE_SERVE_MODE applied one way and was silently ignored the other.
 # Order: injected env → Herdr CLI → Herdr's conventional path (if it has a .env) → ~/.config/collie.
 resolve_config_dir() {
-  if [ -n "${HERDR_PLUGIN_CONFIG_DIR:-}" ]; then echo "$HERDR_PLUGIN_CONFIG_DIR"; return; fi
+  # `update-major` runs under the old id, so Herdr hands that run the herdr.collie dir; this script
+  # is herdr.nenu, so it takes the sibling, and migrate_legacy_config fills it.
+  if [ -n "${HERDR_PLUGIN_CONFIG_DIR:-}" ]; then
+    case "$HERDR_PLUGIN_CONFIG_DIR" in
+      */"$LEGACY_PLUGIN_ID") echo "${HERDR_PLUGIN_CONFIG_DIR%/*}/${PLUGIN_ID}" ;;
+      *) echo "$HERDR_PLUGIN_CONFIG_DIR" ;;
+    esac
+    return
+  fi
   if command -v herdr >/dev/null; then
     local d; d="$(herdr plugin config-dir "$PLUGIN_ID" 2>/dev/null || true)"
     if [ -n "$d" ]; then echo "$d"; return; fi
@@ -40,9 +48,11 @@ CONFIG_DIR="$(resolve_config_dir)"
 # Herdr keys a plugin's config dir by its id, so the first run as herdr.nenu starts on an empty dir:
 # no .env, and no record of the tailscale mapping this install owns. Copy over what the herdr.collie
 # dir holds that the new one lacks, once — a marker keeps a file the operator later deletes deleted.
-# The old dir is left as it was.
+# The old dir is left as it was. Only a run Herdr or the service hands a config dir is the installed
+# plugin: a dev checkout's `bun run build` asks the herdr CLI, which names a dir for any id, and
+# copying then would snapshot the live config before the install has moved.
 migrate_legacy_config() {
-  [ "${CONFIG_DIR##*/}" = "$PLUGIN_ID" ] || return 0
+  [ -n "${HERDR_PLUGIN_CONFIG_DIR:-}" ] && [ "${CONFIG_DIR##*/}" = "$PLUGIN_ID" ] || return 0
   local legacy="${CONFIG_DIR%/*}/${LEGACY_PLUGIN_ID}" marker="${CONFIG_DIR}/.migrated-from-${LEGACY_PLUGIN_ID}" entry
   [ -d "$legacy" ] && [ ! -e "$marker" ] || return 0
   mkdir -p "$CONFIG_DIR"
