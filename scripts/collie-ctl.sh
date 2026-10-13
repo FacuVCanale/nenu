@@ -1457,6 +1457,8 @@ cmd_version() { collie_version; }
 cmd_push_test() {
   [ -n "$BUN" ] || { echo "error: bun not found on PATH" >&2; exit 1; }
   export_bridge_env
+  # The subscriptions live in the supervised bridge's state dir, not the one Herdr hands this action.
+  drop_action_state_dir
   "$BUN" run "${PLUGIN_ROOT}/scripts/push-test.ts" "$@"
 }
 
