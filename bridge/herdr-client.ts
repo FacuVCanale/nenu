@@ -133,6 +133,8 @@ export interface WireAgent {
   state_change_seq?: number | null;
   /** Bumps when an idle transition completed work. */
   completion_seq?: number | null;
+  /** The agent's Herdr name: set by `herdr agent start <name>` (and `herdr agent rename`). */
+  name?: string | null;
 }
 
 /** What `ping` reports about the server. `protocol` gates newer subscription types. */

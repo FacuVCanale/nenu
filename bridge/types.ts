@@ -28,6 +28,9 @@ export interface AgentView {
   kind?: "agent" | "shell";
   /** User-set pane label (herdr `pane.rename`), when one is set; absent when the pane is unlabelled. */
   paneLabel?: string;
+  /** The agent's Herdr name, which `herdr agent start <name>` sets; another agent started it, as far
+   *  as Herdr can tell today (it records no launcher). Absent for an unnamed agent. */
+  agentName?: string;
   /**
    * Claude's OWN session name, set in-agent via `/rename` and read out of the pane's rendered text
    * (see `extractClaudeSessionName` in state-engine.ts). Claude-only and derived, not a wire field —

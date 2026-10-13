@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { object } from "../bridge/subagent-files.ts";
 import { loadConfig } from "../bridge/config.ts";
 import { defaultSettingsPath, pluginRoot, updateClaudeSettings } from "./install-claude-hooks.ts";
+import { stableBun } from "./bun-path.ts";
 
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 export function subagentHookSettings(settings: unknown, command: string): Record<string, unknown> {
@@ -27,7 +28,7 @@ if (import.meta.main) {
   const settingsPath = process.argv[2] ?? defaultSettingsPath();
   const stateDir = process.argv[3] ?? loadConfig().stateDir;
   const script = join(pluginRoot("subagent-hook.ts"), "scripts", "subagent-hook.ts");
-  const command = [process.execPath, script, stateDir].map(quote).join(" ");
+  const command = [stableBun(), script, stateDir].map(quote).join(" ");
   await updateClaudeSettings(settingsPath, (settings) => subagentHookSettings(settings, command), "nenu-backup");
   console.log(`Nenu subagent hooks installed from ${script}; existing hooks preserved.`);
 }

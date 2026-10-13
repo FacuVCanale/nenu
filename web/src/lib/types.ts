@@ -540,6 +540,8 @@ export interface NotifyPrefs {
   /** Push when an agent finishes a turn a person started (from Nenu, or typed into a loose agent or a
    *  coordinator); never the organization's own traffic. Default on. */
   replies: boolean;
+  /** Push when an agent another agent started finishes a turn that agent typed. Default off. */
+  launched: boolean;
   /** Push when a turn a subagent's result started finishes. Default off. */
   subagents: boolean;
   /** Push when a new Nenu version is available (a restart or upgrade is waiting). Default on. */

@@ -19,6 +19,10 @@ export interface NotifyPrefs {
    *  into a loose agent or a coordinator. Never a turn Herdr Organizations' own nudge started, nor a
    *  thread's turn its coordinator started. Default on. */
   replies: boolean;
+  /** Push when an agent another agent started (`herdr agent start <name>`) finishes a turn that agent
+   *  typed. Default off: the agent that launched it is the one waiting. A message you sent it from
+   *  Nenu still counts as Replies to you. */
+  launched: boolean;
   /** Push when a turn a subagent's or background task's result started finishes. Default off: one
    *  delegation wakes its parent once per result. */
   subagents: boolean;
@@ -28,9 +32,9 @@ export interface NotifyPrefs {
   updates: boolean;
 }
 
-export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { blocked: true, replies: true, subagents: false, updates: true };
+export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { blocked: true, replies: true, launched: false, subagents: false, updates: true };
 
-export const NOTIFY_PREF_KEYS = ["blocked", "replies", "subagents", "updates"] as const;
+export const NOTIFY_PREF_KEYS = ["blocked", "replies", "launched", "subagents", "updates"] as const;
 
 /**
  * Coerce an untrusted parsed value into a {@link NotifyPrefs}, filling any missing or non-boolean key
@@ -45,6 +49,7 @@ export function coerceNotifyPrefs(raw: unknown): NotifyPrefs {
   return {
     blocked: flag("blocked") ?? DEFAULT_NOTIFY_PREFS.blocked,
     replies: flag("replies") ?? (before.length > 0 ? before.some(Boolean) : DEFAULT_NOTIFY_PREFS.replies),
+    launched: flag("launched") ?? DEFAULT_NOTIFY_PREFS.launched,
     subagents: flag("subagents") ?? DEFAULT_NOTIFY_PREFS.subagents,
     updates: flag("updates") ?? DEFAULT_NOTIFY_PREFS.updates,
   };
@@ -74,17 +79,19 @@ export class NotifyPrefsStore {
   /** Whether a transition into `status` could notify at all: the coordinator debounces only these. */
   maybe(status: AgentStatus): boolean {
     if (status === "blocked") return this.prefs.blocked;
-    if (status === "done") return this.prefs.replies || this.prefs.subagents;
+    if (status === "done") return this.prefs.replies || this.prefs.launched || this.prefs.subagents;
     return false;
   }
 
   /** Whether this alert, once the bridge knows who it is and what started its turn, should push. */
-  wants(alert: Pick<AlertDetail, "status" | "kind" | "startedBy" | "requested">): boolean {
+  wants(alert: Pick<AlertDetail, "status" | "kind" | "startedBy" | "requested" | "launched">): boolean {
     if (alert.status === "blocked") return this.prefs.blocked;
     if (alert.startedBy === "subagent") return this.prefs.subagents;
     if (alert.requested) return this.prefs.replies;
     // Organizations' nudges are its own traffic, and a thread's typed turns come from its coordinator.
     if (alert.startedBy === "organizations" || alert.kind === "thread") return false;
+    // An agent another agent started: that agent typed this turn, and it is the one waiting.
+    if (alert.launched) return this.prefs.launched;
     return this.prefs.replies;
   }
 
