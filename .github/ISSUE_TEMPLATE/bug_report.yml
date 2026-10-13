@@ -24,9 +24,16 @@ body:
       required: true
   - type: input
     attributes:
+      label: Herdr version
+      description: Run `herdr --version`.
+      placeholder: herdr 0.9.4
+    validations:
+      required: true
+  - type: input
+    attributes:
       label: Environment
-      description: Host OS, browser/device, Herdr version, install method, and deployment variant.
-      placeholder: macOS 15, iPhone Safari 18, Herdr 0.7.0, linked clone, Tailscale Serve
+      description: Host OS, device and browser (say if Nenu runs as an installed PWA), install method, and deployment variant.
+      placeholder: macOS 15, iPhone 15 iOS 18.6 installed PWA, linked clone, Tailscale Serve
     validations:
       required: true
   - type: textarea
@@ -41,7 +48,14 @@ body:
       required: true
   - type: textarea
     attributes:
-      label: Expected behavior
+      label: Expected and actual behavior
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Screenshot or recording
+      description: Required for anything visible. Drag a screenshot here, or a short screen recording for a gesture, a flow or something that changes over time. Remove private data first.
     validations:
       required: true
   - type: textarea

@@ -10,6 +10,21 @@ privacy, and compatibility take priority over convenience.
 - Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
 - Remove usernames, hostnames, paths, tokens, pane output, and repository content from logs and images.
 
+## What an issue includes
+
+A report someone else can reproduce without asking you anything:
+
+- **Versions.** Nenu (`herdr plugin action invoke version --plugin herdr.nenu`), Herdr
+  (`herdr --version`), the host OS, and the device and browser, including whether Nenu runs as an
+  installed PWA.
+- **Steps.** A numbered sequence from a known starting screen, then what you expected and what
+  happened instead.
+- **Evidence.** For anything visible, a screenshot; for a gesture, a flow or something that changes
+  over time (a notification, an animation, a state that does not update), a short screen recording.
+  Logs only with private data removed.
+- **Feature requests** say what you are trying to get done, and a sketch or recording of the
+  current behavior helps more than a description.
+
 ## Development setup
 
 Requirements: Bun, Git, and Herdr 0.7.0 or newer. Tailscale is needed only for device testing through
@@ -73,8 +88,20 @@ body so it can be included in release notes.
 
 ## Pull requests
 
-Use a clear Conventional Commit title. Explain the problem, resulting behavior, validation, and
-risk. Include current screenshots for visible UI changes. Keep unrelated refactors separate.
+Use a clear Conventional Commit title and fill in every section of the
+[pull request template](.github/PULL_REQUEST_TEMPLATE.md). A pull request is reviewable when it
+carries:
+
+| Section | What it needs |
+| --- | --- |
+| What and why | The problem, who hits it, what changes for the operator, and the issue it closes. |
+| Versions tested | Nenu version or commit, Herdr version, host OS, device and browser. |
+| How to reproduce and try it | Numbered steps a reviewer follows. For a fix, the steps that failed before and pass now. |
+| Evidence | A fix of something visible: screenshots before and after, same screen and size. A new feature or interaction: a short screen recording of the whole flow on a phone-sized screen. Bridge or script only: the command and its output, or the test that proves it. |
+| Validation | The checks you ran and where you tried it for real. |
+| Risk and rollback | Compatibility, security, migration, and how to undo it. |
+
+Keep unrelated refactors separate. Remove private data from every image and recording.
 
 By contributing, you agree that your contribution is licensed under the repository's MIT License and
 to follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

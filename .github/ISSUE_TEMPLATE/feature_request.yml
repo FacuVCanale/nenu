@@ -23,6 +23,17 @@ body:
       description: Describe the outcome and interaction, including mobile behavior when relevant.
     validations:
       required: true
+  - type: input
+    attributes:
+      label: Versions
+      description: Nenu (`herdr plugin action invoke version --plugin herdr.nenu`) and Herdr (`herdr --version`) you use today.
+      placeholder: Nenu 1.0.1+9301dfa0, herdr 0.9.4
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Screenshot, sketch or recording
+      description: The current screen or flow, and a sketch of what you would like if you have one. A short screen recording for a flow or gesture.
   - type: textarea
     attributes:
       label: Alternatives and compatibility
