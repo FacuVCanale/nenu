@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.65.2] - 2026-10-13
+
+### Fixed
+- Choose a folder shows home's folders at once on a phone: recent folders are one row of chips instead of a column that pushed the list below Use. (62be8db0)
+- A bare `file:///…` path in an agent's reply is a link that opens the file in Nenu. (911f2f15)
+
 ## [0.65.1] - 2026-10-12
 
 ### Added
