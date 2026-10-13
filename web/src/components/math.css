@@ -1,0 +1,57 @@
+/* The part of Temml's Temml-Local.css (MIT) that WebKit and Chromium need for the classes Temml emits,
+   without its web font: math draws in the system math font. Loaded with the lazy math chunk. */
+math {
+  font-family: "Cambria Math", "STIX Two Math", "STIXTwoMath-Regular", "Noto Sans Math", math;
+  font-style: normal;
+  font-weight: normal;
+  line-height: normal;
+  letter-spacing: normal;
+  text-indent: 0;
+  text-transform: none;
+  direction: ltr;
+}
+math * {
+  border-color: currentColor;
+}
+math.tml-display {
+  display: block;
+}
+/* Cramped superscripts in WebKit */
+mfrac > :nth-child(2),
+msqrt,
+mover > :first-child {
+  math-shift: compact;
+}
+/* Italic correction on superscripts */
+.tml-sml-pad { padding-left: 0.05em; }
+.tml-med-pad { padding-left: 0.1em; }
+.tml-lrg-pad { padding-left: 0.15em; }
+/* Array cell justification (aligned, cases) */
+.tml-right { text-align: right; }
+.tml-left { text-align: left; }
+/* Cell padding. The app's CSS reset zeroes MathML Core's 0.5ex row padding, and Temml writes its column
+   gaps as inline padding, which lib/mathml.ts drops: half a gap on each side of an inner edge
+   (matrices, arrays; 1em between the columns of `cases`), none on the outer edges, and flush cells in
+   aligned and stacked rows. */
+mtd { padding: 0.5ex 0.5em; }
+mtd:first-child { padding-left: 0; }
+mtd:last-child { padding-right: 0; }
+mtable.tml-jot > mtr > mtd { padding: 0.7ex 0; }
+mtable.tml-small mtd { padding: 0.35ex 0; }
+@supports (-webkit-backdrop-filter: blur(1px)) {
+  /* WebKit vertical and italic correction on accents */
+  .wbk-acc { transform: translate(0em, 0.431em); }
+  .wbk-sml { transform: translate(0.07em, 0); }
+  .wbk-sml-acc { transform: translate(0.07em, 0.431em); }
+  .wbk-sml-vec { transform: scale(0.75) translate(0.07em, 0); }
+  .wbk-med { transform: translate(0.14em, 0); }
+  .wbk-med-acc { transform: translate(0.14em, 0.431em); }
+  .wbk-med-vec { transform: scale(0.75) translate(0.14em, 0); }
+  .wbk-lrg { transform: translate(0.21em, 0); }
+  .wbk-lrg-acc { transform: translate(0.21em, 0.431em); }
+  .wbk-lrg-vec { transform: scale(0.75) translate(0.21em, 0); }
+}
+@supports (not (-webkit-backdrop-filter: blur(1px))) and (not (-moz-appearance: none)) {
+  .tml-right { text-align: -webkit-right; }
+  .tml-left { text-align: -webkit-left; }
+}
