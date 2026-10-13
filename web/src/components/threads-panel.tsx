@@ -1,23 +1,72 @@
 import { useState, type ReactNode } from "react";
-import { Activity, ArrowLeft, BookText, GitPullRequest, MessageSquare } from "lucide-react";
+import {
+  Activity, ArrowLeft, BookText, Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitMerge, GitPullRequest,
+  GitPullRequestClosed, GitPullRequestDraft, MessageSquare, MessageSquareWarning, type LucideIcon,
+} from "lucide-react";
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
-import { NodeDot } from "@/components/node-row";
-import { ProjectTasks, canMerge, prSummary, threadAge } from "@/components/project-tasks";
+import { ProjectTasks, canMerge, threadAge } from "@/components/project-tasks";
 import { MergeDialog } from "@/components/thread-cards";
 import { Button } from "@/components/ui/button";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
-import { nodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type PanelTab = "threads" | "prs" | "activity" | "memory";
 
-/** Threads with a pull request, open ones first. */
-export function prThreads(threads: readonly ProjectThreadView[]): ProjectThreadView[] {
-  const rank = { open: 0, draft: 1, merged: 2, closed: 3 } as const;
-  return threads.filter((thread) => thread.pr).sort((a, b) => rank[a.pr!.state] - rank[b.pr!.state]);
+/**
+ * What a pull request waits on, what needs you first: the order of the open list. Words come only
+ * from what Organizations reported; a PR it has read nothing about is just "Open".
+ */
+const PR_STATUS = {
+  ready: { icon: GitMerge, tone: "text-status-done" },
+  approved: { icon: CircleCheck, tone: "text-status-done" },
+  review: { icon: Eye, tone: "text-primary" },
+  passed: { icon: Check, tone: "text-status-done" },
+  changes: { icon: MessageSquareWarning, tone: "text-status-blocked" },
+  failing: { icon: CircleX, tone: "text-status-blocked" },
+  running: { icon: CircleDashed, tone: "text-status-working" },
+  open: { icon: GitPullRequest, tone: "text-muted-foreground" },
+  draft: { icon: GitPullRequestDraft, tone: "text-muted-foreground" },
+  merged: { icon: GitMerge, tone: "text-violet-400" },
+  closed: { icon: GitPullRequestClosed, tone: "text-muted-foreground" },
+  unread: { icon: GitPullRequest, tone: "text-muted-foreground" },
+} satisfies Record<string, { icon: LucideIcon; tone: string }>;
+type PrStatus = keyof typeof PR_STATUS;
+const OPEN_ORDER = Object.keys(PR_STATUS) as PrStatus[];
+
+function prStatus(thread: ProjectThreadView): { status: PrStatus; label: string } {
+  const pr = thread.pr!;
+  if (pr.state === "merged") return { status: "merged", label: "Merged" };
+  if (pr.state === "closed") return { status: "closed", label: "Closed" };
+  // Organizations stops reading a PR once its thread is resolved, so its state is as of then.
+  if (thread.status === "resolved") return { status: "unread", label: `Last seen ${pr.state}` };
+  if (pr.state === "draft") return { status: "draft", label: "Draft" };
+  const checks = pr.checks;
+  const total = checks ? checks.passed + checks.failed + checks.pending : 0;
+  if (checks?.failed) return { status: "failing", label: `${checks.failed} ${checks.failed === 1 ? "check" : "checks"} failing` };
+  if (pr.review === "changes_requested") return { status: "changes", label: "Changes requested" };
+  if (checks?.pending) return { status: "running", label: `Checks running ${checks.passed}/${total}` };
+  if (pr.mergeBlocker === null) return { status: "ready", label: "Ready to merge" };
+  if (pr.review === "approved") return { status: "approved", label: "Approved" };
+  if (pr.review === "review_required") return { status: "review", label: "Needs review" };
+  return total ? { status: "passed", label: "Checks passed" } : { status: "open", label: "Open" };
+}
+
+/**
+ * Threads with a pull request, split as the organization is: open PRs of open threads, what needs
+ * you first, and a History of the merged, the closed and those of resolved threads, newest first.
+ */
+export function prLists(threads: readonly ProjectThreadView[]): { open: ProjectThreadView[]; history: ProjectThreadView[] } {
+  const withPr = threads.filter((thread) => thread.pr);
+  const current = (thread: ProjectThreadView) => thread.status !== "resolved" && (thread.pr!.state === "open" || thread.pr!.state === "draft");
+  const rank = (thread: ProjectThreadView) => OPEN_ORDER.indexOf(prStatus(thread).status);
+  const updated = (thread: ProjectThreadView) => Date.parse(thread.updated ?? "") || 0;
+  return {
+    open: withPr.filter(current).sort((a, b) => rank(a) - rank(b)),
+    history: withPr.filter((thread) => !current(thread)).sort((a, b) => updated(b) - updated(a)),
+  };
 }
 
 /** The pull requests of a set of threads; one Organizations can merge offers Merge, which asks first. */
@@ -32,32 +81,42 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
   now?: number;
 }) {
   const [merging, setMerging] = useState<ProjectThreadView | null>(null);
-  const list = prThreads(threads);
-  if (list.length === 0) return <p className="py-3 text-sm text-muted-foreground">No pull requests yet.</p>;
-  return <>
-    <ul className="task-list">
-      {list.map((thread) => {
-        const body = <>
-          <NodeDot state={nodeState(thread)} className="mt-1.5 size-2" />
+  const [historyShown, setHistoryShown] = useState(false);
+  const { open, history } = prLists(threads);
+  if (open.length === 0 && history.length === 0) return <p className="py-3 text-sm text-muted-foreground">No pull requests yet.</p>;
+  const row = (thread: ProjectThreadView, past: boolean) => {
+    const pr = thread.pr!;
+    const { status, label } = prStatus(thread);
+    const { icon: Icon, tone } = PR_STATUS[status];
+    const age = threadAge(thread, now);
+    return (
+      <li key={thread.id} className="task-row">
+        <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>
+          <span data-pr-status={status} className="mt-0.5 flex shrink-0"><Icon aria-hidden className={cn("size-3.5", tone)} /></span>
           <span className="min-w-0 flex-1">
-            <span className="block break-words text-sm font-medium">{thread.title}</span>
-            <span className="block truncate text-xs text-muted-foreground">{prSummary(thread.pr!)}</span>
+            <span className={cn("block break-words text-sm font-medium", past && "text-muted-foreground")}>{thread.title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{pr.number !== undefined ? `PR #${pr.number}` : "PR"} · {label}</span>
           </span>
-          {thread.pr!.diff && <span className="shrink-0 font-mono text-xs tabular-nums">
-            <span className="text-status-done">+{thread.pr!.diff.additions}</span> <span className="text-status-blocked">−{thread.pr!.diff.deletions}</span>
-          </span>}
-          {!thread.pr!.diff && threadAge(thread, now) && <span className="shrink-0 text-xs text-muted-foreground">{threadAge(thread, now)}</span>}
-        </>;
-        return (
-          <li key={thread.id} className="task-row">
-            <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>{body}</button>
-            {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
-            {!readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
-              onClick={() => setMerging(thread)}>Merge</Button>}
-          </li>
-        );
-      })}
-    </ul>
+          {pr.diff ? <span className="shrink-0 font-mono text-xs tabular-nums">
+            <span className="text-status-done">+{pr.diff.additions}</span> <span className="text-status-blocked">−{pr.diff.deletions}</span>
+          </span> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}
+        </button>
+        {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
+        {!past && !readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
+          onClick={() => setMerging(thread)}>Merge</Button>}
+      </li>
+    );
+  };
+  return <>
+    {open.length > 0
+      ? <ul className="task-list mb-2" aria-label="Open pull requests">{open.map((thread) => row(thread, false))}</ul>
+      : <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No thread has an open pull request.</p>}
+    {history.length > 0 && <>
+      <button type="button" className="task-history-toggle" aria-expanded={historyShown} onClick={() => setHistoryShown(!historyShown)}>
+        <ChevronRight aria-hidden className="size-3.5" />History · {history.length}
+      </button>
+      {historyShown && <ul className="task-list task-history mb-2" aria-label="History">{history.map((thread) => row(thread, true))}</ul>}
+    </>}
     <MergeDialog project={project} thread={merging} session={session} onMerged={() => { setMerging(null); onChanged(); }} onCancel={() => setMerging(null)} />
   </>;
 }

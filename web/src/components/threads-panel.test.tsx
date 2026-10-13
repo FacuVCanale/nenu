@@ -35,7 +35,7 @@ it("lists only the open PRs of open threads; a resolved thread's PR and a merged
 
 it("says nothing is open when every PR is in History", () => {
   renderList([thread("T1", "Old", { number: 7, state: "merged" }, { status: "resolved" })]);
-  expect(screen.getByText("No open pull requests.")).toBeInTheDocument();
+  expect(screen.getByText("No thread has an open pull request.")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "History · 1" })).toBeInTheDocument();
 });
 
