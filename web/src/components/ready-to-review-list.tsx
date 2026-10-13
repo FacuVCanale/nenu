@@ -10,7 +10,7 @@ import type { ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { nodePath, panePath } from "@/lib/nav";
-import { cn } from "@/lib/utils";
+import { cn, keepUnchanged } from "@/lib/utils";
 import type { AgentView } from "@/lib/types";
 
 /** How many Claude panes Home reads background work for, most recently active first. */
@@ -43,7 +43,10 @@ export function useHomeActivity(agents: readonly AgentView[], session?: string):
       if (disposed || document.hidden || isLocked()) return;
       try {
         const res = await fetchActivity(paneId, session, controller.signal);
-        if (!disposed) setByPane((prev) => new Map(prev).set(paneId, res));
+        if (!disposed) setByPane((prev) => {
+          const kept = keepUnchanged(prev.get(paneId), res);
+          return kept === prev.get(paneId) ? prev : new Map(prev).set(paneId, kept);
+        });
       } catch {
         // A failed read keeps what was last known; the next poll tries again.
       }

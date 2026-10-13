@@ -18,7 +18,7 @@ import { PaneWatcher } from "./pane-watcher.ts";
 import { PaneWrites } from "./pane-writes.ts";
 import { ProjectRegistry } from "./projects.ts";
 import { PullRequestRegistry } from "./pull-requests.ts";
-import { QueueService } from "./queue-service.ts";
+import { freshAgentView, QueueService } from "./queue-service.ts";
 import { isLoopbackPeer } from "./routes/access.ts";
 import type { ServerDeps, Services } from "./routes/context.ts";
 import { WEB_DIR, text } from "./routes/http.ts";
@@ -71,10 +71,9 @@ export function startServer(opts: ServerDeps) {
     let original = snapshot.agents.find(pane => pane.paneId === paneId);
     if (!original) return null;
     if (fresh) {
-      const live = (await rt.herdr.listPanes()).find(pane => pane.pane_id === paneId);
-      if (!live || live.agent !== original.agent) return null;
-      const ref = live.agent_session;
-      original = { ...original, status: live.agent_status, agentSession: ref?.kind === "id" && typeof ref.value === "string" && (!ref.agent || ref.agent === original.agent) ? { kind: "id", value: ref.value } : undefined };
+      const live = await freshAgentView(rt.herdr, original);
+      if (!live) return null;
+      original = live;
     }
     return { pane: agentStates.attach(session, await conversations.resolve(original, rt.herdr, session)), herdr: rt.herdr, connected: snapshot.bridge === "connected" };
   }, async (row, text, submit, requestId, paste) => {

@@ -7,7 +7,7 @@ import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMod
 import { computeEtag } from "./http-cache.ts";
 import { object } from "./subagent-files.ts";
 import type { ActionResponse, AgentView, DeliveryMode } from "./types.ts";
-import type { HerdrClient } from "./herdr-client.ts";
+import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
 import type { JournalFacts } from "./journal/types.ts";
 import type { AuditLog } from "./audit.ts";
 import type { SendHerdr } from "./guarded-send.ts";
@@ -44,6 +44,28 @@ const BUSY_RETRY_MS = 300;
 
 /** A delivery's mark on its scope: the herd's state counter, or the status when Herdr has none. */
 type TurnMark = { seq?: number; status: string; at: number };
+
+/**
+ * `original` as Herdr reports its pane right now: its status and the session ref its own agent
+ * reported. Null when the pane is gone or another agent runs in it. One `pane.get`, not the whole
+ * herd: the queue asks this on every read and delivery check.
+ */
+export async function freshAgentView(herdr: Pick<HerdrClient, "getPane">, original: AgentView): Promise<AgentView | null> {
+  let live;
+  try {
+    live = await herdr.getPane(original.paneId);
+  } catch (err) {
+    if (herdrErrorCode(err) === "pane_not_found") return null;
+    throw err;
+  }
+  if (!live || live.agent !== original.agent) return null;
+  const ref = live.agent_session;
+  return {
+    ...original,
+    status: live.agent_status,
+    agentSession: ref?.kind === "id" && typeof ref.value === "string" && (!ref.agent || ref.agent === original.agent) ? { kind: "id", value: ref.value } : undefined,
+  };
+}
 
 export class QueueService {
   private queue: MessageQueue;

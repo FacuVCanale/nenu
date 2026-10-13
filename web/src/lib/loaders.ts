@@ -270,11 +270,15 @@ const lastHomeData = new Map<string, HomeData>();
 async function loadHome(session: string | undefined, request: Request | undefined): Promise<HomeData> {
   try {
     const snap = await fetchSnapshot(session, request?.signal);
+    // A 304 hands back the snapshot already on screen; the same herd object then keeps every view's
+    // memoised work. The write-through below still runs, so its date stays the last confirmed read.
+    const previous = lastHomeData.get(session ?? "");
+    const unchanged = snap === lastSnapshot.get(session ?? "") && previous && !previous.error;
     lastSnapshot.set(session ?? "", snap);
     // Write-through: the same body, dated, in a store that outlives this page (lib/last-seen.ts).
     saveLastSnapshot(session, snap);
     rememberAuthError(session, false);
-    return toHomeData(snap, session, false);
+    return unchanged ? previous : toHomeData(snap, session, false);
   } catch (e) {
     if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
     rememberAuthError(session, isAuthError(e));

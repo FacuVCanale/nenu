@@ -1,6 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, test } from "bun:test";
 import { join } from "node:path";
-import { QueueService } from "./queue-service.ts";
+import { freshAgentView, QueueService } from "./queue-service.ts";
+import type { HerdrClient } from "./herdr-client.ts";
+import type { AgentView } from "./types.ts";
 
 const repoFile = (path: string) => Bun.file(join(import.meta.dirname, "..", path)).text();
 
@@ -443,4 +445,37 @@ it("without an audit trail the queue presses no key of its own: Codex waits for 
     expect(added.body.messages[0]).toMatchObject({ id: "later", waitingFor: "working" });
     expect(t.pane.keys).toEqual([]);
   } finally { await t.close(); }
+});
+
+describe("freshAgentView", () => {
+  const original = { paneId: "w1:p1", agent: "claude", status: "idle", agentSession: { kind: "id", value: "old" } } as AgentView;
+  const herdrWith = (pane: Record<string, unknown> | Error) => ({
+    calls: 0,
+    async getPane(paneId: string) {
+      this.calls++;
+      expect(paneId).toBe("w1:p1");
+      if (pane instanceof Error) throw pane;
+      return pane as unknown as Awaited<ReturnType<HerdrClient["getPane"]>>;
+    },
+  });
+
+  test("reads the one pane and carries Herdr's status and session ref", async () => {
+    const herdr = herdrWith({ pane_id: "w1:p1", agent: "claude", agent_status: "working", agent_session: { kind: "id", value: "new", agent: "claude" } });
+    expect(await freshAgentView(herdr, original)).toMatchObject({ status: "working", agentSession: { kind: "id", value: "new" } });
+    expect(herdr.calls).toBe(1);
+  });
+
+  test("drops a session ref another agent reported", async () => {
+    const herdr = herdrWith({ pane_id: "w1:p1", agent: "claude", agent_status: "idle", agent_session: { kind: "id", value: "x", agent: "codex" } });
+    expect((await freshAgentView(herdr, original))?.agentSession).toBeUndefined();
+  });
+
+  test("is null when the pane is gone or now runs another agent", async () => {
+    expect(await freshAgentView(herdrWith(new Error("herdr pane.get: pane_not_found: no pane w1:p1")), original)).toBeNull();
+    expect(await freshAgentView(herdrWith({ pane_id: "w1:p1", agent: "codex", agent_status: "idle" }), original)).toBeNull();
+  });
+
+  test("any other Herdr failure still rejects", async () => {
+    await expect(freshAgentView(herdrWith(new Error("herdr pane.get: timed out after 5000ms")), original)).rejects.toThrow("timed out");
+  });
 });

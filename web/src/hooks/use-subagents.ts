@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchSubagents, isApiErrorStatus } from "@/lib/api";
 import { concerns } from "@/lib/live-events";
 import type { SubagentsResponse, SubagentView } from "@/lib/types";
+import { keepUnchanged } from "@/lib/utils";
 import { useLivePoll } from "./use-live-poll";
 
 /** A subagent opened in place of the main conversation, tied to the parent session it came from. */
@@ -62,7 +63,7 @@ export function useSubagents({ paneId, session, enabled, open = false, selected 
       }
     },
     onRead: (next) => {
-      setList(next);
+      setList((prev) => keepUnchanged(prev, next));
       setStale(false);
       const key = next.available ? next.sessionKey : null;
       const changed = loadedKey.current !== null && loadedKey.current !== key;

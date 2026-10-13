@@ -390,6 +390,13 @@ describe("EventPoker — output watches", () => {
     client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" }, tokens: { thread: "t1" } } });
     await sleep(15);
     expect(pokes.length).toBe(3);
+    client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" }, tokens: { thread: "t1", role: "worker" } } });
+    await sleep(15);
+    expect(pokes.length).toBe(4);
+    // Herdr returns a pane's tokens in no fixed order (live-observed); the same tokens are no change.
+    client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" }, tokens: { role: "worker", thread: "t1" } } });
+    await sleep(15);
+    expect(pokes.length).toBe(4);
     poker.stop();
   });
 });

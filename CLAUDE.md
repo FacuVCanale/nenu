@@ -69,8 +69,9 @@ line — do it as part of the change, not after**:
 **Tag the release when you push it.** Cutting a release means the three version files + the newest
 `CHANGELOG.md` heading agree on `x.y.z` (steps 1–3). When that release lands on `main` and you push,
 **always push a matching annotated git tag with it** — `git tag -a vX.Y.Z -m "Nenu X.Y.Z" && git
-push origin vX.Y.Z` (or `git push --follow-tags` so the tag ships *with* the release). One `v<x.y.z>`
-tag per shipped version on the remote. Not hook-enforced — it's on you. (Adding/adjusting this note is
+push origin refs/tags/vX.Y.Z`. Never `--tags` or `--follow-tags`: a clone inherited Collie's
+`v1.x` tags, which are reachable from `main`, and one on the remote would become the release
+`update-major` picks. One `v<x.y.z>` tag per shipped version on the remote. Not hook-enforced — it's on you. (Adding/adjusting this note is
 a doc-only change and needs no version bump.)
 
 **Update notice (user-facing).** The app's in-app update banner links to the newest release's GitHub
@@ -191,6 +192,9 @@ the unit name; the Herdr action runs from anywhere.
 
 - RPC is **one-shot**: one request per connection; the server closes after one reply. `id` must be
   a **string**. Only `events.subscribe` streams.
+- **What the bridge copies out of a Herdr map comes out in its allowlist's order**, never in the order
+  Herdr sent it: Herdr reorders map keys between reads, and the snapshot ETag, live events and the
+  poker all compare JSON ([ADR 0069](./.adr/0069-copies-of-herdr-maps-come-out-in-a-fixed-order.md)).
 - `pane.send_keys` grammar is **`+`-joined, not tmux**: `ctrl+c` (NOT `C-c`), `shift+tab`, `Up`,
   `Tab`, `Escape`, `Enter`, `Backspace`. `PageUp`/`Home`/`End`/`Delete` are unsupported.
 - **A long send to Claude is verified via its paste placeholder** — anything past Claude's paste

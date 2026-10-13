@@ -329,11 +329,28 @@ function req<T>(path: string, init?: RequestInit, recover?: Recover<T>, timeoutO
   return method === "GET" ? op : trackBusy(op);
 }
 
+// The last snapshot per session with its ETag, under the same two invariants as the pane cache below.
+// The bridge answers an unchanged herd 304, and the caller then gets this very object back.
+const snapshotCache = new Map<string, { etag: string; snap: SnapshotResponse }>();
+
 export async function fetchSnapshot(
   session?: string,
   signal?: AbortSignal,
 ): Promise<SnapshotResponse> {
-  const snap = await req<SnapshotResponse>(withSession("/api/snapshot", session), { signal });
+  const cached = snapshotCache.get(session ?? "");
+  const res = await apiFetch(withSession("/api/snapshot", session), {
+    signal: withTimeout(signal, GET_TIMEOUT_MS),
+    headers: { [XHR_HEADER]: XHR_HEADER_VALUE, ...(cached ? { "if-none-match": cached.etag } : {}) },
+  });
+  captureBuild(res);
+  let snap: SnapshotResponse;
+  if (res.status === 304 && cached) snap = cached.snap;
+  else {
+    if (!res.ok) throw await apiError(res);
+    snap = (await res.json()) as SnapshotResponse;
+    const etag = res.headers.get("etag");
+    if (etag) snapshotCache.set(session ?? "", { etag, snap });
+  }
   // A snapshot whose herd link is UP is a provably-live moment — stamp the shared connection-health
   // anchor so escalation is measured from here. A snapshot that 200s but reports `bridge:
   // "disconnected"` is NOT live (the pill/banner still escalate on it), so it must NOT reset the
