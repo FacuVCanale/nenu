@@ -297,22 +297,29 @@ describe("Push — per-message collapse topic (update must not share the herd sl
     const push = new Push(cfg, sender);
     enable(push, [sub("a")]);
 
-    await push.send({ title: "claude needs you", body: "…", tag: "collie:herd", paneId: "w1:p1" });
+    await push.send({ title: "claude needs you", body: "…", tag: "collie:herd:w1:p1", paneId: "w1:p1" });
 
     // `urgency: "high"` is not cosmetic: at web-push's default (`normal`) FCM lets Android defer the
     // message by Doze / App Standby bucket, which silently ate alerts entirely. See push.ts.
-    expect(sends[0]!.options).toEqual({ topic: "collie-herd", TTL: 21_600, urgency: "high" });
+    expect(sends[0]!.options).toMatchObject({ TTL: 21_600, urgency: "high" });
+    expect(topicIsSendable(sends[0]!.options.topic)).toBe(true);
     expect("target" in JSON.parse(sends[0]!.payload).data).toBe(false);
   });
 
-  test("a clear stays on the herd topic (it closes the herd slot)", async () => {
+  test("each agent's notification has its own collapse topic, and its clear shares it", async () => {
+    // A fixed topic would let a reconnecting phone receive only the last of several agents' alerts.
     const cfg = await tempCfg();
     const { sender, sends } = capturing();
     const push = new Push(cfg, sender);
     enable(push, [sub("a")]);
 
-    await push.send({ type: "clear", tag: "collie:herd" });
-    expect(sends[0]!.options.topic).toBe("collie-herd");
+    await push.send({ title: "a", body: "", tag: "collie:herd:w1:p1", paneId: "w1:p1" });
+    await push.send({ title: "b", body: "", tag: "collie:herd:w1:p2", paneId: "w1:p2" });
+    await push.send({ type: "clear", tag: "collie:herd:w1:p1" });
+    const [p1, p2, clear] = sends.map((s) => s.options.topic);
+    expect(p1).not.toBe(p2);
+    expect(clear).toBe(p1);
+    for (const t of [p1!, p2!]) expect(topicIsSendable(t)).toBe(true);
     // A deferred retraction is as bad as a deferred alert — it strands handled work on the lock
     // screen — so a clear is high-urgency too.
     expect(sends[0]!.options.urgency).toBe("high");
