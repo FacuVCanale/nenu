@@ -1634,4 +1634,88 @@ test_claude_hooks_are_opt_in_and_reversible() {
 }
 test_claude_hooks_are_opt_in_and_reversible
 
+# 1.0 renamed the plugin herdr.collie → herdr.nenu. Herdr keys a plugin's config dir by its id and
+# re-reads the id from the manifest, so an upgraded install wakes up on an empty dir while the old
+# service still holds the port. `start` must carry the config over, retire the old service, and the
+# registry refresh must drop the old key — or the operator is left with no .env, no tailscale record,
+# a bridge the new service can never replace, and a phantom registration.
+test_renamed_plugin_takes_over_from_herdr_collie() {
+  setup_case rename
+  local root="${CASE_DIR}/plugins-config"
+  local legacy="${root}/herdr.collie" current="${root}/herdr.nenu"
+  mkdir -p "$legacy" "${HOME_DIR}/Library/LaunchAgents" "${HOME_DIR}/.config/systemd/user"
+  printf 'COLLIE_PORT=8799\n' > "${legacy}/.env"
+  chmod 600 "${legacy}/.env"
+  printf 'https:443|http://127.0.0.1:8799\n' > "${legacy}/tailscale-managed-handler"
+  printf '[[command]]\n' > "${legacy}/commands.toml"
+  local old_plist="${HOME_DIR}/Library/LaunchAgents/herdr.collie.plist"
+  local old_unit="${HOME_DIR}/.config/systemd/user/collie.service"
+  : > "$old_plist"
+  local systemctl_calls="${CASE_DIR}/systemctl.calls" herdr_calls="${CASE_DIR}/herdr.calls"
+
+  local harness="${CASE_DIR}/rename.sh"
+  cat > "$harness" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export HOME="$HOME_DIR"
+export HERDR_PLUGIN_CONFIG_DIR="$current"
+export PATH="$BIN_DIR:$BASE_PATH"
+source "$CTL"
+ensure_build() { return 0; }
+have_systemd() { [ "\${SUPERVISOR:-}" = systemd ]; }
+have_launchd() { [ "\${SUPERVISOR:-}" = launchd ]; }
+systemctl() { echo "\$*" >> "$systemctl_calls"; }
+BUN=/bin/true
+cmd_serve() { return 0; }
+print_status_banner() { echo "PORT=\$PORT"; }
+cmd_start
+EOF
+  SUPERVISOR=launchd bash "$harness" > "${CASE_DIR}/rename.out" 2>&1 || fail "start failed on a herdr.collie install"
+
+  assert_eq "$(cat "${current}/.env")" "COLLIE_PORT=8799"
+  local mode; mode="$(stat -c '%a' "${current}/.env" 2>/dev/null || stat -f '%Lp' "${current}/.env")"
+  assert_eq "$mode" "600"
+  assert_contains "$(cat "${CASE_DIR}/rename.out")" "PORT=8799"
+  [ -f "${current}/tailscale-managed-handler" ] || fail "the tailscale ownership record was not carried over"
+  [ -f "${legacy}/.env" ] || fail "the old config dir must stay as it was"
+  [ ! -e "$old_plist" ] || fail "the herdr.collie LaunchAgent was left to reload at login"
+  [ -f "${HOME_DIR}/Library/LaunchAgents/herdr.nenu.plist" ] || fail "no herdr.nenu LaunchAgent"
+  local calls; calls="$(cat "$LAUNCHCTL_CALLS")"
+  assert_contains "$calls" "bootout gui/$(id -u)/herdr.collie"
+  assert_contains "$calls" "bootstrap gui/$(id -u) ${HOME_DIR}/Library/LaunchAgents/herdr.nenu.plist"
+
+  # Copied once: a file the operator removes from the new dir afterwards stays removed.
+  rm "${current}/commands.toml"
+  SUPERVISOR=launchd bash "$harness" > /dev/null 2>&1 || fail "a second start failed"
+  [ ! -e "${current}/commands.toml" ] || fail "the migration copied the old config again"
+
+  # systemd: the old `collie` unit is stopped, disabled and removed before `nenu` starts.
+  : > "$old_unit"
+  SUPERVISOR=systemd bash "$harness" > /dev/null 2>&1 || fail "start failed on a systemd host with a collie unit"
+  [ ! -e "$old_unit" ] || fail "the collie unit was left behind"
+  [ -f "${HOME_DIR}/.config/systemd/user/nenu.service" ] || fail "no nenu unit"
+  calls="$(cat "$systemctl_calls")"
+  assert_contains "$calls" "--user disable --now collie"
+  assert_contains "$calls" "--user enable --now nenu"
+
+  # The registry: a re-link registers herdr.nenu and the stale herdr.collie key goes, unless a
+  # checkout somewhere still declares herdr.collie.
+  cat > "${BIN_DIR}/herdr" <<FAKE
+#!/bin/sh
+echo "\$*" >> "$herdr_calls"
+[ "\$1 \$2" = "plugin list" ] && printf '{"result":{"plugins":[{"plugin_id":"%s"}]}}\n' "\$LISTED"
+exit 0
+FAKE
+  chmod +x "${BIN_DIR}/herdr"
+  local registry="${CASE_DIR}/registry.sh"
+  printf '#!/usr/bin/env bash\nset -euo pipefail\nexport HOME="%s" HERDR_PLUGIN_CONFIG_DIR="%s" PATH="%s:%s"\nsource "%s"\nrefresh_registry\n' \
+    "$HOME_DIR" "$current" "$BIN_DIR" "$BASE_PATH" "$CTL" > "$registry"
+  LISTED=herdr.nenu bash "$registry" > /dev/null 2>&1 || fail "refresh_registry failed"
+  assert_contains "$(cat "$herdr_calls")" "plugin unlink herdr.collie"
+  : > "$herdr_calls"
+  LISTED=herdr.collie bash "$registry" > /dev/null 2>&1 || fail "refresh_registry failed"
+  case "$(cat "$herdr_calls")" in *"unlink herdr.collie"*) fail "unlinked a checkout that still declares herdr.collie" ;; esac
+}
+test_renamed_plugin_takes_over_from_herdr_collie
+
 echo "collie-ctl lifecycle tests: passed"
