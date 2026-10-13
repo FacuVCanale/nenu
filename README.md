@@ -85,6 +85,19 @@ herdr plugin action invoke start --plugin herdr.nenu
 See the [complete user guide](docs/USER_GUIDE.md) for configuration, first-run output, Web Push,
 updates, uninstalling, and troubleshooting.
 
+To finish the setup with Claude Code or Codex, link the
+[onboarding skill](skills/nenu-onboarding/SKILL.md) from the plugin checkout and run it on this
+host. It checks the bridge, the tailnet front door, the access gates, Web Push, the Claude hooks and
+status line, your operator files and updates, reports what is done and what is missing, and offers
+to complete each missing item through the plugin actions:
+
+```bash
+ROOT="$(herdr plugin list --json | jq -r '.result.plugins[] | select(.plugin_id == "herdr.nenu") | .plugin_root')"
+mkdir -p ~/.claude/skills ~/.codex/skills
+ln -s "$ROOT/skills/nenu-onboarding" ~/.claude/skills/   # Claude Code: /nenu-onboarding
+ln -s "$ROOT/skills/nenu-onboarding" ~/.codex/skills/    # Codex: $nenu-onboarding
+```
+
 ## Common operations
 
 ```bash

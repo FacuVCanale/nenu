@@ -182,6 +182,11 @@ On the phone: your agents are listed, and the footer build stamp (`vX.Y.Z · deb
 `scripts/collie-ctl.sh version`. If the page loads but stays empty, that's the same-origin gate —
 see [Troubleshooting](#troubleshooting).
 
+An agent can walk the rest of the setup for you: the
+[onboarding skill](../skills/nenu-onboarding/SKILL.md) checks identity, Web Push, the Claude hooks
+and status line, your operator files and updates on this host, and offers to finish each missing
+item. The [README](../README.md#install) shows how to make it available to Claude Code and Codex.
+
 ## Projects and chat controls
 
 Nenu discovers registered Herdr Projects automatically. Open a project from Overview or the sidebar
