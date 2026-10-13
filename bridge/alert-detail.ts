@@ -21,6 +21,8 @@ export interface AlertDetail {
   startedBy: TurnStarter;
   /** Nenu sent this pane a message that this finish answers. */
   requested: boolean;
+  /** A loose agent another agent started (it has a Herdr name); a project's panes never count. */
+  launched: boolean;
   /** The thread's id and title, "<project> coordinator", or the pane's own label. */
   name: string;
   /** The project, or the workspace (and tab) the pane runs in. */
@@ -38,7 +40,7 @@ export function describeAlert(
   entries: readonly TranscriptEntry[] | null = null,
   requested = false,
 ): AlertDetail {
-  const outcome = { ...(status === "done" && entries ? turnOutcome(entries) : { startedBy: "person" as const }), requested };
+  const outcome = { ...(status === "done" && entries ? turnOutcome(entries) : { startedBy: "person" as const }), requested, launched: false };
   for (const project of projects) {
     if (project.coordinator?.paneId === agent.paneId) {
       return { status, kind: "coordinator", name: `${project.name} coordinator`, where: project.name, ...outcome };
@@ -47,9 +49,10 @@ export function describeAlert(
     if (thread) return { status, kind: "thread", name: `${thread.id} ${thread.title}`.trim(), where: project.name, ...outcome };
   }
   const label = [agent.paneLabel, agent.sessionName, agent.tabLabel, agent.terminalTitle].find((l) => names(l, agent.agent));
-  if (!label) return { status, kind: "agent", name: agent.workspaceLabel, where: "", ...outcome };
+  const loose = { ...outcome, launched: agent.agentName !== undefined };
+  if (!label) return { status, kind: "agent", name: agent.workspaceLabel, where: "", ...loose };
   const tab = names(agent.tabLabel, agent.agent) && agent.tabLabel !== label ? ` · ${agent.tabLabel}` : "";
-  return { status, kind: "agent", name: label, where: `${agent.workspaceLabel}${tab}`, ...outcome };
+  return { status, kind: "agent", name: label, where: `${agent.workspaceLabel}${tab}`, ...loose };
 }
 
 /** A label that tells a pane apart: not a positional tab number, nor the title the CLI gives itself. */

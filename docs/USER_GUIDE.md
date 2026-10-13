@@ -734,11 +734,13 @@ browser won't even offer the subscribe button — Settings flags it `insecure`.
 Nenu pushes when an agent **needs your input**, and when an agent **finishes something a person
 asked**: a message you sent from Nenu, or text typed into a loose agent or a coordinator. It does not
 push for Herdr Organizations' own back-and-forth (its inbox nudges and a coordinator's messages to
-its threads) or, unless you switch it on, for a subagent's result. Each agent gets its own
+its threads) or, unless you switch them on, for a subagent's result or for an agent another agent
+started with `herdr agent start <name>` (Nenu treats an agent with a Herdr name as one; a message you
+send it from Nenu still notifies). Each agent gets its own
 notification, and only once until you look at it in Nenu; **tapping it opens Nenu at that agent**.
 Nothing is pushed while Nenu is open on a screen, and the app closes the notifications you have
-handled when it opens. Settings → **Notify when** has Needs input, Replies to you, Subagent results
-and App updates.
+handled when it opens. Settings → **Notify when** has Needs input, Replies to you, Agents started by an
+agent, Subagent results and App updates.
 
 ## Troubleshooting
 

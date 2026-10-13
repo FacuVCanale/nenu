@@ -11,11 +11,11 @@ import { NotifyPrefsControl } from "@/components/notify-prefs-control";
 // merged prefs back; a failing POST must leave the switch where it started (revert).
 
 let lastPatch: Record<string, unknown> | undefined;
-let currentPrefs: { blocked: boolean; replies: boolean; subagents: boolean; updates: boolean };
+let currentPrefs: { blocked: boolean; replies: boolean; launched: boolean; subagents: boolean; updates: boolean };
 
 beforeEach(() => {
   lastPatch = undefined;
-  currentPrefs = { blocked: true, replies: false, subagents: false, updates: true };
+  currentPrefs = { blocked: true, replies: false, launched: false, subagents: false, updates: true };
   server.use(
     http.get("/api/notifications/prefs", () => HttpResponse.json(currentPrefs)),
     http.post("/api/notifications/prefs", async ({ request }) => {
@@ -33,6 +33,7 @@ describe("NotifyPrefsControl", () => {
     expect(switches.map((s) => [s.getAttribute("aria-label"), s.getAttribute("aria-checked")])).toEqual([
       ["Needs input", "true"],
       ["Replies to you", "false"],
+      ["Agents started by an agent", "false"],
       ["Subagent results", "false"],
       ["App updates", "true"],
     ]);

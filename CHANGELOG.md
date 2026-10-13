@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-14
+
+### Added
+- Agents started by an agent: an agent launched with `herdr agent start <name>` stays quiet when it finishes a turn its launcher typed, unless you switch this on; a message you send it from Nenu still notifies. (e04eed80)
+
+### Fixed
+- The status line and subagent hooks keep working after `brew upgrade bun`: the installers write the bun on PATH, not the versioned keg. (e04eed80)
+
 ## [1.1.0] - 2026-10-14
 
 **Read this if notifications were noisy or stopped arriving on an iPhone.** iOS revokes a web-push subscription after a few pushes that show nothing, and Nenu sent some; it sends none now. Your phone may need Settings → Push notifications turned on once more.

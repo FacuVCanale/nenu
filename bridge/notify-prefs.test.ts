@@ -21,7 +21,7 @@ afterAll(async () => {
 });
 
 describe("coerceNotifyPrefs", () => {
-  const fresh = { blocked: true, replies: true, subagents: false, updates: true };
+  const fresh = { blocked: true, replies: true, launched: false, subagents: false, updates: true };
   test("fills missing / non-boolean keys from defaults", () => {
     expect(coerceNotifyPrefs(undefined)).toEqual(fresh);
     expect(coerceNotifyPrefs({ blocked: false, updates: 0 })).toEqual({ ...fresh, blocked: false });
@@ -35,7 +35,7 @@ describe("coerceNotifyPrefs", () => {
 });
 
 describe("NotifyPrefsStore.wants", () => {
-  const done = { status: "done" as const, kind: "agent" as const, startedBy: "person" as const, requested: false, name: "x", where: "y" };
+  const done = { status: "done" as const, kind: "agent" as const, startedBy: "person" as const, requested: false, launched: false, name: "x", where: "y" };
   test("a finished turn notifies only when it answers a person, never the organization's own traffic", async () => {
     const store = new NotifyPrefsStore(await tempCfg());
     expect(store.wants(done)).toBe(true);
@@ -49,6 +49,15 @@ describe("NotifyPrefsStore.wants", () => {
     expect(store.wants({ ...done, startedBy: "subagent" })).toBe(true);
     expect(store.wants(done)).toBe(false);
     expect(store.wants({ ...done, status: "blocked" })).toBe(true);
+  });
+
+  test("an agent another agent started stays quiet unless you asked it from Nenu or switch it on", async () => {
+    const store = new NotifyPrefsStore(await tempCfg());
+    expect(store.wants({ ...done, launched: true })).toBe(false);
+    expect(store.wants({ ...done, launched: true, requested: true })).toBe(true);
+    expect(store.wants({ ...done, launched: true, status: "blocked" })).toBe(true);
+    await store.set({ launched: true });
+    expect(store.wants({ ...done, launched: true })).toBe(true);
   });
 
   test("a finished turn may notify while Replies or Subagent results is on", async () => {
@@ -71,12 +80,12 @@ describe("NotifyPrefsStore", () => {
     const cfg = await tempCfg();
     const store = new NotifyPrefsStore(cfg);
     const updated = await store.set({ replies: true, updates: false });
-    expect(updated).toEqual({ blocked: true, replies: true, subagents: false, updates: false });
+    expect(updated).toEqual({ blocked: true, replies: true, launched: false, subagents: false, updates: false });
 
     // Round-trips through disk: a fresh store reloads the same values (survives a restart).
     const reloaded = new NotifyPrefsStore(cfg);
     await reloaded.load();
-    expect(reloaded.current()).toEqual({ blocked: true, replies: true, subagents: false, updates: false });
+    expect(reloaded.current()).toEqual({ blocked: true, replies: true, launched: false, subagents: false, updates: false });
   });
 
   test("current() returns a copy — callers can't mutate the store's state", async () => {
@@ -100,7 +109,7 @@ describe("NotifyPrefsStore", () => {
     await writeFile(join(cfg.stateDir, "notify-prefs.json"), JSON.stringify({ blocked: false }));
     const store = new NotifyPrefsStore(cfg);
     await store.load();
-    expect(store.current()).toEqual({ blocked: false, replies: true, subagents: false, updates: true });
+    expect(store.current()).toEqual({ blocked: false, replies: true, launched: false, subagents: false, updates: true });
   });
 
   test("load tolerates a missing file (keeps defaults)", async () => {

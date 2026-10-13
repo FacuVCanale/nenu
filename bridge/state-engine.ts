@@ -354,6 +354,7 @@ export class StateEngine {
           // completion_seq; the list-call fallback has neither).
           ...(typeof counters?.state_change_seq === "number" ? { stateChangeSeq: counters.state_change_seq } : {}),
           ...(typeof counters?.completion_seq === "number" ? { completionSeq: counters.completion_seq } : {}),
+          ...(typeof counters?.name === "string" && counters.name !== "" ? { agentName: counters.name } : {}),
         };
       };
 

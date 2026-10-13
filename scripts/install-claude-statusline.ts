@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { object } from "../bridge/subagent-files.ts";
 import { loadConfig } from "../bridge/config.ts";
 import { defaultSettingsPath, pluginRoot, updateClaudeSettings } from "./install-claude-hooks.ts";
+import { stableBun } from "./bun-path.ts";
 
 const WRAPPER = "/scripts/claude-statusline.ts";
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -41,7 +42,7 @@ if (import.meta.main) {
   const script = join(pluginRoot("claude-statusline.ts"), "scripts", "claude-statusline.ts");
   await updateClaudeSettings(
     path,
-    (settings) => claudeStatuslineSettings(settings, process.execPath, script, stateDir),
+    (settings) => claudeStatuslineSettings(settings, stableBun(), script, stateDir),
     "nenu-statusline-backup",
   );
   console.log(`Nenu native Claude metrics installed from ${script}; existing status line preserved.`);
