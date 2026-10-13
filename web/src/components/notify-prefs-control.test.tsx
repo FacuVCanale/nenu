@@ -11,11 +11,11 @@ import { NotifyPrefsControl } from "@/components/notify-prefs-control";
 // merged prefs back; a failing POST must leave the switch where it started (revert).
 
 let lastPatch: Record<string, unknown> | undefined;
-let currentPrefs: { blocked: boolean; done: boolean; updates: boolean };
+let currentPrefs: { blocked: boolean; done: boolean; threads: boolean; coordinators: boolean; subagents: boolean; updates: boolean };
 
 beforeEach(() => {
   lastPatch = undefined;
-  currentPrefs = { blocked: true, done: false, updates: true };
+  currentPrefs = { blocked: true, done: false, threads: true, coordinators: false, subagents: false, updates: true };
   server.use(
     http.get("/api/notifications/prefs", () => HttpResponse.json(currentPrefs)),
     http.post("/api/notifications/prefs", async ({ request }) => {
@@ -27,14 +27,24 @@ beforeEach(() => {
 });
 
 describe("NotifyPrefsControl", () => {
-  test("renders the fetched prefs onto the switches", async () => {
+  test("renders the fetched prefs onto one switch per kind", async () => {
     render(<NotifyPrefsControl />);
-    const needs = await screen.findByRole("switch", { name: /needs input/i });
-    const finished = await screen.findByRole("switch", { name: /finished/i });
-    const updates = await screen.findByRole("switch", { name: /app updates/i });
-    expect(needs).toBeChecked(); // blocked default on
-    expect(finished).not.toBeChecked(); // done default off
-    expect(updates).toBeChecked(); // updates default on
+    const switches = await screen.findAllByRole("switch");
+    expect(switches.map((s) => [s.getAttribute("aria-label"), s.getAttribute("aria-checked")])).toEqual([
+      ["Needs input", "true"],
+      ["Agents finish", "false"],
+      ["Threads finish", "true"],
+      ["Coordinators answer", "false"],
+      ["Subagent results", "false"],
+      ["App updates", "true"],
+    ]);
+  });
+
+  test("turning on Subagent results POSTs only that key", async () => {
+    const user = userEvent.setup();
+    render(<NotifyPrefsControl />);
+    await user.click(await screen.findByRole("switch", { name: "Subagent results" }));
+    await waitFor(() => expect(lastPatch).toEqual({ subagents: true }));
   });
 
   test("toggling App updates POSTs the single-key partial update", async () => {
@@ -51,7 +61,7 @@ describe("NotifyPrefsControl", () => {
   test("toggling a row POSTs the single-key partial update", async () => {
     const user = userEvent.setup();
     render(<NotifyPrefsControl />);
-    const finished = await screen.findByRole("switch", { name: /finished/i });
+    const finished = await screen.findByRole("switch", { name: "Agents finish" });
 
     await user.click(finished);
 
