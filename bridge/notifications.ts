@@ -4,17 +4,15 @@ import type { PushMessage } from "./push.ts";
 import type { AgentStatus, AgentView, Interaction } from "./types.ts";
 
 // A notification shouldn't be fire-and-forget. This coordinator gives every blocked/done alert a
-// lifecycle and collapses the herd into a single, always-accurate notification:
+// lifecycle, and each agent its own notification (.adr/0070):
 //
 //   • Debounce + cancel — an agent that blocks and unblocks within the window (you handled it at your
 //     desk) never reaches your phone. Herdr exposes no "user present" signal (only a `focused` pane,
 //     no activity timestamp), so we infer presence: a quickly-resolved transition is an at-desk one.
-//   • Coalesce — instead of N stacked notifications, we keep ONE summary of everything currently
-//     outstanding: the named agent when exactly one needs you, or "N agents need you" for several.
-//     Each change re-renders that single summary; when the last one resolves, we clear it.
-//   • Retract — clearing the last outstanding agent (at the PC, or its pane closing) removes the
-//     summary. Clearing one of several sends nothing: a phone re-alerts on every replacement, so a
-//     shrinking digest buzzed once per handled agent. The next new alert re-renders the herd as it is.
+//   • One per agent — each agent's alert is its own notification, tagged by its pane, saying who it is,
+//     what it answered and where. A herd digest ("3 agents finished") rewrote one slot on every new
+//     alert, so each agent's arrival buzzed a count that named nobody.
+//   • Retract — an agent handled at the PC (or its pane closing) closes its own notification only.
 //   • Name — each alert says who it is to the operator (a project's thread or coordinator, else the
 //     pane's own label), what started its turn, and the first line of what it answered
 //     (alert-detail.ts). A turn a subagent's result started answers to its own switch.
@@ -29,23 +27,23 @@ export interface NotifyClock<H> {
   cancel(handle: H): void;
 }
 
-/** The current state of the herd's single notification, derived from everything outstanding. */
-export interface HerdSummary {
-  /** Headline: "t-0093 Mi Cúcula pedidos finished" for one, or "3 agents need you" for several. */
+/** One agent's notification. */
+export interface AgentNotice {
+  /** Who and what: "t-0093 Mi Cúcula pedidos finished", "api needs you". */
   title: string;
-  /** Sub-line: what it answered and where for one outstanding alert, or who for a digest. */
+  /** What it answered (first line) and where it runs. */
   body: string;
-  /** Deep-link target when exactly one alert is outstanding; undefined for a multi-agent digest. */
-  paneId?: string;
-  /** Re-alert (buzz) the device — true when a new alert arrived, false on a silent retraction update. */
+  /** The agent's pane: the notification's slot and its deep-link target. */
+  paneId: string;
+  /** Alert (buzz) the device. */
   renotify: boolean;
 }
 
 export interface NotifySink {
-  /** Render (or replace) the herd's single notification. */
-  render(summary: HerdSummary): void;
-  /** Close the herd notification — nothing is outstanding any more. */
-  clear(): void;
+  /** Show (or replace) this agent's notification. */
+  render(notice: AgentNotice): void;
+  /** Close this agent's notification. */
+  clear(paneId: string): void;
 }
 
 /** Just the transport the sink needs — "deliver this message to the devices". */
@@ -58,12 +56,12 @@ export interface MuteGate {
 }
 
 /**
- * Build the {@link NotifySink} the coordinator drives. One session's whole herd shares one
- * notification slot (`herdTag`), so a render replaces rather than stacks; an active snooze mutes both
- * render and clear (nothing is shown, so there's nothing to close). `sessionName` (the registry name)
- * is stamped into the push payload so the service worker can deep-link to the right session — omit it
- * (undefined) for the primary, keeping its payload byte-identical to the single-session case. Kept
- * here, decoupled from `Push`/`Snooze`, so the gating + summary→message mapping is unit-testable.
+ * Build the {@link NotifySink} the coordinator drives. Each agent gets its own notification slot,
+ * `<herdTag>:<paneId>`, so its render replaces only its own; an active snooze mutes both render and
+ * clear (nothing is shown, so there's nothing to close). `sessionName` (the registry name) is stamped
+ * into the push payload so the service worker can deep-link to the right session — omit it
+ * (undefined) for the primary. Kept here, decoupled from `Push`/`Snooze`, so the gating and
+ * notice→message mapping are unit-testable.
  */
 export function makeNotifySink(
   push: PushSender,
@@ -72,15 +70,15 @@ export function makeNotifySink(
   sessionName?: string,
 ): NotifySink {
   return {
-    render: (s) => {
+    render: (n) => {
       if (mute.isMuted()) return;
-      const msg: PushMessage = { title: s.title, body: s.body, tag: herdTag, paneId: s.paneId, renotify: s.renotify };
+      const msg: PushMessage = { title: n.title, body: n.body, tag: `${herdTag}:${n.paneId}`, paneId: n.paneId, renotify: n.renotify };
       if (sessionName !== undefined) msg.session = sessionName;
       void push.send(msg);
     },
-    clear: () => {
+    clear: (paneId) => {
       if (mute.isMuted()) return;
-      void push.send({ type: "clear", tag: herdTag });
+      void push.send({ type: "clear", tag: `${herdTag}:${paneId}` });
     },
   };
 }
@@ -140,10 +138,8 @@ interface Pending<H> {
 export class NotificationCoordinator<H = unknown> {
   /** paneId → alert that hasn't entered the summary yet. */
   private readonly pending = new Map<string, Pending<H>>();
-  /** paneId → alert that has fired and is reflected in the current summary (insertion-ordered). */
+  /** paneId → alert that has fired and whose notification is showing. */
   private readonly outstanding = new Map<string, AlertDetail>();
-  /** Whether the herd slot shows something a clear would close. */
-  private shown = false;
 
   constructor(
     private readonly clock: NotifyClock<H>,
@@ -182,7 +178,7 @@ export class NotificationCoordinator<H = unknown> {
       this.pending.delete(id);
       if (!this.policy.wants(alert)) return;
       this.outstanding.set(id, alert);
-      this.emit(true);
+      this.sink.render(notice(id, alert));
     };
     if (detail instanceof Promise) detail.then(admit, () => admit(describeAlert(agent, entry.status)));
     else admit(detail);
@@ -195,9 +191,8 @@ export class NotificationCoordinator<H = unknown> {
 
   /**
    * Re-evaluate every pending + outstanding alert against the current prefs after they change,
-   * dropping any whose kind is now disabled: cancel a still-debouncing timer, retract a delivered
-   * alert. Retractions re-emit the shrunk summary (or a clear) once, silently. Call after the prefs
-   * store is updated (see the /api/notifications/prefs route).
+   * dropping any whose kind is now disabled: cancel a still-debouncing timer, close a delivered
+   * alert's notification. Call after the prefs store is updated (see the /api/notifications/prefs route).
    */
   applyPrefs(): void {
     // Drop pending alerts no kind of their status would push — nothing was shown yet. One that may
@@ -205,64 +200,28 @@ export class NotificationCoordinator<H = unknown> {
     for (const [id, p] of [...this.pending]) {
       if (!this.policy.maybe(p.status)) this.cancelPending(id);
     }
-    // Retract delivered alerts of a now-disabled kind. Only an emptied herd sends anything (a clear).
+    // Close delivered alerts of a now-disabled kind.
     for (const [id, a] of [...this.outstanding]) {
-      if (!this.policy.wants(a)) this.outstanding.delete(id);
+      if (this.policy.wants(a)) continue;
+      this.outstanding.delete(id);
+      this.sink.clear(id);
     }
-    if (this.outstanding.size === 0) this.sinkClearIfShown();
   }
 
   /**
-   * Tear down this session's notifications: cancel every pending timer and retract everything
-   * outstanding, closing the herd slot. Called when a session is disposed (its socket vanished) so
-   * its alerts never linger on the lock screen with no live session behind them.
+   * Tear down this session's notifications: cancel every pending timer and close every outstanding
+   * agent's notification. Called when a session is disposed (its socket vanished) so its alerts never
+   * linger on the lock screen with no live session behind them.
    */
   clearAll(): void {
     for (const id of [...this.pending.keys()]) this.cancelPending(id);
+    for (const id of [...this.outstanding.keys()]) this.sink.clear(id);
     this.outstanding.clear();
-    this.sinkClearIfShown();
   }
 
   private resolve(id: string): void {
     this.cancelPending(id);
-    if (this.outstanding.delete(id) && this.outstanding.size === 0) this.sinkClearIfShown();
-  }
-
-  private sinkClearIfShown(): void {
-    if (!this.shown) return;
-    this.shown = false;
-    this.sink.clear();
-  }
-
-  /** Render the single herd summary from whatever's outstanding. */
-  private emit(renotify: boolean): void {
-    this.shown = true;
-    this.sink.render(this.summarize(renotify));
-  }
-
-  private summarize(renotify: boolean): HerdSummary {
-    const entries = [...this.outstanding.entries()];
-    if (entries.length === 1) {
-      const [paneId, a] = entries[0]!;
-      const verb = a.status === "blocked" ? "needs you" : a.background ? "got a subagent's result" : "finished";
-      // One outstanding agent → deep-link straight to its pane on tap.
-      return {
-        title: `${a.name} ${verb}`,
-        body: a.summary ? `${a.summary}\n${a.where}` : a.where,
-        paneId,
-        renotify,
-      };
-    }
-    const alerts = entries.map(([, a]) => a);
-    const n = alerts.length;
-    const allBlocked = alerts.every((a) => a.status === "blocked");
-    const allDone = alerts.every((a) => a.status === "done");
-    const title = allBlocked
-      ? `${n} agents need you`
-      : allDone
-        ? `${n} agents finished`
-        : `${n} agents need attention`;
-    return { title, body: alerts.map((a) => a.name).join(", "), renotify };
+    if (this.outstanding.delete(id)) this.sink.clear(id);
   }
 
   private cancelPending(id: string): void {
@@ -271,4 +230,10 @@ export class NotificationCoordinator<H = unknown> {
     if (p.handle !== null) this.clock.cancel(p.handle);
     this.pending.delete(id);
   }
+}
+
+/** What an agent's notification says: who and what in the title, its answer and where below. */
+function notice(paneId: string, a: AlertDetail): AgentNotice {
+  const verb = a.status === "blocked" ? "needs you" : a.background ? "got a subagent's result" : "finished";
+  return { title: `${a.name} ${verb}`, body: a.summary ? `${a.summary}\n${a.where}` : a.where, paneId, renotify: true };
 }
