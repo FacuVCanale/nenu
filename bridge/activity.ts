@@ -1,6 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
+import type { AgentStatus } from "./types.ts";
 
 // When did each pane last DO something, and when did you last LOOK at it? Herdr answers neither —
 // its pane records carry no timestamps at all (HERDR_API.md) — so Nenu derives and owns both.
@@ -128,6 +129,11 @@ export function meaningfulTerminalTitle(
   if (fold === agent.trim().toLowerCase()) return undefined;
   if (fold === workspaceLabel.trim().toLowerCase()) return undefined;
   return cleaned;
+}
+
+/** The status the snapshot reports for a pane: Herdr's as it stands. */
+export function shownStatus(status: AgentStatus, _activity: PaneActivity | undefined): AgentStatus {
+  return status;
 }
 
 /**

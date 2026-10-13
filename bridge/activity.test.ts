@@ -9,6 +9,7 @@ import {
   meaningfulTabLabel,
   meaningfulTerminalTitle,
   PRUNE_AFTER_MS,
+  shownStatus,
 } from "./activity.ts";
 
 // A ledger over a throwaway state dir with a controllable clock. The debounce is set absurdly high
@@ -213,6 +214,49 @@ describe("ActivityLedger — the unseen derivation", () => {
     const { l } = ledger();
     l.noteActive("default", "w0:p9");
     expect(unseen(l.get("default", "w0:p9"))).toBe(false);
+  });
+});
+
+describe("shownStatus — Herdr's done is Herdr's own unseen", () => {
+  test("a pane opened in Nenu after it finished is no longer reported done", () => {
+    const { l, advance } = ledger();
+    l.ensure("default", "w0:p1");
+    advance(60_000);
+    l.noteActive("default", "w0:p1");
+    advance(1000);
+    l.noteSeen("default", "w0:p1");
+    // Herdr keeps saying `done` until a desk focus; a Nenu read never clears it.
+    expect(shownStatus("done", l.get("default", "w0:p1"))).toBe("idle");
+  });
+
+  test("a pane that finished since the last look stays done", () => {
+    const { l, advance } = ledger();
+    l.ensure("default", "w0:p1");
+    advance(10_000);
+    l.noteSeen("default", "w0:p1");
+    advance(10_000);
+    l.noteActive("default", "w0:p1");
+    expect(shownStatus("done", l.get("default", "w0:p1"))).toBe("done");
+  });
+
+  test("a first sighting is already seen, so a pane found done reads idle", () => {
+    const { l } = ledger();
+    l.ensure("default", "w0:p1");
+    expect(shownStatus("done", l.get("default", "w0:p1"))).toBe("idle");
+  });
+
+  test("every other status passes through, seen or not", () => {
+    const { l, advance } = ledger();
+    l.ensure("default", "w0:p1");
+    advance(1000);
+    l.noteActive("default", "w0:p1");
+    for (const status of ["idle", "working", "blocked", "unknown"] as const) {
+      expect(shownStatus(status, l.get("default", "w0:p1"))).toBe(status);
+    }
+  });
+
+  test("without a ledger entry Herdr's status stands", () => {
+    expect(shownStatus("done", undefined)).toBe("done");
   });
 });
 
