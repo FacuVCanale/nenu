@@ -8,8 +8,8 @@ import type { UpdateInfo } from "@/lib/types";
 // Instructions are Herdr plugin actions: they run from any directory, because Herdr resolves the
 // plugin's checkout.
 
-export const RESTART_COMMAND = "herdr plugin action invoke restart --plugin herdr.collie";
-export const MAJOR_COMMAND = "herdr plugin action invoke update-major --plugin herdr.collie";
+export const RESTART_COMMAND = "herdr plugin action invoke restart --plugin herdr.nenu";
+export const MAJOR_COMMAND = "herdr plugin action invoke update-major --plugin herdr.nenu";
 
 export type UpdateCheck = "idle" | "checking" | "failed";
 

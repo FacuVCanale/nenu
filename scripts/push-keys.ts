@@ -235,7 +235,7 @@ if (import.meta.main) {
   }
 
   console.log("\nNext:");
-  console.log("  1. herdr plugin action invoke restart --plugin herdr.collie");
+  console.log("  1. herdr plugin action invoke restart --plugin herdr.nenu");
   console.log("  2. On your phone: open Nenu → Settings → enable notifications");
   console.log("  3. bash scripts/collie-ctl.sh push-test");
 }

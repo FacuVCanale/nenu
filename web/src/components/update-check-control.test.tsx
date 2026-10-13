@@ -167,11 +167,11 @@ describe("UpdateCheckControl — the card owns every update state", () => {
     renderControl({ ...upToDate, bridgeStale: true });
     const updates = await card();
     expect(within(updates).getByText("Restart needed")).toBeInTheDocument();
-    expect(within(updates).getByText("herdr plugin action invoke restart --plugin herdr.collie")).toBeInTheDocument();
+    expect(within(updates).getByText("herdr plugin action invoke restart --plugin herdr.nenu")).toBeInTheDocument();
 
     await user.click(within(updates).getByRole("button", { name: "Copy command" }));
 
-    expect(await navigator.clipboard.readText()).toBe("herdr plugin action invoke restart --plugin herdr.collie");
+    expect(await navigator.clipboard.readText()).toBe("herdr plugin action invoke restart --plugin herdr.nenu");
     expect(within(updates).getByRole("button", { name: "Copied" })).toBeInTheDocument();
   });
 
@@ -180,7 +180,7 @@ describe("UpdateCheckControl — the card owns every update state", () => {
     renderControl({ ...upToDate, majorAvailable: "1.0.0", majorUrl: url });
     const updates = await card();
     expect(within(updates).getByText("Major 1.0.0 available")).toBeInTheDocument();
-    expect(within(updates).getByText("herdr plugin action invoke update-major --plugin herdr.collie")).toBeInTheDocument();
+    expect(within(updates).getByText("herdr plugin action invoke update-major --plugin herdr.nenu")).toBeInTheDocument();
     expect(within(updates).getByRole("link", { name: /release notes/i })).toHaveAttribute("href", url);
   });
 

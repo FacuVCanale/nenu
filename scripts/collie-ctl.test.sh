@@ -466,7 +466,7 @@ test_launchd_agent_lifecycle() {
 COLLIE_PORT=8787
 COLLIE_VAPID_PRIVATE=super-secret-signing-key
 EOF
-  local plist="${HOME_DIR}/Library/LaunchAgents/herdr.collie.plist"
+  local plist="${HOME_DIR}/Library/LaunchAgents/herdr.nenu.plist"
   local kill_calls="${CASE_DIR}/kill.calls"
   printf '4242\n' > "${CONFIG_DIR}/collie.pid"
 
@@ -530,8 +530,8 @@ EOF
 
   local calls; calls="$(cat "$LAUNCHCTL_CALLS")"
   assert_contains "$calls" "bootstrap gui/$(id -u) ${plist}"
-  assert_contains "$calls" "bootout gui/$(id -u)/herdr.collie"
-  assert_contains "$calls" "disable gui/$(id -u)/herdr.collie"
+  assert_contains "$calls" "bootout gui/$(id -u)/herdr.nenu"
+  assert_contains "$calls" "disable gui/$(id -u)/herdr.nenu"
 
   # `start` must be idempotent: bootstrap on an already-loaded label errors, so it boots out first.
   assert_eq "$(grep -c '^bootout ' <<<"$calls")" 2
@@ -558,7 +558,7 @@ EOF
   # The `disable` cmd_stop wrote outlives the plist, so uninstall must clear it — otherwise a later
   # reinstall inherits a disabled label whose `start` only recovers by re-enabling.
   local teardown_calls; teardown_calls="$(cat "$LAUNCHCTL_CALLS")"
-  assert_contains "$teardown_calls" "enable gui/$(id -u)/herdr.collie"
+  assert_contains "$teardown_calls" "enable gui/$(id -u)/herdr.nenu"
   assert_eq "$(grep -c '^enable ' <<<"$teardown_calls")" 1
 }
 
@@ -600,9 +600,9 @@ print_status_banner
 EOF
   bash "$harness" > "${CASE_DIR}/status.out" 2>&1 || fail "print_status_banner failed on the launchd path"
   local out; out="$(cat "${CASE_DIR}/status.out")"
-  assert_contains "$out" 'launchd (herdr.collie) · active (pid 4242)'
-  assert_contains "$out" 'launchd (herdr.collie) · loaded, not running'
-  assert_contains "$out" 'launchd (herdr.collie) · not loaded'
+  assert_contains "$out" 'launchd (herdr.nenu) · active (pid 4242)'
+  assert_contains "$out" 'launchd (herdr.nenu) · loaded, not running'
+  assert_contains "$out" 'launchd (herdr.nenu) · not loaded'
   assert_contains "$out" 'pid 4242 (unsupervised — launchd bootstrap refused)'
   # The pid must appear exactly once on its line — not "active (pid 4242)4242".
   case "$out" in
@@ -827,7 +827,7 @@ EOF
   # Transient: the window closes on the second try, and `start` reports success like any other.
   install_flaky_launchctl 1
   bash "$harness" > "${CASE_DIR}/retry.out" 2>&1 || fail "start gave up on a transient bootstrap failure"
-  assert_contains "$(cat "${CASE_DIR}/retry.out")" 'bridge started (launchd: herdr.collie)'
+  assert_contains "$(cat "${CASE_DIR}/retry.out")" 'bridge started (launchd: herdr.nenu)'
   assert_eq "$(grep -c '^bootstrap ' "$LAUNCHCTL_CALLS")" 2
 
   # Permanent: EIO is also how launchd reports "gui/<uid> doesn't exist", which is every Mac
@@ -998,7 +998,7 @@ EOF
 # fixture tag must be annotated or that half of the parser is never exercised.
 origin_release() {
   printf '%s\n' "$1" > "${ORIGIN_DIR}/VERSION"
-  printf 'id = "herdr.collie"\nversion = "%s"\n' "$1" > "${ORIGIN_DIR}/herdr-plugin.toml"
+  printf 'id = "herdr.nenu"\nversion = "%s"\n' "$1" > "${ORIGIN_DIR}/herdr-plugin.toml"
   git_q -C "$ORIGIN_DIR" add -A
   git_q -C "$ORIGIN_DIR" commit -qm "release $1"
   if [ "${2-}" = "-a" ]; then
@@ -1116,7 +1116,7 @@ test_update_targets_the_highest_release_in_the_major() {
   assert_eq "$(cat "${root}/VERSION")" "9.10.0"
   # …and it SAYS the major exists, naming the one command that takes it.
   assert_contains "$out" "Nenu 10.0.0 is out — a NEW MAJOR"
-  assert_contains "$out" "update-major --plugin herdr.collie"
+  assert_contains "$out" "update-major --plugin herdr.nenu"
 }
 
 # At the top of its major with a major out: nothing to take, said out loud, and nothing moved. This
@@ -1131,7 +1131,7 @@ test_update_holds_at_a_major_boundary() {
   local out; out="$(run_update_checkout "$root")" || fail "a routine update at a boundary must succeed: $out"
   assert_contains "$out" "already current — v9.10.0"
   assert_contains "$out" "Nenu 10.0.0 is out — a NEW MAJOR"
-  assert_contains "$out" "herdr plugin action invoke update-major --plugin herdr.collie"
+  assert_contains "$out" "herdr plugin action invoke update-major --plugin herdr.nenu"
   assert_eq "$(git -C "$root" rev-parse HEAD)" "$at"
 }
 
@@ -1185,7 +1185,7 @@ test_update_refuses_a_major_on_a_linked_clone() {
 
   local out; out="$(run_update_checkout "$root")" || fail "a refusal must still succeed: $out"
   assert_contains "$out" "crosses a MAJOR version"
-  assert_contains "$out" "herdr plugin action invoke update-major --plugin herdr.collie"
+  assert_contains "$out" "herdr plugin action invoke update-major --plugin herdr.nenu"
   assert_contains "$out" "nothing was pulled"
   assert_eq "$(git -C "$root" rev-parse HEAD)" "$at"
 }
@@ -1428,7 +1428,7 @@ test_failed_discovery_keeps_the_units_host_allowlist() {
 exit 1
 EOF
   chmod +x "${BIN_DIR}/tailscale"
-  local unit="${HOME_DIR}/.config/systemd/user/collie.service"
+  local unit="${HOME_DIR}/.config/systemd/user/nenu.service"
   mkdir -p "$(dirname "$unit")"
   printf '[Service]\nEnvironment=COLLIE_TAILSCALE_HOSTS=host.example,100.64.0.1\n' > "$unit"
 
@@ -1446,6 +1446,12 @@ EOF
   local out; out="$(bash "$harness" 2>&1)" || fail "discovery aborted: $out"
   assert_contains "$out" "named no host for this node"
   assert_contains "$out" "HOSTS=host.example,100.64.0.1"
+
+  # An install upgraded from 1.0's predecessor still carries its allowlist in the `collie` unit.
+  mv "$unit" "${unit%/*}/collie.service"
+  out="$(bash "$harness" 2>&1)" || fail "discovery aborted: $out"
+  assert_contains "$out" "HOSTS=host.example,100.64.0.1"
+  rm -f "${unit%/*}/collie.service"
 
   # With nothing to keep, the unit gets no allowlist line at all — never an empty one.
   rm -f "$unit"
@@ -1556,13 +1562,13 @@ test_update_judges_a_clones_own_upstream
 test_update_leaves_a_branch_without_an_upstream_to_git
 test_registry_refresh_skips_a_managed_checkout
 
-# A fake `herdr` that reports herdr.collie installed at $1, so an installer resolves the stable
+# A fake `herdr` that reports herdr.nenu installed at $1, so an installer resolves the stable
 # checkout from it instead of from whichever worktree ran the script.
 install_fake_herdr_plugin_root() {
   cat > "${BIN_DIR}/herdr" <<FAKE
 #!/bin/sh
 [ "\$1 \$2" = "plugin list" ] || exit 1
-printf '{"result":{"plugins":[{"plugin_id":"herdr.collie","plugin_root":"%s"}]}}\n' "$1"
+printf '{"result":{"plugins":[{"plugin_id":"herdr.nenu","plugin_root":"%s"}]}}\n' "$1"
 FAKE
   chmod +x "${BIN_DIR}/herdr"
 }
@@ -1634,7 +1640,7 @@ test_claude_hooks_are_opt_in_and_reversible() {
 }
 test_claude_hooks_are_opt_in_and_reversible
 
-# 1.0 renamed the plugin herdr.collie → herdr.nenu. Herdr keys a plugin's config dir by its id and
+# 1.0 renamed the plugin herdr.nenu → herdr.nenu. Herdr keys a plugin's config dir by its id and
 # re-reads the id from the manifest, so an upgraded install wakes up on an empty dir while the old
 # service still holds the port. `start` must carry the config over, retire the old service, and the
 # registry refresh must drop the old key — or the operator is left with no .env, no tailscale record,

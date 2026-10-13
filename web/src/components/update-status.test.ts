@@ -104,6 +104,6 @@ describe("updateStatus", () => {
   });
 
   it("phrases every update instruction as a Herdr plugin action", () => {
-    for (const command of [RESTART_COMMAND, MAJOR_COMMAND]) expect(command).toMatch(/^herdr plugin action invoke \S+ --plugin herdr\.collie$/);
+    for (const command of [RESTART_COMMAND, MAJOR_COMMAND]) expect(command).toMatch(/^herdr plugin action invoke \S+ --plugin herdr\.nenu$/);
   });
 });

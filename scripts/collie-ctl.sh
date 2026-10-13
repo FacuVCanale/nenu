@@ -6,9 +6,14 @@
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UNIT="collie"
+UNIT="nenu"
 UNIT_FILE="${HOME}/.config/systemd/user/${UNIT}.service"
-PLUGIN_ID="herdr.collie"
+PLUGIN_ID="herdr.nenu"
+# Before 1.0 the plugin was herdr.collie and its systemd unit `collie`. An upgraded install still has
+# that config dir, service and registry key; migrate_legacy_config, retire_legacy_service and
+# refresh_registry carry it over (.adr/0068).
+LEGACY_PLUGIN_ID="herdr.collie"
+LEGACY_UNIT="collie"
 # macOS: launchd's stand-in for the systemd unit. Label is the plugin id, so `launchctl print` names
 # the job as `herdr plugin list` names the plugin.
 AGENT_LABEL="$PLUGIN_ID"
@@ -27,10 +32,28 @@ resolve_config_dir() {
     if [ -n "$d" ]; then echo "$d"; return; fi
   fi
   local conventional="${HOME}/.config/herdr/plugins/config/${PLUGIN_ID}"
-  if [ -f "${conventional}/.env" ]; then echo "$conventional"; return; fi
+  if [ -f "${conventional}/.env" ] || [ -f "${conventional%/*}/${LEGACY_PLUGIN_ID}/.env" ]; then echo "$conventional"; return; fi
   echo "${HOME}/.config/collie"
 }
 CONFIG_DIR="$(resolve_config_dir)"
+
+# Herdr keys a plugin's config dir by its id, so the first run as herdr.nenu starts on an empty dir:
+# no .env, and no record of the tailscale mapping this install owns. Copy over what the herdr.collie
+# dir holds that the new one lacks, once — a marker keeps a file the operator later deletes deleted.
+# The old dir is left as it was.
+migrate_legacy_config() {
+  [ "${CONFIG_DIR##*/}" = "$PLUGIN_ID" ] || return 0
+  local legacy="${CONFIG_DIR%/*}/${LEGACY_PLUGIN_ID}" marker="${CONFIG_DIR}/.migrated-from-${LEGACY_PLUGIN_ID}" entry
+  [ -d "$legacy" ] && [ ! -e "$marker" ] || return 0
+  mkdir -p "$CONFIG_DIR"
+  for entry in "$legacy"/* "$legacy"/.[!.]*; do
+    [ -e "$entry" ] && [ ! -e "${CONFIG_DIR}/${entry##*/}" ] || continue
+    cp -Rp "$entry" "${CONFIG_DIR}/"
+  done
+  : > "$marker"
+  echo "note: carried ${legacy} over to ${CONFIG_DIR} (the plugin is herdr.nenu now)" >&2
+}
+migrate_legacy_config
 
 # If a legacy ~/.config/collie/.env exists but isn't the resolved dir, it's being ignored — say so
 # rather than silently dropping config that used to apply via the old fallback.
@@ -219,6 +242,30 @@ have_launchd() { [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null
 launchd_domain() { echo "gui/$(id -u)"; }
 launchd_target() { echo "gui/$(id -u)/${AGENT_LABEL}"; }
 
+# The pre-1.0 service (launchd herdr.collie, systemd collie) keeps the port while it runs, so the new
+# one could never bind it. `stop` stops and disables it; `start` also removes its definition, after
+# discovery has read the allowlist the old unit carries. A host without one is untouched.
+retire_legacy_service() {
+  local legacy_unit="${UNIT_FILE%/*}/${LEGACY_UNIT}.service"
+  local legacy_agent="${AGENT_FILE%/*}/${LEGACY_PLUGIN_ID}.plist"
+  if have_systemd && [ -f "$legacy_unit" ]; then
+    systemctl --user disable --now "$LEGACY_UNIT" 2>/dev/null || true
+    [ "${1:-}" = remove ] || return 0
+    rm -f "$legacy_unit"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user reset-failed "$LEGACY_UNIT" 2>/dev/null || true
+    echo "retired the pre-1.0 systemd unit ${LEGACY_UNIT}"
+  elif have_launchd && [ -f "$legacy_agent" ]; then
+    launchctl disable "$(launchd_domain)/${LEGACY_PLUGIN_ID}" 2>/dev/null || true
+    launchctl bootout "$(launchd_domain)/${LEGACY_PLUGIN_ID}" 2>/dev/null || true
+    [ "${1:-}" = remove ] || return 0
+    rm -f "$legacy_agent"
+    # The `disable` above is a row in launchd's per-user database that outlives the plist; reset it.
+    launchctl enable "$(launchd_domain)/${LEGACY_PLUGIN_ID}" 2>/dev/null || true
+    echo "retired the pre-1.0 LaunchAgent ${LEGACY_PLUGIN_ID}"
+  fi
+}
+
 # Stop a bridge started by the unsupervised fallback and drop its pidfile. Also the migration path for
 # macOS installs predating launchd support, whose bridge still owns the port when the updated script
 # first bootstraps an agent.
@@ -306,8 +353,11 @@ self_hosts() {
 # The allowlist a previous write_unit() baked in — so a failed discovery can keep what already
 # worked instead of overwriting it with silence.
 unit_tailscale_hosts() {
-  [ -f "$UNIT_FILE" ] || return 0
-  sed -n 's/^Environment=COLLIE_TAILSCALE_HOSTS=//p' "$UNIT_FILE" | tail -1
+  local unit="$UNIT_FILE"
+  # An upgraded install's allowlist is still in the pre-1.0 unit until its first start as nenu.
+  [ -f "$unit" ] || unit="${UNIT_FILE%/*}/${LEGACY_UNIT}.service"
+  [ -f "$unit" ] || return 0
+  sed -n 's/^Environment=COLLIE_TAILSCALE_HOSTS=//p' "$unit" | tail -1
 }
 
 # The Host gate fails closed, so an EMPTY allowlist is a lockout, not a default. `tailscale status`
@@ -641,6 +691,7 @@ start_unsupervised() {
 cmd_start() {
   ensure_build || true
   discover_tailscale_hosts
+  retire_legacy_service remove
   if have_systemd; then
     write_unit
     systemctl --user enable --now "$UNIT"
@@ -699,6 +750,7 @@ cmd_start() {
 }
 
 cmd_stop() {
+  retire_legacy_service
   if have_systemd; then
     systemctl --user disable --now "$UNIT" 2>/dev/null || true
   elif have_launchd; then
@@ -718,7 +770,7 @@ cmd_restart() { cmd_stop; cmd_start; }
 # Tear the service down completely (the inverse of `start`): stop + disable it, remove the service
 # definition, remove Nenu's tailscale serve mapping, and drop the pidfile. Deliberately leaves your
 # config (${CONFIG_DIR}/.env) and the on-disk checkout in place — `uninstall` removes only what
-# `start` created. To remove the plugin registration too, run `herdr plugin uninstall herdr.collie`
+# `start` created. To remove the plugin registration too, run `herdr plugin uninstall herdr.nenu`
 # (or, for a linked clone, just delete the checkout).
 cmd_uninstall() {
   cmd_stop
@@ -755,7 +807,7 @@ is_managed_checkout() {
 # banner that announces the major has no terminal at all.
 
 # The command that consents to a major crossing — printed wherever one is refused.
-MAJOR_ACTION="herdr plugin action invoke update-major --plugin herdr.collie"
+MAJOR_ACTION="herdr plugin action invoke update-major --plugin herdr.nenu"
 
 # `--major` anywhere in the verb's argv. The flag IS the consent.
 wants_major() {
@@ -1022,6 +1074,12 @@ refresh_registry() {
   fi
   if herdr plugin link "$PLUGIN_ROOT" >/dev/null 2>&1; then
     echo "herdr registry refreshed (re-linked) — new actions are invokable now"
+    # Herdr keeps a link under the id it was first made with, so the herdr.collie link of this
+    # checkout survives as a second key once it re-links as herdr.nenu. Drop it, unless a checkout
+    # still declares herdr.collie: that key is someone else's live install.
+    if ! herdr plugin list --json 2>/dev/null | grep -q "\"plugin_id\":\"${LEGACY_PLUGIN_ID}\""; then
+      herdr plugin unlink "$LEGACY_PLUGIN_ID" >/dev/null 2>&1 || true
+    fi
   else
     echo "note: couldn't refresh the Herdr registry (is the Herdr server running?) —"
     echo "      run: herdr plugin link \"$PLUGIN_ROOT\""
