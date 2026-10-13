@@ -1,4 +1,4 @@
-import { baseName, crumbs, expandPath, matchDirs, parseQuery, tildePath } from "./dir-picker";
+import { baseName, crumbs, expandPath, matchDirs, parseQuery, shortcutLabels, tildePath } from "./dir-picker";
 
 describe("dir-picker helpers", () => {
   it("shortens and expands paths under home only", () => {
@@ -32,5 +32,12 @@ describe("dir-picker helpers", () => {
     ]);
     expect(crumbs("/srv/data").map((c) => c.query)).toEqual(["/", "/srv/", "/srv/data/"]);
     expect([baseName("~/code/awam/"), baseName("~"), baseName("/")]).toEqual(["awam", "~", "/"]);
+  });
+
+  it("names a recent folder by its own name, and by its parent's too when another shares it", () => {
+    const home = "/home/me";
+    expect(shortcutLabels([`${home}/code/awam`, "/srv/web", home, `${home}/.herdr/worktrees/awam`, "/awam"], home))
+      .toEqual(["code/awam", "web", "Home", "worktrees/awam", "awam"]);
+    expect(shortcutLabels(["/srv/web"], "")).toEqual(["web"]);
   });
 });
