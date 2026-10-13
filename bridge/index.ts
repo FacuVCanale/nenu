@@ -8,7 +8,7 @@ import { loadConfig, type Config } from "./config.ts";
 import { EventPoker } from "./event-poker.ts";
 import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient } from "./herdr-client.ts";
-import { NotificationCoordinator, makeNotifySink, type NotifyClock } from "./notifications.ts";
+import { AlertDescriber, NotificationCoordinator, makeNotifySink, type NotifyClock } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
 import { Push } from "./push.ts";
 import { startServer } from "./server.ts";
@@ -59,6 +59,8 @@ const snooze = new Snooze(cfg);
 await snooze.load();
 
 const notifyPrefs = new NotifyPrefsStore(cfg);
+// The sessions' coordinators exist before the server's projects and journals; startServer fills it in.
+const alerts = new AlertDescriber();
 await notifyPrefs.load();
 
 // When each pane last moved, and when you last looked at it — the two numbers the dashboard sorts
@@ -162,9 +164,7 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
     cancel: (h) => clearTimeout(h),
   };
   const sink = makeNotifySink(push, snooze, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
-  const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, (status) =>
-    notifyPrefs.isNotifiable(status),
-  );
+  const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name));
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));
   engine.onRemove((paneId) => notifications.onRemove(paneId));
 
@@ -224,7 +224,7 @@ const sweepTimer = setInterval(() => {
 }, SWEEP_INTERVAL_MS);
 sweepTimer.unref();
 
-const server = startServer({ cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity, live });
+const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live });
 
 const shutdown = async () => {
   console.log("\n[bridge] shutting down");

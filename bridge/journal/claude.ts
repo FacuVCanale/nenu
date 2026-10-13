@@ -438,7 +438,9 @@ export class ClaudeParser implements JournalParser {
     const stop = (message as { stop_reason?: unknown }).stop_reason;
     const phase = role === "assistant" && parts.some((part) => part.kind === "text")
       ? stop === "end_turn" ? "final_answer" : stop === "tool_use" ? "commentary" : undefined : undefined;
-    const entry: TranscriptEntry = { uuid, ts, role, parts, ...(phase ? { phase } : {}) };
+    const origin = row.origin !== null && typeof row.origin === "object" ? (row.origin as Record<string, unknown>).kind : undefined;
+    const background = role === "note" && (origin === "task-notification" || (origin === undefined && isEnvelope("task-notification", words)));
+    const entry: TranscriptEntry = { uuid, ts, role, parts, ...(phase ? { phase } : {}), ...(background ? { background: true as const } : {}) };
     this.push(entry);
     if (role === "user" && said?.role === "user" && said.command) this.lastCommand = { uuid, name: said.command, entry };
   }

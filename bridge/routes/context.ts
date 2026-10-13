@@ -12,6 +12,7 @@ import type { TranscriptStore } from "../journal/store.ts";
 import type { JournalAdapter } from "../journal/types.ts";
 import type { LiveEvents } from "../live-events.ts";
 import type { NotifyPrefsStore } from "../notify-prefs.ts";
+import type { AlertDescriber } from "../notifications.ts";
 import type { createOperatorCommands } from "../operator-commands.ts";
 import type { createOperatorKeys } from "../operator-keys.ts";
 import type { createOperatorQuickReplies } from "../operator-quick-replies.ts";
@@ -35,6 +36,8 @@ export interface ServerDeps {
   push: Push;
   snooze: Snooze;
   notifyPrefs: NotifyPrefsStore;
+  /** Names each push alert from the session's projects and the pane's journal (filled by startServer). */
+  alerts: AlertDescriber;
   updateMonitor: UpdateMonitor;
   audit: AuditLog;
   activity: ActivityLedger;

@@ -86,8 +86,8 @@ describe("NotifyPrefsControl", () => {
   test("describes each event as a sentence", async () => {
     render(<NotifyPrefsControl />);
     await screen.findByRole("switch", { name: /needs input/i });
-    expect(screen.getByText("When an agent is waiting on you.")).toBeInTheDocument();
-    expect(screen.getByText("When an agent completes its task.")).toBeInTheDocument();
+    expect(screen.getByText("Any agent waiting on you.")).toBeInTheDocument();
+    expect(screen.getByText("An agent ends a turn its subagent's result started. Usually noise.")).toBeInTheDocument();
     expect(screen.getByText("When a new Nenu version is out.")).toBeInTheDocument();
   });
 
