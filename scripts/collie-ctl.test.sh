@@ -1714,7 +1714,8 @@ exit 0
 FAKE
   chmod +x "${BIN_DIR}/herdr"
   local registry="${CASE_DIR}/registry.sh"
-  printf '#!/usr/bin/env bash\nset -euo pipefail\nexport HOME="%s" HERDR_PLUGIN_CONFIG_DIR="%s" PATH="%s:%s"\nsource "%s"\nrefresh_registry\n' \
+  # A linked clone: CI checks the PR out detached, which reads as a Herdr-managed install.
+  printf '#!/usr/bin/env bash\nset -euo pipefail\nexport HOME="%s" HERDR_PLUGIN_CONFIG_DIR="%s" PATH="%s:%s"\nsource "%s"\nis_managed_checkout() { return 1; }\nrefresh_registry\n' \
     "$HOME_DIR" "$current" "$BIN_DIR" "$BASE_PATH" "$CTL" > "$registry"
   LISTED=herdr.nenu bash "$registry" > /dev/null 2>&1 || fail "refresh_registry failed"
   assert_contains "$(cat "$herdr_calls")" "plugin unlink herdr.collie"
