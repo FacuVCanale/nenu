@@ -21,6 +21,11 @@ describe("chat file references", () => {
     expect(filePathsInText("[docs/a.md](https://example.com/a)")).toEqual(["docs/a.md"]);
   });
 
+  it("reads a bare file:// URL in prose as the absolute path it names", () => {
+    const target = "/Users/fran/.herdr-projects/awam/library/t-0093/micucula-pedidos-20261013.html";
+    expect(filePathsInText(`Ya está abierto desde las 17:50:\nfile://${target}\n\nQué tiene:`)).toEqual([target]);
+  });
+
   it("extracts prose and tool references, classifies photos, and deduplicates per path", () => {
     const entries: TranscriptEntry[] = [
       { uuid: "one", ts: "2026-09-21T10:00:00Z", role: "user", parts: [{ kind: "text", text: "See ./docs/../assets/hero.png" }] },

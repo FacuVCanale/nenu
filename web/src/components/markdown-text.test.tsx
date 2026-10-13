@@ -72,6 +72,21 @@ describe("inline code", () => {
   });
 });
 
+describe("file links", () => {
+  it("opens a bare file:// URL an agent writes in prose, by the path it names", () => {
+    // The coordinator's message as it sits in the journal: the URL alone on its line, no Markdown.
+    const path = "/Users/fran/.herdr-projects/awam/library/t-0093/micucula-pedidos-20261013.html";
+    const openFile = vi.fn();
+    render(
+      <FilePreviewContext.Provider value={openFile}>
+        <MarkdownText text={`El HTML de avance ya está abierto en tu navegador desde las 17:50:\nfile://${path}\n\nQué tiene:`} />
+      </FilePreviewContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: `file://${path}` }));
+    expect(openFile).toHaveBeenCalledWith(path);
+  });
+});
+
 describe("code blocks", () => {
   const SOURCE = "export function ComposerShell() {\n  return <div className=\"workbench-composer\" />;\n}";
   const BLOCK = "Así queda:\n\n```tsx\n" + SOURCE + "\n```";

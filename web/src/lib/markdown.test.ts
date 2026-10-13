@@ -125,6 +125,29 @@ describe("parseInline", () => {
   });
 });
 
+describe("bare file URLs", () => {
+  const path = "/Users/fran/notes/report.html";
+
+  it("reads a file:// URL in prose as a link to the path it names, leaving trailing punctuation as text", () => {
+    expect(parseInline(`Listo: file://${path}. Abrilo.`)).toEqual([
+      { kind: "text", text: "Listo: " },
+      { kind: "file", path, spans: [{ kind: "text", text: `file://${path}` }] },
+      { kind: "text", text: ". Abrilo." },
+    ]);
+    expect(parseInline(`(file://${path})`)).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "file", path, spans: [{ kind: "text", text: `file://${path}` }] },
+      { kind: "text", text: ")" },
+    ]);
+  });
+
+  it("leaves a file URL for another host, a web URL and a bare path as text", () => {
+    for (const text of ["file://server/share/report.html", "https://example.com/report.html", `see ${path}`]) {
+      expect(parseInline(text)).toEqual([{ kind: "text", text }]);
+    }
+  });
+});
+
 describe("parseMarkdown", () => {
   it("parses headings by level", () => {
     expect(parseMarkdown("## Two\n### Three")).toEqual([
