@@ -330,6 +330,10 @@ Two sibling structural ops reorder objects. Both live-verified 2026-07-20 on the
 ```
 
 `agent_status` ∈ `idle | working | blocked | done | unknown`. Panes without an agent omit/null `agent`.
+`idle` and `done` both mean ready for input; `done` is the one Herdr has not seen yet. Herdr's agent
+guide (`herdr --skill`, 0.9.3): "explicit focus commands mark the target seen, while reads do not." Nenu
+only reads, so it never clears `done`; the snapshot reports it through Nenu's own seen instead
+(ADR 0071).
 
 > **`agent_session` has TWO kinds, and it can outlive the agent that reported it** (live-verified
 > 2026-07-29 against claude, codex and pi panes). Each harness's herdr integration reports through
