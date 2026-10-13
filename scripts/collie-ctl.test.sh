@@ -1724,4 +1724,33 @@ FAKE
 }
 test_renamed_plugin_takes_over_from_herdr_collie
 
+# Only a run Herdr (or the service it installed) hands a config dir is the installed plugin. A dev
+# checkout's `bun run build` asks the herdr CLI, which names a dir for any id at all, and must not
+# carry the real config over early. And `update-major` runs under the old id, so Herdr hands it the
+# herdr.collie dir: that run must still settle on herdr.nenu, or the new service bakes the old dir in.
+test_migration_runs_only_as_the_installed_plugin() {
+  setup_case rename-gate
+  local root="${CASE_DIR}/plugins-config"
+  local legacy="${root}/herdr.collie" current="${root}/herdr.nenu"
+  mkdir -p "$legacy"
+  printf 'COLLIE_PORT=8799\n' > "${legacy}/.env"
+  chmod 600 "${legacy}/.env"
+  cat > "${BIN_DIR}/herdr" <<FAKE
+#!/bin/sh
+[ "\$1 \$2" = "plugin config-dir" ] && echo "${root}/\$3" && exit 0
+exit 1
+FAKE
+  chmod +x "${BIN_DIR}/herdr"
+
+  HOME="$HOME_DIR" PATH="${BIN_DIR}:${BASE_PATH}" bash "$CTL" version > /dev/null 2>&1 || true
+  [ ! -e "$current" ] || fail "a run Herdr did not hand a config dir migrated the real config"
+
+  local out
+  out="$(HOME="$HOME_DIR" HERDR_PLUGIN_CONFIG_DIR="$legacy" PATH="${BIN_DIR}:${BASE_PATH}" bash -c "source '$CTL'; echo \"CONFIG_DIR=\$CONFIG_DIR PORT=\$PORT\"" 2>/dev/null)"
+  assert_contains "$out" "CONFIG_DIR=${current} "
+  assert_contains "$out" "PORT=8799"
+  [ -f "${current}/.env" ] || fail "the herdr.collie dir Herdr handed over was not carried to herdr.nenu"
+}
+test_migration_runs_only_as_the_installed_plugin
+
 echo "collie-ctl lifecycle tests: passed"
