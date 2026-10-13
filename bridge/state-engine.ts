@@ -47,14 +47,18 @@ const ALLOWED_TOKENS = new Set([
 ]);
 const MAX_TOKEN_VALUE = 200;
 
-/** The allowlisted subset of a pane's tokens, or undefined when none is set. */
+/**
+ * The allowlisted subset of a pane's tokens, or undefined when none is set. Keys come out in the
+ * allowlist's order: Herdr returns a pane's tokens in a different order on each read, and every
+ * change check downstream (the snapshot ETag, live events, the poker's pane key) compares JSON.
+ */
 export function allowedTokens(tokens: Record<string, unknown> | null | undefined): Record<string, string> | undefined {
   if (!tokens) return undefined;
   const out: Record<string, string> = {};
   let any = false;
-  for (const [key, value] of Object.entries(tokens)) {
+  for (const key of ALLOWED_TOKENS) {
+    const value = tokens[key];
     if (typeof value !== "string" || value.length > MAX_TOKEN_VALUE) continue;
-    if (!ALLOWED_TOKENS.has(key)) continue;
     out[key] = value;
     any = true;
   }

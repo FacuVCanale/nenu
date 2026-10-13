@@ -884,6 +884,18 @@ describe("StateEngine — pane capability fields", () => {
     expect("tokens" in byId("w1:p3")).toBe(false);
   });
 
+  test("tokens Herdr returns in another order serialise the same (live-observed: order varies per read)", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    const p = pane("w1:p1", "w1", "idle", "claude");
+    p.tokens = { thread: "rd-f2", project: "nenu", org_heartbeat: "1", hp_group: "~!0001", role: "worker" };
+    herdr.panes = [p];
+    await poll();
+    const first = JSON.stringify(engine.current().agents);
+    herdr.panes = [{ ...p, tokens: { role: "worker", org_heartbeat: "2", hp_group: "~!0001", project: "nenu", thread: "rd-f2" } }];
+    await poll();
+    expect(JSON.stringify(engine.current().agents)).toBe(first);
+  });
+
   test("joins state_change_seq and completion_seq from the snapshot's agents, absent when unreported", async () => {
     const { herdr, engine, poll } = makeEngine();
     herdr.panes = [pane("w1:p1", "w1", "idle", "claude"), pane("w1:p2", "w1", "idle", "claude")];
