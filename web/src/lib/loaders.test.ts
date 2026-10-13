@@ -41,6 +41,21 @@ describe("rootLoader", () => {
     expect(data.agents).toHaveLength(2);
   });
 
+  it("hands back the same herd object when the bridge answers 304", async () => {
+    server.use(
+      http.get("/api/snapshot", ({ request }) =>
+        request.headers.get("if-none-match") === '"h1"'
+          ? new HttpResponse(null, { status: 304, headers: { etag: '"h1"' } })
+          : HttpResponse.json(fixtureSnapshot, { headers: { etag: '"h1"' } }),
+      ),
+    );
+    const { rootLoader } = await import("./loaders");
+    const first = await rootLoader({ request: new Request("http://localhost/") });
+    const second = await rootLoader({ request: new Request("http://localhost/") });
+    expect(second).toBe(first);
+    expect(second.error).toBe(false);
+  });
+
   it.each([401, 403] as const)("marks a %i response as an auth error", async (status) => {
     rejectSnapshot(status);
     const { rootLoader } = await import("./loaders");

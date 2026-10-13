@@ -416,6 +416,41 @@ describe("api client — connection-health stamping", () => {
   });
 });
 
+// The bridge answers an unchanged herd with a 304 (bridge/routes/snapshot.ts); the client keeps the
+// body that ETag belongs to, so a quiet poll moves no body and hands the loader the very same object.
+describe("api client — snapshot revalidation", () => {
+  it("sends the last ETag and hands back the same body on a 304, still stamping a live moment", async () => {
+    const sent: (string | null)[] = [];
+    server.use(
+      http.get("/api/snapshot", ({ request }) => {
+        const tag = request.headers.get("if-none-match");
+        sent.push(tag);
+        if (tag === '"s1"') return new HttpResponse(null, { status: 304, headers: { etag: '"s1"' } });
+        return HttpResponse.json(fixtureSnapshot, { headers: { etag: '"s1"' } });
+      }),
+    );
+    const first = await fetchSnapshot("etag-case");
+    __resetConnectionHealth(1);
+    const second = await fetchSnapshot("etag-case");
+    expect(sent).toEqual([null, '"s1"']);
+    expect(second).toBe(first);
+    expect(lastHealthyAt()).toBeGreaterThan(1);
+  });
+
+  it("keeps the ETag per session", async () => {
+    const sent: (string | null)[] = [];
+    server.use(
+      http.get("/api/snapshot", ({ request }) => {
+        sent.push(request.headers.get("if-none-match"));
+        return HttpResponse.json(fixtureSnapshot, { headers: { etag: '"s2"' } });
+      }),
+    );
+    await fetchSnapshot("etag-a");
+    await fetchSnapshot("etag-b");
+    expect(sent).toEqual([null, null]);
+  });
+});
+
 // A proxy that REDIRECTS an unauthenticated request instead of refusing it strips Nenu of the only
 // signal `isAuthError` (lib/loaders.ts) can act on: `fetch` follows the cross-origin 302, the call
 // rejects as a TypeError with no status, and the refusal banner — with the Sign-in link that would
