@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronRight, Info, MessageSquare, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, Info, ChatCircle, Ellipsis, type IconComponent } from "@/components/ui/icon";
 
 import { ActionRow } from "@/components/action-sheet-rows";
 import { StatusDot } from "@/components/status-badge";
@@ -30,7 +30,7 @@ export interface RowAction {
   name: string;
   /** Its row in the touch sheet, with an ellipsis since a dialog follows ("Close thread…"). */
   menuLabel: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   run: () => void;
 }
 
@@ -90,10 +90,10 @@ function RowActions({ title, opens, onOpen, actions }: { title: string; opens: "
     );
   }
   const run = (then: () => void) => { setSheet(false); then(); };
-  const OpenIcon = opens === "chat" ? MessageSquare : Info;
+  const OpenIcon = opens === "chat" ? ChatCircle : Info;
   return <>
     <button type="button" className="task-more" aria-label={`${title} actions`} aria-haspopup="dialog" aria-expanded={sheet} onClick={() => setSheet(true)}>
-      <MoreHorizontal aria-hidden className="size-5" />
+      <Ellipsis aria-hidden className="size-5" />
     </button>
     <BottomSheet open={sheet} onClose={() => setSheet(false)} title={title}>
       <div className="flex flex-col gap-1">

@@ -1,4 +1,4 @@
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "@/components/ui/icon";
 import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {

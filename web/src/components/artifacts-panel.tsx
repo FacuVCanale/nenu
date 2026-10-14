@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, FileText, Film, Image, LayoutTemplate, Lock } from "lucide-react";
+import { ChevronRight, FileText, Film, ImageIcon, LayoutTemplate, Lock } from "@/components/ui/icon";
 
 import { ArtifactRow, isClaudeLink } from "@/components/activity/artifact-list";
 import { FileOpenButton } from "@/components/file-open-dialog";
@@ -74,7 +74,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
       <ul>{delivered.map((file) => {
         const known = found.get(file.path);
         const board = known?.state === "preview" ? known.designboard : undefined;
-        const Icon = board ? LayoutTemplate : file.kind === "video" ? Film : file.kind === "photo" ? Image : FileText;
+        const Icon = board ? LayoutTemplate : file.kind === "video" ? Film : file.kind === "photo" ? ImageIcon : FileText;
         const kind = board ? "Designboard" : KIND_LABEL[fileExtension(file)] ?? fileExtension(file).toUpperCase();
         return <li key={file.path}>
           <button type="button" aria-label={`Open ${board ?? file.name}`} title={file.path} className={ROW}
@@ -114,7 +114,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
       </button>
       {outsideOpen && <ul className="border-t border-dashed px-1 py-1">{sections.outside.map((file) => <li key={file.path}>
         <FileOpenButton paneId={paneId} session={session} path={file.path} label={`Open ${file.name}`} className={ROW}>
-          <span className={TILE}><Image aria-hidden="true" className="size-4" /></span>
+          <span className={TILE}><ImageIcon aria-hidden="true" className="size-4" /></span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{file.name}</span>
             <span className="block truncate font-mono text-caption text-muted-foreground">{file.path}</span>

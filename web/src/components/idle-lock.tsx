@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Pending } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 
@@ -59,7 +59,7 @@ export function IdleLock({ onUnlock, catchingUp = false }: IdleLockProps) {
         {/* The button keeps its slot while catching up: disabled and busy, with a spinner that stays
             visible (still) under reduced motion, so there is always a cue that something is happening. */}
         <Button size="lg" className="mt-6 w-full" onClick={onUnlock} disabled={catchingUp} aria-busy={catchingUp || undefined}>
-          {catchingUp && <Loader2 aria-hidden="true" className="motion-safe:animate-spin" />}
+          {catchingUp && <Pending aria-hidden="true" />}
           {catchingUp ? "Resuming…" : "Resume"}
         </Button>
       </div>

@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Check, Loader2, Pencil, StickyNote, Trash2 } from "lucide-react";
+import { Check, Pending, Pencil, StickyNote, Trash2 } from "@/components/ui/icon";
 
 import { WizardStepper } from "@/components/wizard-stepper";
 import { PreviewContent } from "@/components/preview-content";
@@ -79,9 +79,9 @@ export function PreviewSelectBlock({ preview, onAction, disabled }: PreviewSelec
   const pointed = preview.options.find((o) => o.pointed);
   const pointedName = pointed && recommendedLabel(pointed.label).text;
   const busyIcon = (
-    <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+    <Pending className="size-4 shrink-0 text-muted-foreground" aria-label="Sending" />
   );
-  const busyOnInk = <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />;
+  const busyOnInk = <Pending className="size-4 shrink-0" aria-label="Sending" />;
 
   return (
     <DialogCard label={preview.question}>

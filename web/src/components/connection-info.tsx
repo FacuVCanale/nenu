@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/ui/icon";
 
 import { listRowClass, listRowPressable } from "@/components/ui/list-group";
 import { cn } from "@/lib/utils";

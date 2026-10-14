@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Command, Delete, Lock, Option } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Command, Delete, Lock, Option } from "@/components/ui/icon";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";

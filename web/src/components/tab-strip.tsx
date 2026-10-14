@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/ui/icon";
 
 import { Chip, ChipStrip } from "@/components/ui/chip";
 import { useStripReorder } from "@/components/ui/strip-reorder";

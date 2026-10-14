@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
-import { House, PanelLeft, Search, Settings2, SquarePen } from "lucide-react";
+import { House, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StatusDot } from "@/components/status-badge";

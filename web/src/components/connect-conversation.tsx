@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRevalidator } from "react-router";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/ui/icon";
 import { connectConversation, fetchConversations } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

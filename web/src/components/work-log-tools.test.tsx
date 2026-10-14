@@ -139,16 +139,16 @@ describe("ThinkingStep", () => {
 });
 
 describe("LiveStepRow", () => {
-  it("says what runs now and for how long, ticking in place", () => {
+  it("says what runs now and for how long, in whole minutes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
     const { container } = render(<LiveStepRow step={{ part: { kind: "tool", name: "Bash", summary: "bun run test tab-strip" }, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} />);
     const row = container.querySelector("[data-live-step]")!;
     expect(row).toHaveTextContent("Running");
     expect(row).toHaveTextContent("bun run test tab-strip");
-    expect(screen.getByText("12s")).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(1000); });
-    expect(screen.getByText("13s")).toBeInTheDocument();
+    expect(screen.getByText("<1m")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(48_000); });
+    expect(screen.getByText("1m")).toBeInTheDocument();
     expect(row.querySelector("[data-live-glyph]")).not.toBeNull();
   });
 
@@ -181,7 +181,7 @@ describe("a call waiting on the operator", () => {
     const { container } = render(<LiveStepRow step={{ part: bash, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} waiting />);
     expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
     expect(container.querySelector("[data-live-glyph]")).toBeNull();
-    expect(screen.queryByText("12s")).not.toBeInTheDocument();
+    expect(screen.queryByText("<1m")).not.toBeInTheDocument();
   });
 
   it("keeps a finished call in the past even inside a waiting turn", () => {

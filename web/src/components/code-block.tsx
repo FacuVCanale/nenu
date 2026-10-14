@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { WrapText } from "lucide-react";
+import { TextWrap } from "@/components/ui/icon";
 
 import { CopyButton, QUIET_ACTION } from "@/components/copy-button";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,7 @@ export function CodeBlock({ lang, text, children }: { lang: string; text: string
         {lang && <span className="min-w-0 truncate text-caption text-muted-foreground">{lang}</span>}
         <div className="ml-auto flex items-center gap-2">
           <button type="button" aria-pressed={wrap} onClick={() => setWrap((on) => !on)} className={QUIET_ACTION}>
-            <WrapText aria-hidden="true" />
+            <TextWrap aria-hidden="true" />
             Wrap
           </button>
           <CopyButton payload={() => ({ text })} />

@@ -5,7 +5,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Loader2, Paperclip, Plus, Settings2, Slash, TextCursorInput, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Pending, Paperclip, Plus, Settings2, Slash, TextCursorInput, X, Zap, type IconComponent } from "@/components/ui/icon";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -86,7 +86,7 @@ export interface ComposerControl {
   id: "attach" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
   group: (typeof MESSAGE_GROUPS)[number] | "View";
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   disabled: boolean;
   /** An open dock or an armed mode; absent for a plain action. */
   on?: boolean;
@@ -1239,7 +1239,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {delivering && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
-            <Loader2 className="size-3 shrink-0 animate-spin" />
+            <Pending className="size-3 shrink-0" />
             <span>Sending…</span>
           </div>
         )}
@@ -1247,7 +1247,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             user what landed so they don't double-tap while waiting for the terminal to update. */}
         {lastSent && (
           <div className="mb-2 flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
-            <Loader2 className="size-3 shrink-0 animate-spin" />
+            <Pending className="size-3 shrink-0" />
             <span className="truncate">
               <span className="font-medium">You sent:</span> {lastSent}
             </span>
@@ -1527,7 +1527,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 {direct.active ? (
                   <Keyboard className="size-4" />
                 ) : sending ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Pending className="size-4" />
                 ) : justSent ? (
                   <Check className="size-4" />
                 ) : (

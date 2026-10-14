@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from "react";
-import { FileText, Globe, LayoutTemplate } from "lucide-react";
+import { FileText, Globe, LayoutTemplate } from "@/components/ui/icon";
 
 import { fetchArtifactMetadata, type ArtifactMetadata } from "@/lib/api";
 import { FilePreviewContext } from "@/lib/file-preview-context";

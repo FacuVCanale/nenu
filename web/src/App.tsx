@@ -1,4 +1,3 @@
-import { LucideProvider } from "lucide-react";
 import { RouterProvider } from "react-router";
 
 import { router } from "./router";
@@ -23,14 +22,13 @@ export function App() {
   const catchingUp = useCatchingUp();
   const covered = locked || catchingUp;
   // BusyBar overlays every route (fixed, top of viewport) — a mutation anywhere shows the strip.
-  // Every Lucide icon draws at stroke 1.5; an icon names its own weight only to differ (Send's arrow).
   return (
-    <LucideProvider strokeWidth={1.5}>
+    <>
       <div style={{ display: "contents" }} inert={covered}>
         <BusyBar />
         <RouterProvider router={router} />
       </div>
       {covered && <IdleLock onUnlock={unlock} catchingUp={catchingUp} />}
-    </LucideProvider>
+    </>
   );
 }

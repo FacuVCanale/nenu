@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type ReactNode } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Pending } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 
@@ -108,7 +108,7 @@ export function LocalModelPicker({ rows, currentModel, disabled, onApply, onCanc
           onClick={() => void apply()}
           className="max-lg:h-[50px] max-lg:w-full max-lg:rounded-xl max-lg:text-body"
         >
-          {busy && <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />}
+          {busy && <Pending aria-hidden="true" className="size-4" />}
           {busy ? "Applying…" : "Use model"}
         </Button>
       </div>

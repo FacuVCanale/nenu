@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Check, Loader2 } from "lucide-react";
+import { TriangleAlert, Check, Pending } from "@/components/ui/icon";
 
 import { WizardStepper } from "@/components/wizard-stepper";
 import type { WizardModel, WizardOption } from "@/lib/blocks";
@@ -57,7 +57,7 @@ export function WizardBlock({ wizard, onAction, disabled }: WizardBlockProps) {
   // review step are no-ops, so disable those arrows rather than send a keystroke that does nothing.
   // When no chip reads as current (an unknown theme's highlight), both stay enabled — the TUI still
   // clamps, and keeping nav available is the safer degradation.
-  const busyIcon = <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />;
+  const busyIcon = <Pending className="size-4 shrink-0 text-muted-foreground" aria-label="Sending" />;
 
   return (
     <DialogCard label={review ? "Review your answers" : wizard.question}>
@@ -122,7 +122,7 @@ function QuestionStep({
               onClick={() => onPress(id, option.keys)}
               trailing={
                 busy ? (
-                  <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+                  <Pending className="size-4 shrink-0 text-muted-foreground" aria-label="Sending" />
                 ) : option.chosen ? (
                   <Check className="size-4 shrink-0 text-primary" aria-label="Current answer" />
                 ) : null
@@ -148,7 +148,7 @@ function QuestionStep({
                 {option.label}
                 <span className="font-normal"> — ends the questions</span>
                 {sendingId === id ? (
-                  <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
+                  <Pending className="size-4 shrink-0" aria-label="Sending" />
                 ) : null}
               </button>
             );
@@ -185,7 +185,7 @@ function ReviewStep({
       )}
       {wizard.incomplete && (
         <p className="flex items-center gap-2 text-body text-status-working">
-          <AlertTriangle aria-hidden className="size-4 shrink-0" />
+          <TriangleAlert aria-hidden className="size-4 shrink-0" />
           You have not answered all questions
         </p>
       )}
@@ -197,7 +197,7 @@ function ReviewStep({
         onClick={() => onPress("submit", WIZARD_SUBMIT_KEYS)}
       >
         {sendingId === "submit" ? (
-          <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
+          <Pending className="size-4 shrink-0" aria-label="Sending" />
         ) : null}
         Submit answers
       </Button>
@@ -209,7 +209,7 @@ function ReviewStep({
           className={SECONDARY_ACTION}
         >
           {sendingId === "cancel" ? (
-            <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />
+            <Pending className="size-4 shrink-0" aria-label="Sending" />
           ) : null}
           Cancel
         </button>

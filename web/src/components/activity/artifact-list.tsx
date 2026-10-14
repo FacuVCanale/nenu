@@ -1,4 +1,4 @@
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { formatClock, type ActivityArtifact } from "@/lib/activity";
 

@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Pending } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import type { StopTurn } from "@/hooks/use-stop-turn";
@@ -20,7 +20,7 @@ export function StopControl({ stop, disabled }: { stop: StopTurn; disabled: bool
   if (stop.phase === "stopping") {
     return (
       <span role="status" className="composer-stop inline-flex items-center gap-1.5 text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+        <Pending className="size-3.5" aria-hidden="true" />
         Stopping…
       </span>
     );

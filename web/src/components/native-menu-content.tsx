@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/ui/icon";
 import type { MenuModel, StyledLine } from "@/lib/blocks";
 import { MENU_ARROW_ROW, parseKeyHintFooter } from "@/lib/harness/menu-hints";
 import { PURE_HORIZONTAL_RULE_GLYPH_CLASS } from "@/lib/rule-glyphs";

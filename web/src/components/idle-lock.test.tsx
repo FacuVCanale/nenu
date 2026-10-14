@@ -33,7 +33,7 @@ describe("IdleLock", () => {
 
   it("never draws a lock or speaks of safety: the pause guards nothing (ADR 0007)", () => {
     const { container } = render(<IdleLock onUnlock={() => {}} />);
-    expect(container.querySelector("[class*='lucide-lock']")).toBeNull();
+    expect(container.querySelector("[class*='icon-lock']")).toBeNull();
     expect(screen.getByRole("dialog")).not.toHaveTextContent(/lock|safe|secur/i);
   });
 });

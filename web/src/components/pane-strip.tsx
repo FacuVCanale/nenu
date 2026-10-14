@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TerminalSquare } from "lucide-react";
+import { SquareTerminal } from "@/components/ui/icon";
 
 import { SectionLabel } from "@/components/ui/section-label";
 import { Chip, ChipStrip } from "@/components/ui/chip";
@@ -62,7 +62,7 @@ export function PaneStrip({
               tag={tag}
               active={p.paneId === currentPaneId}
               status={p.kind === "shell" ? undefined : p.status}
-              icon={p.kind === "shell" ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" /> : undefined}
+              icon={p.kind === "shell" ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" /> : undefined}
               onClick={() => onSelect(p.paneId)}
               onLongPress={actionsEnabled ? open : undefined}
               // A tap on the open pill would be a dead re-navigate; it opens the same sheet instead,

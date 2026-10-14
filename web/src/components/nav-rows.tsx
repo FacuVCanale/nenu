@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigation } from "react-router";
-import { LoaderCircle, Terminal } from "lucide-react";
+import { Pending, Terminal } from "@/components/ui/icon";
 
 import { StatusDot } from "@/components/status-badge";
 import type { DisplayPlace } from "@/lib/display-name";
@@ -69,5 +69,5 @@ function useOpening(to: string): boolean {
  */
 export function OpeningMark({ to, children }: { to: string; children: ReactNode }) {
   if (!useOpening(to)) return children;
-  return <span data-pending className="nav-opening"><LoaderCircle aria-hidden size={14} className="animate-spin motion-reduce:animate-none" /><span className="sr-only">Opening</span></span>;
+  return <span data-pending className="nav-opening"><Pending aria-hidden size={14} /><span className="sr-only">Opening</span></span>;
 }

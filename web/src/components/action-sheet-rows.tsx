@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
-import { Loader2, XCircle } from "lucide-react";
+import { Pending, CircleX } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { useSheetStep } from "@/components/ui/sheet";
@@ -83,7 +83,7 @@ export function ConfirmView({
       <p className="text-subhead text-muted-foreground">{message}</p>
       <div className="flex flex-col gap-2">
         <Button variant="destructive" size="lg" className="w-full" onClick={confirm} disabled={busy} aria-busy={busy || undefined}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy && <Pending className="size-4" />}
           {confirmLabel}
         </Button>
         <Button ref={cancelRef} variant="secondary" size="lg" className="w-full" onClick={onCancel}>
@@ -161,13 +161,13 @@ export function RenameView({
             }}
             className="absolute inset-y-0 right-0 grid w-11 place-items-center text-subtle-foreground hover:text-foreground"
           >
-            <XCircle aria-hidden="true" className="size-4" />
+            <CircleX aria-hidden="true" className="size-4" />
           </button>
         )}
       </div>
       {/* While saving a spinner joins the word, which keeps the button's name. */}
       <Button size="lg" className="w-full" onClick={onSave} disabled={saving || !canSave} aria-busy={saving || undefined}>
-        {saving && <Loader2 aria-hidden="true" className="size-4 animate-spin" />}
+        {saving && <Pending aria-hidden="true" className="size-4" />}
         Save
       </Button>
     </div>
