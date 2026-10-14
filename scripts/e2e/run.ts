@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
@@ -25,7 +25,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, o
 //   bun scripts/e2e/run.ts stop-state [--port 8797] [--out DIR] Stop from the session file, under a custom statusline
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
-//   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  Home with a project: captures, each list, requests per minute
+//   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  A busy Home, calm then asked: captures, each list, requests per minute
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -1414,6 +1414,22 @@ async function artifacts(): Promise<void> {
  * installed hook delivers it, so the blocked pane's command is known whole, and a desk answers Yes
  * from Needs you: the key the fake terminal got, and the requests from the tap to that key.
  */
+/** A GitHub pull request as `gh pr list --json` prints it, from its number, title and what GitHub says of it. */
+function ghPr(number: number, title: string, at: string, extra: { review?: string; checks?: string[]; draft?: boolean; additions?: number; deletions?: number; branch?: string } = {}) {
+  return {
+    number, title, url: `https://github.com/acme/shop/pull/${number}`, headRefName: extra.branch ?? `acme-${number}`, baseRefName: "main",
+    isDraft: extra.draft ?? false, reviewDecision: extra.review ?? "REVIEW_REQUIRED",
+    statusCheckRollup: (extra.checks ?? ["SUCCESS", "SUCCESS", "SUCCESS"]).map((state) => ({ state })),
+    additions: extra.additions ?? 40 + number, deletions: extra.deletions ?? number % 17, updatedAt: at,
+  };
+}
+
+/**
+ * Home as a busy operator sees it: a project, four workspaces with several tabs each, a dozen pull
+ * requests in every state, first with nothing waiting on you, then with a dialog and a thread waiting
+ * for your reply. Captures, each list, the requests a phone on Home makes per minute, and a dialog
+ * answered from Home.
+ */
 async function home(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const prs = join(outDir, "gh-prs.json");
@@ -1422,14 +1438,27 @@ async function home(): Promise<void> {
   const windowMs = Number(values.seconds) * 1000;
   const result = await withBench(async (bridge, browser) => {
     const shots: string[] = [];
-    const stopJournal = tickJournal(bridge.herd!.journals.get(bridge.herd!.working)!, bridge.now);
+    const fake = bridge.fake!;
+    const herd = bridge.herd!;
+    // More workspaces, each with several tabs: "docs" runs two agents and, in the project's folder, the
+    // thread that will wait for a reply.
+    fake.addWorkspace("w3", "docs").addTab("w3:t1", "outline").addTab("w3:t2", "examples").addTab("w3:t3", "copy")
+      .addPane({ paneId: "w3:outline", workspaceId: "w3", tabId: "w3:t1", agent: "claude", label: "Docs outline", cwd: "/tmp" })
+      .addPane({ paneId: "w3:examples", workspaceId: "w3", tabId: "w3:t2", agent: "codex", label: "API examples", cwd: "/tmp" })
+      .addPane({ paneId: "w3:copy", workspaceId: "w3", tabId: "w3:t3", agent: "claude", label: "Checkout copy", cwd: bridge.dir });
+    fake.setStatus("w3:outline", "working");
+    await addOps(bridge);
+    // Nothing needs you first: the dialog is off and no thread waits for a reply.
+    fake.setDialog(herd.blocked, null);
+    const stopJournal = tickJournal(herd.journals.get(herd.working)!, bridge.now);
     try {
       const open = async (device: typeof PHONE | typeof DESKTOP, colorScheme: "dark" | "light") => {
         const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
         const page = await context.newPage();
         await page.clock.install({ time: bridge.now() });
         await page.goto(bridge.url + "/");
-        await page.locator("main").getByText("Checkout flow").first().waitFor({ timeout: 15_000 });
+        // The sessions' control, not a row: with this many sessions a row can sit behind "Show all".
+        await page.getByRole("tab", { name: "Recents" }).waitFor({ timeout: 15_000 });
         await page.waitForTimeout(1500);
         return { page, close: () => context.close() };
       };
@@ -1438,19 +1467,52 @@ async function home(): Promise<void> {
         await page.screenshot({ path, animations: "disabled" });
         shots.push(path);
       };
+      const scrollTo = async (page: Page, selector: string) => {
+        await page.evaluate((s) => document.querySelector(s)?.scrollIntoView({ block: "start" }), selector);
+        await page.waitForTimeout(300);
+      };
+      for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+        const { page, close } = await open(device, "dark");
+        await shoot(page, `home-${name}-calm`);
+        await close();
+      }
+      // Then a dialog on the blocked pane, and the docs thread says it waits for your reply.
+      fake.setDialog(herd.blocked, herd.dialog);
+      const orgFile = join(bridge.dir, "org.json");
+      const seed = JSON.parse(await Bun.file(orgFile).text()) as OrgSeed;
+      seed.projects[0]!.threads = seed.projects[0]!.threads.map((thread) => thread.id === "t-0015" ? { ...thread, activity: "Waiting for you", percent: 85 } : thread);
+      await writeFile(orgFile, JSON.stringify(seed, null, 2));
+      const manifest = join(bridge.dir, "projects", seed.projects[0]!.slug, "PROJECT.md");
+      await utimes(manifest, new Date(), new Date(Date.now() + 1000));
+      for (let i = 0; ; i++) {
+        const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ status: string }>; projects?: Array<{ threads: Array<{ id: string; selfWaiting?: true }> }> }>);
+        if (snap.projects?.[0]?.threads.some((t) => t.id === "t-0015" && t.selfWaiting) && snap.agents.some((a) => a.status === "blocked")) break;
+        if (i > 300) throw new Error("the reply thread never read as waiting");
+        await sleep(100);
+      }
       for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
         for (const scheme of ["dark", "light"] as const) {
           const { page, close } = await open(device, scheme);
           await shoot(page, `home-${name}-${scheme}`);
           // The list itself, scrolled into view: the Recents / Workspaces control, else the older "Recent".
-          await page.evaluate(() => (document.querySelector('[role="tablist"][aria-label="Sessions"]') ?? document.getElementById("home-recent"))?.scrollIntoView({ block: "start" }), null);
-          await page.waitForTimeout(300);
+          await scrollTo(page, '[role="tablist"][aria-label="Sessions"], #home-recent');
           await shoot(page, `home-${name}-${scheme}-list`);
-          const workspaces = page.getByRole("tab", { name: "Workspaces" });
-          if (scheme === "dark" && await workspaces.count()) {
-            await workspaces.click();
-            await page.waitForTimeout(400);
-            await shoot(page, `home-${name}-workspaces`);
+          if (scheme === "dark") {
+            await scrollTo(page, "#home-review");
+            await shoot(page, `home-${name}-prs`);
+            const workspaces = page.getByRole("tab", { name: "Workspaces" });
+            if (await workspaces.count()) {
+              await workspaces.click();
+              await scrollTo(page, '[role="tablist"][aria-label="Sessions"]');
+              await shoot(page, `home-${name}-workspaces`);
+              const docs = page.locator("main").getByRole("button", { name: /^docs,/ });
+              if (await docs.count()) {
+                await docs.first().click();
+                await page.waitForTimeout(400);
+                await shoot(page, `home-${name}-workspace-open`);
+              }
+              await page.getByRole("tab", { name: "Recents" }).click();
+            }
           }
           await close();
         }
@@ -1463,7 +1525,6 @@ async function home(): Promise<void> {
       const http = tally(phone.requests.filter((r) => r.at >= from).map((r) => r.url));
       await phone.close();
 
-      const herd = bridge.herd!;
       const token = crypto.randomUUID();
       await writeFile(join(bridge.dir, "state", CLAUDE_HOOK_TOKEN_FILE), token);
       const hook = await fetch(bridge.url + CLAUDE_HOOK_PATH, {
@@ -1481,8 +1542,8 @@ async function home(): Promise<void> {
       await shoot(page, "home-desktop-answer");
       const t0 = Date.now();
       await yes.click();
-      while (bridge.fake!.answered.length === 0 && Date.now() - t0 < 15_000) await sleep(5);
-      const answer = bridge.fake!.answered[0];
+      while (fake.answered.length === 0 && Date.now() - t0 < 15_000) await sleep(5);
+      const answer = fake.answered[0];
       if (!answer) throw new Error("the answer from Home never reached the fake terminal");
       await page.getByText(/^Approved/).first().waitFor({ timeout: 15_000 });
       await shoot(page, "home-desktop-answered");
@@ -1491,7 +1552,7 @@ async function home(): Promise<void> {
       await shoot(phoneAsk.page, "home-phone-after-answer");
       await phoneAsk.close();
       // The one write this run drives: the dialog's key on the blocked pane.
-      const unexpectedWrites = bridge.fake!.writes().filter((c) => !(c.method === "pane.send_keys" && c.params.pane_id === herd.blocked));
+      const unexpectedWrites = fake.writes().filter((c) => !(c.method === "pane.send_keys" && c.params.pane_id === herd.blocked));
       return {
         shots, windowSeconds: windowMs / 1000,
         homeRequestsPerMinute: Math.round(sum(http) * 60_000 / windowMs), byRoute: perMinute(http, windowMs),
@@ -1501,14 +1562,31 @@ async function home(): Promise<void> {
     } finally {
       stopJournal();
     }
-  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => {
+  }, CAPTURE_EPOCH, (herd, now) => {
+    const seed = homeOrg(herd, now, size);
+    const project = seed.projects[0]!;
+    const sibling = project.threads.find((thread) => thread.id === "t-0014")!;
+    project.threads.push({ ...sibling, id: "t-0015", title: "Checkout copy", group: "waiting-on-you", group_label: "waiting-on-you", workspace_id: "w3", tab_id: "w3:t3", pane_id: "w3:copy", activity: "" });
+    return seed;
+  }, (dir) => {
     size = seedDiffRepo(dir);
     const at = new Date(CAPTURE_EPOCH).toISOString();
+    const failing = ["SUCCESS", "FAILURE", "SUCCESS"];
+    const pending = ["SUCCESS", "PENDING", "PENDING"];
     writeFileSync(prs, JSON.stringify([
-      { number: 42, title: "Checkout flow", url: "https://github.com/acme/shop/pull/42", headRefName: "e2e-demo", baseRefName: "main",
-        isDraft: false, reviewDecision: "REVIEW_REQUIRED", statusCheckRollup: [], ...size, updatedAt: at },
-      { number: 39, title: "Refresh the docs", url: "https://github.com/acme/shop/pull/39", headRefName: "docs-refresh", baseRefName: "main",
-        isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [], additions: 18, deletions: 4, updatedAt: at },
+      ghPr(42, "Checkout flow", at, { branch: "e2e-demo", checks: [], ...size }),
+      ghPr(39, "Refresh the docs", at, { review: "APPROVED", additions: 18, deletions: 4 }),
+      ghPr(44, "Coupon codes at checkout", at, { review: "APPROVED" }),
+      ghPr(54, "Bump dependencies", at, { review: "APPROVED", additions: 212, deletions: 198 }),
+      ghPr(45, "Order export to CSV", at),
+      ghPr(46, "Inventory sync retries", at, { checks: failing }),
+      ghPr(47, "Faster product search", at, { checks: pending }),
+      ghPr(48, "Gift cards", at, { review: "CHANGES_REQUESTED" }),
+      ghPr(49, "Shipping rates by zone", at),
+      ghPr(50, "Admin audit log", at, { draft: true, checks: pending }),
+      ghPr(51, "Tax rules for the EU", at),
+      ghPr(52, "Dark mode for the admin", at, { review: "APPROVED", checks: failing }),
+      ghPr(53, "Remove the legacy cart", at, { additions: 3, deletions: 640 }),
     ]));
   });
   await writeFile(join(outDir, "home.json"), JSON.stringify(result, null, 2));
