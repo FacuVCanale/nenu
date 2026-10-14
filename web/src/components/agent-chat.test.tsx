@@ -1577,6 +1577,12 @@ describe("AgentChat — Send while only background work runs", () => {
   const claude = (turn: { running: boolean; background?: boolean }) =>
     ({ ...fixtureAgents[0]!, paneId: "background-send", agent: "claude", status: "working" as const, hasSession: true, turn: { ...turn, source: "claude-session" as const } });
 
+  it("draws no note above the composer while only background work runs", () => {
+    const agent = claude({ running: false, background: true });
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: "" });
+    expect(screen.queryByText(/background work is running/i)).not.toBeInTheDocument();
+  });
+
   it("sends directly when the main turn is over, without asking now or later", async () => {
     const wire = serveQueue();
     const agent = claude({ running: false, background: true });
