@@ -8,6 +8,9 @@ import {
   openProject,
   orgEnv,
   readOverview,
+  readProjectDetail,
+  readRoutines,
+  readTasks,
   replaceCoordinator,
   resolveNode,
   setThreadFlags,
@@ -278,5 +281,66 @@ describe("herdr-organizations PR actions and project creation", () => {
   it("never hands the CLI an agent pane's identity", () => {
     const env = orgEnv({ HOME: "/home/me", HERDR_PANE_ID: "w1:p1", HERDR_TAB_ID: "w1:t1", HERDR_WORKSPACE_ID: "w1", HERDR_SOCKET_PATH: "/s" }, "/bin", { HERDR_PROJECTS_ROOT: "/r" });
     expect(env).toEqual({ HOME: "/home/me", HERDR_SOCKET_PATH: "/s", PATH: "/bin", HERDR_PROJECTS_ROOT: "/r" });
+  });
+});
+
+describe("herdr-organizations project documents (task list, project show, routine list)", () => {
+  const missing = { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'task'" };
+  const task = { list: "Backlog", title: "Fix login", owner: { kind: "agent", profile: "codex", machine: "", name: "" }, thread: "t-0007", description: "Safari logs out.\n  keep the cookie" };
+
+  it("reads the coordinator's tasks in file order from the project's root", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, project: "acme", tasks: [
+      task,
+      { list: "", title: "Write the docs", owner: { kind: "me", profile: "", machine: "", name: "" }, thread: "", description: "" },
+      { ...task, owner: { kind: "robot" } },
+    ] }), stderr: "" });
+    expect(await readTasks(run, "/root", "acme")).toEqual([
+      { list: "Backlog", title: "Fix login", owner: { kind: "agent", profile: "codex", machine: "", name: "" }, thread: "t-0007", description: "Safari logs out.\n  keep the cookie" },
+      { list: "", title: "Write the docs", owner: { kind: "me", profile: "", machine: "", name: "" }, thread: "", description: "" },
+    ]);
+    expect(calls).toEqual([{ argv: ["task", "list", "acme", "--json"], opts: { env: { HERDR_PROJECTS_ROOT: "/root" }, timeoutMs: 10_000 } }]);
+  });
+
+  it("answers no document, never an error, when Organizations predates it or says something else", async () => {
+    for (const result of [missing, { code: 0, stdout: "not json", stderr: "" }, { code: 0, stdout: JSON.stringify({ schema_version: 2, tasks: [] }), stderr: "" }, { code: 0, stdout: JSON.stringify({ schema_version: 1 }), stderr: "" }]) {
+      expect(await readTasks(fakeRun(result).run, "/root", "acme")).toBeNull();
+      expect(await readProjectDetail(fakeRun(result).run, "/root", "acme")).toBeNull();
+      expect(await readRoutines(fakeRun(result).run, "/root", "acme")).toBeNull();
+    }
+  });
+
+  it("refuses a slug that is not one before running anything", async () => {
+    const { run, calls } = fakeRun(missing);
+    await expect(readTasks(run, "/root", "--all")).rejects.toThrow("lowercase");
+    await expect(readProjectDetail(run, "/root", "../x")).rejects.toThrow("lowercase");
+    expect(calls).toEqual([]);
+  });
+
+  it("reads what every thread receives, and drops a memory file or repo that is not one", async () => {
+    const project = {
+      slug: "acme", name: "Acme Shop", goal: "Ship it", status: "active", dir: "/srv/projects/acme", counts: {}, icon: "", tone: "",
+      instructions: "Open a pull request.\n", memory: "# Memory\n", memory_files: [{ name: "payments.md", text: "Retries.\n" }, { name: 3 }],
+      repos: [{ path: "/srv/acme/shop", machine: "" }, { path: "/srv/acme/admin", machine: "build-box" }, { machine: "x" }],
+      coordinator_profile: "claude", thread_profile: "codex", max_parallel_threads: 10, auto_resolve_days: 7, nudge: true, mute: false,
+    };
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, project }), stderr: "" });
+    expect(await readProjectDetail(run, "/root", "acme")).toEqual({
+      instructions: "Open a pull request.\n", memory: "# Memory\n", memoryFiles: [{ name: "payments.md", text: "Retries.\n" }],
+      repos: [{ path: "/srv/acme/shop", machine: "" }, { path: "/srv/acme/admin", machine: "build-box" }],
+      coordinatorProfile: "claude", threadProfile: "codex", maxParallelThreads: 10,
+    });
+    expect(calls[0]!.argv).toEqual(["project", "show", "acme", "--json"]);
+  });
+
+  it("lists routines with their trigger and whether they are on", async () => {
+    const routine = { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, command: "", command_status: "none", prompt: "Check.", last_run: "", next_run: "2026-10-11T03:00:00Z", skipped_unhandled: 0, skipped_no_coordinator: 0 };
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, project: "acme", routine_commands: false, broken: [], routines: [
+      routine, { ...routine, name: "pr-followup", trigger: "pr", schedule: "", events: ["opened", "merged"], enabled: false, next_run: "" }, { ...routine, trigger: "cron" },
+    ] }), stderr: "" });
+    expect(await readRoutines(run, "/root", "acme")).toEqual([
+      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, nextRun: "2026-10-11T03:00:00Z" },
+      { name: "pr-followup", trigger: "pr", schedule: "", events: ["opened", "merged"], enabled: false, nextRun: "" },
+    ]);
+    expect(calls[0]!.argv).toEqual(["routine", "list", "acme", "--json"]);
   });
 });
