@@ -212,8 +212,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   </>;
 }
 
-/** A task list's heading: the project or coordinator, a Paused badge, and its second line. */
-/** A list's heading: the project's glyph (`mark`) when the list is the whole project, its title, and a second line. */
+/** A task list's heading: the project's glyph (`mark`) when it lists the whole project, the project or coordinator, a Paused badge, and its second line. */
 export function TasksHeader({ title, subtitle, paused = false, mark }: { title: string; subtitle?: ReactNode; paused?: boolean; mark?: ReactNode }) {
   return (
     <header className="mb-4">
