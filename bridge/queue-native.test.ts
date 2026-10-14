@@ -49,6 +49,20 @@ describe("what Claude's own queue did with a message (P0 journal, Claude Code 2.
     ];
     expect(nativeState(events, "ok", at("2026-10-10T00:00:09.000Z"))).toBe("enqueued");
   });
+
+  // Claude Code 2.1.300, 2026-10-14: a 1 500-character "Send now" row reached Claude's queue as one
+  // paste, logged between `<pasted_content>` tags, and was absorbed mid-turn.
+  test("a long message Claude logged as a paste is still this message", async () => {
+    const parser = new ClaudeParser();
+    feedText(await Bun.file(join(FIXTURES, "journal-long-paste-v2300.jsonl")).text(), (l, o, b) => parser.line(l, o, b));
+    const events = parser.facts().queue;
+    const words = Array.from({ length: 300 }, (_, i) => `${["alpha", "bravo", "charlie", "delta", "echo"][i % 5]}${i}`).join(" ");
+    const tail = " D-TAIL-MARK reply only OK.";
+    const sent = `Reply only OK. D-HEAD-MARK ${words}`.slice(0, 1500 - tail.length) + tail;
+    const since = at("2026-10-14T20:58:09.000Z");
+    expect(nativeState(events.slice(0, 1), sent, since)).toBe("enqueued");
+    expect(nativeState(events, sent, since)).toBe("absorbed");
+  });
 });
 
 describe("delivery modes, as P0 measured the keys", () => {

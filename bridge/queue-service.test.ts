@@ -193,7 +193,11 @@ type Status = "idle" | "working" | "blocked" | "done";
 const RULE = "─".repeat(60);
 
 /** One agent pane: a Claude- or Codex-shaped screen, Herdr's status and state counter, and a journal. */
-async function agentPane(agent: "claude" | "codex", status: Status, { audited = true } = {}) {
+async function agentPane(
+  agent: "claude" | "codex",
+  status: Status,
+  { audited = true, logs }: { audited?: boolean; logs?: (typed: string) => string } = {},
+) {
   const { mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { HerdrClient } = await import("./herdr-client.ts");
@@ -203,6 +207,8 @@ async function agentPane(agent: "claude" | "codex", status: Status, { audited = 
     status, seq: 1, session: "first", draft: "", events: 0, turn: undefined as import("./types.ts").TurnState | undefined,
     submitted: [] as string[], keys: [] as string[][], journal: [] as import("./journal/types.ts").NativeQueueEvent[],
     audit: [] as import("./audit.ts").AuditEntry[],
+    /** What Claude's log holds for the last submitted message, when `logs` says what it keeps. */
+    logged: null as string | null,
   };
   const screen = () => {
     if (agent === "codex") return pane.draft ? codexDraft.replace("Also say BANANA at the end.", pane.draft) : codexBusy;
@@ -233,6 +239,7 @@ async function agentPane(agent: "claude" | "codex", status: Status, { audited = 
     async (_row, text, submit) => {
       if (submit) {
         pane.submitted.push(pane.draft);
+        if (logs) pane.logged = logs(pane.draft);
         if (pane.status === "working") pane.journal.push({ kind: "enqueue", ts: new Date().toISOString(), content: pane.draft });
         pane.draft = "";
       } else pane.draft = text;
@@ -240,7 +247,11 @@ async function agentPane(agent: "claude" | "codex", status: Status, { audited = 
     },
     undefined,
     () => { pane.events++; },
-    { facts: async () => ({ queue: pane.journal }), audit: audited ? { record: (entry) => { pane.audit.push(entry); } } : null },
+    {
+      facts: async () => ({ queue: pane.journal }),
+      audit: audited ? { record: (entry) => { pane.audit.push(entry); } } : null,
+      ...(logs ? { log: () => async () => pane.logged } : {}),
+    },
   );
   const call = async (body?: Record<string, unknown>) => {
     const res = await service.handle(new Request("http://localhost/queue", body ? { method: "POST", body: JSON.stringify(body) } : {}), "session", "pane", null);
@@ -267,6 +278,30 @@ it("Claude 'asap' types into a working Claude, and a second message reaches its 
     await t.add("two", "Second while you work", "asap");
     await t.settle(() => t.pane.submitted.length === 2);
     expect(t.pane.submitted).toEqual(["First while you work", "Second while you work"]);
+  } finally { await t.close(); }
+});
+
+// ADR 0076 measured Claude 2.1.296 to 2.1.300 logging only the last 478 of 1 500 characters. A queued
+// row is checked against the log as a direct send is.
+it("a queued row Claude logs without its head stays in the queue as incomplete, not delivered", async () => {
+  const long = "Keep the whole message. ".repeat(63);
+  const t = await agentPane("claude", "idle", { logs: (typed) => typed.slice(1022) });
+  try {
+    const added = await t.add("one", long);
+    expect(t.pane.submitted).toEqual([long]);
+    expect(added.body.delivered).toEqual([]);
+    expect(added.body.messages[0]).toMatchObject({ id: "one", state: "paused" });
+    expect(added.body.messages[0].error).toContain(`incomplete: it logged ${long.slice(1022).trim().length} of ${long.length} characters`);
+  } finally { await t.close(); }
+});
+
+it("a queued row Claude logs whole is delivered", async () => {
+  const long = "Keep the whole message. ".repeat(63);
+  const t = await agentPane("claude", "idle", { logs: (typed) => `\n\n<pasted_content id="75ce">\n${typed}\n</pasted_content id="75ce">\n` });
+  try {
+    const added = await t.add("one", long);
+    expect(added.body.messages).toEqual([]);
+    expect(added.body.delivered.map((row: { id: string }) => row.id)).toEqual(["one"]);
   } finally { await t.close(); }
 });
 
