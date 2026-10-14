@@ -325,7 +325,7 @@ function StarterRow({ icon: Icon, title, hint, disabled, onClick }: { icon: Luci
   return (
     <button type="button" onClick={onClick} disabled={disabled}
       className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent active:bg-muted disabled:pointer-events-none disabled:text-disabled-foreground">
-      <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+      <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-body font-medium">{title}</span>
         <span className="text-footnote text-pretty text-muted-foreground">{hint}</span>

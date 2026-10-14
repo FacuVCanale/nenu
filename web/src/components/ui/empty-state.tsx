@@ -26,7 +26,7 @@ export function EmptyState({ icon: Icon, title, titleAs: Title = "h2", children,
   return (
     <div data-slot="empty-state" className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
       {isValidElement(Icon) ? <div className="mb-3">{Icon}</div>
-        : Icon && <Icon aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />}
+        : Icon && <Icon aria-hidden="true" className="mb-3 size-7 text-muted-foreground" />}
       <Title className="text-headline text-balance">{title}</Title>
       {children && <p className="mt-1 max-w-sm text-subhead text-muted-foreground text-pretty">{children}</p>}
       {action && <div className="mt-6">{action}</div>}

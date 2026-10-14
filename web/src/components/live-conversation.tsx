@@ -492,9 +492,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {footer}
             </> : linkable ? <>
               {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
-                <MessageSquare aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />No conversation linked
+                <MessageSquare aria-hidden="true" className="size-4 shrink-0" />No conversation linked
               </p> : <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
-                <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
+                <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" />
                 <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
                 <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
