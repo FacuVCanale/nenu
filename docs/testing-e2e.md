@@ -85,6 +85,10 @@ and no onboarding. What the 2026-10-14 long-send check used, all inside that `HO
   `<home>/Library/Keychains` to your own keychain dir lets the pane's Claude use it. A
   `<home>/.claude.json` with `hasCompletedOnboarding` and the work folder's
   `hasTrustDialogAccepted` skips the first-run screens.
+- Herdr learns a pane's Claude session from Herdr's Claude hook. Without it the pane reports no
+  session, so Nenu shows no conversation and the queue is unavailable. Once `claude` has run (it
+  creates `<home>/.claude`), install the hook under that `HOME` and restart `claude`:
+  `HOME=<home> XDG_CONFIG_HOME=<home>/.config HERDR_SOCKET_PATH=<tmp>/herdr.sock herdr integration install claude`.
 - Codex reads `<home>/.codex/auth.json`; a link to yours logs it in.
 - Drive the panes with `HERDR_SOCKET_PATH=<tmp>/herdr.sock herdr pane …` from your shell, never
   with the inherited variable.

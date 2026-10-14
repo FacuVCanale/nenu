@@ -25,7 +25,7 @@ import type { ServerDeps, Services } from "./routes/context.ts";
 import { WEB_DIR, text } from "./routes/http.ts";
 import { dispatch } from "./routes/index.ts";
 import { interactionHints } from "./routes/interactions.ts";
-import { replyPane } from "./routes/reply.ts";
+import { claudeLog, replyPane } from "./routes/reply.ts";
 import { Subagents } from "./subagents.ts";
 import type { ActionResponse } from "./types.ts";
 import { MAX_UPLOAD_BYTES } from "./uploads.ts";
@@ -91,6 +91,8 @@ export function startServer(opts: ServerDeps) {
     }
   }, {
     audit,
+    // A queued row is checked against Claude's log after Enter, as a phone send is (ADR 0076).
+    log: (session, paneId) => claudeLog(agentStates, journals, session, paneId),
     // The queue shares the routes' store, so its journal reads hit the same cache.
     facts: journals && transcripts
       ? async (pane) => {

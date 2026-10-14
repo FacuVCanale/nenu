@@ -53,5 +53,6 @@ Nenu said "Sent". Measured in a disposable Herdr 0.9.3 on macOS, one byte-level 
 - An idle send now waits for Claude to log the message before answering, which takes one or two
   reads after the box lets go. A pane whose session Nenu cannot map, or a non-Claude pane, skips it.
 - A message with an image path is not judged, because Claude logs `[Image #N]` in its place. The
-  queue (`bridge/queue-delivery.ts`) gets rule 1 through the guarded send, but not rule 2 yet.
+  queue (`bridge/queue-delivery.ts`, its log from `bridge/queue-service.ts`) gets both rules through
+  the guarded send: a row Claude logs incomplete stays in the queue, paused, instead of delivered.
 - Codex is unchanged: it already sends every message as one bracketed paste.

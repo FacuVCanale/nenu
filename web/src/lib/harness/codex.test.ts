@@ -74,6 +74,13 @@ const PINNED = [
   "codex--v0159-slash-model.txt",
   "codex--v0159-trust.txt",
   "codex--v0159-update-dialog.txt",
+  "codex--v0162-headless-draft-wrapped.txt",
+  "codex--v0162-headless-draft.txt",
+  "codex--v0162-headless-idle-warning.txt",
+  "codex--v0162-headless-idle.txt",
+  "codex--v0162-headless-paste.txt",
+  "codex--v0162-idle-warning.txt",
+  "codex--v0162-warnings.txt",
   "codex--working.txt",
 ];
 
@@ -1334,6 +1341,77 @@ describe("Codex 0.159.0", () => {
     expect(codexAdapter.composerReady!(lines)).toBe(false);
     expect(codexAdapter.extractInputDraft(lines)).toBeNull();
     expect(buildBlocks(lines, { agent: "codex" }).map((b) => b.kind)).toEqual(["raw"]);
+  });
+});
+
+// A Codex 0.162.1 started with no Herdr client attached (Nenu's launcher, a phone, a closed desktop)
+// paints the space before a status separator in the field's colour: the row arrives as
+// `GPT-6.1-Sol default ` then a plain `· `. Read as segments, the field had an edge space and the
+// separator was not ` · `, so no fresh headless 0.162.1 pane had a composer and every send asked for
+// "Type anyway", with or without the MCP warning in the hint row.
+describe("Codex 0.162.1 started with no client attached", () => {
+  const WRAPPED =
+    "zeta gamma eta lambda alpha beta iota beta zeta kappa alpha iota delta alpha beta eta eta beta delta beta iota eta alpha kappa beta delta lambda lambda kappa alpha kappa kappa eta alpha delta alpha iota gamma epsilon eta gamma iota beta kappa epsilon iota lambda gamma beta kappa kappa lambda delta z";
+  const READY = [
+    ["codex--v0162-headless-idle-warning.txt", null],
+    ["codex--v0162-headless-idle.txt", null],
+    ["codex--v0162-headless-draft.txt", "hello from the phone probe"],
+    ["codex--v0162-headless-draft-wrapped.txt", WRAPPED],
+    ["codex--v0162-headless-paste.txt", "[Pasted Content 4000 chars]"],
+    // The control: the same Codex with a client attached already read fine.
+    ["codex--v0162-idle-warning.txt", null],
+  ] as const;
+
+  it.each(READY)("%s: the composer is found and its draft reads back", (name, draft) => {
+    const lines = fixtureLines(name);
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    expect(codexAdapter.extractInputDraft(lines)).toBe(draft);
+    expect(lineText(codexAdapter.extractStatusLines(lines)[0]!)).toMatch(/^ {2}GPT-6\.1-Sol default · \//);
+    expect(buildBlocks(lines, { agent: "codex" }).map((b) => b.kind)).toEqual(["raw"]);
+  });
+
+  it("the drafts are send evidence for what was typed, and the paste token only for its own count", () => {
+    expect(draftCarriesSend(WRAPPED, codexAdapter.extractInputDraft(fixtureLines("codex--v0162-headless-draft-wrapped.txt")))).toBe(true);
+    const token = codexAdapter.extractInputDraft(fixtureLines("codex--v0162-headless-paste.txt"))!;
+    expect(codexAdapter.draftCarriesSend!("x".repeat(4000), token)).toBe(true);
+    expect(codexAdapter.draftCarriesSend!("x".repeat(3999), token)).toBe(false);
+  });
+
+  it("the warnings view (f2) owns the screen: no composer", () => {
+    const lines = fixtureLines("codex--v0162-warnings.txt");
+    expect(codexAdapter.composerReady!(lines)).toBe(false);
+    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+  });
+
+  describe("a separator owns the spaces around its dot, and only spaces that show no paint", () => {
+    const FG = "\u001b[38;2;246;226;183m";
+    const FG2 = "\u001b[38;2;171;223;167m";
+    const OFF = "\u001b[0m";
+    const accepts = (raw: string) => {
+      const line = splitLines(parseAnsi(raw))[0]!;
+      return isStatusRow(lineText(line), line);
+    };
+
+    it("takes the field-coloured space before the dot, or after it", () => {
+      expect(accepts(`  ${FG}model default ${OFF}· ${FG2}/dir${OFF}`)).toBe(true);
+      expect(accepts(`  ${FG}model default${OFF} ·${FG2} /dir${OFF}`)).toBe(true);
+      expect(accepts(`  ${FG}model ${OFF}· ${FG2}/dir ${OFF}· ${FG}main${OFF}`)).toBe(true);
+    });
+
+    it("leaves a space that shows paint, and the dot's own paint, where they are", () => {
+      // An underlined or filled space is visible, so it stays part of its field and the row fails.
+      expect(accepts(`  ${FG}\u001b[4mmodel ${OFF}· ${FG2}/dir${OFF}`)).toBe(false);
+      expect(accepts(`  ${FG}model\u001b[48;2;9;9;9m ${OFF}· ${FG2}/dir${OFF}`)).toBe(false);
+      // A dot in the field's colour is a glyph of that field, not a separator.
+      expect(accepts(`  ${FG}model ·${OFF} ${FG2}/dir${OFF}`)).toBe(false);
+      // A field that holds a dot keeps it, and the separator beside it keeps its spaces.
+      expect(accepts(`  ${FG}a·b${OFF} · ${FG2}·dir${OFF}`)).toBe(true);
+      expect(accepts(`  ${FG}model·${OFF} · ${FG2}/dir${OFF}`)).toBe(true);
+      // Mixed separator paints are still refused once the spaces have moved.
+      expect(accepts(`  ${FG}model ${OFF}· ${FG2}/dir ${OFF}\u001b[2m· ${OFF}${FG}main${OFF}`)).toBe(false);
+      // And text alone still is not a status row.
+      expect(accepts("  model default · /dir")).toBe(false);
+    });
   });
 });
 

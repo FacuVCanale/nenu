@@ -233,6 +233,39 @@ function foldTrailingPadding(segments: AnsiSegment[]): AnsiSegment[] | null {
   return folded;
 }
 
+// A Codex 0.162.1 started with no Herdr client attached paints the space before a separator in the
+// field's colour: `GPT-6.1-Sol default ` then a plain `· ` (codex--v0162-headless-idle.txt). Read as
+// segments, the field had an edge space and the separator was not ` · `, so no such pane had a
+// composer. That paint is noise: the same hint came back `? ` bold in one frame and `?` bold plus a
+// plain space in the next, and a space shows no colour or weight. A space shows a background, an
+// underline or a strike-through, so only spaces without those move.
+function isInvisibleSpace(segment: AnsiSegment): boolean {
+  return segment.bg === undefined && segment.underline !== true && segment.strike !== true;
+}
+
+/** The segments with the spaces touching each separator dot moved into the dot's segment, so the
+ *  separator carries them and its own paint. A dot is a separator only on its own (`·`, ` ·`) or
+ *  opening its segment before a space (`· `, `· Main`); a dot inside a field moves nothing. The
+ *  indent never moves; a segment left empty is dropped. */
+function separatorOwnsItsSpaces(segments: AnsiSegment[]): AnsiSegment[] {
+  const out = segments.map((segment) => ({ ...segment }));
+  for (let i = 1; i + 1 < out.length; i++) {
+    const before = out[i]!;
+    const after = out[i + 1]!;
+    if (/^\u00b7(?: |$)/.test(after.text) && isInvisibleSpace(before)) {
+      const kept = before.text.replace(/ +$/, "");
+      after.text = before.text.slice(kept.length) + after.text;
+      before.text = kept;
+    }
+    if (before.text.trimStart() === "\u00b7" && isInvisibleSpace(after)) {
+      const moved = /^ */.exec(after.text)![0];
+      before.text += moved;
+      after.text = after.text.slice(moved.length);
+    }
+  }
+  return out.filter((segment, i) => i === 0 || segment.text.length > 0);
+}
+
 /**
  * The default status row, recognised by its PAINT. All of these must hold, or the row is refused:
  * the styled line must be the same row as `text`; the segments must read as an unstyled two-space
@@ -249,8 +282,9 @@ function isStyledStatusRow(text: string, line: StyledLine): boolean {
   if (CONTROL_CHARS.test(rowText)) return false;
   if (codePointCount(rowText) > MAX_STATUS_ROW_CHARS) return false;
 
-  const segments = foldTrailingPadding(line.segments);
-  if (segments === null) return false;
+  const folded = foldTrailingPadding(line.segments);
+  if (folded === null) return false;
+  const segments = separatorOwnsItsSpaces(folded);
   if (!isIndentSegment(segments[0]!)) return false;
 
   let fields = 0;

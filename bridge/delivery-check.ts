@@ -1,4 +1,4 @@
-import { classifyUserText } from "./journal/claude.ts";
+import { classifyUserText, unwrapPastes } from "./journal/claude.ts";
 import { readAppended, type TailState } from "./journal/lines.ts";
 
 // What Claude itself logged for a message Nenu just submitted (ADR 0067, ADR 0076).
@@ -12,14 +12,6 @@ import { readAppended, type TailState } from "./journal/lines.ts";
 
 /** The newest bytes the first look reads; later looks read only what was appended since. */
 const FIRST_LOOK_BYTES = 1024 * 1024;
-
-/** Claude logs a paste as `\n\n<pasted_content id="…">\n<text>\n</pasted_content id="…">\n`. */
-const PASTE = /\n{0,2}<pasted_content id="([^"]*)">\n([\s\S]*?)\n<\/pasted_content id="\1">\n/g;
-
-/** A message as Claude logged it, with the paste wrappers taken off. */
-export function unwrapPastes(text: string): string {
-  return text.replace(PASTE, (_all, _id: string, inner: string) => inner);
-}
 
 /** The operator's typed message in one log line, and when Claude logged it; null for any other row. */
 export function loggedMessage(line: string): { at: number; text: string } | null {
