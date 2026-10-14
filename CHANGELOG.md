@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-15
+
+### Changed
+- On a phone, pages push in from the right, the header's back slides them out, and Home fades, only on navigations the app starts; nothing animates on its own, and reduced motion or a desk only fades (ADR 0078). (948c0b92)
+- A tapped notification opens its page in the open app instead of reloading it. (948c0b92, ba82c9f1)
+- No note above the composer while only background work runs. (12270b0b)
+
 ## [1.6.0] - 2026-10-14
 
 ### Added
