@@ -14,8 +14,8 @@
     <!-- Browser chrome follows the OS for System users. useTheme rewrites these at runtime for
          someone who has pinned the opposite of their OS. Both are --background's halves exactly
          (index.css), so the status bar, the header and the page are one colour. -->
-    <meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f7f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161617" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <!-- Opaque, not black-translucent: on iOS 26 and later a home-screen app drawn under the status
@@ -58,8 +58,8 @@
         /* --background and --muted-foreground, copied because index.css has not loaded yet. Any
            other value steps the page on hand-off to React (it once went white to rgb(245), and the
            caption sat at 3.45:1). design-system.test.ts holds the background to the token. */
-        background: light-dark(#fcfcfc, #0a0a0a);
-        color: light-dark(#62626c, #a3a3a3);
+        background: light-dark(#f7f7f7, #161617);
+        color: light-dark(#55555a, #b4b4b9);
         font: 500 0.875rem/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
       }
       .boot-splash__dog {

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { ChevronRight, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "lucide-react";
 
 import { NodeDot } from "@/components/node-row";
+import { ProjectGlyph } from "@/components/project-glyph";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -215,14 +216,10 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick,
 }
 
 function HitMark({ hit }: { hit: SearchHit }) {
-  if (hit.kind === "project") return <ProjectAvatar name={hit.project.name} />;
+  if (hit.kind === "project") return <ProjectGlyph slug={hit.project.slug} />;
   if (hit.kind === "node") return <NodeDot state={hit.state} />;
   if (hit.kind === "workspace") return <LayoutGrid aria-hidden size={14} />;
   return <PaneMark pane={hit.pane} />;
-}
-
-function ProjectAvatar({ name }: { name: string }) {
-  return <span className="nav-avatar" aria-hidden>{name.trim().charAt(0).toUpperCase() || "P"}</span>;
 }
 
 function hitState(hit: SearchHit): string {
@@ -405,7 +402,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
         <Link className="nav-row" to={projectPath(project.slug, session)} aria-current={projectSlug === project.slug && !nodeId ? "page" : undefined}>
           <span className="nav-lead">
             <OpeningMark to={projectPath(project.slug, session)}>
-              <ProjectAvatar name={project.name} />
+              <ProjectGlyph slug={project.slug} />
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>
