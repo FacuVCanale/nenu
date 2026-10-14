@@ -48,6 +48,11 @@ describe("AppHeader — the one shared header shell", () => {
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
+  it("draws Settings as the sliders, as the sidebar does", () => {
+    renderHeader(<AppHeader bridge="connected" error={false} rightTrail={<SettingsGear />} />);
+    expect(screen.getByRole("button", { name: "Settings" }).querySelector("svg")).toHaveClass("lucide-settings-2");
+  });
+
   it("uses the shell drawer as the single mobile navigation control", async () => {
     const onOpen = vi.fn();
     renderHeader(

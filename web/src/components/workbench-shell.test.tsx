@@ -156,6 +156,31 @@ it("draws New as a tab with its own label, like its neighbours", () => {
   for (const name of ["Home", "Browse", "Search", "New"]) expect(bar.getByRole(name === "Home" ? "link" : "button", { name })).toHaveTextContent(name);
 });
 
+// New is a pen on a page and Settings the sliders wherever the navigation draws them, at 16 px on a
+// desk and 23 px in the phone's tab bar.
+it("draws New as a pen and Settings as sliders in the sidebar, the rail and the drawer, sized for each", async () => {
+  const glyph = (el: HTMLElement) => el.querySelector("svg.lucide")!;
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
+  onTestFinished(() => { window.matchMedia = matchMedia; });
+  const { sidebar, user, unmount } = setup();
+  expect(glyph(sidebar.getByRole("button", { name: "New" }))).toHaveClass("lucide-square-pen");
+  expect(glyph(sidebar.getByRole("link", { name: "Settings" }))).toHaveClass("lucide-settings-2");
+  for (const icon of screen.getByRole("navigation", { name: "Primary" }).querySelectorAll("svg")) expect(icon).toHaveAttribute("width", "23");
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = screen.getByRole("navigation", { name: "Collapsed sidebar" });
+  expect(glyph(within(rail).getByRole("button", { name: "New" }))).toHaveClass("lucide-square-pen");
+  expect(glyph(within(rail).getByRole("link", { name: "Settings" }))).toHaveClass("lucide-settings-2");
+  for (const button of rail.querySelectorAll(".workbench-icon-button")) expect(button.querySelector("svg")).toHaveAttribute("width", "16");
+  unmount();
+  window.matchMedia = matchMedia;
+  const phone = setup(data, "/pane/w%3A1%3Ap2?s=work");
+  await phone.user.click(screen.getByRole("button", { name: "Chat title" }));
+  const drawer = screen.getByRole("dialog", { name: "Navigation" });
+  expect(glyph(within(drawer).getByRole("button", { name: "New" }))).toHaveClass("lucide-square-pen");
+  for (const name of ["New", "Search"]) expect(glyph(within(drawer).getByRole("button", { name }))).toHaveAttribute("width", "16");
+});
+
 it("searches with Cmd+K and reaches every action from the collapsed rail", async () => {
   const matchMedia = window.matchMedia;
   window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
