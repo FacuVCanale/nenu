@@ -111,6 +111,8 @@ const EXPECTED: Record<string, string> = {
   "ask-type-something-typed-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Mango=neutral | Submit=primary | Chat about this=deny",
   // The Rewind a second Escape opens at an idle Claude (ADR 0066): its footer names Enter and Esc.
   "interrupt-rewind-v2296.txt": "menu: Continue=neutral | Cancel=deny",
+  "permission-auto-deny-a-v2299.txt": "permission: Yes=primary | No=deny",
+  "permission-auto-deny-b-v2299.txt": "permission: Yes=primary | No=deny",
   "permission-bash-v2296.txt": "permission: Yes=primary | Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
   "permission-bash-amend-typed-v2296.txt": "permission: Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
   "permission-bash-amend-v2296.txt": "permission: Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
@@ -121,6 +123,7 @@ const EXPECTED: Record<string, string> = {
   "trust-prompt-v2296.txt": "permission: No, exit=deny | Yes, I trust this folder=persistent",
   // web/src/lib/harness/codex/fixtures
   "approval-exec-v0160.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
+  "hooks-review-v0162.txt": "permission: Review hooks=persistent | Trust all and continue=persistent | Continue without trusting (hooks won't run)=deny",
   "ask-notes-open-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-notes-row-pointed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-notes-typed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
@@ -552,6 +555,21 @@ describe("Interactions.refresh", () => {
     expect(await interactions.refresh("s", pane.io, [working])).toEqual([]);
     interactions.noteOutputMatched("s", "p");
     expect((await interactions.refresh("s", pane.io, [working]))[0]?.kind).toBe("permission");
+  });
+
+  test("a pane Herdr cannot classify is read, so a dialog its manifest misses still gets a card", async () => {
+    const interactions = new Interactions(recorder().live, { sleep: noSleep });
+    const pane = scriptedPane(fixture("hooks-review-v0162.txt", join(ROOT, "web/src/lib/harness/codex/fixtures")));
+    const [card] = await interactions.refresh("s", pane.io, [blocked("p", "codex", "unknown")]);
+    expect(card?.question).toBe("Hooks need review");
+    // The stakes are on the card before any button: how many hooks, and that they leave the sandbox.
+    expect(card?.context).toBe("3 hooks are new or changed.\nHooks can run outside the sandbox after you trust them.");
+    const answer = (optionIndex: number, confirm?: true) =>
+      interactions.answer("s", pane.io, blocked("p", "codex", "unknown"), { signature: card!.signature, optionIndex, ...(confirm ? { confirm } : {}) });
+    expect((await answer(1)).outcome).toMatchObject({ code: "confirm_required" });
+    expect(pane.log.keys).toEqual([]);
+    expect((await answer(1, true)).keys).toEqual(["Down", "Enter"]);
+    expect((await answer(2)).keys).toEqual(["Down", "Down", "Enter"]);
   });
 
   test("the CLI's own `waiting` makes a pane Herdr still calls working eligible (ADR 0067)", async () => {
@@ -1035,5 +1053,59 @@ describe("free-text answers (Tab-amend, Type something, Codex notes)", () => {
     expect(c.options.map((o) => o.acceptsText ?? false)).toEqual([false, false, true]);
     const result = await answer({ signature: c.signature, optionIndex: 2, text: "Mango please" });
     expect(result).toEqual({ status: 200, outcome: { ok: true }, keys: ["Down", "Down", "Tab", "Enter"] });
+  });
+});
+
+describe("Claude's auto-deny countdown (2.1.299)", () => {
+  const P0 = join(ROOT, "web/src/lib/harness/claude/fixtures");
+  const a = fixture("permission-auto-deny-a-v2299.txt", P0);
+  // One second later: only `in 1:50` became `in 1:49`.
+  const b = fixture("permission-auto-deny-b-v2299.txt", P0);
+
+  async function shown(at = 1_000_000) {
+    const { events, live } = recorder();
+    let now = at;
+    const interactions = new Interactions(live, { sleep: noSleep, now: () => now });
+    const pane = scriptedPane(a, { "1": "" });
+    const [card] = await interactions.refresh("s", pane.io, [blocked("p")]);
+    pane.log.reads = 0;
+    events.length = 0;
+    const later = async (screen: string, ms: number) => {
+      pane.show(screen);
+      now += ms;
+      return (await interactions.refresh("s", pane.io, [blocked("p")]))[0];
+    };
+    return { interactions, pane, card: card!, events, later, answer: (body: Parameters<Interactions["answer"]>[3]) => interactions.answer("s", pane.io, blocked("p"), body) };
+  }
+
+  test("the countdown ticking keeps the card: same signature, nothing published", async () => {
+    const { card, events, later } = await shown();
+    expect((await later(b, 1000))!.signature).toBe(card.signature);
+    expect(events).toEqual([]);
+  });
+
+  test("Yes tapped on the card a second ago answers", async () => {
+    const { pane, card, answer } = await shown();
+    pane.show(b);
+    expect(await answer({ signature: card.signature, optionIndex: 0 })).toEqual({ status: 200, outcome: { ok: true }, keys: ["1"] });
+  });
+
+  test("another command under the same countdown is still refused before any key", async () => {
+    const { pane, card, answer } = await shown();
+    pane.show(b.replaceAll("scratch2", "scratch3"));
+    expect((await answer({ signature: card.signature, optionIndex: 0 })).status).toBe(409);
+    expect(pane.log.keys).toEqual([]);
+  });
+
+  test("the card says when Claude denies it, read once from the screen", async () => {
+    const { card, later } = await shown(1_000_000);
+    expect(card.autoDenyAt).toBe(1_000_000 + 110_000);
+    expect((await later(b, 1500))!.autoDenyAt).toBe(1_000_000 + 110_000);
+  });
+
+  test("a dialog without a countdown carries no deadline", async () => {
+    const interactions = new Interactions({ publish() {} }, { sleep: noSleep });
+    const [card] = await interactions.refresh("s", scriptedPane(fixture("claude--permission-bash.txt")).io, [blocked("p")]);
+    expect(card!.autoDenyAt).toBeUndefined();
   });
 });

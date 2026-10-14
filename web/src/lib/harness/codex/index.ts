@@ -17,7 +17,8 @@ import { detectUpdateMenu } from "./update-menu";
 // patch approval sends the shortcuts it prints (`y`, Escape), the rewritten trust prompt sends a
 // pointer walk and the Enter its footer names, and each of those was pressed live the same day
 // (APPROVAL_NOTES.md, TRUST_NOTES.md). The `/model` and `/permissions`
-// pickers are deliberately left to the unread-dialog card.
+// pickers are deliberately left to the unread-dialog card. The 0.162.1 hooks review (HOOKS_NOTES.md)
+// is a pointer walk plus Enter like the rewritten trust prompt: a digit there only moves the pointer.
 
 import { trimTrailingBlank, type Block, type StyledLine } from "../../blocks";
 import type { HarnessAdapter } from "../types";
@@ -31,6 +32,7 @@ import {
 import { detectApprovalRegion } from "./approval";
 import { detectAskRegion } from "./ask";
 import { detectTrustRegion } from "./trust";
+import { detectHooksReviewRegion } from "./hooks";
 import { codexDraftCarriesSend } from "./paste";
 import { detectModelMenuRegion } from "./model-menu";
 import { readCodexTurn } from "./interrupt";
@@ -44,6 +46,15 @@ export function codexBuildBlocks(lines: StyledLine[]): Block[] {
     const blocks: Block[] = [];
     if (before.length > 0) blocks.push({ kind: "raw", lines: before });
     blocks.push({ kind: "prompt-select", prompt: trust.model, lines: lines.slice(trust.startLine) });
+    return blocks;
+  }
+
+  const hooks = detectHooksReviewRegion(lines);
+  if (hooks) {
+    const before = trimTrailingBlank(lines.slice(0, hooks.startLine));
+    const blocks: Block[] = [];
+    if (before.length > 0) blocks.push({ kind: "raw", lines: before });
+    blocks.push({ kind: "prompt-select", prompt: hooks.model, lines: lines.slice(hooks.startLine) });
     return blocks;
   }
 

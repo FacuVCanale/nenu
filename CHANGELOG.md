@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-14
+
+### Fixed
+- A Claude request with an auto-deny countdown is answered from Nenu instead of "The question changed in the terminal", and its card counts down to when Claude denies it. (98ca03fd)
+- Codex's "Hooks need review" startup screen is answerable from the phone, and its pane shows as needing you instead of unknown. (388e35b6)
+
 ## [1.3.0] - 2026-10-14
 
 ### Added

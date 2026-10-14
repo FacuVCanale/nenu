@@ -3,6 +3,7 @@ import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { splitLines, type Block } from "../web/src/lib/blocks.ts";
 import { DIALOG_CONTRACT, type DialogKind, type DialogModels } from "../web/src/lib/harness/dialog-contract.ts";
 import { detectAskNotes } from "../web/src/lib/harness/codex/ask.ts";
+import { autoDenyInMs } from "../web/src/lib/harness/claude/markers.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 import { multiSelectIdentity, type MultiSelectModel } from "../web/src/lib/harness/multi-select-model.ts";
 import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/src/lib/harness/poll.ts";
@@ -104,7 +105,7 @@ const HEAD_ROWS = 12;
 /** Rows of a plan's on-screen tail a plan hint must contain. */
 const PLAN_TAIL_ROWS = 3;
 
-const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip)/i;
+const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip|continue without)/i;
 const TYPE_SOMETHING = /^type something\b/i;
 /** A select question's escape row; Claude's prompt model carries no flag for it (wizard and multi-select do). */
 const QUESTION_ESCAPE = /^chat about this$/i;
@@ -529,15 +530,17 @@ export class Interactions {
   }
 
   /**
-   * Re-detect the session's eligible panes (blocked, or a dialog regex matched lately) and forget the
-   * rest. A pane is read every time (one local read, no revision to skip on: pane.read's is 0) but only
-   * parsed when its text or hints changed. Publishes `interaction` for every pane whose card changed.
+   * Re-detect the session's eligible panes (blocked, unknown, or a dialog regex matched lately) and
+   * forget the rest. Unknown is read because a dialog Herdr's manifest does not name (Codex's hooks
+   * review) leaves the pane there, and only the screen can tell. A pane is read every time (one local
+   * read, no revision to skip on: pane.read's is 0) but only parsed when its text or hints changed.
+   * Publishes `interaction` for every pane whose card changed.
    */
   async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string, maxAgeMs = 0): Promise<Interaction[]> {
     const now = this.now();
     const eligible = agents.filter((a) => {
       const matchedAt = this.matched.get(paneKey(session, a.paneId));
-      return a.status === "blocked" || this.waiting(session, a.paneId) || (matchedAt !== undefined && now - matchedAt <= OUTPUT_MATCH_WINDOW_MS);
+      return a.status === "blocked" || a.status === "unknown" || this.waiting(session, a.paneId) || (matchedAt !== undefined && now - matchedAt <= OUTPUT_MATCH_WINDOW_MS);
     });
     const live = new Set(eligible.map((a) => a.paneId));
     if (only === undefined) {
@@ -627,9 +630,16 @@ export class Interactions {
     }
     const dialog = dialogOnScreen(pane.agent, read.text);
     const detection = dialog ? toInteraction(pane, dialog, read.revision, hints, readAt) : null;
-    this.panes.set(key, { input, detection, readAt });
     const before = previous?.detection?.interaction;
     const after = detection?.interaction;
+    if (after?.kind === "permission" && pane.agent === "claude") {
+      // Kept from the dialog's first read: the countdown only says whole seconds, so each later read
+      // would move the deadline by up to one.
+      const left = autoDenyInMs(read.text);
+      const kept = before?.signature === after.signature ? before.autoDenyAt : undefined;
+      if (left !== null) after.autoDenyAt = kept ?? readAt + left;
+    }
+    this.panes.set(key, { input, detection, readAt });
     if (before?.signature !== after?.signature || JSON.stringify(before?.hints) !== JSON.stringify(after?.hints)) {
       this.publish(session, pane.paneId, "interaction");
     }

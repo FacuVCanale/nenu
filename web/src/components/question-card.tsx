@@ -365,6 +365,7 @@ export function QuestionCard({
           : plan !== undefined ? <PlanText text={plan} compact={compact} folded={planFolded} overflows={planOverflows} onMeasure={(overflows) => setPlanMeasure({ text: plan, overflows })} onOpenAll={() => setOpened(true)} />
           : i.context && <Context interaction={i} text={i.context} compact={compact} clamp={clampOnly} folded={codeFolded} onOpenAll={() => setOpened(true)} />}
       </div>
+      {i.autoDenyAt !== undefined && <AutoDeny at={i.autoDenyAt} />}
 
       {typing ? (
         <div className="flex flex-col gap-3">
@@ -665,6 +666,27 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
       </p>
     )}
   </>;
+}
+
+/**
+ * Claude's own deadline for an unanswered request (its countdown row), counted down here so only this
+ * line re-renders each second. It ticks when the whole second changes, as Claude's row does.
+ */
+function AutoDeny({ at }: { at: number }) {
+  const [now, setNow] = useState(Date.now);
+  const left = Math.max(0, at - now);
+  useEffect(() => {
+    if (left === 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), (left % 1000) + 1);
+    return () => clearTimeout(timer);
+  }, [left]);
+  const s = Math.floor(left / 1000);
+  return (
+    <p className="flex items-center gap-2 text-footnote text-status-working">
+      <AlertTriangle aria-hidden className="size-4 shrink-0" />
+      {left > 0 ? `Claude denies this on its own in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} if nobody answers.` : "Claude is denying this now."}
+    </p>
+  );
 }
 
 /** Options the card shows but cannot answer (a read-only device, or answered in the thread): the same
