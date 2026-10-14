@@ -58,11 +58,12 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
 }
 
 /**
- * A pane that belongs to a project renders inside this frame. A coordinator's chat carries its
- * threads as cards; a wide screen keeps the project panel beside it, or docks a thread there
- * (`?thread=`). A phone switches the coordinator between Chat, Threads and PRs in place, keeping
- * the chat mounted so its draft and scroll survive; a thread shows its siblings as chips, a header
- * button to the project's threads, and its pull request above the composer.
+ * A pane that belongs to a project renders inside this frame. A wide screen keeps the project panel
+ * beside a coordinator's chat, or docks a thread there (`?thread=`), and lists its threads as cards
+ * under the chat only while the panel is put away. A phone switches the coordinator between Chat,
+ * Threads and PRs in place, keeping the chat mounted so its draft and scroll survive; a thread shows
+ * its siblings as chips, a header button to the project's threads, and its pull request above the
+ * composer.
  */
 export function ProjectFrame({ owner, paneId, data, children }: {
   owner: PaneProject;
@@ -166,10 +167,11 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     </div></div>
   ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
 
-  // Beside the panel the cards would list every thread a second time; they come back when it is put away.
-  const cards = scope.coordinating && !panelShown ? (
+  // The cards list the threads only where nothing else does: a phone's tabs list them, and so does the
+  // panel until it is put away.
+  const cards = scope.coordinating && wide && !panelShown ? (
     <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
-      onOpen={(target) => { if (!target.paneId) openNode(target.id); else if (wide) setDocked(target.paneId); else openPane(target.paneId); }} />
+      onOpen={(target) => { if (target.paneId) setDocked(target.paneId); else openNode(target.id); }} />
   ) : undefined;
 
   return (

@@ -131,8 +131,6 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
   }
 
   const shell = agent === "shell";
-  const choices = shell ? [] : PERMISSIONS[agent];
-  const chosen = shell ? undefined : choices.find((p) => p.id === permissions[agent]);
   const shown = cwd.trim() ? tildePath(cwd.trim(), home) : "~";
   const parent = shown === "~" ? "~" : shown.slice(0, -baseName(shown).length - 1) || "/";
   if (browsing) {
@@ -162,20 +160,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
 
       <FolderButton shown={shown} parent={parent} onClick={() => onBrowsing(true)} />
 
-      {chosen && !shell && (
-        <div className="flex flex-col gap-1.5">
-          <Segmented
-            label="Permissions"
-            options={choices}
-            value={chosen.id}
-            onChange={(id) => setPermissions((p) => ({ ...p, [agent]: id }))}
-          />
-          <p className={cn("flex items-start gap-1.5 px-0.5 text-footnote", chosen.danger ? "text-status-working" : "text-muted-foreground")}>
-            {chosen.danger && <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />}
-            {chosen.hint}
-          </p>
-        </div>
-      )}
+      {!shell && <PermissionPicker agent={agent} value={permissions[agent]} onChange={(id) => setPermissions((p) => ({ ...p, [agent]: id }))} />}
 
       <input aria-label="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className={inputField} />
 
@@ -201,6 +186,22 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
         {busy ? "Creating…" : shell ? "Open shell" : `Start ${agentLabel(agent)}`}
       </Button>
     </form>
+  );
+}
+
+/** How much the agent may do without asking, and what that means. New offers it, and so does a shell pane. */
+export function PermissionPicker({ agent, value, onChange }: { agent: Exclude<SpawnAgent, "shell">; value: string; onChange: (id: string) => void }) {
+  const choices = PERMISSIONS[agent];
+  const chosen = choices.find((p) => p.id === value);
+  if (!chosen) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Segmented label="Permissions" options={choices} value={chosen.id} onChange={onChange} />
+      <p className={cn("flex items-start gap-1.5 px-0.5 text-footnote", chosen.danger ? "text-status-working" : "text-muted-foreground")}>
+        {chosen.danger && <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />}
+        {chosen.hint}
+      </p>
+    </div>
   );
 }
 

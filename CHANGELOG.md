@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-14
+
+### Added
+- A pull request's size opens its diff: files, their +/− and folded hunks, read with git from the thread's folder, bounded and lazy-loaded (ADR 0073). (e8fc31bb)
+
+### Fixed
+- A shell pane starts Claude Code or Codex with New's agent and permission choice, and Claude's folder-trust prompt (2.1.296+) is answerable from the phone. (e6ea79f3)
+- A message with images sent to Claude Code no longer stalls as "wasn't seen": the guard reads Claude's `[Image #N]` tokens, and the input box survives Claude's "ctrl+g to edit" hint. (53e03e9c)
+- A phone's coordinator chat no longer lists its threads as cards under the conversation; the Threads and PRs tabs list them. (70f1d9e4)
+
 ## [1.2.0] - 2026-10-14
 
 ### Added

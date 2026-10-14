@@ -209,7 +209,7 @@ MEASURED by running the adapters on the new captures:
 
 | Capture | Today | Why it matters |
 |---|---|---|
-| Claude `trust-prompt-v2296` | raw | 2.1.296 trust prompt not lifted (cursor starts on "No, exit"). |
+| Claude `trust-prompt-v2296` | lifted (2026-10-14) | Unnumbered rows, cursor on "No, exit": each row is reached by arrows from the cursor, then Enter. Before, the phone showed no buttons and Enter alone exited Claude. |
 | Claude `working-queued-v2296` | `composerReady=false` | While a message is queued Nenu refuses to type, so a second queued send is blocked. |
 | Claude `hook-holding-v2296` | `composerReady=false` | Same during a slow hook, although the empty input box is drawn (typing there was not tried). |
 | Claude `permission-bash-amend*`, `permission-deny-amend-typed` | raw | "Tab to amend" not modelled. |

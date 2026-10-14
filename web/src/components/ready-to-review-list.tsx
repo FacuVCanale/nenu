@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Check, CircleDashed, GitPullRequest, X } from "lucide-react";
 
+import { DiffStat } from "@/components/diff-stat";
 import { BusyLabel, FoldedList, HomeHeading, isOpening } from "@/components/home-panels";
 import { buttonVariants } from "@/components/ui/button";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
@@ -106,6 +107,8 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
   const label = `Review ${entry.title}`;
   const to = entry.open && ("paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session));
   const busy = !!to && isOpening(opening, to);
+  // The size opens the diff when a pane sits in the PR's repo to read it from.
+  const diffProps = entry.open && "paneId" in entry.open ? { paneId: entry.open.paneId, pr: entry.number, session, url: entry.url } : {};
   return (
     <li className={rowClass}>
       <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0", entry.draft ? "text-muted-foreground" : "text-status-done")} />
@@ -120,17 +123,12 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
         {entry.branch && <span className="min-w-0 truncate font-mono max-sm:hidden">· {entry.branch}</span>}
         {entry.mergeBlocker && <span className="min-w-0 truncate max-sm:hidden">· {entry.mergeBlocker}</span>}
         {entry.diff && (
-          <span className="shrink-0 font-mono sm:hidden">
-            <span aria-hidden>· </span>
-            <span className="text-status-done">+{entry.diff.additions}</span> <span className="text-destructive">−{entry.diff.deletions}</span>
+          <span className="shrink-0 sm:hidden">
+            <span aria-hidden>· </span><DiffStat {...diffProps} diff={entry.diff} />
           </span>
         )}
       </span>
-      {entry.diff && (
-        <span className="col-start-3 row-span-2 row-start-1 shrink-0 font-mono text-footnote max-sm:hidden">
-          <span className="text-status-done">+{entry.diff.additions}</span> <span className="text-destructive">−{entry.diff.deletions}</span>
-        </span>
-      )}
+      {entry.diff && <DiffStat {...diffProps} diff={entry.diff} className="col-start-3 row-span-2 row-start-1 text-footnote max-sm:hidden" />}
       <span className="col-start-3 row-span-2 row-start-1 sm:col-start-4">{entry.checks && <Checks checks={entry.checks} />}</span>
       {to ? (
         <Link to={to} aria-busy={busy || undefined}
