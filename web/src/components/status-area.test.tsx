@@ -14,11 +14,11 @@ describe("workbench notifications", () => {
     const { container } = render(<><textarea aria-label="Reply" /><StatusArea /></>);
     const input = screen.getByRole("textbox");
     input.focus();
-    act(() => setStatus("Codex finished", "success", undefined, { description: "comercio-saas · web" }));
+    act(() => setStatus("Codex finished", "success", undefined, { description: "shop · web" }));
     const notice = screen.getByRole("status");
     expect(container).not.toContainElement(notice);
     expect(document.activeElement).toBe(input);
-    expect(screen.getByText("comercio-saas · web")).toBeVisible();
+    expect(screen.getByText("shop · web")).toBeVisible();
     expect(screen.getAllByRole("region", { name: "Notifications" })).toHaveLength(1);
   });
 

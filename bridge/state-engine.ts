@@ -31,6 +31,14 @@ const SESSION_NAME_READ_LINES = 40;
 // Consecutive failed polls before the herd is reported disconnected (see the poll's catch).
 const DISCONNECT_AFTER_FAILURES = 2;
 
+// How long the poll waits for `session.snapshot`. Longer than a one-shot request's budget because the
+// poll is single-flight: abandoning a slow snapshot and asking again only hands a Herdr that is
+// already behind a second one to build. It covers a Herdr that answers in up to this long, which
+// stays connected. What it delays: a Herdr that accepts connections and never answers reads as
+// disconnected after two of these (~30 s) instead of ~11 s. A Herdr that is gone is unaffected — the
+// dial fails at once and two failed dials still disconnect within seconds.
+export const SNAPSHOT_TIMEOUT_MS = 15_000;
+
 // How long a claude pane's session name may go unread while its identity and status hold still. A
 // `/rename` typed in the desktop TUI changes neither, so this bounds how stale the name can get;
 // everything else re-reads on the change itself. Without it every poll read every claude pane:
@@ -157,6 +165,7 @@ export class StateEngine {
     private readonly herdr: HerdrClient,
     private readonly pollMs: number,
     private readonly now: () => number = Date.now,
+    private readonly snapshotTimeoutMs = SNAPSHOT_TIMEOUT_MS,
   ) {
     this.cadenceMs = pollMs;
   }
@@ -255,7 +264,7 @@ export class StateEngine {
   private async fetchWire() {
     if (this.supportsSnapshot) {
       try {
-        const snap = await this.herdr.sessionSnapshot();
+        const snap = await this.herdr.sessionSnapshot(this.snapshotTimeoutMs);
         return { workspaces: snap.workspaces, panes: snap.panes, tabs: snap.tabs, agents: snap.agents ?? [] };
       } catch (err) {
         if (!(err instanceof Error && err.message.includes("unknown variant"))) throw err;

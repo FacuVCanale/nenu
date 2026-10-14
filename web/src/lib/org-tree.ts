@@ -33,6 +33,26 @@ export function nodeState(thread: ProjectThreadView): NodeState {
   return thread.group === "working" || thread.status === "starting" ? "working" : "idle";
 }
 
+/**
+ * What a node that needs you waits for, when it is something to answer: a dialog on its screen
+ * (Herdr reads the pane blocked), or the agent's own report that it stopped for your reply, which
+ * leaves it idle at its prompt with no dialog at all. Organizations' other reasons (a closed pane,
+ * a failed or stuck start) are neither, and their note says them.
+ */
+export type Ask = "question" | "reply";
+
+/** How each ask reads: the tree's word, the row's line, and the button that opens the chat. */
+export const ASK: Record<Ask, { word: string; label: string; action: string }> = {
+  question: { word: "needs you", label: "Asked you a question", action: "Answer" },
+  reply: { word: "needs reply", label: "Waiting for your reply", action: "Reply" },
+};
+
+export function awaits(thread: ProjectThreadView): Ask | undefined {
+  if (thread.status === "failed" || !thread.paneId || nodeState(thread) !== "needs") return undefined;
+  if (thread.liveStatus && liveState(thread.liveStatus) === "needs") return "question";
+  return thread.selfWaiting ? "reply" : undefined;
+}
+
 export interface OrgNode {
   thread: ProjectThreadView;
   state: NodeState;

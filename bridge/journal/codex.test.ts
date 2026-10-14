@@ -247,10 +247,10 @@ describe("parseCodexTranscript", () => {
 
   test("injected AGENTS instructions stored with a user role are hidden like Codex hides them", () => {
     const injected = [
-      "# AGENTS.md instructions for /Users/fran/Developer/soflex",
+      "# AGENTS.md instructions for /Users/demo/Developer/globex",
       "",
       "<INSTRUCTIONS>",
-      "# Workspace Soflex",
+      "# Workspace Globex",
       "Never print secrets.",
       "</INSTRUCTIONS>",
     ].join("\n");

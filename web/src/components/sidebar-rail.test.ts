@@ -8,7 +8,7 @@ describe("railMonograms", () => {
   });
 
   it("reads words across spaces, punctuation and camelCase", () => {
-    expect(railMonograms(["AWAM Comercio SaaS", "myProject", "psag", "Rediseño_mobile", "x"])).toEqual(["AC", "MP", "PS", "RM", "X"]);
+    expect(railMonograms(["Acme Shop", "myProject", "docs", "Rediseño_mobile", "x"])).toEqual(["AS", "MP", "DO", "RM", "X"]);
   });
 
   it("lets the first of a colliding pair keep its initials and moves the other to letters of its own", () => {

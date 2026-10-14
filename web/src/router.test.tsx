@@ -35,9 +35,9 @@ describe("routes", () => {
   });
 
   it("titles the page in its header and keeps the read-only notice, like every other page", () => {
-    const router = open("/nowhere", { ...home, device: { enforced: true, authorized: false, device: "fran-iphone" } });
+    const router = open("/nowhere", { ...home, device: { enforced: true, authorized: false, device: "alex-iphone" } });
     expect(within(screen.getByRole("banner")).getByText("Page not found")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Read-only on this device · fran-iphone");
+    expect(screen.getByRole("status")).toHaveTextContent("Read-only on this device · alex-iphone");
     router.dispose();
   });
 });

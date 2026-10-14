@@ -7,8 +7,8 @@ import { fetchPaneFile, grantFileOpen, PaneFileError } from "@/lib/api";
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn(), grantFileOpen: vi.fn() }));
 const fetchFile = vi.mocked(fetchPaneFile);
 const grant = vi.mocked(grantFileOpen);
-const PATH = "/Users/fran/Obsidian/board/resultado-shopify.md";
-const GRANT = { url: "/api/files/open?t=abc", name: "resultado-shopify.md", size: 6_500_000, type: "text/plain" };
+const PATH = "/Users/demo/Obsidian/board/board-summary.md";
+const GRANT = { url: "/api/files/open?t=abc", name: "board-summary.md", size: 6_500_000, type: "text/plain" };
 
 beforeEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
 

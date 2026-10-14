@@ -154,8 +154,8 @@ describe("the sidebar's workspaces, with no projects", () => {
 describe("the sidebar", () => {
   const thread = (id: string, title: string, parentId: string, extra: Partial<ProjectView["threads"][number]> = {}): ProjectView["threads"][number] =>
     ({ id, title, parentId, role: "worker", status: "open", ...extra });
-  const awam: ProjectView = {
-    slug: "awam", name: "AWAM", status: "active", workspaceIds: ["w1"],
+  const acme: ProjectView = {
+    slug: "acme", name: "Acme", status: "active", workspaceIds: ["w1"],
     coordinator: { paneId: "c", agent: "codex", liveStatus: "working" },
     threads: [
       thread("t1", "rediseño mobile", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle" }),
@@ -171,14 +171,14 @@ describe("the sidebar", () => {
     agents: [at("c", "w1", "working"), at("lead", "w1"), at("depo", "w1", "blocked"), at("merca", "w1"), at("stray", "w1"), at("loose", "w2", "working")],
     shellPanes: [],
     workspaces: [
-      { workspaceId: "w1", number: 1, label: "AWAM ws", focused: true, activeTabId: "w1:t", tabCount: 1, paneCount: 5 },
-      { workspaceId: "w2", number: 2, label: "soflex", focused: false, activeTabId: "w2:t", tabCount: 1, paneCount: 1 },
+      { workspaceId: "w1", number: 1, label: "Acme ws", focused: true, activeTabId: "w1:t", tabCount: 1, paneCount: 5 },
+      { workspaceId: "w2", number: 2, label: "globex", focused: false, activeTabId: "w2:t", tabCount: 1, paneCount: 1 },
     ],
     tabs: [
       { tabId: "w1:t", workspaceId: "w1", number: 1, label: "main", focused: true, paneCount: 5 },
       { tabId: "w2:t", workspaceId: "w2", number: 1, label: "main", focused: true, paneCount: 1 },
     ],
-    projects: [awam], sessions: [], session: undefined, bridge: "connected", error: false,
+    projects: [acme], sessions: [], session: undefined, bridge: "connected", error: false,
   } as unknown as HomeData;
 
   function open(path = "/", source: HomeData = herd) {
@@ -192,7 +192,7 @@ describe("the sidebar", () => {
 
   it("nests threads under their coordinator and marks what needs you and what is ready for review", () => {
     open("/pane/depo");
-    const project = screen.getByRole("region", { name: "AWAM" });
+    const project = screen.getByRole("region", { name: "Acme" });
     const lead = within(project).getByRole("group", { name: "rediseño mobile" });
     expect(within(lead).getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/pane/lead");
     expect(within(lead).getByRole("link", { name: /^panel depo/ })).toHaveAccessibleName("panel depo, needs you");
@@ -209,12 +209,12 @@ describe("the sidebar", () => {
   it("lists only the workspaces no project holds, and folds a coordinator's threads", async () => {
     const user = open();
     const workspaces = screen.getByRole("region", { name: "Workspaces" });
-    expect(within(workspaces).getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["soflex"]);
-    // soflex holds one pane, so its name opens that pane rather than a page of one.
-    expect(within(workspaces).getByRole("link", { name: /^soflex/ })).toHaveAttribute("href", "/pane/loose");
+    expect(within(workspaces).getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["globex"]);
+    // globex holds one pane, so its name opens that pane rather than a page of one.
+    expect(within(workspaces).getByRole("link", { name: /^globex/ })).toHaveAttribute("href", "/pane/loose");
     await user.click(screen.getByRole("button", { name: "rediseño mobile threads" }));
     expect(screen.queryByText("panel depo")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!).expanded).toEqual({ "awam/t1": false });
+    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!).expanded).toEqual({ "acme/t1": false });
   });
 
   it("finds a project's nodes under Projects and any other pane under Chats", async () => {
@@ -230,8 +230,17 @@ describe("the sidebar", () => {
     expect(screen.queryByRole("group", { name: "Projects" })).toBeNull();
   });
 
+  it("says a thread that stopped to wait for your reply needs a reply, not a dialog", () => {
+    const project = herd.projects![0]!;
+    const waiting = { ...project, threads: project.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "idle" as const, group: "waiting-on-you", selfWaiting: true as const } : item) };
+    open("/", { ...herd, projects: [waiting] });
+    const head = screen.getByRole("link", { name: /^rediseño mobile/ });
+    expect(head).toHaveAccessibleName("rediseño mobile, needs reply");
+    expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs reply");
+  });
+
   it("shows a coordinator thread's own state beside its threads' dots", () => {
-    const blocked = { ...awam, threads: awam.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "blocked" as const } : item) };
+    const blocked = { ...acme, threads: acme.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "blocked" as const } : item) };
     open("/", { ...herd, projects: [blocked] });
     const head = screen.getByRole("link", { name: /^rediseño mobile/ });
     expect(head).toHaveAccessibleName("rediseño mobile, needs you");
@@ -244,7 +253,7 @@ describe("the sidebar", () => {
     await user.click(needsYou);
     expect(needsYou).toHaveAttribute("aria-pressed", "true");
     const list = screen.getByRole("region", { name: "Needs you" });
-    expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual(["panel depoAWAM, needs you"]);
+    expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual(["panel depoAcme, needs you"]);
     await user.click(needsYou);
     expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
   });
@@ -270,7 +279,7 @@ describe("the sidebar", () => {
   });
 
   it("lists open work most urgent first with coordinators ahead, and History as a closed grey tree of node details", async () => {
-    const org: ProjectView = { ...awam, threads: [
+    const org: ProjectView = { ...acme, threads: [
       thread("t1", "landing", "root"),
       thread("t2", "panel depo", "root", { paneId: "depo", liveStatus: "blocked" }),
       thread("t3", "rediseño", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle" }),
@@ -281,29 +290,29 @@ describe("the sidebar", () => {
       thread("t12", "newer plan", "root", { role: "coordinator", status: "resolved", updated: "2026-10-02T00:00:00Z" }),
     ] };
     const user = open("/", { ...herd, projects: [org] });
-    const project = within(screen.getByRole("region", { name: "AWAM" }));
+    const project = within(screen.getByRole("region", { name: "Acme" }));
     const names = () => project.getAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
-    expect(names()).toEqual(["AWAM", "Coordinator", "rediseño", "merca", "panel depo", "landing", "stray"]);
+    expect(names()).toEqual(["Acme", "Coordinator", "rediseño", "merca", "panel depo", "landing", "stray"]);
     // A node with no live pane opens its own detail, not the project.
-    expect(project.getByRole("link", { name: /^landing/ })).toHaveAttribute("href", "/project/awam/node/t1");
+    expect(project.getByRole("link", { name: /^landing/ })).toHaveAttribute("href", "/project/acme/node/t1");
 
     const history = project.getByRole("button", { name: /^History/ });
     expect(history).toHaveAttribute("aria-expanded", "false");
     expect(project.queryByText("new fix")).not.toBeInTheDocument();
     await user.click(history);
     expect(names().slice(7)).toEqual(["newer plan", "old plan", "new fix"]);
-    expect(project.getByRole("link", { name: /^new fix/ })).toHaveAttribute("href", "/project/awam/node/t11");
+    expect(project.getByRole("link", { name: /^new fix/ })).toHaveAttribute("href", "/project/acme/node/t11");
     await user.click(project.getByRole("button", { name: "old plan threads" }));
     expect(names().slice(7)).toEqual(["newer plan", "old plan", "old step", "new fix"]);
   });
 
   it("calls the coordinator what every other view calls it, in Needs you and the drawer's Recent", async () => {
-    const asking = { ...awam, coordinator: { ...awam.coordinator!, liveStatus: "blocked" as const } };
+    const asking = { ...acme, coordinator: { ...acme.coordinator!, liveStatus: "blocked" as const } };
     const source = { ...herd, agents: herd.agents.map((agent) => agent.paneId === "c" ? { ...agent, status: "blocked" as const, tabLabel: "lead" } : agent), projects: [asking] };
     const user = open("/", source);
     await user.click(screen.getByRole("button", { name: "Needs you, 2" }));
     const list = screen.getByRole("region", { name: "Needs you" });
-    expect(within(list).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent)).toEqual(["AWAM coordinator", "panel depo"]);
+    expect(within(list).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent)).toEqual(["Acme coordinator", "panel depo"]);
   });
 
   it("names a chat in the drawer's Recent as the chat names itself, with its workspace and tab under it", () => {
@@ -311,23 +320,23 @@ describe("the sidebar", () => {
     const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={source} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
     render(<RouterProvider router={router} />);
     const recent = within(screen.getByRole("region", { name: "Recent" }));
-    const coordinator = recent.getByRole("link", { name: /^AWAM coordinator/ });
+    const coordinator = recent.getByRole("link", { name: /^Acme coordinator/ });
     expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
   it("opens History on its five newest nodes and leaves the rest to the project page", async () => {
     const done = (n: number, day: number, extra: Partial<ProjectView["threads"][number]> = {}) =>
       thread(`h${n}`, `done ${n}`, "root", { status: "resolved", updated: `2026-10-0${day}T00:00:00Z`, ...extra });
-    const org: ProjectView = { ...awam, threads: [
+    const org: ProjectView = { ...acme, threads: [
       done(1, 1), done(2, 2), done(3, 3, { role: "coordinator" }), done(4, 4), done(5, 5), done(6, 6), done(7, 7), done(8, 8, { parentId: "h3" }),
     ] };
     const user = open("/", { ...herd, projects: [org] });
-    const project = within(screen.getByRole("region", { name: "AWAM" }));
+    const project = within(screen.getByRole("region", { name: "Acme" }));
     await user.click(project.getByRole("button", { name: /^History/ }));
     // The five that moved last, still drawn coordinators first; the rest is one tap away.
     const names = project.getAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent).filter((name) => name?.startsWith("done"));
     expect(names).toEqual(["done 3", "done 7", "done 6", "done 5", "done 4"]);
-    expect(project.getByRole("link", { name: "Show all 8 in project" })).toHaveAttribute("href", "/project/awam");
+    expect(project.getByRole("link", { name: "Show all 8 in project" })).toHaveAttribute("href", "/project/acme");
   });
 
   it("marks Home as the page on screen only on Home", () => {

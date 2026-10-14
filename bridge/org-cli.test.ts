@@ -105,17 +105,17 @@ describe("herdr-organizations CLI adapter", () => {
     const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ id: "t-0042", parent_id: "t-0010", role: "coordinator", profile: "codex" }), stderr: "" });
 
     expect(await startNode(run, "/tmp/herdr.sock", {
-      project: "awam", title: "-Billing", parent: "t-0010", task: "Coordinate billing.", role: "coordinator", profile: "codex",
+      project: "acme", title: "-Billing", parent: "t-0010", task: "Coordinate billing.", role: "coordinator", profile: "codex",
     }, () => false)).toMatchObject({ id: "t-0042", role: "coordinator", parent: "t-0010", profile: "codex" });
-    expect(calls[0]!.argv).toEqual(["node", "start", "awam", "--role=coordinator", "--parent=t-0010", "--title=-Billing", "--profile=codex", "--task-file", "-"]);
+    expect(calls[0]!.argv).toEqual(["node", "start", "acme", "--role=coordinator", "--parent=t-0010", "--title=-Billing", "--profile=codex", "--task-file", "-"]);
   });
 
   it("starts a top-level thread through upstream herdr-projects and refuses what it cannot do", async () => {
     const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ id: "t-0007", kind: "tab", profile: "", agent: "claude", branch: "", pane_id: "w1:p3" }), stderr: "" });
-    const thread = { project: "awam", title: "Hotfix", parent: "root", task: "Fix the login." };
+    const thread = { project: "acme", title: "Hotfix", parent: "root", task: "Fix the login." };
 
     expect(await startNode(run, "/tmp/herdr.sock", thread, () => true)).toMatchObject({ id: "t-0007", role: "worker", parent: "root" });
-    expect(calls[0]!.argv).toEqual(["thread", "start", "awam", "--title=Hotfix", "--task-file", "-"]);
+    expect(calls[0]!.argv).toEqual(["thread", "start", "acme", "--title=Hotfix", "--task-file", "-"]);
     for (const refused of [{ role: "coordinator" }, { parent: "t-0001" }, { template: "review-worker" }]) {
       await expect(startNode(run, "/tmp/herdr.sock", { ...thread, ...refused }, () => true)).rejects.toThrow("need Herdr Organizations");
     }
@@ -130,11 +130,11 @@ describe("herdr-organizations CLI adapter", () => {
   });
 
   it("opens a project's coordinator in the bridge's Herdr session", async () => {
-    const { run, calls } = fakeRun({ code: 0, stdout: "started codex as hp-awam", stderr: "" });
+    const { run, calls } = fakeRun({ code: 0, stdout: "started codex as hp-acme", stderr: "" });
 
-    expect(await openProject(run, "/tmp/herdr.sock", { project: "awam" })).toEqual({ message: "started codex as hp-awam" });
-    expect(calls).toEqual([{ argv: ["open", "awam"], opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 } }]);
-    await expect(openProject(fakeRun({ code: 1, stdout: "", stderr: "error: `awam` is archived" }).run, "/s", { project: "awam" })).rejects.toThrow("is archived");
+    expect(await openProject(run, "/tmp/herdr.sock", { project: "acme" })).toEqual({ message: "started codex as hp-acme" });
+    expect(calls).toEqual([{ argv: ["open", "acme"], opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 } }]);
+    await expect(openProject(fakeRun({ code: 1, stdout: "", stderr: "error: `acme` is archived" }).run, "/s", { project: "acme" })).rejects.toThrow("is archived");
   });
 
   it("rejects invalid input before running the CLI", async () => {
@@ -151,7 +151,7 @@ describe("herdr-organizations CLI adapter", () => {
     await expect(start({ profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
     await expect(start({ template: "review-worker", profile: "codex" })).rejects.toThrow("carries its own profile");
     await expect(start({ parent: "../t-1" })).rejects.toThrow("Node ID must look like t-1234");
-    await expect(openProject(run, "/s", { project: "../awam" })).rejects.toThrow("Project must use lowercase");
+    await expect(openProject(run, "/s", { project: "../acme" })).rejects.toThrow("Project must use lowercase");
     await expect(resolveNode(run, "/tmp/herdr.sock", { project: "nenu", id: "t-1" })).rejects.toThrow("Node ID must look like t-1234");
     expect(calls).toEqual([]);
   });
@@ -170,26 +170,26 @@ describe("herdr-organizations CLI adapter", () => {
   it("replaces the project coordinator on the chosen profile and passes on what Organizations says", async () => {
     const { run, calls } = fakeRun({ code: 0, stdout: "stopped 1 coordinator agent(s) and started a new one on codex\n", stderr: "" });
 
-    expect(await replaceCoordinator(run, "/tmp/herdr.sock", { project: "awam", profile: "codex" }))
+    expect(await replaceCoordinator(run, "/tmp/herdr.sock", { project: "acme", profile: "codex" }))
       .toEqual({ message: "stopped 1 coordinator agent(s) and started a new one on codex" });
     expect(calls).toEqual([{
-      argv: ["coordinator", "replace", "awam", "--profile=codex"],
+      argv: ["coordinator", "replace", "acme", "--profile=codex"],
       opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 },
     }]);
-    await expect(replaceCoordinator(run, "/s", { project: "awam", profile: "" })).rejects.toThrow("Choose the agent the new coordinator runs on.");
-    await expect(replaceCoordinator(run, "/s", { project: "awam", profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
-    await expect(replaceCoordinator(run, "/s", { project: "../awam", profile: "codex" })).rejects.toThrow("Project must use lowercase");
+    await expect(replaceCoordinator(run, "/s", { project: "acme", profile: "" })).rejects.toThrow("Choose the agent the new coordinator runs on.");
+    await expect(replaceCoordinator(run, "/s", { project: "acme", profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
+    await expect(replaceCoordinator(run, "/s", { project: "../acme", profile: "codex" })).rejects.toThrow("Project must use lowercase");
     expect(calls).toHaveLength(1);
-    await expect(replaceCoordinator(fakeRun({ code: 1, stdout: "", stderr: "error: no Herdr session to start the coordinator in" }).run, "/s", { project: "awam", profile: "codex" }))
+    await expect(replaceCoordinator(fakeRun({ code: 1, stdout: "", stderr: "error: no Herdr session to start the coordinator in" }).run, "/s", { project: "acme", profile: "codex" }))
       .rejects.toThrow("no Herdr session");
   });
 
   it("closes a thread through upstream herdr-projects, keeping its worktree", async () => {
     const { run, calls } = fakeRun({ code: 0, stdout: "", stderr: "" });
 
-    await resolveNode(run, "/tmp/herdr.sock", { project: "awam", id: "t-0042" }, () => true);
+    await resolveNode(run, "/tmp/herdr.sock", { project: "acme", id: "t-0042" }, () => true);
 
-    expect(calls.map((call) => call.argv)).toEqual([["thread", "resolve", "awam", "t-0042", "--keep-worktree"]]);
+    expect(calls.map((call) => call.argv)).toEqual([["thread", "resolve", "acme", "t-0042", "--keep-worktree"]]);
   });
 });
 

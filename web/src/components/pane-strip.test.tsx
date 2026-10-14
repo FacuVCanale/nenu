@@ -97,7 +97,7 @@ describe("PaneStrip", () => {
 
   it("calls a project's thread by its title, as the rest of Nenu does", () => {
     const projects: ProjectView[] = [{
-      slug: "awam", name: "Awam", status: "active",
+      slug: "acme", name: "Acme", status: "active",
       threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
     }];
     render(
@@ -114,7 +114,7 @@ describe("PaneStrip", () => {
 
   it("names the actions sheet as its pill does", () => {
     const projects: ProjectView[] = [{
-      slug: "awam", name: "Awam", status: "active",
+      slug: "acme", name: "Acme", status: "active",
       threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
     }];
     render(

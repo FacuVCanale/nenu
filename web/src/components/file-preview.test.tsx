@@ -92,7 +92,7 @@ it("surfaces unavailable files and retries without leaving the chat", async () =
 });
 
 it("explains a file outside the pane's folder with its path instead of a Retry that cannot work", async () => {
-  const path = "/Users/fran/Obsidian/board/resultado-shopify.md";
+  const path = "/Users/demo/Obsidian/board/board-summary.md";
   fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): This file is outside the project.", 404, true));
   const writeText = vi.fn(async () => {});
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -128,10 +128,10 @@ it("replaces a refused HTML frame with the reason once the frame has loaded", as
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
     new Response("This file is outside the project.", { status: 404, headers: { "x-file-state": "outside-project" } }));
   try {
-    render(<FilePreview paneId="w1:p1" path="/Users/fran/Obsidian/board/resultado-shopify.html" onClose={() => {}} />);
-    fireEvent.load(screen.getByTitle("Rendered preview of resultado-shopify.html"));
+    render(<FilePreview paneId="w1:p1" path="/Users/demo/Obsidian/board/board-summary.html" onClose={() => {}} />);
+    fireEvent.load(screen.getByTitle("Rendered preview of board-summary.html"));
     expect(await screen.findByRole("alert")).toHaveTextContent("outside this agent's folder");
-    expect(screen.queryByTitle("Rendered preview of resultado-shopify.html")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Rendered preview of board-summary.html")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Download file" })).not.toBeInTheDocument();
   } finally {
     fetchSpy.mockRestore();

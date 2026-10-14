@@ -182,7 +182,7 @@ describe("one organization, the way Herdr Organizations draws it", () => {
   const node = (id: string, title: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
     ({ id, title, parentId, role: "worker", status: "open", ...extra });
   const org: ProjectView = {
-    slug: "awam", name: "AWAM", status: "active", nodeActions: true,
+    slug: "acme", name: "Acme", status: "active", nodeActions: true,
     coordinator: { paneId: "c", agent: "claude", liveStatus: "working" },
     threads: [
       node("t-1", "Hotfix", "root", { group: "idle", updated: ago(30) }),
@@ -303,8 +303,20 @@ describe("one organization, the way Herdr Organizations draws it", () => {
     expect(agent).toHaveValue("claude");
     await user.selectOptions(agent, "codex");
     await user.click(within(dialog).getByRole("button", { name: "Replace" }));
-    await waitFor(() => expect(posted).toEqual({ project: "awam", profile: "codex" }));
+    await waitFor(() => expect(posted).toEqual({ project: "acme", profile: "codex" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+});
+
+it("a thread waiting for your reply says so instead of its terminal's state, and opens its chat", async () => {
+  const waiting: ProjectView = { ...project, threads: [
+    { id: "T2", title: "Copy", parentId: "root", role: "worker", status: "open", paneId: "b", agent: "claude", liveStatus: "idle", group: "waiting-on-you", note: "idle", selfWaiting: true },
+  ] };
+  const { user, onOpenPane } = setup({ project: waiting, panes: [{ paneId: "b", terminalTitle: "Copy brief" } as never] });
+  const row = screen.getByRole("button", { name: /^Copy/ });
+  expect(row).toHaveTextContent("Waiting for your reply");
+  expect(row).not.toHaveTextContent("Copy brief");
+  await user.click(row);
+  expect(onOpenPane).toHaveBeenCalledWith("b");
 });

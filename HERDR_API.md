@@ -413,12 +413,21 @@ out here too since they're easy to miss in the block above.
 - **`pane.updated`** (global, protocol 22) carries the full pane record and fires on metadata changes
   (title, session id, tokens), each with a new `revision`. **It does not track status**: in the P0
   probe Claude produced 4 (agent detected, session id, `/clear`, title) and Codex ~1/s while blocked,
-  following its animated terminal title. Treat it as a metadata poke only.
+  following its animated terminal title. On a live 21-agent herd (2026-10-14, 60 s) it was 30 of 51
+  events and 29.9 of 32.2 KB, up to 9 KB in one second. Nenu does not subscribe to it.
 - **`pane.agent_status_changed`** (protocol 22) accepts an optional `agent_status` filter, and its
   payload also carries `title`, `display_agent` and `state_labels`.
 - **One bad entry rejects the whole subscribe.** An unknown `type` (an older server) and a `pane_id`
   that no longer exists (`pane_not_found`) both fail the request before the ack. Rebuild the per-pane
   entries from a fresh snapshot before retrying.
+- **A pane that closes does not end a stream that names it.** Probed on a disposable 0.9.3 server
+  (2026-10-14): subscribed to two panes' status, closed one; `pane_closed` arrived and the stream stayed
+  open. The check is at subscribe time only.
+- **A reader that falls behind loses the stream.** Herdr 0.9.3 writes events without waiting for the
+  socket; when a write would block it logs `api connection failed err=Resource temporarily unavailable
+  (os error 35)` and closes the stream (twice on 2026-10-14, both while the bridge was stalled on a
+  loaded host). A macOS Unix socket buffers 8 KiB, so the stream's volume sets how long a stall it
+  survives.
 - **`events_lost`.** Herdr streams from a bounded shared event history; a reader that falls behind it gets
   an `events_lost` error line and the stream closes. The prescribed recovery is resubscribe plus a fresh
   `session.snapshot`, since whatever happened meanwhile is unknown.
@@ -429,19 +438,19 @@ out here too since they're easy to miss in the block above.
 
 Nenu now polls `session.snapshot` (above) as the source of truth, and additionally holds a
 long-lived `events.subscribe` stream — global lifecycle events plus a per-agent-pane
-`pane.agent_status_changed` subscription, resubscribed whenever the agent-pane set changes —
+`pane.agent_status_changed` subscription, resubscribed whenever an agent pane appears —
 purely to **poke** the poller: an event triggers an immediate debounced re-poll, it never updates
 state by itself. `bridge/event-poker.ts` adds:
 
-- the `**` types above, only when `ping` reports protocol 22 or newer, and the base list for good if
-  a server rejects them anyway;
+- the `**` types above except `pane.updated`, only when `ping` reports protocol 22 or newer, and the
+  base list for good if a server rejects them anyway;
 - `pane.output_matched` entries only for watches a caller sets (`setOutputWatches`), delivered to
   `onOutputMatched` listeners at once and never as a poke. Herdr compiles each regex while handling
   the subscribe and rejects the whole subscribe with `invalid_regex` over one it cannot compile (Rust
   regex syntax: no look-around), so the poker drops every watch, tells `onOutputWatchesRejected`
   listeners and resubscribes the base list at once;
-- `pane.updated` pokes only when the pane's agent, label, session ref or allowlisted tokens changed,
-  so Codex's animated title does not turn into a poll a second;
+- a resubscribe only when an agent pane appears that the open stream does not name; a pane that
+  closes leaves the stream as it is, and the next subscribe drops it;
 - on `events_lost`, an immediate re-poll and resubscribe; on `pane_not_found`, an immediate re-poll
   whose fresh pane set resubscribes (backoff stays the fallback).
 

@@ -14,7 +14,7 @@ describe("skill completion", () => {
 
   it("does not open for embedded symbols, paths or the other provider prefix", () => {
     expect(detectSkillCompletion("cost$review", 11, "$" )).toBeNull();
-    expect(detectSkillCompletion("/Users/fran", 11, "/")).toBeNull();
+    expect(detectSkillCompletion("/Users/demo", 11, "/")).toBeNull();
     expect(detectSkillCompletion("/review", 7, "$" )).toBeNull();
     expect(detectSkillCompletion("$(ls", 4, "$" )).toBeNull();
     expect(detectSkillCompletion("$review ", 8, "$" )).toBeNull();
