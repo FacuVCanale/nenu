@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-10-15
+
+### Changed
+- On a desk, the coordinator's chat no longer lists thread cards, and the session panel's Terminal tab keeps the screen and the Type into terminal switch without the Keys tray: the physical keyboard is the keys (ADR 0079). (bbedd566)
+
+### Fixed
+- With Type into terminal armed, a physical keyboard sends Ctrl chords, Shift+Tab and F-keys to the terminal; before, Ctrl+C sent nothing and Shift+Tab arrived as Tab. (bbedd566, 3391990c)
+
 ## [1.7.1] - 2026-10-15
 
 ### Changed
