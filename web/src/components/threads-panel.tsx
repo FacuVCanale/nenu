@@ -5,8 +5,8 @@ import {
 } from "lucide-react";
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
-import { DiffStat } from "@/components/diff-stat";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
+import { DiffStat } from "@/components/diff-stat";
 import { ProjectTasks, canMerge, threadAge } from "@/components/project-tasks";
 import { MergeDialog } from "@/components/thread-cards";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
           </span>
           {pr.diff ? !diffPane && <DiffStat diff={pr.diff} className="text-xs" /> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}
         </button>
-        {pr.diff && diffPane && <DiffStat diff={pr.diff} paneId={diffPane} pr={pr.number} session={session} url={pr.url} className="mr-1 self-center px-1.5 text-xs" />}
+        {pr.diff && diffPane && <DiffStat diff={pr.diff} paneId={diffPane} pr={pr.number} session={session} url={pr.url} className="mr-1 mt-[9px] self-start px-1.5 text-xs" />}
         {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
         {!past && !readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
           onClick={() => setMerging(thread)}>Merge</Button>}

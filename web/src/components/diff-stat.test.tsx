@@ -74,3 +74,15 @@ it("says why there is no diff, and offers GitHub", async () => {
   expect(await screen.findByText("This thread's folder is not on the pull request's branch.")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Open on GitHub/ })).toHaveAttribute("href", "https://github.com/a/b/pull/1352");
 });
+
+it("reads the diff again on every opening", async () => {
+  const seen = serve(diff);
+  render(<DiffStat diff={{ additions: 7, deletions: 3 }} paneId="w1:p1" pr={1345} />);
+  await userEvent.click(screen.getByRole("button", { name: /View changes/ }));
+  await screen.findByText("4 files");
+  await userEvent.click(screen.getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await userEvent.click(screen.getByRole("button", { name: /View changes/ }));
+  await screen.findByText("4 files");
+  expect(seen).toEqual(["w1:p1?pr=1345", "w1:p1?pr=1345"]);
+});

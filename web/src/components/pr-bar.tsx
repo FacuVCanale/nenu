@@ -26,9 +26,9 @@ function ciTone(checks: Checks | undefined): string {
 }
 
 /**
- * A thread's pull request above its composer: number, branch and diff size (which opens the diff),
- * and a CI chip whose popover lists the checks. The two automation toggles are Organizations' own and appear only when
- * it reports PR actions; without them the popover is read-only.
+ * A thread's pull request above its composer: number, branch and diff size, which opens the diff
+ * while the PR is open, and a CI chip whose popover lists the checks. The two automation toggles are
+ * Organizations' own and appear only when it reports PR actions; without them the popover is read-only.
  */
 export function PrBar({ project, thread, session, readOnly, onChanged }: {
   project: ProjectView;
@@ -80,7 +80,7 @@ export function PrBar({ project, thread, session, readOnly, onChanged }: {
       {pr.state !== "open" && <span className="shrink-0 text-xs text-muted-foreground">{pr.state}</span>}
       <span className="hidden min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground sm:block">{thread.branch}</span>
       <span className="flex-1 sm:hidden" />
-      {pr.diff && <DiffStat diff={pr.diff} paneId={thread.paneId} pr={pr.number} session={session} url={pr.url} className="text-xs" />}
+      {pr.diff && <DiffStat diff={pr.diff} paneId={pr.state === "open" || pr.state === "draft" ? thread.paneId : undefined} pr={pr.number} session={session} url={pr.url} className="text-xs" />}
       <button ref={anchor} type="button" aria-expanded={open} aria-label={`${ciLabel(checks)}, checks`} onClick={() => setOpen(!open)}
         className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-muted px-2.5 text-xs font-medium tabular-nums", "relative after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-[''] lg:after:hidden")}>
         <span aria-hidden className={cn("size-1.5 rounded-full", ciTone(checks))} />{ciLabel(checks)}

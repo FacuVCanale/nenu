@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -7,7 +7,8 @@ const DiffViewer = lazy(() => import("./diff-viewer"));
 
 /**
  * A pull request's size, "+N −M". Given the pane it can be read from and the PR's number, it is a
- * button that opens the PR's files and hunks; the diff is read then, once per opening.
+ * button that opens the PR's files and hunks; the diff is read then, once per opening, and let go
+ * after it closes.
  */
 export function DiffStat({ diff, paneId, pr, session, url, className }: {
   diff: { additions: number; deletions: number };
@@ -19,6 +20,12 @@ export function DiffStat({ diff, paneId, pr, session, url, className }: {
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (open || !mounted) return;
+    // Closed: drop the viewer and the diff it holds once its exit has played.
+    const timer = setTimeout(() => setMounted(false), 1_000);
+    return () => clearTimeout(timer);
+  }, [open, mounted]);
   const size = <><span className="text-status-done">+{diff.additions}</span> <span className="text-status-blocked">−{diff.deletions}</span></>;
   if (!paneId || pr === undefined) return <span className={cn("shrink-0 font-mono tabular-nums", className)}>{size}</span>;
   return <>

@@ -97,7 +97,7 @@ function FileRow({ file }: { file: DiffFile }) {
         </span>}
       </button>
       {open && file.hunks && <div className="overflow-x-auto border-t border-border/60">
-        <div className="inline-block min-w-full font-mono text-[12px] leading-5">
+        <div className="inline-block min-w-full font-mono text-[12px] leading-5 [font-variant-ligatures:none]">
           {file.hunks.map((hunk, index) => <Hunk key={index} hunk={hunk} />)}
         </div>
       </div>}
