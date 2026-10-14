@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
+import { groupByRecency, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -23,24 +23,30 @@ const project: ProjectView = {
 };
 
 describe("recency", () => {
-  it("splits at local midnight and at seven days, and treats unknown times as older", () => {
+  it("splits at local midnight, at seven days and at thirty, and treats unknown times as older", () => {
     const midnight = new Date(2026, 9, 6).getTime();
     expect(recencyOf(midnight, now)).toBe("today");
     expect(recencyOf(midnight - 1, now)).toBe("week");
     expect(recencyOf(now - 7 * DAY + 1, now)).toBe("week");
-    expect(recencyOf(now - 7 * DAY, now)).toBe("older");
+    expect(recencyOf(now - 7 * DAY, now)).toBe("month");
+    expect(recencyOf(now - 30 * DAY + 1, now)).toBe("month");
+    expect(recencyOf(now - 30 * DAY, now)).toBe("older");
     expect(recencyOf(0, now)).toBe("older");
   });
 
-  it("groups newest first, by the later of activity and last visit, skipping empty groups", () => {
-    const groups = groupChats([
-      pane("old", { lastActiveAt: now - 30 * DAY }),
+  it("groups newest first into every period, an empty one included, as Cursor's history lists them", () => {
+    const chats = [
+      pane("old", { lastActiveAt: now - 40 * DAY }),
       pane("seen", { lastActiveAt: now - 20 * DAY, lastSeenAt: now - 60_000 }),
+      pane("month", { lastActiveAt: now - 12 * DAY }),
       pane("active", { lastActiveAt: now - 1000 }),
       pane("unknown"),
-    ], now);
-    expect(groups.map((group) => [group.label, group.chats.map((chat) => chat.paneId)])).toEqual([
+    ];
+    const groups = groupByRecency(chats, (chat) => Math.max(chat.lastActiveAt ?? 0, chat.lastSeenAt ?? 0), now);
+    expect(groups.map((group) => [group.label, group.items.map((chat) => chat.paneId)])).toEqual([
       ["Today", ["active", "seen"]],
+      ["Last 7 days", []],
+      ["Last 30 days", ["month"]],
       ["Older", ["old", "unknown"]],
     ]);
   });

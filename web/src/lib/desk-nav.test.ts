@@ -1,0 +1,60 @@
+import { describe, expect, it } from "vitest";
+
+import { deskChats, liveliest, projectActivity, projectAgents } from "./desk-nav";
+import type { AgentView, ProjectView } from "./types";
+
+const now = new Date(2026, 9, 6, 12, 0, 0).getTime();
+const MIN = 60_000;
+
+function pane(paneId: string, extra: Partial<AgentView> = {}): AgentView {
+  return { paneId, workspaceId: "w1", workspaceLabel: "w1", workspaceNumber: 1, tabId: "t", agent: "claude", status: "idle", cwd: "/", focused: false, ...extra };
+}
+
+const acme: ProjectView = {
+  slug: "acme", name: "Acme", status: "active", workspaceIds: ["w1"],
+  coordinator: { paneId: "coord", agent: "claude", liveStatus: "idle" },
+  threads: [
+    { id: "t-1", title: "Checkout flow", parentId: "root", role: "worker", status: "open", paneId: "flow", liveStatus: "working", updated: new Date(now - 90 * MIN).toISOString() },
+    { id: "t-2", title: "Cart badge", parentId: "root", role: "worker", status: "open", group: "ready-for-review", updated: new Date(now - 30 * MIN).toISOString(),
+      pr: { url: "https://github.com/acme/shop/pull/41", number: 41, state: "open", review: "approved" } },
+    { id: "t-3", title: "Search index", parentId: "root", role: "worker", status: "resolved", updated: new Date(now - 5 * MIN).toISOString() },
+  ],
+};
+
+describe("the desk's chats", () => {
+  const agents = [pane("coord", { lastActiveAt: now }), pane("flow", { lastActiveAt: now - 2 * MIN }), pane("loose", { workspaceId: "w2", lastSeenAt: now - 3 * MIN })];
+
+  it("lists every open thread and every chat outside a project, never the project's own coordinator or a resolved thread", () => {
+    expect(deskChats({ agents, projects: [acme] }).map((chat) => chat.title)).toEqual(["Checkout flow", "Cart badge", "loose"]);
+  });
+
+  it("opens a running thread's pane, and the node page of one that runs nowhere", () => {
+    const [flow, badge] = deskChats({ agents, projects: [acme] });
+    expect(flow).toMatchObject({ paneId: "flow", thread: { id: "t-1" } });
+    expect(badge).toMatchObject({ paneId: undefined, project: "acme", thread: { id: "t-2" } });
+  });
+
+  it("dates each chat by its last real activity: the later of the thread's update and its pane's", () => {
+    const chats = deskChats({ agents, projects: [acme] });
+    expect(chats.map((chat) => [chat.title, chat.at])).toEqual([
+      ["Checkout flow", now - 2 * MIN],
+      ["Cart badge", now - 30 * MIN],
+      ["loose", now - 3 * MIN],
+    ]);
+  });
+});
+
+describe("a project's row", () => {
+  const agents = [pane("coord", { lastActiveAt: now - 50 * MIN }), pane("flow", { status: "blocked", lastActiveAt: now - 60 * MIN }), pane("loose", { workspaceId: "w2", status: "working" })];
+
+  it("dates the project by anything in it that moved last, resolved threads included", () => {
+    expect(projectActivity(acme, agents)).toBe(now - 5 * MIN);
+    expect(projectActivity({ ...acme, threads: [], coordinator: undefined }, agents)).toBe(0);
+  });
+
+  it("draws the most pressing state among the agents it holds", () => {
+    expect(projectAgents(acme, agents, [acme]).map((agent) => agent.paneId)).toEqual(["coord", "flow"]);
+    expect(liveliest(projectAgents(acme, agents, [acme]))).toBe("blocked");
+    expect(liveliest([pane("a")])).toBeUndefined();
+  });
+});
