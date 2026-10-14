@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps, type RefObject } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps } from "react";
 import { PanelRightOpen } from "lucide-react";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -53,16 +53,14 @@ export interface TerminalSlots {
 }
 
 /**
- * What the chat beside the panel gets from it. The chat owns the mirror, Keys and Type into terminal,
- * and draws them in the Terminal tab; the + menu leaves them out wherever this is given.
+ * What the chat beside the panel gets from it. The chat owns the mirror and Type into terminal, and
+ * draws them in the Terminal tab; the + menu leaves out Type, Keys and Quick replies wherever this is given.
  */
 export interface SessionPanelLink {
   /** The Terminal tab's places while it is on screen, else null. */
   terminal: TerminalSlots | null;
   /** Open the panel on its Terminal tab. */
   showTerminal: () => void;
-  /** Asked before the panel stops showing Terminal; false keeps it on screen (a staged key queue, ADR 0005). */
-  leaving: RefObject<(() => boolean) | null>;
 }
 
 export interface SessionInspectorState {
@@ -81,7 +79,6 @@ export interface SessionInspectorState {
   /** The Terminal tab's places, published by the tab while it is on screen. */
   terminal: TerminalSlots | null;
   setTerminal: (slots: TerminalSlots | null) => void;
-  leaving: SessionPanelLink["leaving"];
 }
 
 /**
@@ -94,7 +91,6 @@ export function useSessionInspector(): SessionInspectorState {
   const [project, setProject] = useState(false);
   const toggleRef = useRef<HTMLButtonElement | null>(null);
   const [terminal, setTerminal] = useState<TerminalSlots | null>(null);
-  const leaving = useRef<(() => boolean) | null>(null);
   const pressed = useRef(false);
   const update = (patch: Partial<Stored>) => setStored((current) => {
     const next = { ...current, ...patch };
@@ -102,10 +98,7 @@ export function useSessionInspector(): SessionInspectorState {
     return next;
   });
   const view: InspectorView = project ? "project" : stored.tab;
-  /** Every way the panel stops showing Terminal asks first: another tab, ⋯ Project, folding. */
-  const mayLeave = (next: InspectorView | null) => view !== "terminal" || next === "terminal" || leaving.current?.() !== false;
   const setOpen = (open: boolean) => {
-    if (!open && !mayLeave(null)) return;
     pressed.current = true;
     update({ open });
   };
@@ -116,15 +109,14 @@ export function useSessionInspector(): SessionInspectorState {
   }, [stored.open]);
 
   // The shortcut leaves focus where it was: folding while typing keeps the cursor in the composer.
-  const latest = useRef({ desk, open: stored.open, update, mayLeave });
-  latest.current = { desk, open: stored.open, update, mayLeave };
+  const latest = useRef({ desk, open: stored.open, update });
+  latest.current = { desk, open: stored.open, update };
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
       // `code`, not `key`: Option+B types "∫" on a Mac.
       if (event.defaultPrevented || event.shiftKey || !event.altKey || !(event.metaKey || event.ctrlKey) || event.code !== "KeyB") return;
       if (!latest.current.desk || isLocked()) return;
       event.preventDefault();
-      if (latest.current.open && !latest.current.mayLeave(null)) return;
       latest.current.update({ open: !latest.current.open });
     }
     window.addEventListener("keydown", onKey);
@@ -139,7 +131,6 @@ export function useSessionInspector(): SessionInspectorState {
     tab: stored.tab,
     setOpen,
     setView: (next) => {
-      if (!mayLeave(next)) return;
       setProject(next === "project");
       if (next !== "project") update({ tab: next });
     },
@@ -147,7 +138,6 @@ export function useSessionInspector(): SessionInspectorState {
     toggleRef,
     terminal,
     setTerminal,
-    leaving,
   };
 }
 
@@ -160,7 +150,6 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
       inspector.setOpen(true);
       inspector.setView("terminal");
     },
-    leaving: inspector.leaving,
   };
 }
 

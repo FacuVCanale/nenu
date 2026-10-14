@@ -7,18 +7,22 @@ import type {
 } from "react";
 
 import { useOrderedKeySender } from "@/hooks/use-ordered-key-sender";
-import { textToKeySequence } from "@/lib/key-queue";
+import { composeKey, normalizeBaseChar, textToKeySequence, type Modifier } from "@/lib/key-queue";
 import { setStatus } from "@/lib/status";
 
 // Physical-keyboard events that do not change a textarea value still need wire names. Printable
-// text, spaces and line breaks normally arrive through the input/change path instead.
+// text, spaces and line breaks normally arrive through the input/change path instead. F1–F12 are
+// bare names in Herdr's grammar, as the phone's Keys tray sends them.
 const SPECIAL_KEYS: Readonly<Record<string, string>> = {
   Escape: "Escape",
   Tab: "Tab",
+  Enter: "Enter",
+  Backspace: "Backspace",
   ArrowUp: "Up",
   ArrowDown: "Down",
   ArrowLeft: "Left",
   ArrowRight: "Right",
+  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`F${i + 1}`, `F${i + 1}`])),
 };
 
 function keyForInputType(inputType: string): string | null {
@@ -27,10 +31,27 @@ function keyForInputType(inputType: string): string | null {
   return null;
 }
 
-function keyForKeyDown(key: string): string | undefined {
-  if (key === "Backspace") return "Backspace";
-  if (key === "Enter") return "Enter";
-  return SPECIAL_KEYS[key];
+/**
+ * A desk's keyboard carries what the phone's Keys tray sends: a named key keeps the Ctrl, Option and
+ * Shift held with it (`shift+Tab`, `alt+Left`), and Ctrl with a printable key is that chord
+ * (`ctrl+c`). Command stays the browser's (copy, paste, close the tab), and so does Ctrl+V where it is
+ * the paste: the pasted text reaches the pane through the change path. Option alone with a printable
+ * key types a character on a Mac, so it stays text as well.
+ */
+function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string | undefined {
+  const named = SPECIAL_KEYS[event.key];
+  if (named !== undefined) {
+    const held: Modifier[] = [];
+    if (event.ctrlKey) held.push("ctrl");
+    if (event.altKey) held.push("alt");
+    if (event.shiftKey) held.push("shift");
+    return composeKey(held, named);
+  }
+  if (!event.ctrlKey || event.altKey || event.metaKey || event.key.length !== 1) return undefined;
+  const base = normalizeBaseChar(event.key);
+  // "+" joins a chord on the wire, so it cannot be a chord's base.
+  if (base === null || base === "+" || (base === "v" && !/Mac|iPhone|iPad/.test(navigator.platform))) return undefined;
+  return composeKey(event.shiftKey && /[a-z]/.test(base) ? ["ctrl", "shift"] : ["ctrl"], base);
 }
 
 interface DirectTypingOptions {
@@ -297,7 +318,7 @@ export function useDirectTyping({
   }
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    const key = keyForKeyDown(event.key);
+    const key = keyForKeyDown(event);
     if (key === undefined) return;
     event.preventDefault();
     sender.enqueue([key]);
