@@ -416,6 +416,71 @@ describe("guardedSend", () => {
   });
 });
 
+// The `reply.unsent` of 2026-10-14 16:08:47 (pane w53:p1), with the prose replaced: three paragraphs
+// and two uploaded images, which Claude 2.1.299 took as one paste. It attached both paths and drew
+// `[Image #1] [Image #2]` ahead of the paragraphs, one row each (blank lines dropped), wrapped at 120
+// columns. Seven reads saw that draft and called it someone else's.
+describe("guardedSend: a message with images on Claude", () => {
+  const paragraphs = [
+    "There is a problem in the terminal view: instead of two buttons it should offer a list with the agent and its permission level, otherwise picking from the phone is impossible",
+    "then in the projects the strip under the chat shows up all the time and should not, it belongs in another tab, and the diffs that were never implemented are still missing",
+    "for that open one tab per agent with its own task, debug everything first at a low level and only then implement it",
+  ];
+  const images = ["/home/u/.local/state/collie/uploads/shot-mf3k2a-0a1b2c3d.png", "/home/u/.local/state/collie/uploads/shot-mf3k2b-4e5f6a7b.png"];
+  const sent = `${paragraphs.join("\n\n")} ${images.join(" ")}`;
+
+  /** The box's rows for `text`: word-wrapped to the box's width, continuation rows indented. */
+  const boxed = (text: string, width = 118) =>
+    text
+      .split("\n")
+      .map((line) => {
+        const rows: string[] = [];
+        let row = "";
+        for (const word of line.split(" ")) {
+          if (row && row.length + 1 + word.length > width) {
+            rows.push(row);
+            row = word;
+          } else row = row ? `${row} ${word}` : word;
+        }
+        return [...rows, row].join("\n  ");
+      })
+      .join("\n  ");
+
+  /** A terminal whose Claude draws `shown` for whatever the send types. */
+  function claudeShowing(shown: string): Term {
+    const term = new Term();
+    term.sendPaneText = async (_paneId, text) => {
+      term.calls.push({ method: "pane.send_text", arg: text });
+      term.pending += boxed(shown);
+    };
+    return term;
+  }
+
+  test("the image tokens ahead of the whole message are the message: Enter once, sent once", async () => {
+    const term = claudeShowing(`[Image #1] [Image #2]${paragraphs.join("\n")}`);
+    const { outcome, trace } = await run(term, { text: sent });
+    expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
+    expect(term.count("pane.send_text")).toBe(1);
+    expect(term.keys()).toEqual([["Enter"]]);
+    expect(trace.attempts.filter((read) => read === "other-draft").length).toBeLessThanOrEqual(1);
+    expect(term.lines.filter((line) => line.startsWith("> [Image #1] [Image #2]There is a problem"))).toHaveLength(1);
+  });
+
+  test("a paragraph that is not the one typed withholds Enter", async () => {
+    const term = claudeShowing(`[Image #1] [Image #2]${[paragraphs[0], paragraphs[1]!.replace("diffs", "tests"), paragraphs[2]].join("\n")}`);
+    const { outcome } = await run(term, { text: sent });
+    expect(outcome).toMatchObject({ ok: false, stage: "verify", textDelivered: true });
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("one image attached where two were sent withholds Enter", async () => {
+    const term = claudeShowing(`[Image #1]${paragraphs.join("\n")}`);
+    const { outcome } = await run(term, { text: sent });
+    expect(outcome).toMatchObject({ ok: false, stage: "verify", textDelivered: true });
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+});
+
 describe("settleAfterType", () => {
   test("returns once a change holds for one tick", async () => {
     const screens = ["typed", "typed"];
