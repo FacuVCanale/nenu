@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { paneDiff, type DiffTarget, type GitRun } from "./pane-diff.ts";
+import { paneDiff, sessionDiff, type DiffTarget, type GitRun } from "./pane-diff.ts";
 
 // Real git in a temporary repo: the parser's job is to agree with git, so git writes the fixtures.
 const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
@@ -202,5 +202,77 @@ describe("refusals", () => {
       expect(call.cwd).toBe(repo);
       expect(call.argv[0]).toBe("git");
     }
+  });
+});
+
+describe("a session's changes, with or without a pull request", () => {
+  test("Branch: the working tree against where the branch left the default branch, untracked files named", async () => {
+    const diff = await sessionDiff(repo, "branch");
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff).toMatchObject({ base: "main", head: "feat/x", source: "worktree" });
+    expect(diff.pr).toBeUndefined();
+    expect(diff.files.map((file) => file.path).sort()).toEqual(["docs/new.md", "gone.txt", "logo.bin", "scratch.txt", "src/a.ts", "src/b.ts", "src/new.ts"]);
+    expect(diff.files.find((file) => file.path === "scratch.txt")).toEqual({ path: "scratch.txt", status: "added", additions: 0, deletions: 0, omitted: "untracked" });
+    expect(diff.totals.files).toBe(7);
+  });
+
+  test("Uncommitted: the working tree against the last commit", async () => {
+    const diff = await sessionDiff(repo, "uncommitted");
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff).toMatchObject({ head: "feat/x", source: "uncommitted" });
+    expect(diff.files.map((file) => file.path)).toEqual(["src/b.ts", "scratch.txt"]);
+    expect(diff.files[0]).toMatchObject({ status: "modified", additions: 1, deletions: 0 });
+    expect(diff.totals).toEqual({ files: 2, additions: 1, deletions: 0 });
+  });
+
+  test("the base of the branch's pull request wins, and origin's default comes before main", async () => {
+    const fromPr = await sessionDiff(repo, "branch", { base: "feat/y" });
+    expect(fromPr).toMatchObject({ ok: true, base: "feat/y" });
+    git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feat/y");
+    try {
+      expect(await sessionDiff(repo, "branch")).toMatchObject({ ok: true, base: "feat/y" });
+    } finally {
+      git(repo, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+    }
+    // A base GitHub reported that git could take for an option is dropped, not escaped.
+    expect(await sessionDiff(repo, "branch", { base: "--output=/tmp/x" })).toMatchObject({ ok: true, base: "main" });
+  });
+
+  test("a folder inside the repo sees only the changes under it", async () => {
+    const diff = await sessionDiff(join(repo, "src"), "branch");
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff.files.map((file) => file.path).sort()).toEqual(["a.ts", "b.ts", "new.ts"]);
+  });
+
+  test("a folder outside any repository, or with no branch to compare against", async () => {
+    const plain = realpathSync(mkdtempSync(join(tmpdir(), "nenu-plain-")));
+    const lone = realpathSync(mkdtempSync(join(tmpdir(), "nenu-lone-")));
+    try {
+      expect(await sessionDiff(plain, "branch")).toMatchObject({ ok: false, reason: "no-repo" });
+      git(lone, "init", "-q", "-b", "trunk");
+      writeFileSync(join(lone, "a.txt"), "a\n");
+      git(lone, "add", "-A");
+      git(lone, "commit", "-q", "-m", "a");
+      expect(await sessionDiff(lone, "branch")).toMatchObject({ ok: false, reason: "no-default" });
+      expect(await sessionDiff(lone, "uncommitted")).toMatchObject({ ok: true, files: [] });
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+      rmSync(lone, { recursive: true, force: true });
+    }
+  });
+
+  test("reads without writing, with fixed arguments from the pane's real folder", async () => {
+    const index = statSync(join(repo, ".git/index")).mtimeMs;
+    const calls: Array<{ argv: string[]; cwd: string }> = [];
+    const spy: GitRun = async (argv, opts) => {
+      calls.push({ argv, cwd: opts.cwd });
+      return { code: 1, stdout: "", truncated: false };
+    };
+    await sessionDiff(repo, "branch", { run: spy });
+    await sessionDiff(repo, "uncommitted");
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call).toMatchObject({ cwd: repo, argv: expect.arrayContaining(["git"]) });
+    expect(statSync(join(repo, ".git/index")).mtimeMs).toBe(index);
+    expect(await sessionDiff(undefined, "branch", { run: spy })).toMatchObject({ ok: false, reason: "no-folder" });
   });
 });
