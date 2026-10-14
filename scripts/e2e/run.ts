@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { appendJournal, demoOrg, diffOrg, growDiffRepo, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { appendJournal, demoOrg, diffOrg, growDiffRepo, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
@@ -15,6 +15,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, orgTreeSeed, projectChat
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
 //   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
 //   bun scripts/e2e/run.ts threads  [--port 8797] [--out DIR] [--seconds 60]  A coordinator's chat: tabs, panel, DOM and React renders
+//   bun scripts/e2e/run.ts needs-you [--port 8797] [--out DIR]  Two threads that need you: a dialog, and an agent waiting for a reply
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
@@ -1160,6 +1161,81 @@ async function compare(a: string, b: string): Promise<void> {
  * viewer, dark and light; then a commit past every limit (`growDiffRepo`) shows the cuts announced.
  * With `--before` it only captures the bar and the tab, for a build that has no viewer.
  */
+/**
+ * Why a thread needs you (scenario.ts `needsYouSeed`): one on a dialog, one that finished and said it
+ * waits for your reply. The phone's Threads tab and Browse sheet, the desk's cards beside the sidebar,
+ * then a tap on the waiting thread, which should land on its last message.
+ */
+async function needsYou(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const ask = "The new copy is ready. Your call: ship it now, or wait for the design review first?";
+    await writeJournal(herd.journals.get(herd.idle)!, [["user", "Rewrite the checkout copy"], ["assistant", "Rewriting the checkout copy."], ["assistant", ask]], bridge.now());
+    bridge.fake!.appendLines(herd.idle, "", `● ${ask}`, "", "❯ ");
+    const shots: string[] = [];
+    const seen: Record<string, unknown> = {};
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    const open = async (device: typeof PHONE | typeof DESKTOP) => {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
+      await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      return { page, close: () => context.close() };
+    };
+    const text = (locator: Locator) => locator.innerText().then((t) => t.replace(/\s+/g, " ").trim());
+    {
+      const { page, close } = await open(PHONE);
+      await page.getByRole("tab", { name: /^Threads/ }).click();
+      await page.locator(".project-overlay").waitFor({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneRow ${title}`] = await text(page.locator(".project-overlay .task-main", { hasText: title }).first());
+      await shoot(page, "phone-threads");
+      await page.locator(".project-overlay .task-main", { hasText: "Checkout copy" }).first().click();
+      await page.getByText(ask).last().waitFor({ timeout: 10_000 });
+      await page.waitForTimeout(800);
+      seen.phoneTapLandsOn = decodeURIComponent(new URL(page.url()).pathname);
+      seen.phoneLastMessageInView = await page.getByText(ask).last().isVisible();
+      await shoot(page, "phone-tap-waiting");
+      await close();
+    }
+    {
+      // The tab bar lives on Home; a chat has none.
+      const { page, close } = await open(PHONE);
+      await page.goto(`${bridge.url}/`);
+      await page.getByRole("button", { name: "Browse" }).click();
+      const project = page.locator('[role=dialog] button[aria-label="Demo shop tasks"]');
+      if (await project.count() && !(await page.locator('[role=dialog] .nav-tree-row', { hasText: "Checkout copy" }).count())) await project.click();
+      await page.waitForTimeout(600);
+      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneBrowse ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
+      await shoot(page, "phone-browse");
+      await close();
+    }
+    {
+      const { page, close } = await open(DESKTOP);
+      const hide = page.getByRole("button", { name: "Hide project panel" });
+      if (await hide.count()) await hide.click();
+      await page.waitForTimeout(500);
+      for (const title of ["Checkout copy", "Payments panel"]) {
+        seen[`deskCard ${title}`] = await text(page.locator('section[aria-label="Threads"] article', { hasText: title }).first()).catch(() => "(no card)");
+        seen[`deskSidebar ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
+      }
+      await shoot(page, "desktop-cards");
+      await close();
+    }
+    return { shots, seen, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => needsYouSeed(herd, now));
+  await writeFile(join(outDir, "needs-you.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
 async function diffs(before: boolean): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
@@ -1332,6 +1408,7 @@ if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
 else if (command === "threads") await threads();
+else if (command === "needs-you") await needsYou();
 else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "layout") await layout();
