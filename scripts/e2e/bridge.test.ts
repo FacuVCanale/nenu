@@ -84,7 +84,7 @@ describe("disposable Herdr isolation", () => {
   });
 
   test("the server --herdr launches passes, and inherits nothing of the live one", () => {
-    const base = { HOME: homedir(), PATH: "/usr/bin", HERDR_SOCKET_PATH: "/live.sock", HERDR_PANE_ID: "w1:p1", COLLIE_PORT: "8787", XDG_CONFIG_HOME: join(homedir(), ".config") };
+    const base = { HOME: homedir(), PATH: "/usr/bin", HERDR_SOCKET_PATH: "/live.sock", HERDR_PANE_ID: "w1:p1", COLLIE_PORT: "8787", XDG_CONFIG_HOME: join(homedir(), ".config"), CLAUDE_CONFIG_DIR: join(homedir(), ".claude"), CODEX_HOME: join(homedir(), ".codex") };
     const home = join(tmpdir(), "nenu-e2e-x", "home");
     const env = disposableHerdrEnv({ home, socketPath: join(tmpdir(), "nenu-e2e-x", "herdr.sock") }, base);
     expect(env.HOME).toBe(home);
@@ -92,6 +92,9 @@ describe("disposable Herdr isolation", () => {
     expect(env.HERDR_SOCKET_PATH).toBe(join(tmpdir(), "nenu-e2e-x", "herdr.sock"));
     expect(env.HERDR_PANE_ID).toBeUndefined();
     expect(env.COLLIE_PORT).toBeUndefined();
+    // An agent started in a pane keeps its config and journals under the temporary HOME.
+    expect(env.CLAUDE_CONFIG_DIR).toBeUndefined();
+    expect(env.CODEX_HOME).toBeUndefined();
     expect(env.PATH).toBe("/usr/bin");
     expect(() => assertIsolatedHerdrEnv(env, base)).not.toThrow();
   });
