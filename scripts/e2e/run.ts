@@ -1842,7 +1842,7 @@ async function webkitProcesses(): Promise<Map<number, { rssKb: number; cpuMs: nu
 /**
  * The surfaces every screen sits on, with five projects so each draws its own mark: Home, a session
  * (the desk's session panel beside it), a project, Settings and Search, on a phone and a desk, dark
- * and light, plus the phone's navigation drawer. Then, on the real clock, one fresh WebKit per view
+ * and light, plus the phone's navigation drawer and the desk's collapsed rail. Then, on the real clock, one fresh WebKit per view
  * left alone for `--seconds`: its processes' CPU and resident memory, and the page's DOM elements.
  */
 async function surface(): Promise<void> {
@@ -1887,6 +1887,14 @@ async function surface(): Promise<void> {
         await page.getByRole("searchbox").first().fill("a");
         await page.waitForTimeout(600);
         await shoot("search");
+        if (deviceName === "desktop") {
+          // The collapsed rail, where a project is a tile among the loose workspaces.
+          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "1"), null);
+          await page.goto(bridge.url + "/");
+          await page.getByRole("navigation", { name: "Collapsed sidebar" }).waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(600);
+          await shoot("rail");
+        }
         if (deviceName === "phone") {
           await page.keyboard.press("Escape");
           // A chat in no project: its title opens the drawer (a project's chat leads back to its project instead).
