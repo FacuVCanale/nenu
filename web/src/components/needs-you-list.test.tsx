@@ -40,8 +40,9 @@ it("lets the name and the place shorten inside the row while the status stays re
   const name = screen.getByText(NAME);
   expect(name.parentElement).toHaveClass("min-w-0");
   expect(name).toHaveClass("truncate");
-  expect(screen.getByText(PLACE)).toHaveClass("min-w-0", "truncate");
-  expect(screen.getByText("waiting in the terminal")).toHaveClass("shrink-0");
+  // The place gives up width first, so what the row waits on stays readable.
+  expect(screen.getByText(PLACE)).toHaveClass("min-w-0", "truncate", "max-w-[40%]");
+  expect(screen.getByText("waiting in the terminal")).toHaveClass("flex-1");
 });
 
 // SYS-17 on the row: a tap into the thread waits on the thread's read like any row does, so the row

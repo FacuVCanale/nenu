@@ -16,7 +16,7 @@ import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue, isDefiniteRefusal } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, unboundReviews, workspaceChats } from "@/lib/home-stats";
+import { greeting, homeHeadline, idleAgents, needsYouItems, recentChats, reviewQueue, runningWorkflows, unboundReviews, workspaceChats } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -63,7 +63,7 @@ export function HomeRoute() {
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const panes = [...data.agents, ...data.shellPanes];
-  const needs = needsYouItems(data.agents, interactions.interactions);
+  const needs = needsYouItems(data.agents, interactions.interactions, data.projects);
   const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
   // "Nothing needs you" only from a live herd whose dialogs were read; anything older cannot vouch for it.
   const calm = live && interactions.loaded && !interactions.stale && data.agents.length > 0 && !needs.length && !receipts.length;
@@ -71,7 +71,7 @@ export function HomeRoute() {
   // A pane Needs you holds (asking, or just answered) stays out of Recents.
   const recent = recentChats(panes, data.projects, new Set([...needs, ...receipts].map((item) => item.paneId)), reviews);
   const running = runningWorkflows(activity);
-  const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
+  const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length, idle: idleAgents(data.agents, needs, reviews) };
   const { title, detail } = homeHeadline(counts, data.agents.length);
 
   // On a phone the date sits right under the header, so the first screen holds more of the list.
@@ -99,7 +99,7 @@ export function HomeRoute() {
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
             interactions={interactions} lockReason={lock} opening={opening} />}
-        <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} herd={data} session={data.session} now={now} opening={opening} />
+        <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} herd={data} projects={data.projects ?? []} session={data.session} now={now} opening={opening} />
         <ReadyToReviewList entries={unboundReviews(reviews, panes)} session={data.session} opening={opening} />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">

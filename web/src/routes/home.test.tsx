@@ -332,7 +332,8 @@ describe("a project's coordinator", () => {
 it("says a session is ready to review on its own row, with its pull request and size, instead of in a second list", async () => {
   const { user, router, main } = await setup(projectData);
   expect(headline()).toBe("1 needs you");
-  expect(subline()).toBe("1 to review · 1 working");
+  // The session under review is counted there, not again as idle.
+  expect(subline()).toBe("1 to review · 1 working · 2 idle");
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
   expect(row).toHaveAccessibleName(/,\s*Ready to review,\s*Hub,\s*PR #1342,\s*\+212 −148$/);
   expect(main.queryByRole("region", { name: /^Ready to review/ })).not.toBeInTheDocument();
