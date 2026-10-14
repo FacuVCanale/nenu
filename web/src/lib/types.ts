@@ -185,6 +185,8 @@ export interface ProjectThreadView {
   liveStatus?: AgentStatus;
   /** Organizations' `last_group` for the thread (e.g. "ready"); absent when unset. */
   group?: string;
+  /** The agent itself reported it is waiting for you (its `Waiting for you` activity); absent otherwise. */
+  selfWaiting?: true;
   branch?: string;
   /** The thread's pull request. Numbers appear only when Organizations reported them. */
   pr?: ThreadPullRequest;

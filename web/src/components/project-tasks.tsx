@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { closeRefusal, historyCount, holds, nodeState, orgTree, type OrgNode } from "@/lib/org-tree";
+import { ASK, awaits, closeRefusal, historyCount, holds, nodeState, orgTree, type OrgNode } from "@/lib/org-tree";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
@@ -39,7 +39,9 @@ export function threadDetail(thread: ProjectThreadView, panes: readonly AgentVie
   const state = nodeState(thread);
   const title = thread.paneId ? panes.find((pane) => pane.paneId === thread.paneId)?.terminalTitle : undefined;
   if (thread.status === "failed") return thread.note ?? "Failed to start";
-  if (state === "needs") return title ?? thread.note ?? "Asked you a question";
+  const ask = awaits(thread);
+  if (ask) return ASK[ask].label;
+  if (state === "needs") return title ?? thread.note ?? "Needs you";
   if (state === "review" && thread.pr) return prSummary(thread.pr);
   // Organizations' own note (pane closed, session unreachable, a remote agent's state) says more than Nenu can.
   if (!thread.paneId) return thread.note || (thread.status !== "open" ? thread.status : state === "working" ? "working" : "not running");

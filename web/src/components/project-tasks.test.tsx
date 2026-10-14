@@ -308,3 +308,15 @@ describe("one organization, the way Herdr Organizations draws it", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
+
+it("a thread waiting for your reply says so instead of its terminal's state, and opens its chat", async () => {
+  const waiting: ProjectView = { ...project, threads: [
+    { id: "T2", title: "Copy", parentId: "root", role: "worker", status: "open", paneId: "b", agent: "claude", liveStatus: "idle", group: "waiting-on-you", note: "idle", selfWaiting: true },
+  ] };
+  const { user, onOpenPane } = setup({ project: waiting, panes: [{ paneId: "b", terminalTitle: "Copy brief" } as never] });
+  const row = screen.getByRole("button", { name: /^Copy/ });
+  expect(row).toHaveTextContent("Waiting for your reply");
+  expect(row).not.toHaveTextContent("Copy brief");
+  await user.click(row);
+  expect(onOpenPane).toHaveBeenCalledWith("b");
+});

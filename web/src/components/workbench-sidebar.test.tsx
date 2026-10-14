@@ -230,6 +230,15 @@ describe("the sidebar", () => {
     expect(screen.queryByRole("group", { name: "Projects" })).toBeNull();
   });
 
+  it("says a thread that stopped to wait for your reply needs a reply, not a dialog", () => {
+    const project = herd.projects![0]!;
+    const waiting = { ...project, threads: project.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "idle" as const, group: "waiting-on-you", selfWaiting: true as const } : item) };
+    open("/", { ...herd, projects: [waiting] });
+    const head = screen.getByRole("link", { name: /^rediseño mobile/ });
+    expect(head).toHaveAccessibleName("rediseño mobile, needs reply");
+    expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs reply");
+  });
+
   it("shows a coordinator thread's own state beside its threads' dots", () => {
     const blocked = { ...acme, threads: acme.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "blocked" as const } : item) };
     open("/", { ...herd, projects: [blocked] });

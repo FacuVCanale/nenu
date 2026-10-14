@@ -20,7 +20,7 @@ import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
-import { STATE_LABEL, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { chatRecency, isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
@@ -528,7 +528,8 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
   fold?: ThreadRowFold;
 }) {
   const { thread, state } = node;
-  const word = STATE_WORD[state];
+  const ask = awaits(thread);
+  const word = ask ? ASK[ask].word : STATE_WORD[state];
   const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
@@ -543,7 +544,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
         to={to} aria-current={current ? "page" : undefined}>
         <span className="nav-tree-mark"><OpeningMark to={to}><NodeDot state={state} /></OpeningMark></span>
         <span className="nav-row-text">{thread.title}</span>
-        <span className="sr-only">, {STATE_LABEL[state].toLowerCase()}</span>
+        <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
