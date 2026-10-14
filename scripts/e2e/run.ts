@@ -1271,6 +1271,10 @@ async function home(): Promise<void> {
         for (const scheme of ["dark", "light"] as const) {
           const { page, close } = await open(device, scheme);
           await shoot(page, `home-${name}-${scheme}`);
+          // The list itself, scrolled into view: the Recents / Workspaces control, else the older "Recent".
+          await page.evaluate(() => (document.querySelector('[role="tablist"][aria-label="Sessions"]') ?? document.getElementById("home-recent"))?.scrollIntoView({ block: "start" }), null);
+          await page.waitForTimeout(300);
+          await shoot(page, `home-${name}-${scheme}-list`);
           const workspaces = page.getByRole("tab", { name: "Workspaces" });
           if (scheme === "dark" && await workspaces.count()) {
             await workspaces.click();
