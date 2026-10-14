@@ -20,10 +20,3 @@ export function turnRunning(agent: Pane, screen: string): boolean {
 export function agentBusy(agent: Pane, screen: string): boolean {
   return agent?.status === "working" || turnRunning(agent, screen);
 }
-
-/** Why Stop is not offered while the agent still looks busy: only background work runs, which the
- *  interrupt key does not reach. Null when there is nothing to explain. A dialog has its own card. */
-export function turnNote(agent: Pane): string | null {
-  const turn = agent?.turn;
-  return turn && !turn.running && turn.background ? "Background work is running. Stop doesn't reach it." : null;
-}
