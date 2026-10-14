@@ -160,14 +160,16 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
 describe("a wide screen, the project behind the session panel's ⋯", () => {
   beforeEach(() => { wide = true; });
 
-  it("lists each thread once: the panel, not cards under the chat as well", async () => {
+  it("draws no thread cards under the coordinator's chat, with the panel open or put away", async () => {
     const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
     const panel = await projectPanel(user);
     expect(panel.getByRole("button", { name: /^Build/ })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
-    // With the panel put away, the cards are the list again.
     await user.click(panel.getByRole("button", { name: "Hide session panel" }));
-    expect(within(screen.getByRole("region", { name: "Threads" })).getByRole("article", { name: "Build" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Show session panel" })).toBeInTheDocument();
+    expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:coord");
+    expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
 
   it("lists a thread's siblings once: the panel, not chips above the chat as well", async () => {
