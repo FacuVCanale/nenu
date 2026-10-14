@@ -27,9 +27,9 @@ export function useFileDrop(zone: RefObject<HTMLElement | null>, enabled: boolea
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     };
-    const leave = (e: DragEvent) => {
-      if (!carriesFiles(e)) return;
-      if (--depth <= 0) { depth = 0; setOver(null); }
+    // Counted whatever it carries: a leave that names no files must still take the overlay down.
+    const leave = () => {
+      if (depth > 0 && --depth === 0) setOver(null);
     };
     const drop = (e: DragEvent) => {
       if (!carriesFiles(e)) return;
