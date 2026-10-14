@@ -90,7 +90,7 @@ function Row({ who, to, opening, line, lineRef, label = line, below, actions }: 
       <StatusDot status="blocked" surface="bg-card" className="size-2" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link to={to} aria-busy={opening || undefined} aria-label={[who.name, who.where, typeof label === "string" ? label : null].filter(Boolean).join(", ")}
-          className="flex min-w-0 flex-col outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring">
+          className="flex min-w-0 flex-col rounded-md after:absolute after:inset-0 after:rounded-xl">
           <span className="truncate text-subhead font-medium">{who.name}</span>
           <span className="flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
             {/* The place gives up width first: what it waits on is the line's point. */}
