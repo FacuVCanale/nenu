@@ -975,7 +975,7 @@ export function AgentChat({
       onPrev={() => gotoMatch(-1)} onNext={() => gotoMatch(1)} onClose={closeFind} />
   ) : undefined;
   const sessionTools = agent && conversationCapable
-    ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
+    ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions
     groups={[{ label: "View", actions: viewActions }, { label: "Tab and pane", actions: paneActions }]}

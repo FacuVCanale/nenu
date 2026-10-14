@@ -4,7 +4,7 @@ import { formatClock, type ActivityArtifact } from "@/lib/activity";
 
 // claude.ai artifacts are private pages behind the operator's claude.ai session, so Nenu cannot
 // frame them; a row opens the link in a new tab instead. Only claude.ai links are ever rendered.
-const isClaudeLink = (url: string) => /^https:\/\/claude\.ai\//.test(url);
+export const isClaudeLink = (url: string) => /^https:\/\/claude\.ai\//.test(url);
 
 export function ArtifactRow({ artifact, className }: { artifact: ActivityArtifact; className?: string }) {
   if (!isClaudeLink(artifact.url)) return null;

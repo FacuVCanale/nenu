@@ -7,11 +7,14 @@ import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { ChatFilesBrowser } from "./chat-files-browser";
 
 const fetchHistory = vi.fn();
+const fetchArtifactMetadata = vi.fn();
+const grantFileOpen = vi.fn();
 vi.mock("@/lib/api", async (original) => ({
   ...(await original<typeof import("@/lib/api")>()),
   fetchHistory: (...args: unknown[]) => fetchHistory(...args),
   fetchProjectFiles: async () => ({ path: ".", files: [], truncated: false }),
-  fetchArtifactMetadata: async () => [],
+  fetchArtifactMetadata: (...args: unknown[]) => fetchArtifactMetadata(...args),
+  grantFileOpen: (...args: unknown[]) => grantFileOpen(...args),
 }));
 
 function entry(uuid: string, text: string): TranscriptEntry {
@@ -22,7 +25,11 @@ function available(entries: TranscriptEntry[], hasMore = false, total = entries.
   return { paneId: "w1:p1", available: true, entries, hasMore, total, fileTruncated: false };
 }
 
-beforeEach(() => fetchHistory.mockReset());
+beforeEach(() => {
+  fetchHistory.mockReset();
+  grantFileOpen.mockReset().mockReturnValue(new Promise(() => {}));
+  fetchArtifactMetadata.mockReset().mockResolvedValue([]);
+});
 
 describe("ChatFilesBrowser", () => {
 
@@ -38,8 +45,29 @@ describe("ChatFilesBrowser", () => {
     expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 120, before: "new" }, undefined, expect.any(AbortSignal));
     await userEvent.click(screen.getByRole("button", { name: /Files · 1/ }));
     expect(screen.getByText("guide.md")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Media" }));
-    expect(screen.getByText("demo.png")).toBeInTheDocument();
+  });
+
+  // Leaving for Project aborts the scan mid-page. Coming back must resume from the oldest page it
+  // already holds: resuming from the newest one re-reads known turns and blames the conversation.
+  it("resumes an interrupted scan where it stopped, without saying the conversation changed", async () => {
+    let resolveOldest!: (value: PaneHistoryResponse) => void;
+    fetchHistory
+      .mockResolvedValueOnce(available([entry("middle", "docs/middle.md")], true, 3))
+      // As fetch does, an aborted read rejects.
+      .mockImplementationOnce((_pane: string, _page: unknown, _session: unknown, signal: AbortSignal) =>
+        new Promise((_, reject) => signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")))))
+      .mockReturnValueOnce(new Promise<PaneHistoryResponse>((resolve) => { resolveOldest = resolve; }));
+    render(<ChatFilesBrowser paneId="w1:p1" history={available([entry("new", "docs/new.md")], true, 3)} />);
+    await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Files/ }));
+    await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(2));
+    await userEvent.click(screen.getByRole("button", { name: "Project" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Files/ }));
+    await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(3));
+    expect(fetchHistory).toHaveBeenLastCalledWith("w1:p1", { limit: 120, before: "middle" }, undefined, expect.any(AbortSignal));
+    resolveOldest(available([entry("old", "docs/old.md")], false, 3));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Files · 3/ })).toBeInTheDocument());
+    expect(screen.queryByText(/conversation changed/i)).not.toBeInTheDocument();
   });
 
   it("opens a selected reference through FilePreviewProvider's context", async () => {
@@ -108,7 +136,51 @@ it("picks a list with a neutral segmented control", async () => {
 // 320px phone and a three-digit Files count did at 375 (bench, r2/seg.ts). The footnote step is the
 // size of an iOS segmented control; past it (a four-digit count, larger browser text) a name ends in
 // an ellipsis inside its own segment instead of running over the next one.
-it("fits the four list names to a narrow phone, ending a name that cannot fit inside its segment", async () => {
+it("lists artifacts, the project and files, with no Media tab", async () => {
+  render(<ChatFilesBrowser paneId="w1:p1" history={available([])} />);
+  await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+  const names = within(screen.getByRole("group", { name: "File type" })).getAllByRole("button").map(button => button.textContent);
+  expect(names).toEqual(["Artifacts", "Project", "Files · 0"]);
+});
+
+describe("Artifacts", () => {
+  const conversation = available([
+    entry("one", "![After](shots/after.png) and [Notes](docs/notes.pdf). I also read /srv/vault/one.png and /srv/vault/two.png."),
+  ]);
+  const published = [{ id: "a1", url: "https://claude.ai/artifact/a1", title: "Review notes" }];
+  beforeEach(() => {
+    fetchArtifactMetadata.mockImplementation(async (_pane: string, paths: string[]) => paths.map(path =>
+      path.startsWith("/srv/") ? { path, state: "outside" } : { path, state: "preview" }));
+  });
+
+  async function openArtifacts() {
+    render(<ChatFilesBrowser paneId="w1:p1" history={conversation} published={published} />);
+    await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+    await userEvent.click(screen.getByRole("button", { name: "Artifacts" }));
+  }
+
+  it("shows what was published and delivered, with a thumbnail only for an image Nenu can serve", async () => {
+    await openArtifacts();
+    expect(await screen.findByRole("link", { name: /Review notes/ })).toHaveAttribute("href", "https://claude.ai/artifact/a1");
+    expect(screen.getByRole("button", { name: "Open notes.pdf" })).toBeInTheDocument();
+    const thumbnail = await screen.findByRole("button", { name: "Open after.png" });
+    expect(within(thumbnail).getByRole("presentation")).toHaveAttribute("src", expect.stringContaining("shots%2Fafter.png"));
+    const images = screen.getAllByRole("presentation").map(image => image.getAttribute("src"));
+    expect(images.join(" ")).not.toContain("vault");
+  });
+
+  it("gathers images beyond the pane's folder in one row that opens only after a confirmation", async () => {
+    await openArtifacts();
+    const row = await screen.findByRole("button", { name: /2 images named outside the pane's folder/ });
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(row);
+    await userEvent.click(screen.getByRole("button", { name: "Open one.png" }));
+    expect(await screen.findByRole("dialog", { name: "Open this file outside Nenu's preview?" })).toBeInTheDocument();
+    expect(grantFileOpen).toHaveBeenCalledWith("w1:p1", "/srv/vault/one.png", undefined);
+  });
+});
+
+it("fits the three list names to a narrow phone, ending a name that cannot fit inside its segment", async () => {
   render(<ChatFilesBrowser paneId="w1:p1" history={available([])} />);
   await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
   for (const button of within(screen.getByRole("group", { name: "File type" })).getAllByRole("button")) {

@@ -1,11 +1,12 @@
 import { writeFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { demoOrg, diffOrg, growDiffRepo, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { appendJournal, demoOrg, diffOrg, growDiffRepo, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
@@ -22,6 +23,7 @@ import { demoOrg, diffOrg, growDiffRepo, needsYouSeed, orgTreeSeed, projectChatS
 //   bun scripts/e2e/run.ts processes [--port 8797] [--out DIR]  A working Claude's background work: chip, list, details, ⋯
 //   bun scripts/e2e/run.ts stop-state [--port 8797] [--out DIR] Stop from the session file, under a custom statusline
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
+//   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -1312,6 +1314,95 @@ async function diffs(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/**
+ * The Artifacts list of a working Claude: a page published on claude.ai, a designboard and a report
+ * the agent linked, one image it showed from its folder and two it named from a folder beyond it.
+ * Every tab is captured on a phone (dark and light) and a desk; `thumbnails` lists what each image
+ * card loaded, so a grey card cannot pass for a picture.
+ */
+async function artifacts(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const vault = await mkdtemp(join(tmpdir(), "nenu-e2e-vault-"));
+  const shots: string[] = [];
+  const thumbnails: Record<string, Array<{ src: string; loaded: boolean }>> = {};
+  try {
+    const result = await withBench(async (bridge, browser) => {
+      const pane = bridge.herd!.working;
+      const now = bridge.now();
+      const picture = await Bun.file(join(import.meta.dir, "../../web/public/nenu-pwa-192x192.png")).bytes();
+      const files: Record<string, string | Uint8Array> = {
+        [join(bridge.dir, "shots/checkout-after.png")]: picture,
+        [join(bridge.dir, "reports/test-report.md")]: "# Test report\n\nAll 48 checkout tests pass.\n",
+        [join(bridge.dir, "design/checkout-redesign.html")]: `<!doctype html><title>Checkout redesign</title><script id="canvas-doc" type="application/json">${JSON.stringify({ title: "Checkout redesign", files: { "cart.html": "<p>Cart</p>", "checkout.html": "<p>Checkout</p>", "empty.html": "<p>Empty cart</p>" } })}</script>`,
+        [join(vault, "attachments/9e7b9700d186.png")]: picture,
+        [join(vault, "attachments/de324ccf677a.png")]: picture,
+      };
+      for (const [path, body] of Object.entries(files)) {
+        await mkdir(join(path, ".."), { recursive: true });
+        await writeFile(path, body);
+      }
+      await appendJournal(bridge.herd!.journals.get(pane)!, [
+        ["user", "Redesign the checkout and show me how it looks."],
+        ["assistant", [
+          "The redesign is on the board: [Checkout redesign](design/checkout-redesign.html). Tests are in [test-report.md](reports/test-report.md).",
+          "![Checkout after](shots/checkout-after.png)",
+          `For the copy I followed the two references in ${join(vault, "attachments/9e7b9700d186.png")} and ${join(vault, "attachments/de324ccf677a.png")}.`,
+        ].join("\n\n")],
+      ], now - 120_000);
+      const activity = { available: true, sessionKey: "bench", workflows: [], tasks: [], truncated: false,
+        artifacts: [{ id: "a1", url: "https://claude.ai/artifact/00000000-0000-4000-8000-000000000001", title: "Checkout review notes", at: now - 300_000 }] };
+      for (const [name, device, colorScheme] of [["phone", PHONE, "dark"], ["desktop", DESKTOP, "dark"], ["phone-light", PHONE, "light"]] as const) {
+        const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await page.clock.install({ time: now });
+        await page.route("**/api/pane/*/activity*", (route) => route.fulfill({ json: activity }));
+        await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
+        await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+        await page.waitForTimeout(1200);
+        await page.getByRole("button", { name: "Conversation actions" }).click();
+        await page.getByRole("button", { name: "Artifacts and files" }).click();
+        const sheet = page.getByRole("dialog", { name: "Artifacts and files" });
+        await sheet.waitFor({ timeout: 10_000 });
+        const tabs = await page.evaluate(() => Array.from(document.querySelectorAll('[role="dialog"] [aria-label="File type"] button'), (button) => button.textContent ?? ""), null);
+        for (const tab of tabs) {
+          const label = tab.split(" ·")[0]!;
+          await sheet.getByRole("group", { name: "File type" }).getByRole("button", { name: new RegExp(`^${label}`) }).click();
+          await page.waitForTimeout(1500);
+          thumbnails[`${name}-${label}`] = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLImageElement>('[role="dialog"] img'),
+            (image) => ({ src: image.src, loaded: image.naturalWidth > 0 && !image.hidden })), null);
+          const path = join(outDir, `${label.toLowerCase()}-${name}.png`);
+          await page.screenshot({ path, animations: "disabled" });
+          shots.push(path);
+        }
+        // The way to an image beyond the folder: the row, then the confirmation it asks for.
+        if (name !== "phone-light" && tabs.some((tab) => tab.startsWith("Artifacts"))) {
+          await sheet.getByRole("group", { name: "File type" }).getByRole("button", { name: /^Artifacts/ }).click();
+          const outside = sheet.getByRole("button", { name: /named outside the pane's folder/ });
+          if (await outside.waitFor({ timeout: 5_000 }).then(() => true, () => false)) {
+            await outside.click();
+            await page.waitForTimeout(300);
+            const listed = join(outDir, `outside-list-${name}.png`);
+            await page.screenshot({ path: listed, animations: "disabled" });
+            await sheet.getByRole("button", { name: "Open 9e7b9700d186.png" }).click();
+            await page.getByRole("dialog", { name: "Open this file outside Nenu's preview?" }).waitFor({ timeout: 5_000 });
+            await page.waitForTimeout(800);
+            const confirm = join(outDir, `outside-confirm-${name}.png`);
+            await page.screenshot({ path: confirm, animations: "disabled" });
+            shots.push(listed, confirm);
+          }
+        }
+        await context.close();
+      }
+      return { shots, thumbnails, unexpectedWrites: bridge.fake!.writes() };
+    }, CAPTURE_EPOCH);
+    await writeFile(join(outDir, "artifacts.json"), JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(result, null, 2));
+    if (result.unexpectedWrites.length) process.exit(1);
+  } finally {
+    await rm(vault, { recursive: true, force: true });
+  }
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -1326,8 +1417,9 @@ else if (command === "processes") await processes();
 else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
 else if (command === "diffs") await diffs(values.before === true);
+else if (command === "artifacts") await artifacts();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
