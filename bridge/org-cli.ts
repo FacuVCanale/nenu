@@ -1,5 +1,5 @@
 import { servicePath } from "./claude-sessions.ts";
-import type { TemplateView } from "./types.ts";
+import type { RoutineList, RoutineView, TemplateView } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -149,6 +149,31 @@ export async function listTemplates(run: OrgRun, project: string): Promise<Templ
     const template = parseTemplate(item);
     return template ? [template] : [];
   });
+}
+
+/**
+ * A project's routines from `routine list --json`, in Organizations' name order. An Organizations
+ * that predates the document (it refuses `--json` or `routine`, or prints another schema) answers
+ * `available: false`, so a client can say it cannot list them instead of that there are none.
+ */
+export async function listRoutines(run: OrgRun, project: string): Promise<RoutineList> {
+  const slug = validateProjectSlug(project);
+  const unavailable: RoutineList = { available: false, routines: [], broken: 0 };
+  const result = await run(["routine", "list", slug, "--json"], { timeoutMs: 10_000 });
+  if (result.code !== 0) {
+    if (/unexpected argument|unrecognized subcommand/i.test(result.stderr)) return unavailable;
+    throw commandError(result);
+  }
+  const value = parseJson(result.stdout, "routine list");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || !Array.isArray(value.routines)) return unavailable;
+  return {
+    available: true,
+    routines: value.routines.flatMap((item) => {
+      const routine = parseRoutine(item);
+      return routine ? [routine] : [];
+    }),
+    broken: Array.isArray(value.broken) ? value.broken.length : 0,
+  };
 }
 
 /** The profiles this host can launch, by name (`profile list --names`); none when the CLI cannot say. */
@@ -521,6 +546,23 @@ function parseTemplate(value: unknown): TemplateView | undefined {
     rulesChars: value.rules_chars,
     memoryChars: value.memory_chars,
     updated: value.updated,
+  };
+}
+
+function parseRoutine(value: unknown): RoutineView | undefined {
+  if (
+    !isRecord(value) || typeof value.name !== "string" || (value.trigger !== "schedule" && value.trigger !== "pr") ||
+    typeof value.enabled !== "boolean"
+  ) return undefined;
+  const text = (key: string) => typeof value[key] === "string" ? value[key] : "";
+  return {
+    name: value.name,
+    trigger: value.trigger,
+    schedule: text("schedule"),
+    events: Array.isArray(value.events) ? value.events.filter((event): event is string => typeof event === "string") : [],
+    enabled: value.enabled,
+    lastRun: text("last_run"),
+    nextRun: text("next_run"),
   };
 }
 

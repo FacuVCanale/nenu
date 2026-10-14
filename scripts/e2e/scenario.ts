@@ -119,6 +119,8 @@ export interface OrgSeed {
     slug: string; name: string; goal: string; status: "active" | "paused";
     coordinator?: { pane_id: string; workspace_id: string; tab_id: string };
     threads: Array<Record<string, unknown> & { id: string }>;
+    /** `routine list --json`'s routines, as Organizations prints them. */
+    routines?: Array<Record<string, unknown>>;
   }>;
 }
 

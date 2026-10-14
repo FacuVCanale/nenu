@@ -65,7 +65,7 @@ function resolve(slug: string, id: string): void {
 }
 
 const [command, sub] = argv;
-const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator"].includes(command ?? "") ? 2 : 1));
+const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator", "routine"].includes(command ?? "") ? 2 : 1));
 if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
@@ -79,6 +79,9 @@ if (command === "overview") {
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
   if (!state.profiles.includes(flags.profile ?? "")) fail(`there is no profile \`${flags.profile}\`; \`profile list\` shows them`);
   console.log(`stopped 1 coordinator agent(s) and started a new one on ${flags.profile}`);
+} else if (command === "routine" && sub === "list" && "json" in flags) {
+  const project = state.projects.find((candidate) => candidate.slug === positionals[0]) ?? fail(`no project ${positionals[0]}`);
+  console.log(JSON.stringify({ schema_version: 1, project: project.slug, routine_commands: false, routines: project.routines ?? [], broken: [] }));
 } else if (command === "open") {
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
   console.log(`started claude as hp-${positionals[0]}; it reads AGENTS.md and primes itself`);

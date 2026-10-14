@@ -311,6 +311,29 @@ export interface TemplateView {
   updated: string;
 }
 
+/** A project's routine, as `/api/org/routines` reads it from `routine list --json` (mirrors bridge/types.ts). */
+export interface RoutineView {
+  name: string;
+  trigger: "schedule" | "pr";
+  /** As written, such as `daily 09:00`; empty for a `pr` routine. */
+  schedule: string;
+  /** The pull request events a `pr` routine fires on; empty for a scheduled one. */
+  events: string[];
+  enabled: boolean;
+  /** RFC 3339, or empty: before the first run, and always for `pr`. */
+  lastRun: string;
+  /** RFC 3339, or empty for `pr` and for a disabled routine. */
+  nextRun: string;
+}
+
+/** `available` is false when the host's Organizations has no `routine list --json`, so the list says nothing. */
+export interface RoutineList {
+  available: boolean;
+  routines: RoutineView[];
+  /** Routine files that do not parse. */
+  broken: number;
+}
+
 /**
  * Version / upgrade status for the running Nenu (mirrors UpdateInfo in bridge/types.ts). Optional
  * on the snapshot — an older bridge omits it entirely, which the client treats as "no info" (the
