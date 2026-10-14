@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-15
+
+### Added
+- Every project draws a glyph and a tone of its own, chosen from its slug and stable, in the sidebar, the drawer, Search, the collapsed rail and the project's header. (ca4c138e)
+
+### Changed
+- Cursor-style surfaces: three greys per theme and hairline borders, with text contrast measured on every surface; the dark theme's blue is lighter (dark text on blue fills) and the light theme's red a step darker, to keep 4.5:1. (ca4c138e)
+
 ## [1.6.1] - 2026-10-15
 
 ### Changed
