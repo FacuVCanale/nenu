@@ -180,7 +180,7 @@ export function isPastePlaceholderOnly(draft: string): boolean {
 const CLAUDE_PASTE_CHARS = 800;
 
 /**
- * Whether a send must reach Claude as ONE bracketed paste (ADR 0075). Past the threshold the PTY can
+ * Whether a send must reach Claude as ONE bracketed paste (ADR 0076). Past the threshold the PTY can
  * hand the text over in pieces (1 022 + 478 bytes on macOS), Claude takes the first as a paste, and
  * about two times in three it then keeps only the last piece: measured on 2.1.296, 2.1.299 and
  * 2.1.300, where 1 500 characters arrived as their last 478. Framed as one paste it arrived whole

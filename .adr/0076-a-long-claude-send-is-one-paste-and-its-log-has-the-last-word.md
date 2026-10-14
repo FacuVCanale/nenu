@@ -1,4 +1,4 @@
-# 0075. A long Claude send is one bracketed paste, and Claude's log has the last word
+# 0076. A long Claude send is one bracketed paste, and Claude's log has the last word
 
 - **Status:** Accepted (2026-10-14). Amends [ADR 0010](./0010-long-sends-are-verified-via-the-paste-placeholder.md):
   its claim that `pane.send_text` cannot carry a bracketed paste, and its idea that a paste

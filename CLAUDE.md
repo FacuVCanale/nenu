@@ -208,7 +208,7 @@ the unit name; the Herdr action runs from anywhere.
   Past that threshold the send goes as ONE bracketed paste, because the PTY splits it and Claude can
   drop the first piece; after Enter, Claude's own log decides whether it arrived whole, and a log
   holding less is answered as incomplete, never "Sent"
-  ([ADR 0075](./.adr/0075-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md)).
+  ([ADR 0076](./.adr/0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md)).
 - **A password prompt is recognised so Nenu can SAY what it is, never so it can send** — no
   automatic Enter, no relaxed verification, no secret channel; the remedy offered is the operator's
   own tap on "Type" ([ADR 0017](./.adr/0017-recognising-a-password-prompt-changes-what-collie-says.md)).

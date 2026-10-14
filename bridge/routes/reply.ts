@@ -308,7 +308,7 @@ async function boxCarries(herdr: HerdrClient, cfg: Config, paneId: string, txt: 
 
 // ── POST /api/pane/:id/send ───────────────────────────────────────────────────────────────────────
 
-/** A look at the log of the Claude session the pane runs, when its session file maps one (ADR 0075). */
+/** A look at the log of the Claude session the pane runs, when its session file maps one (ADR 0076). */
 function claudeLog(agentStates: Pick<AgentStates, "claudeSessionId">, journals: Services["journals"], session: string, paneId: string): GuardedSendDeps["received"] {
   const sessionId = agentStates.claudeSessionId(session, paneId);
   const source = journals ? journalFor(journals, "claude")?.source : undefined;

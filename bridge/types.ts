@@ -716,7 +716,7 @@ export type SendOutcome =
       stage: SendStage;
       error: string;
       textDelivered: boolean;
-      /** `incomplete`: submitted, but the CLI logged less than was sent (ADR 0075). */
+      /** `incomplete`: submitted, but the CLI logged less than was sent (ADR 0076). */
       code?: "prompt_changed" | "not_ready" | "busy" | "incomplete";
     };
 

@@ -361,7 +361,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
 
 /**
  * The box let go of the message; the CLI's log says what it received. The box only proves a long
- * send by Claude's paste token, or by a literal slice that may be all that is left of it (ADR 0075),
+ * send by Claude's paste token, or by a literal slice that may be all that is left of it (ADR 0076),
  * so a log holding less than was sent turns "sent" into "incomplete". No log in time is no verdict.
  */
 async function logged(send: Send, deps: GuardedSendDeps, since: number): Promise<GuardedSendResult> {

@@ -1,7 +1,7 @@
 import { classifyUserText } from "./journal/claude.ts";
 import { readAppended, type TailState } from "./journal/lines.ts";
 
-// What Claude itself logged for a message Nenu just submitted (ADR 0067, ADR 0075).
+// What Claude itself logged for a message Nenu just submitted (ADR 0067, ADR 0076).
 //
 // The guarded send verifies a long message by Claude's paste token, which says nothing about what the
 // token holds. Measured on Claude Code 2.1.296, 2.1.299 and 2.1.300 under Herdr 0.9.3 on macOS: the

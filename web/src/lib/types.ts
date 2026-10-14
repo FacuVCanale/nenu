@@ -779,7 +779,7 @@ export type SendOutcome =
       error: string;
       /** True when text reached the input box: a resend would duplicate it. */
       textDelivered: boolean;
-      /** `incomplete`: submitted, but the CLI logged less than was sent (ADR 0075). */
+      /** `incomplete`: submitted, but the CLI logged less than was sent (ADR 0076). */
       code?: "prompt_changed" | "not_ready" | "busy" | "incomplete";
     };
 
