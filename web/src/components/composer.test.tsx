@@ -1773,6 +1773,15 @@ describe("Composer — attaching any file", () => {
     expect(uploads).toBe(0);
   });
 
+  it("takes the drop overlay down when the drag leaves, even when the leave carries no file list", async () => {
+    renderComposer();
+    const zone = screen.getByPlaceholderText(/type a reply/i);
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ["Files"], files: [] } });
+    expect(await screen.findByText("Drop to attach")).toBeInTheDocument();
+    fireEvent.dragLeave(zone);
+    await waitFor(() => expect(screen.queryByText("Drop to attach")).not.toBeInTheDocument());
+  });
+
   it("shows where to drop while files are dragged over it, and attaches what is dropped", async () => {
     server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: "/st/uploads/w1_p1-mv8g-0a1b2c3d-spec.pdf" })));
     renderComposer();
