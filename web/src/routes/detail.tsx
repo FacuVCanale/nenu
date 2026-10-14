@@ -3,7 +3,7 @@ import { useLoaderData, useLocation, useNavigate, useParams, useRevalidator, use
 
 import { AgentChat } from "@/components/agent-chat";
 import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
-import { InspectorToggle, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
+import { InspectorToggle, panelLink, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
@@ -113,7 +113,8 @@ export function DetailRoute() {
   const pr = sessionPr(root, paneId);
   return (
     <div className="project-frame">
-      {chat({ headerAction: inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined })}
+      {chat({ headerAction: inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined,
+        sessionPanel: inspector.desk ? panelLink(inspector) : undefined })}
       {inspector.desk && inspector.open && <SessionInspector inspector={inspector} paneId={paneId} session={session}
         artifacts={root.agents.some((pane) => pane.paneId === paneId)} pr={pr} />}
     </div>

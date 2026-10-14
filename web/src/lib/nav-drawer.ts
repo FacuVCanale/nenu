@@ -1,4 +1,4 @@
-import { isAttention } from "@/lib/triage";
+import { needsYouItems } from "@/lib/home-stats";
 import { chatRecency } from "@/lib/projects";
 import type { AgentView, ProjectView } from "@/lib/types";
 
@@ -12,7 +12,7 @@ export interface DrawerChat {
 }
 
 export interface DrawerSections {
-  /** Every chat waiting on you, newest first. */
+  /** Every chat waiting on you, as Home's headline and icon count them, newest first. */
   needsYou: DrawerChat[];
   /** The chats that moved or were opened last, the open one included and marked; never one listed above. */
   recent: DrawerChat[];
@@ -23,8 +23,9 @@ export function drawerSections(data: { agents: readonly AgentView[]; projects?: 
   const rows = [...data.agents]
     .sort((a, b) => chatRecency(b) - chatRecency(a))
     .map((pane): DrawerChat => ({ pane, current: pane.paneId === currentPaneId }));
+  const asking = new Set(needsYouItems(data.agents, [], data.projects).map((item) => item.paneId));
   return {
-    needsYou: rows.filter((row) => isAttention(row.pane.status)),
-    recent: rows.filter((row) => !isAttention(row.pane.status)).slice(0, RECENT_CHATS),
+    needsYou: rows.filter((row) => asking.has(row.pane.paneId)),
+    recent: rows.filter((row) => !asking.has(row.pane.paneId)).slice(0, RECENT_CHATS),
   };
 }

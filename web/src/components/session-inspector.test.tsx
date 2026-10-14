@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 
 import type { PaneDiff } from "@/lib/types";
 import { server } from "@/test/setup";
-import { InspectorToggle, SessionInspector, useSessionInspector, type SessionPr } from "./session-inspector";
+import { InspectorToggle, panelLink, SessionInspector, useSessionInspector, type SessionPr } from "./session-inspector";
 // Loaded up front, as a desk has it cached: the lazy import then resolves at once.
 import "./inspector-panels";
 
@@ -182,4 +182,54 @@ it("has no panel and no shortcut on a phone", async () => {
   expect(screen.getByText("phone")).toBeInTheDocument();
   act(() => { fireEvent.keyDown(window, { key: "∫", code: "KeyB", metaKey: true, altKey: true }); });
   await waitFor(() => expect(seen).toEqual([]));
+});
+
+/** A desk whose chat reads the panel's link the way agent-chat.tsx does. */
+function LinkedDesk({ project, keep }: { project?: React.ReactNode; keep?: () => boolean }) {
+  const inspector = useSessionInspector();
+  const link = panelLink(inspector);
+  if (keep) link.leaving.current = keep;
+  return <>
+    <p data-testid="slots">{link.terminal ? `mirror:${link.terminal.mirror.isConnected} controls:${link.terminal.controls.isConnected}` : "none"}</p>
+    <button type="button" onClick={link.showTerminal}>Show terminal</button>
+    {!inspector.open && <InspectorToggle inspector={inspector} />}
+    {inspector.open && <SessionInspector inspector={inspector} paneId="w1:p1" artifacts project={project} />}
+  </>;
+}
+
+it("adds Terminal after Artifacts, and lends its places to the chat only while it is on screen", async () => {
+  render(<LinkedDesk />);
+  await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
+  expect(within(panel()).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Changes", "Files", "Artifacts", "Terminal"]);
+  expect(screen.getByTestId("slots")).toHaveTextContent("none");
+
+  await userEvent.click(within(panel()).getByRole("tab", { name: /Terminal/ }));
+  expect(screen.getByTestId("slots")).toHaveTextContent("mirror:true controls:true");
+  // A tab of its own reads nothing: the chat draws the mirror and the controls into it.
+  expect(seen).toEqual(["diff?scope=branch"]);
+
+  await userEvent.click(within(panel()).getByRole("button", { name: "Hide session panel" }));
+  expect(screen.getByTestId("slots")).toHaveTextContent("none");
+  await userEvent.click(screen.getByRole("button", { name: "Show terminal" }));
+  expect(within(panel()).getByRole("tab", { name: /Terminal/ })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByTestId("slots")).toHaveTextContent("mirror:true controls:true");
+});
+
+it("asks the chat before Terminal leaves the screen: another tab, ⋯ Project, its button or ⌘⌥B", async () => {
+  let keep = true;
+  render(<LinkedDesk project={<p>Threads list</p>} keep={() => !keep} />);
+  await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
+  await userEvent.click(within(panel()).getByRole("tab", { name: /Terminal/ }));
+  const terminal = () => within(panel()).getByRole("tab", { name: /Terminal/ });
+
+  keep = true;
+  await userEvent.click(within(panel()).getByRole("tab", { name: /Changes/ }));
+  await userEvent.click(within(panel()).getByRole("button", { name: /^Project/ }));
+  await userEvent.click(within(panel()).getByRole("button", { name: "Hide session panel" }));
+  act(() => { fireEvent.keyDown(window, { key: "∫", code: "KeyB", metaKey: true, altKey: true }); });
+  expect(terminal()).toHaveAttribute("aria-selected", "true");
+
+  keep = false;
+  await userEvent.click(within(panel()).getByRole("tab", { name: /Changes/ }));
+  expect(within(panel()).getByRole("tab", { name: /Changes/ })).toHaveAttribute("aria-selected", "true");
 });

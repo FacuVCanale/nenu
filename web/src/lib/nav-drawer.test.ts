@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentView } from "@/lib/types";
+import type { AgentView, ProjectView } from "@/lib/types";
 import { drawerSections, RECENT_CHATS } from "./nav-drawer";
 
 function pane(paneId: string, status: AgentView["status"], active: number, extra: Partial<AgentView> = {}): AgentView {
@@ -23,6 +23,17 @@ describe("drawerSections", () => {
     expect(needsYou.map((row) => row.pane.paneId)).toEqual(["asks-new", "asks-old"]);
     // A chat waiting on you is already above; Recent does not list it twice.
     expect(recent.map((row) => [row.pane.paneId, row.current])).toEqual([["here", true], ["done", false], ["quiet", false]]);
+  });
+
+  it("counts a thread waiting for your reply under what needs you, as Home's headline and icon do", () => {
+    const agents = [pane("asks", "blocked", 20), pane("waits", "idle", 50), pane("quiet", "idle", 10)];
+    const projects: ProjectView[] = [{
+      slug: "demo", name: "Demo", status: "active", source: "json",
+      threads: [{ id: "t1", title: "Checkout copy", parentId: "root", role: "worker", status: "open", paneId: "waits", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true }],
+    }];
+    const { needsYou, recent } = drawerSections({ agents, projects }, undefined);
+    expect(needsYou.map((row) => row.pane.paneId)).toEqual(["waits", "asks"]);
+    expect(recent.map((row) => row.pane.paneId)).toEqual(["quiet"]);
   });
 
   it("keeps Recent short", () => {

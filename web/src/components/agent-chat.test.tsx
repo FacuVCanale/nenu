@@ -19,6 +19,7 @@ vi.mock("@/lib/wizard-action", () => ({
 
 import { server } from "@/test/setup";
 import { clearStatus } from "@/lib/status";
+import { useMirrorShown } from "@/lib/live-events";
 import { dismissModelPicker } from "@/lib/dismiss-model-picker";
 vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
 import { submitPromptOption } from "@/lib/prompt-action";
@@ -1597,5 +1598,49 @@ describe("AgentChat — Send while only background work runs", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByRole("group", { name: /is working/i })).toBeInTheDocument();
     expect(wire.sends).toEqual([]);
+  });
+});
+
+// ADR 0058: the bridge watches a pane's screen only while a browser shows it. On a desk the session
+// panel's Terminal tab is such a place, beside the conversation, and only while it is on screen.
+describe("AgentChat — the desk's Terminal tab", () => {
+  function MirrorShown() {
+    return <p data-testid="mirror-shown">{String(useMirrorShown())}</p>;
+  }
+
+  it("draws the raw mirror in the tab and has the pane watched only while the tab is on screen", async () => {
+    const paneId = "terminal-tab";
+    server.use(http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json({
+      paneId, available: true, entries: [{ uuid: "a", ts: "", role: "assistant", parts: [{ kind: "text", text: "Conversation turn" }] }],
+      total: 1, hasMore: false, fileTruncated: false,
+    })));
+    const agent = { ...fixtureAgents[0]!, paneId, agent: "claude", status: "idle" as const, hasSession: true };
+    const showTerminal = vi.fn();
+    function Desk() {
+      const [shown, setShown] = useState(false);
+      const [mirror, setMirror] = useState<HTMLElement | null>(null);
+      const [controls, setControls] = useState<HTMLElement | null>(null);
+      return <>
+        <button type="button" onClick={() => setShown((on) => !on)}>toggle tab</button>
+        {shown && <section aria-label="Terminal tab"><div ref={setMirror} /><div ref={setControls} /></section>}
+        <AgentChat paneId={paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={"$ bun test\n3 pass"} onBack={vi.fn()} onSelect={vi.fn()}
+          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal, leaving: { current: null } }} />
+        <MirrorShown />
+      </>;
+    }
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <Desk /> }], { initialEntries: [`/pane/${paneId}`] });
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByText("Conversation turn")).toBeInTheDocument();
+    expect(screen.getByTestId("mirror-shown")).toHaveTextContent("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "toggle tab" }));
+    const tab = within(screen.getByRole("region", { name: "Terminal tab" }));
+    expect(await tab.findByText(/3 pass/)).toBeInTheDocument();
+    expect(screen.getByTestId("mirror-shown")).toHaveTextContent("true");
+    // Keys and the switch arrive with it, drawn by the composer.
+    expect(tab.getByRole("switch", { name: /Type into terminal/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "toggle tab" }));
+    await waitFor(() => expect(screen.getByTestId("mirror-shown")).toHaveTextContent("false"));
   });
 });

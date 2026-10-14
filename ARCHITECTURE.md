@@ -109,10 +109,12 @@ Product details that shaped the loop:
 - **Quick replies are heuristics, not guarantees.** Different agents expect different input (a Y/n
   prompt vs a numbered menu vs an approval phrase), so there is always a **"send exactly what I
   type"** fallback.
-- **Opinionated triage.** Home answers what needs you now, in one column on a phone and a desk: the
-  composer, **"Needs you"** (dialogs answered in place), the chats that moved last, then what is
-  ready to review. Projects and workspaces live only in the sidebar. Simultaneous blocks batch into
-  one summary notification, not three races.
+- **Opinionated triage.** Home answers what needs you now, in one column on a phone and a desk: a
+  headline that counts it (never the pull requests), **"Needs you"** (dialogs answered in place), the
+  pull requests no session carries (ready to merge first), then the sessions as Recents or one row
+  per Herdr workspace. Home's icon counts what the headline counts; the phone's tab bar is Home, New
+  and Search, and the project tree lives in the sidebar (on a phone, under Search's box until
+  something is typed). Simultaneous blocks batch into one summary notification, not three races.
 - **Close the trust loop.** A "Sent" state on the `POST`'s HTTP response, then the visible
   blocked→working transition. Without it, latency makes users double-tap.
 - **Manage a pane in place.** Long-pressing a pane pill in the tab's pane switcher opens a small

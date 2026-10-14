@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
-import { House, Inbox, PanelLeft, Search, Settings2, SquarePen } from "lucide-react";
+import { House, PanelLeft, Search, Settings2, SquarePen } from "lucide-react";
 
 import { StatusDot } from "@/components/status-badge";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
+import { needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
@@ -171,7 +172,7 @@ function RailTile({ tile, monogram }: { tile: Tile; monogram: string }) {
 }
 
 /** The collapsed sidebar: the same actions as icons, then two letters per project and loose workspace. */
-export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch, onNeedsYou }: {
+export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch }: {
   data: HomeData;
   attention: number;
   expandRef: RefObject<HTMLButtonElement | null>;
@@ -179,7 +180,6 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
   onExpand: () => void;
   onNewChat?: () => void;
   onSearch: () => void;
-  onNeedsYou: () => void;
 }) {
   const { paneId, projectSlug, spaceId } = useParams();
   const tip = useRailTip();
@@ -204,10 +204,9 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
       </button>
       <button type="button" className="workbench-icon-button" aria-label="New" data-rail-tip="New" onClick={onNewChat} disabled={!onNewChat}><SquarePen aria-hidden size={16} /></button>
       <button type="button" className="workbench-icon-button" aria-label="Search" data-rail-tip="Search" onClick={onSearch}><Search aria-hidden size={16} /></button>
-      <button type="button" className="workbench-icon-button rail-attention" aria-label={attention ? `Needs you, ${attention}` : "Needs you"} data-rail-tip="Needs you" onClick={onNeedsYou}>
-        <Inbox aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
-      </button>
-      <Link className="workbench-icon-button" to={homePath(data.session)} aria-label="Home" data-rail-tip="Home"><House aria-hidden size={16} /></Link>
+      <Link className="workbench-icon-button rail-attention" to={homePath(data.session)} aria-label={attention ? `Home, ${needYou(attention)}` : "Home"} data-rail-tip="Home">
+        <House aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
+      </Link>
       <span className="rail-divider" aria-hidden />
       {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} monogram={monograms[i]!} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}

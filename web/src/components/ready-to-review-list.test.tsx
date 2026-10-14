@@ -35,12 +35,15 @@ test("an unchanged re-read keeps Home's activity map; a changed one replaces it"
   live.stop();
 });
 
-test("a review row's size opens the diff when the PR has a pane", () => {
+// Home lists here only the PRs no live session carries, and a diff is read from a live pane's folder
+// (bridge/routes/diff.ts), so a size here is the PR's size and the row is one tap into it.
+test("a review row is one tap into its PR, its size read as text", () => {
   const entries: ReviewEntry[] = [
     { key: "a/b#7", title: "Fix", repo: "b", number: 7, draft: false, updatedAt: 0, diff: { additions: 5, deletions: 1 }, open: { paneId: "w1:p1" } },
     { key: "a/b#8", title: "Other", repo: "b", number: 8, draft: false, updatedAt: 0, diff: { additions: 9, deletions: 2 }, url: "https://github.com/a/b/pull/8" },
   ];
   render(<MemoryRouter><ReadyToReviewList entries={entries} opening={null} /></MemoryRouter>);
-  expect(screen.getAllByRole("button", { name: "View changes: 5 added, 1 removed" }).length).toBeGreaterThan(0);
-  expect(screen.queryByRole("button", { name: "View changes: 9 added, 2 removed" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^View changes/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Fix, #7, +5 −1" })).toHaveAttribute("href", "/pane/w1%3Ap1");
+  expect(screen.getByRole("link", { name: "Other, #8, +9 −2" })).toHaveAttribute("href", "https://github.com/a/b/pull/8");
 });
