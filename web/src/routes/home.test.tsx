@@ -132,6 +132,9 @@ it("answers a dialog in place from Needs you", async () => {
   await user.click(needs.getByRole("button", { name: "Yes" }));
   expect(answers).toEqual([{ pane: "w1:p2", body: { signature: "sig-1", optionIndex: 0 } }]);
   expect(await needs.findByText("Approved · bun run test")).toBeInTheDocument();
+  // The snapshot still reads the pane blocked until its next read: the receipt is its one row meanwhile.
+  expect(needs.queryByRole("link", { name: /waiting in the terminal/ })).not.toBeInTheDocument();
+  expect(headline()).not.toBe("1 needs you");
 });
 
 it("offers a blocked pane with no readable dialog as a row into its thread", async () => {
