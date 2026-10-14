@@ -3,9 +3,11 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
 import { nodeState } from "./org-tree";
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
-import { byRecency, chatRecency, isOpenThread } from "./projects";
+import { byRecency, chatRecency, isOpenThread, projectForPane } from "./projects";
 import { isUnseen } from "./triage";
 import type { AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
+import { workspaceTree } from "./workspace-tree";
+import type { Herd } from "./spaces";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -150,7 +152,7 @@ export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRe
   return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
 }
 
-/** A chat in Home's "Recent": what it is called (as every view calls it), where it lives, and when it last moved. */
+/** A session in Home's list (any pane, agent or shell): what every view calls it, where it lives, and when it last moved. */
 export interface RecentChat extends DisplayPlace {
   agent: AgentView;
   title: string;
@@ -158,15 +160,65 @@ export interface RecentChat extends DisplayPlace {
   at: number;
   /** Finished since you last opened it. */
   unseen: boolean;
+  /** Its thread waits on a review, as the organization tree reads it. */
+  review: boolean;
+  /** What tells it apart after its place: its pull request, "coordinator" for a coordinator thread, else its tab. */
+  detail: string | null;
+  /** Its pull request's size, when one is known. */
+  diff?: { additions: number; deletions: number };
 }
 
 /**
- * Home's "Recent": every agent chat, most recently moved or opened first, except the ones "Needs you"
- * already shows. Equal (or unknown) times keep the bridge's pane order.
+ * Home's rows for `panes`, in the order given. A session's pull request is the one Home's review
+ * queue opens in it (GitHub's on its branch, joined with its thread's), else the one its thread records.
  */
-export function recentChats(agents: readonly AgentView[], projects: readonly ProjectView[] | undefined, shown: ReadonlySet<string>): RecentChat[] {
-  return byRecency(agents.filter((agent) => !shown.has(agent.paneId)))
-    .map((agent) => ({ agent, title: displayName(agent, projects), ...displayPlace(agent, projects), at: chatRecency(agent), unseen: isUnseen(agent) }));
+export function sessionChats(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined, reviews: readonly ReviewEntry[] = []): RecentChat[] {
+  const inReview = new Set(reviewItems(projects).map(({ thread }) => thread.paneId));
+  const byPane = new Map<string, ReviewEntry>();
+  for (const entry of reviews) if (entry.open && "paneId" in entry.open && !byPane.has(entry.open.paneId)) byPane.set(entry.open.paneId, entry);
+  return panes.map((agent) => {
+    const thread = projectForPane(projects, agent.paneId)?.thread;
+    const entry = byPane.get(agent.paneId);
+    const number = entry?.number ?? thread?.pr?.number;
+    const diff = entry?.diff ?? thread?.pr?.diff;
+    const place = displayPlace(agent, projects);
+    return {
+      agent, title: displayName(agent, projects), ...place, at: chatRecency(agent), unseen: isUnseen(agent),
+      review: inReview.has(agent.paneId),
+      detail: number !== undefined ? `PR #${number}` : thread?.role === "coordinator" ? "coordinator" : place.tab,
+      ...(diff ? { diff } : {}),
+    };
+  });
+}
+
+/**
+ * Home's "Recents": every session, agents and shells, most recently moved or opened first, except the
+ * ones "Needs you" already shows. Equal (or unknown) times keep the bridge's pane order.
+ */
+export function recentChats(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined, shown: ReadonlySet<string>, reviews: readonly ReviewEntry[] = []): RecentChat[] {
+  return sessionChats(byRecency(panes.filter((pane) => !shown.has(pane.paneId))), projects, reviews);
+}
+
+/** A Herdr workspace in Home's "Workspaces" list, with its sessions in tab order. */
+export interface WorkspaceChats {
+  workspaceId: string;
+  name: string;
+  chats: RecentChat[];
+}
+
+/** Home's "Workspaces": every session under its workspace, in the order the workspace tree keeps them. */
+export function workspaceChats(herd: Herd, projects: readonly ProjectView[] | undefined, reviews: readonly ReviewEntry[] = []): WorkspaceChats[] {
+  return workspaceTree(herd).map((branch) => ({
+    workspaceId: branch.workspace.workspaceId,
+    name: branch.name,
+    chats: sessionChats(branch.tabs.flatMap((tab) => tab.panes), projects, reviews),
+  }));
+}
+
+/** The pull requests no live session's row carries: on a branch no pane is on, or on a thread without a pane. */
+export function unboundReviews(reviews: readonly ReviewEntry[], panes: readonly AgentView[]): ReviewEntry[] {
+  const live = new Set(panes.map((pane) => pane.paneId));
+  return reviews.filter((entry) => !(entry.open && "paneId" in entry.open && live.has(entry.open.paneId)));
 }
 
 /** Workflows still running, with the pane that launched them. */

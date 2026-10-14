@@ -3,14 +3,17 @@ import { Link, useNavigation } from "react-router";
 import { AlertCircle, ChevronRight, FolderPlus, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
-import { StatusDot } from "@/components/status-badge";
+import { AgentIcon } from "@/components/agent-icon";
+import { DiffStat } from "@/components/diff-stat";
+import { PaneMark } from "@/components/nav-rows";
 import { buttonVariants } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
 import type { BusyChoice } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
-import type { RecentChat } from "@/lib/home-stats";
-import { panePath } from "@/lib/nav";
+import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
+import { panePath, workspacePath } from "@/lib/nav";
+import type { Herd } from "@/lib/spaces";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -97,58 +100,127 @@ export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; 
   </>;
 }
 
-/** How many chats Recent lists before "Show all". */
+/** How many sessions Recents lists before "Show all". */
 export const RECENT_ROWS = 6;
 
 const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { working: "text-status-working", done: "text-status-done" };
 
 const sr = (text: string) => <span className="sr-only">{text}</span>;
 
-/** Title, then state and place; the place gives up width before the tab, which tells rows apart. */
-function RecentRow({ chat, session, now, opening }: { chat: RecentChat; session?: string; now: number; opening: string | null }) {
-  const { agent, title, place, tab, at, unseen } = chat;
-  const status = STATUS_LABEL[agent.status];
+/** The state word a row leads its second line with, and its colour. */
+function stateOf(chat: RecentChat): { word: string; tone?: string } {
+  if (chat.agent.kind === "shell") return { word: "Shell" };
+  if (chat.review) return { word: "Ready to review", tone: "text-primary" };
+  const status = STATUS_LABEL[chat.agent.status];
+  return { word: status.charAt(0).toUpperCase() + status.slice(1), tone: STATUS_TEXT[chat.agent.status] };
+}
+
+/**
+ * Title, then state, place and what tells it apart (its PR, its role or its tab); the place gives up
+ * width first. A desk adds the PR's size and the agent. `group` is the name the row sits under, which
+ * it then leaves out.
+ */
+function SessionRow({ chat, session, now, opening, group }: { chat: RecentChat; session?: string; now: number; opening: string | null; group?: string }) {
+  const { agent, title, detail, diff, at, unseen } = chat;
+  const place = chat.place === group ? null : chat.place;
+  const state = stateOf(chat);
   const to = panePath(agent.paneId, session);
   const busy = isOpening(opening, to);
   return (
     <li>
       <Link to={to} aria-busy={busy || undefined}
-        className={cn("grid min-h-14 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:rounded-lg sm:px-3.5",
+        className={cn("relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
           busy && "bg-[var(--workbench-row-hover)]")}>
-        <StatusDot status={agent.status} className="row-span-2 size-2" />
+        <span className="row-span-2 flex justify-center text-muted-foreground"><PaneMark pane={agent} /></span>
         <span className="col-start-2 flex min-w-0 items-center gap-1.5">
-          <span className={cn("truncate text-body", unseen && "font-semibold")}>{title}</span>
+          <span className={cn("truncate text-body sm:text-subhead", unseen && "font-semibold")}>{title}</span>
           {unseen && <>{sr(", ")}<span className="shrink-0 rounded-sm border border-status-done/50 px-1 text-micro text-status-done">New</span></>}
         </span>
         <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
           {sr(", ")}
-          <span className={cn("shrink-0", STATUS_TEXT[agent.status])}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
-          <span aria-hidden className="shrink-0">·</span>{sr(", ")}
-          <span className={cn("truncate", tab ? "max-w-[45%] shrink" : "min-w-0 flex-1")}>{place}</span>
-          {tab && <><span aria-hidden className="shrink-0">·</span>{sr(", ")}<span className="min-w-0 flex-1 truncate">{tab}</span></>}
+          <span className={cn("shrink-0", state.tone)}>{state.word}</span>
+          {place && <><span aria-hidden className="shrink-0">·</span>{sr(", ")}<span className={cn("truncate", detail ? "max-w-[45%] shrink" : "min-w-0 flex-1")}>{place}</span></>}
+          {detail && <><span aria-hidden className="shrink-0">·</span>{sr(", ")}<span className="min-w-0 flex-1 truncate">{detail}</span></>}
         </span>
-        {busy
-          ? <OpeningSpinner className="col-start-3 row-span-2 row-start-1" />
-          : at > 0 && <span className="col-start-3 row-span-2 row-start-1 text-footnote text-muted-foreground tabular-nums">
-            {sr(", ")}<span aria-hidden>{timeAgoShort(at, now)}</span>{sr(timeAgo(at, now))}
-          </span>}
+        <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
+          {diff && <>{sr(", ")}<DiffStat diff={diff} className="text-caption max-sm:hidden" /></>}
+          {agent.kind !== "shell" && <span aria-hidden className="max-sm:hidden"><AgentIcon agent={agent.agent} className="size-4" /></span>}
+          {busy
+            ? <OpeningSpinner />
+            : at > 0 && <span className="min-w-8 text-right tabular-nums">{sr(", ")}<span aria-hidden>{timeAgoShort(at, now)}</span>{sr(timeAgo(at, now))}</span>}
+        </span>
       </Link>
     </li>
   );
 }
 
+export type SessionList = "recents" | "workspaces";
+
+const LISTS: ReadonlyArray<[SessionList, string]> = [["recents", "Recents"], ["workspaces", "Workspaces"]];
+const LIST_KEY = "nenu:home-list:v1";
+
+function readList(): SessionList {
+  try {
+    return localStorage.getItem(LIST_KEY) === "workspaces" ? "workspaces" : "recents";
+  } catch {
+    return "recents";
+  }
+}
+function rememberList(list: SessionList): void {
+  try {
+    localStorage.setItem(LIST_KEY, list);
+  } catch {
+    /* Private mode or a full quota: the choice just isn't remembered. */
+  }
+}
+
 /**
- * Home's "Recent": the chats that moved or were opened last, each one tap from its thread. "New" marks
- * one that finished since you last opened it. How many are working is the headline's to say.
+ * Home's one list of sessions under a control that reorders it: Recents, everything that moved last
+ * first (what Needs you shows stays out), or Workspaces, every session under its Herdr workspace,
+ * whose name opens the pane every way into it opens (ADR 0065). Both read the snapshot Home already
+ * has; the choice is remembered on this device.
  */
-export function RecentChats({ chats, session, now, opening }: { chats: readonly RecentChat[]; session?: string; now: number; opening: string | null }) {
-  if (!chats.length) return null;
+export function HomeSessions({ recent, workspaces, herd, session, now, opening }: {
+  recent: readonly RecentChat[];
+  workspaces: readonly WorkspaceChats[];
+  herd: Herd;
+  session?: string;
+  now: number;
+  opening: string | null;
+}) {
+  const [list, setList] = useState<SessionList>(readList);
+  if (!recent.length && !workspaces.length) return null;
+  const row = (chat: RecentChat, group?: string) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} />;
   return (
-    <section aria-labelledby="home-recent" className="flex flex-col gap-1.5">
-      <HomeHeading id="home-recent" label="Recent" />
-      <FoldedList items={chats} rows={RECENT_ROWS}>
-        {(chat) => <RecentRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} />}
-      </FoldedList>
+    <section aria-label="Sessions" className="flex flex-col gap-2">
+      <div role="tablist" aria-label="Sessions" className="project-segmented mx-0 grid-cols-2 sm:w-60">
+        {LISTS.map(([key, label]) => (
+          <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
+            onClick={() => { setList(key); rememberList(key); }} className="project-segment">{label}</button>
+        ))}
+      </div>
+      <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
+        {list === "recents"
+          ? recent.length
+            ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
+            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">Every session is in Needs you.</p>
+          : <ul className="flex flex-col">
+            {workspaces.map((group) => {
+              const to = workspacePath(group.workspaceId, herd, session);
+              return (
+                <li key={group.workspaceId} className="flex flex-col pt-2 first:pt-0">
+                  <h3 className="text-footnote font-medium text-muted-foreground">
+                    <Link to={to} aria-busy={isOpening(opening, to) || undefined}
+                      className="inline-flex min-h-9 items-center gap-1 px-1 hover:text-foreground coarse:min-h-11 sm:px-2.5">
+                      {group.name}<ChevronRight aria-hidden className="size-3.5" />
+                    </Link>
+                  </h3>
+                  <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{group.chats.map((chat) => row(chat, group.name))}</ul>
+                </li>
+              );
+            })}
+          </ul>}
+      </div>
     </section>
   );
 }
