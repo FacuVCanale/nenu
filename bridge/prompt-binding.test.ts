@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import { parseAnsi } from "../web/src/lib/ansi.ts";
+import { splitLines } from "../web/src/lib/blocks.ts";
+import { detectPromptSelect } from "../web/src/lib/harness/claude/prompt-select.ts";
+
 import {
   DEFAULT_PROMPT_TAIL_LINES,
   normalizePromptRegion,
@@ -261,5 +265,20 @@ describe("client/bridge binding contract", () => {
     // The exemption must not go vacuous: if the duplicate capture ever leaves the corpus, the skip
     // above is dead code and this line says so.
     expect(identicalPairs).toBeGreaterThan(0);
+  });
+});
+
+describe("Claude's auto-deny countdown (2.1.299)", () => {
+  const P0 = join(import.meta.dir, "../web/src/lib/harness/claude/fixtures");
+  const a = readFileSync(join(P0, "permission-auto-deny-a-v2299.txt"), "utf8");
+  const b = readFileSync(join(P0, "permission-auto-deny-b-v2299.txt"), "utf8");
+  const region = (text: string) => detectPromptSelect(splitLines(parseAnsi(text)))!.signature;
+
+  test("a region read a second earlier still binds: only the countdown moved", () => {
+    expect(verifyExpectedPrompt(b, region(a))).toEqual({ ok: true });
+  });
+
+  test("another command under the countdown does not", () => {
+    expect(verifyExpectedPrompt(b.replaceAll("scratch2", "scratch3"), region(a))).toEqual({ ok: false, reason: "not_found" });
   });
 });

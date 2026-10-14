@@ -2,6 +2,7 @@
 // These are pure SGR/grammar modules; sharing them avoids weaker server-side text heuristics.
 import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { lineText, splitLines } from "../web/src/lib/blocks.ts";
+import { steadyCountdown } from "../web/src/lib/harness/claude/markers.ts";
 import { animatedComposerRegion } from "../web/src/lib/harness/codex/chrome.ts";
 
 /**
@@ -10,6 +11,7 @@ import { animatedComposerRegion } from "../web/src/lib/harness/codex/chrome.ts";
  * A terminal redraw can append trailing padding or change blank-line layout without changing the
  * question, so trailing whitespace and blank lines are ignored. Leading indentation and internal
  * alignment must survive because they can be semantic content in a displayed diff or command.
+ * Claude's auto-deny countdown is steadied on both sides, as the grammar's signature carries it.
  */
 const SGR_SEQUENCE = /(?:\x1b\[|\x9b)[0-?]*[ -/]*m/g;
 
@@ -18,7 +20,7 @@ export function normalizePromptRegion(text: string): string[] {
     .replace(SGR_SEQUENCE, "")
     .replace(/\r\n?/g, "\n")
     .split("\n")
-    .map((line) => line.replace(/\s+$/, ""))
+    .map((line) => steadyCountdown(line.replace(/\s+$/, "")))
     .filter((line) => line.length > 0);
 }
 

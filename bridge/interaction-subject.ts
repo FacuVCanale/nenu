@@ -1,3 +1,4 @@
+import { isAutoDenyRow } from "../web/src/lib/harness/claude/markers.ts";
 import type { PromptModel } from "../web/src/lib/harness/prompt-model.ts";
 import type { InteractionSubject } from "./types.ts";
 
@@ -121,14 +122,15 @@ export function promptSubjectText(p: PromptModel): string[] {
 }
 
 /**
- * Claude's Tip (which wraps on a narrow pane, its last row ending "below") and the old "This command
- * requires approval" line: chrome about the dialog, never part of what is asked.
+ * Claude's Tip (which wraps on a narrow pane, its last row ending "below"), the old "This command
+ * requires approval" line and the auto-deny countdown (the card says it from `autoDenyAt`): chrome
+ * about the dialog, never part of what is asked.
  */
 function withoutChrome(rows: readonly string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!.trim();
-    if (CHROME.test(row)) continue;
+    if (CHROME.test(row) || isAutoDenyRow(row)) continue;
     if (!TIP.test(row)) {
       out.push(rows[i]!);
       continue;

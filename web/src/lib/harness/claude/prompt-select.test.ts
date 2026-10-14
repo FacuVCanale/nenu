@@ -429,3 +429,34 @@ describe("detectPromptSelect — the unnumbered folder-trust prompt", () => {
     expect(detect(text.replace(/Is this a project you created or one you trust\?/, "Proceed?").replace("Yes, I trust this folder", "Yes, go on"))).toBeNull();
   });
 });
+
+// Claude Code 2.1.299 in auto mode: a command its safety check cannot clear asks with a countdown row,
+// `⚠ Claude Code will automatically deny this request in 1:50, …`, which it redraws every second for
+// two minutes (PROBES_2026_10_NOTES.md). The two captures are one second apart and differ only there.
+describe("detectPromptSelect — the auto-deny countdown (2.1.299)", () => {
+  const P0_DIR = join(import.meta.dirname, "fixtures");
+  const screen = (name: string) => readFileSync(join(P0_DIR, name), "utf8");
+  const detect = (text: string) => detectPromptSelect(splitLines(parseAnsi(text)));
+  const a = screen("permission-auto-deny-a-v2299.txt");
+  const b = screen("permission-auto-deny-b-v2299.txt");
+
+  it("reads the dialog with its two answers", () => {
+    const model = detect(a)!;
+    expect(model.family).toBe("permission");
+    expect(model.question).toBe("Do you want to proceed?");
+    expect(model.options.map((o) => [o.label, o.keys])).toEqual([["Yes", ["1"]], ["No", ["2"]]]);
+  });
+
+  it("is the same dialog a second later: the clock is not its identity", () => {
+    const [first, second] = [detect(a)!, detect(b)!];
+    expect(second.signature).toBe(first.signature);
+    expect(second.coreSignature).toBe(first.coreSignature);
+    expect(promptsEqual(first, second)).toBe(true);
+  });
+
+  it("another command under the same countdown is another dialog", () => {
+    const other = detect(b.replaceAll("scratch2", "scratch3"))!;
+    expect(other.signature).not.toBe(detect(a)!.signature);
+    expect(promptsEqual(detect(a)!, other)).toBe(false);
+  });
+});
