@@ -11,7 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { STATE_LABEL, flatten, orgTree } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, flatten, orgTree } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
 // What a tap on a node with no live pane opens: the node itself, inside Nenu. A coordinator lists
@@ -45,6 +45,8 @@ export function NodeRoute() {
     const live = thread.paneId !== undefined && data.agents.some((pane) => pane.paneId === thread.paneId);
     const coordinator = thread.role === "coordinator";
     const age = threadAge(thread, Date.now());
+    const ask = awaits(thread);
+    const note = ask ? ASK[ask].label : thread.note;
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
@@ -53,7 +55,7 @@ export function NodeRoute() {
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
           {age && <span className="text-muted-foreground">· {age}</span>}</p>
-        {thread.note && <p className="mt-1.5 text-muted-foreground">{thread.note}</p>}
+        {note && <p className="mt-1.5 text-muted-foreground">{note}</p>}
         {thread.pr && <p className="mt-1.5 flex items-center gap-1.5">{prSummary(thread.pr)}
           {thread.pr.url && <a className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" href={thread.pr.url} target="_blank" rel="noreferrer">
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}

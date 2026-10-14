@@ -6,7 +6,7 @@ import { NodeDot } from "@/components/node-row";
 import { canMerge, threadDetail, threadTree } from "@/components/project-tasks";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { mergeOrgThread } from "@/lib/api";
-import { orgTree } from "@/lib/org-tree";
+import { ASK, awaits, orgTree } from "@/lib/org-tree";
 import { setStatus } from "@/lib/status";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
       {nodes.map(({ thread, state }) => {
         const mergeable = !readOnly && canMerge(project, thread);
         const open = () => onOpen(thread);
+        const ask = awaits(thread);
         const actions = state === "needs" || mergeable;
         const pr = thread.pr?.number !== undefined && (
           <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-status-done/10 px-1.5 text-xs font-medium tabular-nums text-status-done">
@@ -54,7 +55,7 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
                 : <span className="flex min-w-0 flex-1 items-baseline gap-2.5">
                   <span className="shrink-0 text-sm font-medium">{thread.title}</span>
                   <span className={cn("truncate text-[13px]", state === "needs" ? "text-status-blocked" : "text-muted-foreground")}>
-                    {state === "needs" && thread.status !== "failed" ? "Asked you a question" : threadDetail(thread, panes)}
+                    {threadDetail(thread, panes)}
                   </span>
                 </span>}
               {pr}
@@ -63,7 +64,7 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {mergeable && <button type="button" className="h-11 rounded-md bg-foreground px-3 text-[13px] font-medium text-background lg:h-8"
                   aria-label={`Merge ${thread.title}`} onClick={() => setMerging(thread)}>Merge</button>}
-                {state === "needs" && thread.paneId && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>Answer</button>}
+                {ask && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>{ASK[ask].action}</button>}
                 <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>View thread</button>
               </div>
             )}
