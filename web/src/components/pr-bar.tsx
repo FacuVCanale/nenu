@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Check, ExternalLink, GitPullRequest, X } from "lucide-react";
 
+import { DiffStat } from "@/components/diff-stat";
 import { errorMessage } from "@/components/node-start";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { setOrgThreadFlags } from "@/lib/api";
@@ -25,8 +26,8 @@ function ciTone(checks: Checks | undefined): string {
 }
 
 /**
- * A thread's pull request above its composer: number, branch and diff size, and a CI chip whose
- * popover lists the checks. The two automation toggles are Organizations' own and appear only when
+ * A thread's pull request above its composer: number, branch and diff size (which opens the diff),
+ * and a CI chip whose popover lists the checks. The two automation toggles are Organizations' own and appear only when
  * it reports PR actions; without them the popover is read-only.
  */
 export function PrBar({ project, thread, session, readOnly, onChanged }: {
@@ -79,9 +80,7 @@ export function PrBar({ project, thread, session, readOnly, onChanged }: {
       {pr.state !== "open" && <span className="shrink-0 text-xs text-muted-foreground">{pr.state}</span>}
       <span className="hidden min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground sm:block">{thread.branch}</span>
       <span className="flex-1 sm:hidden" />
-      {pr.diff && <span className="shrink-0 font-mono text-xs tabular-nums">
-        <span className="text-status-done">+{pr.diff.additions}</span> <span className="text-status-blocked">−{pr.diff.deletions}</span>
-      </span>}
+      {pr.diff && <DiffStat diff={pr.diff} paneId={thread.paneId} pr={pr.number} session={session} url={pr.url} className="text-xs" />}
       <button ref={anchor} type="button" aria-expanded={open} aria-label={`${ciLabel(checks)}, checks`} onClick={() => setOpen(!open)}
         className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-muted px-2.5 text-xs font-medium tabular-nums", "relative after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-[''] lg:after:hidden")}>
         <span aria-hidden className={cn("size-1.5 rounded-full", ciTone(checks))} />{ciLabel(checks)}

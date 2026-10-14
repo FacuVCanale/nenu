@@ -80,15 +80,14 @@ describe("the pull request checked out in the pane", () => {
     const diff = await paneDiff(repo, target());
     if (!diff.ok) throw new Error(diff.message);
     const a = diff.files.find((file) => file.path === "src/a.ts")!;
-    expect(a.hunks).toHaveLength(1);
-    const [hunk] = a.hunks!;
-    expect(hunk!.oldStart).toBe(1);
-    expect(hunk!.newStart).toBe(1);
-    expect(hunk!.header.startsWith("@@ -1,")).toBe(true);
-    expect(hunk!.lines).toContain("-line 3");
-    expect(hunk!.lines).toContain("+line three");
-    expect(hunk!.lines).toContain("+line 11");
-    expect(hunk!.lines).toContain(" line 2");
+    // Line 3 and the new line 11 sit more than six lines apart: git draws two hunks.
+    expect(a.hunks).toHaveLength(2);
+    const [first, second] = a.hunks!;
+    expect([first!.oldStart, first!.newStart]).toEqual([1, 1]);
+    expect(first!.header).toBe("@@ -1,6 +1,6 @@");
+    expect(first!.lines).toEqual([" line 1", " line 2", "-line 3", "+line three", " line 4", " line 5", " line 6"]);
+    expect([second!.oldStart, second!.newStart]).toEqual([8, 8]);
+    expect(second!.lines).toEqual([" line 8", " line 9", " line 10", "+line 11"]);
     expect(diff.files.find((file) => file.path === "src/new.ts")!.hunks![0]!.lines).toEqual(["+new 1", "+new 2", "+new 3"]);
   });
 

@@ -69,7 +69,7 @@ it("says what each open PR waits on, in words and with a mark of its own, what n
 
 it("a PR's size opens its diff beside the row, without opening the thread", async () => {
   const onOpenPane = vi.fn();
-  const threads = [thread("T1", "Build", { number: 12, state: "open", diff: { additions: 30, deletions: 4 } }, { paneId: "w1:p1" })];
+  const threads = [thread("T1", "Build", { number: 12, state: "open", mergeBlocker: null, diff: { additions: 30, deletions: 4 } }, { paneId: "w1:p1" })];
   const project: ProjectView = { slug: "hub", name: "Hub", status: "active", prActions: true, threads };
   render(<PrList project={project} threads={threads} readOnly={false} onOpenPane={onOpenPane} onOpenNode={vi.fn()} onChanged={vi.fn()} />);
   const size = screen.getByRole("button", { name: "View changes: 30 added, 4 removed" });
