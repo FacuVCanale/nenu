@@ -1,10 +1,9 @@
 import type { HerdrClient } from "./herdr-client.ts";
 import type { QueuedMessage, QueueOutcome } from "./message-queue.ts";
-import { guardedSend, type SendHerdr } from "./guarded-send.ts";
+import { guardedSend, type GuardedSendDeps, type SendHerdr } from "./guarded-send.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 import { splitLines } from "../web/src/lib/blocks.ts";
 import { parseAnsi } from "../web/src/lib/ansi.ts";
-import type { Sleep } from "../web/src/lib/harness/poll.ts";
 import type { ActionResponse } from "./types.ts";
 
 /** Types into the pane through the audited reply route: text alone, or the configured submit key. */
@@ -24,7 +23,8 @@ const TAB: string[] = ["Tab"];
  * operator's own typing at the terminal, so the row waits instead of sweeping it. Text and Enter go
  * through `write`, the reply route, so each lands in the audit trail as before. And the submit key
  * follows the row's mode: Enter, or Tab for Codex's next-turn queue (queue-native.ts), pressed on
- * `herdr`, which the queue service hands in already audited.
+ * `herdr`, which the queue service hands in already audited. With `received`, the CLI's log has the
+ * last word, as on a phone send (ADR 0076): a row it logged incomplete is not sent.
  */
 export async function deliverQueuedMessage(
   row: QueuedMessage,
@@ -32,7 +32,7 @@ export async function deliverQueuedMessage(
   write: QueueWrite,
   sameConversation: () => Promise<boolean>,
   submit: "enter" | "tab" = "enter",
-  sleep?: Sleep,
+  deps: Pick<GuardedSendDeps, "sleep" | "received"> = {},
 ): Promise<QueueOutcome> {
   const adapter = adapterFor(row.agent);
   if (!adapter?.composerReady)
@@ -68,7 +68,7 @@ export async function deliverQueuedMessage(
     },
   };
   const { outcome } = await guardedSend(
-    { herdr: pane, paneId: row.paneId, readLines: READ_LINES, submitKeys: submit === "tab" ? TAB : ENTER, ...(sleep ? { sleep } : {}) },
+    { herdr: pane, paneId: row.paneId, readLines: READ_LINES, submitKeys: submit === "tab" ? TAB : ENTER, ...deps },
     { text: row.text, requestId: base },
   );
   if (outcome.ok) return { status: "sent" };

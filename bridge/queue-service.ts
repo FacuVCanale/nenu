@@ -10,7 +10,7 @@ import type { ActionResponse, AgentView, DeliveryMode } from "./types.ts";
 import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
 import type { JournalFacts } from "./journal/types.ts";
 import type { AuditLog } from "./audit.ts";
-import type { SendHerdr } from "./guarded-send.ts";
+import type { GuardedSendDeps, SendHerdr } from "./guarded-send.ts";
 
 type Context = { pane: AgentView; herdr: HerdrClient; connected: boolean };
 /** A row ready to go: how to submit it, and whether the agent was mid-turn when it was assessed. */
@@ -22,9 +22,14 @@ export type FactsReader = (pane: AgentView) => Promise<JournalFacts | null>;
  * What the bridge lends the queue beyond typing through the reply route. Each is optional and its
  * feature stays off without it: no `facts`, no journal state and no "Read it now"; no `audit`, no key
  * the reply route cannot press for it (Codex's Tab, Claude's send-now chord), so nothing reaches a
- * terminal unaudited.
+ * terminal unaudited; no `log`, no look at the CLI's log after Enter (ADR 0076).
  */
-export type QueueExtras = { facts?: FactsReader | null; audit?: Pick<AuditLog, "record"> | null };
+export type QueueExtras = {
+  facts?: FactsReader | null;
+  audit?: Pick<AuditLog, "record"> | null;
+  /** A fresh look at the log of the conversation a pane runs, as the phone send gets one. */
+  log?: (session: string, paneId: string) => GuardedSendDeps["received"];
+};
 
 const identity = (pane: AgentView) =>
   pane.agentSession?.kind === "id"
@@ -162,7 +167,7 @@ export class QueueService {
     const outcome = await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, async () => {
       const next = await this.resolve(row.session, row.paneId, true);
       return !!next?.connected && identity(next.pane) === row.conversation;
-    }, ready.submit);
+    }, ready.submit, { received: this.extras.log?.(row.session, row.paneId) });
     // Only a delivery to a free agent starts a turn. A steer or a native-queue Tab into a working one
     // does not, and marking it would hold the next row for the whole TURN_START_CAP_MS.
     if (outcome.status === "sent" && !ready.busy) {
