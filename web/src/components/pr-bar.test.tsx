@@ -41,3 +41,14 @@ it("labels CI by passed checks out of all reported", () => {
   expect(ciLabel(undefined)).toBe("CI");
   expect(ciLabel({ passed: 6, failed: 0, pending: 0 })).toBe("CI 6/6");
 });
+
+it("opens the PR's diff from its size when the thread has a pane", async () => {
+  render(<PrBar project={project(true)} thread={{ ...thread, paneId: "w1:p1" }} session="s" readOnly={false} onChanged={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "View changes: 212 added, 148 removed" })).toHaveTextContent("+212 −148");
+});
+
+it("keeps a merged PR's size as text: there is no open PR to read", () => {
+  render(<PrBar project={project(true)} thread={{ ...thread, paneId: "w1:p1", pr: { ...thread.pr!, state: "merged" } }} readOnly={false} onChanged={vi.fn()} />);
+  expect(screen.getByText("+212")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /View changes/ })).not.toBeInTheDocument();
+});

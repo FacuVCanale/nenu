@@ -68,7 +68,11 @@ async function portIsFree(port: number): Promise<boolean> {
  * `epoch` plus the time since the bridge started, so captures taken hours apart render the same
  * greeting, date and activity chart.
  */
-export async function startTestBridge(opts: { port: number; fake?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed }): Promise<TestBridge> {
+/**
+ * `repo` fills the demo panes' folder after it becomes a git repo (with $NENU_E2E_GH_PRS) and before
+ * the projects are seeded, so a seed can carry numbers the repo produced.
+ */
+export async function startTestBridge(opts: { port: number; fake?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; repo?: (dir: string) => void }): Promise<TestBridge> {
   assertTestPort(opts.port);
   if (!opts.fake && !opts.socketPath) throw new Error("pass --fake or --socket <disposable herdr socket>");
   if (!(await portIsFree(opts.port))) throw new Error(`port ${opts.port} is busy`);
@@ -113,7 +117,10 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
     herd = await seedDemoHerd(fake, { claudeRoot: paths.claude, cwd: dir, shift });
     // With fake pull requests the demo panes sit in a repo on branch `e2e-demo`, so a PR on that
     // branch opens its agent and the rest open on GitHub.
-    if (process.env.NENU_E2E_GH_PRS) Bun.spawnSync(["git", "init", "-q", "-b", "e2e-demo", dir]);
+    if (process.env.NENU_E2E_GH_PRS) {
+      Bun.spawnSync(["git", "init", "-q", "-b", "e2e-demo", dir]);
+      opts.repo?.(dir);
+    }
     await fake.start();
   }
   const org = opts.org && herd ? opts.org(herd, Date.now() + shift) : undefined;

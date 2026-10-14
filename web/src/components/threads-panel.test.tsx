@@ -66,3 +66,15 @@ it("says what each open PR waits on, in words and with a mark of its own, what n
   const marks = within(list).getAllByRole("listitem").map((item) => item.querySelector("[data-pr-status]")?.getAttribute("data-pr-status"));
   expect(new Set(marks).size).toBe(9);
 });
+
+it("a PR's size opens its diff beside the row, without opening the thread", async () => {
+  const onOpenPane = vi.fn();
+  const threads = [thread("T1", "Build", { number: 12, state: "open", mergeBlocker: null, diff: { additions: 30, deletions: 4 } }, { paneId: "w1:p1" })];
+  const project: ProjectView = { slug: "hub", name: "Hub", status: "active", prActions: true, threads };
+  render(<PrList project={project} threads={threads} readOnly={false} onOpenPane={onOpenPane} onOpenNode={vi.fn()} onChanged={vi.fn()} />);
+  const size = screen.getByRole("button", { name: "View changes: 30 added, 4 removed" });
+  expect(size.closest(".task-main")).toBeNull();
+  await userEvent.click(size);
+  expect(onOpenPane).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Merge Build" })).toBeInTheDocument();
+});

@@ -178,4 +178,22 @@ describe("registry", () => {
     await prs.refresh();
     expect(calls.filter((call) => call.argv[0] === "gh").length).toBe(12);
   });
+
+  test("finds a PR by number in the repo a folder sits in, with the branch that folder is on", async () => {
+    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")], "/r/api": [ghRow(1, "fix/api")] } });
+    const { prs } = registry(run);
+    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p5", "/r/api")];
+    expect(prs.locate("/h/worktrees/shop/a", 1)).toBeUndefined();
+    prs.list("main", panes);
+    await prs.refresh();
+    const before = calls.length;
+    expect(prs.locate("/h/worktrees/shop/a", 1)).toMatchObject({ checkedOut: "feat/a", pr: { number: 1, branch: "feat/a", base: "main" } });
+    expect(prs.locate("/r/shop", 2)).toMatchObject({ checkedOut: "develop", pr: { number: 2, branch: "feat/z" } });
+    // The same number in another repo is another PR.
+    expect(prs.locate("/r/api", 1)).toMatchObject({ pr: { branch: "fix/api" } });
+    expect(prs.locate("/r/api", 2)).toBeUndefined();
+    expect(prs.locate("/tmp", 1)).toBeUndefined();
+    // Answers from what the last refresh read; it never runs a command.
+    expect(calls.length).toBe(before);
+  });
 });
