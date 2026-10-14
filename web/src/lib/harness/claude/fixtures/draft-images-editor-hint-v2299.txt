@@ -1,0 +1,17 @@
+user@host work % claude --model haiku --effort low --setting-sources project,local
+[0m[38;2;215;119;87m ▐[0m[38;2;215;119;87m[48;2;0;0;0m▛███▛█   [0m[1mClaude Code [0m[38;2;153;153;153mv2.1.299[0m
+[0m[38;2;215;119;87m▝▜[0m[38;2;215;119;87m[48;2;0;0;0m█████[0m[38;2;215;119;87m█▀  [0m[38;2;153;153;153mHaiku 5.5 with low effort · Claude Team[0m
+[0m[38;2;215;119;87m ▝▝   ▝▝   [0m[38;2;153;153;153m/private/tmp/nsh/work[0m
+
+
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+❯ [Image #3] [Image #4]Hay un problema en la vista de prueba que quiero que en lugar de mostrar dos botones muestre
+  una lista con el agente que sea y el nivel de permisos, porque si no es imposible elegir bien desde el telefono
+  cuando estoy lejos del escritorio y sin la notebook a mano para nada
+  despues en los proyectos hay un retoque abajo de lo que aparece todo el rato que no deberia aparecer, sino que en
+  otra pestana y falta implementar los diffs que no se implementaron todavia en ninguna parte del producto
+  para eso crea un tab que cada agente tenga su propia tarea y que se meta bajo nivel, a investigar y debugear todo
+  primero y luego implemente para hacerlo lo mas eficiente y rapido posible y que consuma la menor memoria posible
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[38;2;255;193;7m⏵⏵ auto mode on[0m[38;2;153;153;153m (shift+tab to cycle)                                                          ctrl+g to edit in Vim[0m
+                                                                                                                  [0m[38;2;78;186;101m/rc[0m

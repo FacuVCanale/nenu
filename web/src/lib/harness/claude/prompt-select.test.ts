@@ -402,6 +402,34 @@ describe("detectPromptSelect — the permission prompt's Tab-amend field", () =>
   });
 });
 
+// Claude Code 2.1.296 dropped the numbers from the folder-trust prompt and put "No, exit" first, under
+// the cursor (PROBES_2026_10_NOTES.md); 2.1.299 draws the same rows. Enter alone exits.
+describe("detectPromptSelect — the unnumbered folder-trust prompt", () => {
+  const text = readFileSync(join(import.meta.dirname, "fixtures", "trust-prompt-v2296.txt"), "utf8");
+  const detect = (screen: string) => detectPromptSelect(splitLines(parseAnsi(screen)));
+
+  it("lifts both rows in screen order, each reached from the cursor", () => {
+    const model = detect(text)!;
+    expect(model.family).toBe("trust");
+    expect(model.question).toContain("Is this a project you created or one you trust?");
+    expect(model.options.map((o) => o.label)).toEqual(["No, exit", "Yes, I trust this folder"]);
+    expect(model.options.map((o) => o.keys)).toEqual([["Enter"], ["Down", "Enter"]]);
+    expect(model.pointer).toBe(1);
+  });
+
+  it("counts the moves from wherever the cursor sits now", () => {
+    const moved = text.replace("❯ No, exit", "  No, exit").replace("  Yes, I trust this folder", "❯ Yes, I trust this folder");
+    const model = detect(moved)!;
+    expect(model.options.map((o) => o.keys)).toEqual([["Up", "Enter"], ["Enter"]]);
+    expect(model.pointer).toBe(2);
+  });
+
+  it("reads nothing without the cursor, or without the trust dialog's own words", () => {
+    expect(detect(text.replace("❯ No, exit", "  No, exit"))).toBeNull();
+    expect(detect(text.replace(/Is this a project you created or one you trust\?/, "Proceed?").replace("Yes, I trust this folder", "Yes, go on"))).toBeNull();
+  });
+});
+
 // Claude Code 2.1.299 in auto mode: a command its safety check cannot clear asks with a countdown row,
 // `⚠ Claude Code will automatically deny this request in 1:50, …`, which it redraws every second for
 // two minutes (PROBES_2026_10_NOTES.md). The two captures are one second apart and differ only there.
