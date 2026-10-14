@@ -13,6 +13,7 @@ import { agentElapsed, allAgents, formatDuration, workflowElapsed, type Activity
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
 import { panePath, workspacePath } from "@/lib/nav";
+import { ASK } from "@/lib/org-tree";
 import type { Herd } from "@/lib/spaces";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -110,6 +111,7 @@ const sr = (text: string) => <span className="sr-only">{text}</span>;
 /** The state word a row leads its second line with, and its colour. */
 function stateOf(chat: RecentChat): { word: string; tone?: string } {
   if (chat.agent.kind === "shell") return { word: "Shell" };
+  if (chat.ask === "reply") return { word: ASK.reply.label, tone: "text-status-blocked" };
   if (chat.review) return { word: "Ready to review", tone: "text-primary" };
   const status = STATUS_LABEL[chat.agent.status];
   return { word: status.charAt(0).toUpperCase() + status.slice(1), tone: STATUS_TEXT[chat.agent.status] };

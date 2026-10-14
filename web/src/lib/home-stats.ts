@@ -1,7 +1,7 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { nodeState } from "./org-tree";
+import { awaits, nodeState, type Ask } from "./org-tree";
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
 import { byRecency, chatRecency, isOpenThread, projectForPane } from "./projects";
 import { isUnseen } from "./triage";
@@ -162,6 +162,8 @@ export interface RecentChat extends DisplayPlace {
   unseen: boolean;
   /** Its thread waits on a review, as the organization tree reads it. */
   review: boolean;
+  /** What its thread waits on you for, as every view of the organization says it. */
+  ask?: Ask;
   /** What tells it apart after its place: its pull request, "coordinator" for a coordinator thread, else its tab. */
   detail: string | null;
   /** Its pull request's size, when one is known. */
@@ -182,11 +184,13 @@ export function sessionChats(panes: readonly AgentView[], projects: readonly Pro
     const number = entry?.number ?? thread?.pr?.number;
     const diff = entry?.diff ?? thread?.pr?.diff;
     const place = displayPlace(agent, projects);
+    const ask = thread && awaits(thread);
     return {
       agent, title: displayName(agent, projects), ...place, at: chatRecency(agent), unseen: isUnseen(agent),
       review: inReview.has(agent.paneId),
       detail: number !== undefined ? `PR #${number}` : thread?.role === "coordinator" ? "coordinator" : place.tab,
       ...(diff ? { diff } : {}),
+      ...(ask ? { ask } : {}),
     };
   });
 }
