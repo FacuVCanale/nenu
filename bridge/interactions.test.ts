@@ -117,6 +117,8 @@ const EXPECTED: Record<string, string> = {
   "permission-deny-amend-typed-v2296.txt": "permission: Yes=primary | Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent",
   "permission-pointer-mid-v2296.txt": "permission: Yes=primary | Yes, and always allow access to=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
   "plan-approval-v2296.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
+  // 2.1.296 drew the folder-trust prompt without numbers, "No, exit" first under the cursor.
+  "trust-prompt-v2296.txt": "permission: No, exit=deny | Yes, I trust this folder=persistent",
   // web/src/lib/harness/codex/fixtures
   "approval-exec-v0160.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
   "ask-notes-open-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
@@ -481,6 +483,19 @@ function recorder() {
 }
 
 const noSleep = async () => {};
+
+describe("the unnumbered folder-trust prompt", () => {
+  test("trusting walks the cursor down to its row, then Enter; Enter alone would exit", async () => {
+    const interactions = new Interactions(recorder().live, { sleep: noSleep });
+    const pane = scriptedPane(fixture("trust-prompt-v2296.txt", join(ROOT, "web/src/lib/harness/claude/fixtures")));
+    const [card] = await interactions.refresh("s", pane.io, [blocked("p")]);
+    const trust = card!.options.find((o) => o.label === "Yes, I trust this folder")!;
+    expect(trust.role).toBe("persistent");
+    const result = await interactions.answer("s", pane.io, blocked("p"), { signature: card!.signature, optionIndex: trust.index, confirm: true });
+    expect(result.keys).toEqual(["Down", "Enter"]);
+    expect(pane.log.keys).toEqual([["Down", "Enter"]]);
+  });
+});
 
 describe("Interactions.list", () => {
   test("reuses a read from the last two seconds and shares a list already running", async () => {
