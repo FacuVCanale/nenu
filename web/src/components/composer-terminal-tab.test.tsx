@@ -130,6 +130,18 @@ describe("Composer on a desk — the session panel's Terminal tab", () => {
     await waitFor(() => expect(sent.flat()).toEqual(presses.map(([, wire]) => wire)));
   });
 
+  // A phone keyboard's Shift (auto-capitals after a full stop) must not turn Return into another key.
+  it("keeps Enter and Backspace bare under Shift; Option still rides along", async () => {
+    const sent = recordKeys();
+    renderDesk();
+    fireEvent.click(typeSwitch());
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    fireEvent.keyDown(field, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(field, { key: "Backspace", shiftKey: true });
+    fireEvent.keyDown(field, { key: "Enter", altKey: true });
+    await waitFor(() => expect(sent.flat()).toEqual(["Enter", "Backspace", "alt+Enter"]));
+  });
+
   it("leaves Command, and Ctrl+V outside Apple keyboards, to the browser: a paste still reaches the pane as text", async () => {
     const sent = recordKeys();
     renderDesk();
