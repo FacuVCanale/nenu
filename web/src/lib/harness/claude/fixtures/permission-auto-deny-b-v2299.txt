@@ -1,0 +1,21 @@
+[0m[38;2;153;153;153m⏺[0m [0m[1mBash[0m(D=/tmp/demo/scratch2; mkdir -p $D; for v in old new; do sh -c "rm -rf $D/$v &&
+      mkdir -p $D/$v && echo \$(date +%s) > $D/$v/stamp…)
+[0m[38;2;153;153;153m  ⎿  Waiting…[0m
+
+[0m[38;2;177;185;249m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+ [0m[1m[38;2;177;185;249mBash command[0m
+ [0m[38;2;153;153;153mCreate old/new stamp dirs under scratch2 and list it[0m
+[0m[38;2;80;80;80m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌[0m
+ [0m[2m│ [0mD=/tmp/demo/scratch2; mkdir -p $D; for v in old new; do sh -c "rm -rf $D/$v &&
+ [0m[2m│ [0mmkdir -p $D/$v && echo \$(date +%s) > $D/$v/stamp"; done; ls $D
+[0m[38;2;80;80;80m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌[0m
+ [0m[2m│ [0mDangerous rm operation on possibly-empty variable path: $D/$v in `rm -rf $D/$v` (use a literal path: the rm is
+ [0m[2m│ [0mparsed again before it runs)
+ [0m[38;2;255;193;7m⚠ Claude Code will automatically deny this request in 1:49, to avoid blocking progress on an unattended session[0m
+
+
+ Do you want to proceed?
+ [0m[38;2;177;185;249m❯ [0m[38;2;153;153;153m1. [0m[38;2;177;185;249mYes[0m
+   [0m[38;2;153;153;153m2. [0mNo
+
+ [0m[38;2;153;153;153mEsc to cancel · Tab to amend[0m

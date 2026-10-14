@@ -94,6 +94,20 @@ describe("QuestionCard", () => {
     expect(screen.getByLabelText("Request details")).toHaveTextContent("line 12");
   });
 
+  it("says when Claude denies the request on its own, counting down in place", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    try {
+      setup({ interaction: { ...permission, autoDenyAt: 1_000_000 + 83_400 } });
+      expect(screen.getByText("Claude denies this on its own in 1:23 if nobody answers.")).toBeTruthy();
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText("Claude denies this on its own in 1:22 if nobody answers.")).toBeTruthy();
+      act(() => { vi.advanceTimersByTime(90_000); });
+      expect(screen.getByText("Claude is denying this now.")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("answers with one call naming the option by index", async () => {
     const { onAnswer, user } = setup();
     await user.click(screen.getByRole("button", { name: /Apple/ }));
