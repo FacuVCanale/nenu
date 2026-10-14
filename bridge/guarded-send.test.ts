@@ -120,7 +120,7 @@ class Term {
 
 const noSleep = async () => {};
 
-function run(term: Term, request: Partial<SendRequest> = {}, opts: { trigger?: OutputTrigger; prior?: PriorAttempt } = {}) {
+function run(term: Term, request: Partial<SendRequest> = {}, opts: { trigger?: OutputTrigger; prior?: PriorAttempt; received?: GuardedSendDeps["received"] } = {}) {
   const deps: GuardedSendDeps = {
     herdr: term,
     paneId: "w1:p1",
@@ -128,6 +128,7 @@ function run(term: Term, request: Partial<SendRequest> = {}, opts: { trigger?: O
     submitKeys: ["Enter"],
     sleep: noSleep,
     ...(opts.trigger ? { trigger: opts.trigger } : {}),
+    ...(opts.received ? { received: opts.received } : {}),
   };
   return guardedSend(deps, { text: "deploy the staging build", requestId: "r1", ...request }, opts.prior);
 }
@@ -231,6 +232,20 @@ describe("guardedSend", () => {
     const { outcome } = await run(term, { text: "first line\n\nlast line" });
     expect(term.calls.find((c) => c.method === "pane.send_text")?.arg).toBe("\x1b[200~first line\n\nlast line\x1b[201~");
     expect(outcome.ok === false ? outcome.stage : "ok").not.toBe("type");
+  });
+
+  test("a long Claude send goes as one bracketed paste, a short one as typed text", async () => {
+    // Past Claude's paste threshold the PTY can hand the text over in pieces (1 022 + 478 bytes on
+    // macOS) and Claude may keep only the last; framed as one paste it arrived whole every time
+    // (measured on 2.1.296, 2.1.299 and 2.1.300).
+    const long = "word ".repeat(300).trim();
+    const term = new Term();
+    await run(term, { text: long });
+    expect(term.calls.find((c) => c.method === "pane.send_text")?.arg).toBe(`\x1b[200~${long}\x1b[201~`);
+    const short = "word ".repeat(150).trim();
+    const typed = new Term();
+    await run(typed, { text: short });
+    expect(typed.calls.find((c) => c.method === "pane.send_text")?.arg).toBe(short);
   });
 
   test("a paste carrying an escape sequence is refused before typing", async () => {
@@ -420,6 +435,40 @@ describe("guardedSend", () => {
 // and two uploaded images, which Claude 2.1.299 took as one paste. It attached both paths and drew
 // `[Image #1] [Image #2]` ahead of the paragraphs, one row each (blank lines dropped), wrapped at 120
 // columns. Seven reads saw that draft and called it someone else's.
+describe("guardedSend: what Claude logged", () => {
+  // The screen cannot tell a whole long send from one that lost its head: the box shows Claude's
+  // paste token, or only the literal tail, which is a slice of the message either way. Claude's own
+  // log says what it received (ADR 0067), so it has the last word on a send it can judge.
+  const sent = Array.from({ length: 240 }, (_, i) => `word${i}`).join(" ");
+  function logged(text: string | null, after = 0) {
+    const asked: number[] = [];
+    return { asked, received: async (since: number) => (asked.push(since) > after ? text : null) };
+  }
+
+  test("a message Claude logged without its head is reported incomplete, not sent", async () => {
+    const term = new Term();
+    const log = logged(sent.slice(1022));
+    const { outcome } = await run(term, { text: sent }, { received: log.received });
+    expect(outcome).toMatchObject({ ok: false, stage: "confirm", code: "incomplete", textDelivered: true });
+    expect(outcome.ok ? "" : outcome.error).toContain("incomplete");
+    expect(term.keys()).toEqual([["Enter"]]);
+  });
+
+  test("a message logged whole is sent once the log shows it", async () => {
+    const log = logged(sent, 2);
+    const { outcome } = await run(new Term(), { text: sent }, { received: log.received });
+    expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
+    expect(log.asked).toHaveLength(3);
+  });
+
+  test("a message the log never shows stays sent: the screen already confirmed it", async () => {
+    const log = logged(null);
+    const { outcome } = await run(new Term(), { text: sent }, { received: log.received });
+    expect(outcome.ok).toBe(true);
+    expect(log.asked.length).toBeGreaterThan(1);
+  });
+});
+
 describe("guardedSend: a message with images on Claude", () => {
   const paragraphs = [
     "There is a problem in the terminal view: instead of two buttons it should offer a list with the agent and its permission level, otherwise picking from the phone is impossible",
