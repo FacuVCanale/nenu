@@ -22,9 +22,10 @@ stood would have left those keys with no way in from a desk.
    terminal" switch, nothing else. The + menu there keeps Files and photos, Commands and Context. A
    phone, and a desk chat with no panel beside it (a docked thread), keep the full menu and the tray.
 2. Armed, the desk's keyboard sends what the tray sent. Esc, Tab, Enter, Backspace, the arrows and
-   F1–F12 go by name with the Ctrl, Option and Shift held (`shift+Tab`, `alt+Left`). Ctrl with a
-   printable key is that chord (`ctrl+c`; Shift kept for a letter, `ctrl+shift+r`). Arming, and every
-   way the mode ends, stay as 0077 and the header of `use-direct-typing.ts` set them.
+   F1–F12 go by name with the Ctrl and Option held (`alt+Left`), and with Shift too except on Enter,
+   Backspace and Esc (`shift+Tab`), where a phone keyboard's auto-capital would otherwise change the
+   key. Ctrl with a printable key is that chord (`ctrl+c`; Shift kept for a letter, `ctrl+shift+r`).
+   Arming, and every way the mode ends, stay as 0077 and the header of `use-direct-typing.ts` set them.
 3. Command stays the browser's: copy, paste, closing the tab. So does Ctrl+V outside Apple keyboards,
    where it is the paste, and a paste reaches the pane as typed text. Option with a printable key
    stays text, because on a Mac it types characters (`@` on some layouts).
