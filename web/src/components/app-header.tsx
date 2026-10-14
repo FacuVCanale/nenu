@@ -4,6 +4,7 @@ import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { armMotion } from "@/lib/motion";
 import { homePath, settingsPath } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { CollieHome } from "@/components/collie-home";
@@ -96,11 +97,11 @@ export function AppHeader({
               className="workbench-chat-menu lg:hidden"
             />
           ) : back?.onClick ? (
-            <button type="button" onClick={back.onClick} aria-label={`Back to ${back.label}`} className={backClass}>
+            <button type="button" onClick={() => { armMotion("pop"); back.onClick?.(); }} aria-label={`Back to ${back.label}`} className={backClass}>
               {icon}{back.inPlace && <span className="text-body">{back.label}</span>}
             </button>
           ) : (
-            <Link to={back?.to ?? homePath(session)} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>{icon}</Link>
+            <Link to={back?.to ?? homePath(session)} onClick={() => armMotion("pop")} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>{icon}</Link>
           )}
           {/* Center region: the title, the route's own content, or on Home an empty flex-1 spacer that
               pushes the right cluster to the edge. min-w-0 so a long title truncates when tight. */}

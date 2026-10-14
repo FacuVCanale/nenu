@@ -152,6 +152,11 @@ the unit name; the Herdr action runs from anywhere.
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
+- **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
+  `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
+  poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped
+  notification opens in place. `bun scripts/e2e/run.ts motion` must count 0 transitions while quiet
+  ([ADR 0078](./.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
   failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
   describe connection health. Brief failures retry quietly; only sustained outages show the

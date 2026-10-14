@@ -41,6 +41,7 @@ export interface Page {
   route(url: string, handler: (route: Route) => unknown): Promise<void>;
   keyboard: { press(key: string): Promise<void> };
   waitForTimeout(ms: number): Promise<void>;
+  waitForFunction<A>(fn: (arg: A) => unknown, arg: A, opts?: { timeout?: number }): Promise<unknown>;
   close(): Promise<void>;
 }
 export interface Context { newPage(): Promise<Page>; close(): Promise<void> }

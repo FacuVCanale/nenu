@@ -3,6 +3,7 @@ import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { clientsClaim } from "workbox-core";
 
+import { openInWindow } from "./lib/notification-open";
 import { decidePush, type PushPayload } from "./lib/push-decision";
 import { FONT_URLS, NAVIGATION_NETWORK_ONLY } from "./lib/sw-routes";
 
@@ -205,14 +206,13 @@ async function openPane(paneId: string | undefined, session?: string): Promise<v
   await openPath(`${base}${sessionSearchParam(session)}`);
 }
 
-// Focus an existing Nenu tab (navigating it to `path`) or open a new one. `path` is origin-relative.
+// Focus an existing Nenu tab and have it open `path` in place, or open a new one. `path` is
+// origin-relative. An open Nenu moves there itself, with its page motion and nothing reloaded; one that
+// does not answer (an older build) is navigated as before (lib/notification-open).
 async function openPath(path: string): Promise<void> {
   const url = new URL(path, self.location.origin).href;
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  for (const client of windows) {
-    await client.focus();
-    if (client.url !== url) await client.navigate(url).catch(() => null);
-    return;
-  }
-  await self.clients.openWindow(url);
+  const client = windows[0];
+  if (client) await openInWindow(client, url);
+  else await self.clients.openWindow(url);
 }
