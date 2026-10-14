@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, House, Inbox, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "lucide-react";
+import { ChevronRight, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "lucide-react";
 
 import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -16,6 +16,7 @@ import { displayName, displayPlace } from "@/lib/display-name";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
+import { needsYouCount, needYou } from "@/lib/home-stats";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
@@ -24,18 +25,16 @@ import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState,
 import { chatRecency, isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
-/** What the sidebar lists: the whole tree, or only what is waiting on the operator. */
-export type SidebarMode = "browse" | "needs-you";
 export interface SidebarRequest {
-  target: "search" | "needs-you";
+  target: "search";
   seq: number;
 }
 
 /**
- * Where the navigation is drawn. The desk's sidebar leads with New, Search, Needs you and Home. A
- * phone's sheet (the tab bar's) and drawer (a chat's Nenu mark) leave those to the bar or the drawer's
- * header and start every project and workspace folded; the drawer, which has no Home behind it, also
- * leads with what needs you and the chats that moved last.
+ * Where the navigation is drawn. The desk's sidebar leads with New, Search and Home, which counts
+ * what needs you. A phone's Search sheet (the tab bar's) keeps to its results; its drawer (Home's or a
+ * chat's Nenu mark) leaves New and Search to its header, leads with what needs you and the chats that
+ * moved last, and starts every project and workspace folded.
  */
 export type SidebarVariant = "sidebar" | "sheet" | "drawer";
 
@@ -47,7 +46,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   data: HomeData;
   variant?: SidebarVariant;
   onNewChat?: () => void;
-  /** Each new `seq` opens search or the Needs you list (⌘K, the rail, the tab bar). */
+  /** Each new `seq` opens search (⌘K, the rail, the tab bar). */
   request?: SidebarRequest;
 }) {
   const [searching, setSearching] = useState(false);
@@ -55,15 +54,14 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   // The pick is a row, not a place in the list: a poll that adds or drops a row leaves it where it was.
   const [picked, setPicked] = useState<string>();
   const [answered, setAnswered] = useState<{ query: string; order: Map<string, number> }>();
-  const [mode, setMode] = useState<SidebarMode>("browse");
   const searchBox = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  // Where the tree was scrolled, so leaving the Needs you filter lands back on the same rows.
+  // Where the tree was scrolled, so leaving a search lands back on the same rows.
   const treeScroll = useRef(0);
   const listId = useId();
   const navigate = useNavigate();
   const { pathname, key } = useLocation();
-  const attention = needsYou(data);
+  const attention = needsYouCount(data);
   const phone = variant !== "sidebar";
   const results = searching ? navSearch(data, query, { order: answered?.query === query ? answered.order : undefined }) : [];
   const hits = results.flatMap((group) => group.hits);
@@ -74,17 +72,12 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   const target = request?.target;
   useEffect(() => {
     if (!target) return;
-    if (target === "needs-you") {
-      setMode("needs-you");
-      return;
-    }
-    setMode("browse");
     setSearching(true);
     searchBox.current?.focus();
     searchBox.current?.select();
   }, [target, request?.seq]);
 
-  const browsing = mode === "browse" && !query.trim();
+  const browsing = !query.trim();
   useLayoutEffect(() => {
     if (browsing && scroller.current) scroller.current.scrollTop = treeScroll.current;
   }, [browsing]);
@@ -124,7 +117,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   }
 
   return (
-    <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : mode}>
+    <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}>
       {(!phone || searching) && <div className="nav-top">
         {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
           <SquarePen aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
@@ -140,16 +133,14 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
               onKeyDown={onSearchKey} />
           </label>
         ) : !phone && (
-          <button type="button" className="nav-row" onClick={() => { setMode("browse"); setSearching(true); }} aria-keyshortcuts="Meta+K">
+          <button type="button" className="nav-row" onClick={() => setSearching(true)} aria-keyshortcuts="Meta+K">
             <Search aria-hidden size={16} /><span className="nav-row-text">Search</span><kbd className="nav-kbd" aria-hidden>⌘K</kbd>
           </button>
         )}
-        {!phone && <button type="button" className="nav-row" aria-pressed={mode === "needs-you"} aria-label={attention.length ? `Needs you, ${attention.length}` : "Needs you"} onClick={() => setMode(mode === "needs-you" ? "browse" : "needs-you")}>
-          <Inbox aria-hidden size={16} /><span className="nav-row-text">Needs you</span>
-          {attention.length > 0 && <span className="nav-badge" aria-hidden>{attention.length}</span>}
-        </button>}
-        {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}>
-          <House aria-hidden size={16} />Home
+        {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}
+          aria-label={attention > 0 ? `Home, ${needYou(attention)}` : undefined}>
+          <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
+          {attention > 0 && <span className="nav-badge" aria-hidden>{attention}</span>}
         </Link>}
       </div>}
 
@@ -157,16 +148,14 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {query.trim()
           ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
               onOpen={() => { picking.current = true; }} />
-          : mode === "needs-you"
-          ? <NeedsYouList data={data} panes={attention} labelled={!phone} />
           : <>
             {variant === "drawer" && <DrawerSections data={data} />}
             <SidebarTree data={data} folded={phone} onNewChat={phone ? onNewChat : undefined} />
           </>}
       </div>
 
-      {/* The host belongs to browsing; a phone's Needs you or Search sheet keeps to its list. */}
-      {(!phone || (mode === "browse" && !searching)) && <div className="nav-footer">
+      {/* The host belongs to browsing; a phone's Search sheet keeps to its results. */}
+      {(!phone || !searching) && <div className="nav-footer">
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
         <HostRow data={data} />
       </div>}
@@ -240,25 +229,6 @@ function hitState(hit: SearchHit): string {
   if (hit.kind === "node") return STATE_LABEL[hit.state].toLowerCase();
   if (hit.kind === "workspace") return "workspace";
   return hit.pane.kind === "shell" ? "shell" : STATUS_LABEL[hit.pane.status];
-}
-
-/** Agent panes waiting on the operator, the same set the Home headline and the rail's dot count. */
-export function needsYou(data: Pick<HomeData, "agents">): AgentView[] {
-  return data.agents.filter((pane) => isAttention(pane.status));
-}
-
-/** `labelled` is the sidebar's: a phone's Needs you sheet already carries the name as its title. */
-function NeedsYouList({ data, panes, labelled }: { data: HomeData; panes: AgentView[]; labelled: boolean }) {
-  const { paneId } = useParams();
-  if (panes.length === 0) return <p className="nav-empty">Nothing needs you right now.</p>;
-  const now = Date.now();
-  return (
-    <section aria-label="Needs you">
-      {labelled && <h3 className="nav-label">Needs you</h3>}
-      {panes.map((pane) => <ChatRow key={pane.paneId} pane={pane} projects={data.projects} current={pane.paneId === paneId} now={now}
-        session={data.session} />)}
-    </section>
-  );
 }
 
 /** What the drawer leads with: the chats waiting on you, then the ones that moved last. */

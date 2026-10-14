@@ -541,8 +541,8 @@ async function workspace(): Promise<void> {
         ["old-link", (page, name) => page.goto(`${bridge.url}/space/${ids[name]}`).then(() => undefined)],
       ],
       phone: [
-        ["browse", async (page, name) => {
-          await page.getByRole("button", { name: "Browse" }).click();
+        ["navigation", async (page, name) => {
+          await page.getByRole("button", { name: "Open navigation" }).click();
           await page.locator(row("[role=dialog]", name)).click();
         }],
         ["search", async (page, name) => {
@@ -1209,15 +1209,15 @@ async function needsYou(): Promise<void> {
       await close();
     }
     {
-      // The tab bar lives on Home; a chat has none.
+      // Home's mark opens the navigation on a phone; a chat opens it from its title.
       const { page, close } = await open(PHONE);
       await page.goto(`${bridge.url}/`);
-      await page.getByRole("button", { name: "Browse" }).click();
+      await page.getByRole("button", { name: "Open navigation" }).click();
       const project = page.locator('[role=dialog] button[aria-label="Demo shop tasks"]');
       if (await project.count() && !(await page.locator('[role=dialog] .nav-tree-row', { hasText: "Checkout copy" }).count())) await project.click();
       await page.waitForTimeout(600);
-      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneBrowse ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
-      await shoot(page, "phone-browse");
+      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneNavigation ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
+      await shoot(page, "phone-navigation");
       await close();
     }
     {

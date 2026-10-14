@@ -21,21 +21,31 @@ export interface HomeCounts {
   idle: number;
 }
 
-/** Home's headline: the one fact that needs you most, said with its noun, and the rest on a line under it. */
+/** Home's headline: what needs you, said with its noun, and the rest on a line under it. */
 export interface HomeHeadline {
   title: string;
   /** The other facts, " · "-joined; null when there are none. */
   detail: string | null;
 }
 
-export function homeHeadline(counts: HomeCounts, total: number): HomeHeadline {
+/** "1 needs you", "2 need you": the headline's words, and what Home's icon says it counts. */
+export const needYou = (n: number) => `${n} ${n === 1 ? "needs" : "need"} you`;
+
+/**
+ * The headline never names the pull requests; they are a line under it. "Nothing needs you" only
+ * once `calm` vouches for it (a live herd whose dialogs were read); until then it says what the herd
+ * is doing.
+ */
+export function homeHeadline(counts: HomeCounts, total: number, calm: boolean): HomeHeadline {
   const { needs, review, working, idle } = counts;
   const rest = (...parts: Array<string | false>) => parts.filter(Boolean).join(" · ") || null;
+  const reviewing = review > 0 && `${review} to review`;
   const idling = idle > 0 && `${idle} idle`;
-  if (needs) return { title: `${needs} ${needs === 1 ? "needs" : "need"} you`, detail: rest(review > 0 && `${review} to review`, working > 0 && `${working} working`, idling) };
-  if (review) return { title: `${plural(review, "pull request")} ready to review`, detail: rest(working > 0 && `${working} working`, idling) };
-  if (working) return { title: `${plural(working, "agent")} at work`, detail: rest(idling) };
-  return { title: total ? "All quiet" : "What should we work on?", detail: null };
+  if (needs) return { title: needYou(needs), detail: rest(reviewing, working > 0 && `${working} working`, idling) };
+  if (!total) return { title: "What should we work on?", detail: null };
+  if (calm) return { title: "Nothing needs you", detail: rest(reviewing, working > 0 && `${working} working`, idling) };
+  if (working) return { title: `${plural(working, "agent")} at work`, detail: rest(reviewing, idling) };
+  return { title: "All quiet", detail: rest(reviewing) };
 }
 
 export function greeting(now: number): string {
@@ -74,6 +84,14 @@ export function needsYouItems<I extends { paneId: string; detectedAt: number }>(
     ...blocked.map((agent) => ({ paneId: agent.paneId })),
     ...replies.map((thread) => ({ paneId: thread.paneId!, reply: true as const })),
   ];
+}
+
+/**
+ * How many need you by the snapshot alone: blocked panes and threads waiting for your reply. Home's
+ * icon shows it; Home's headline counts the same set and adds the dialogs it reads itself.
+ */
+export function needsYouCount(herd: { agents: readonly AgentView[]; projects?: readonly ProjectView[] }): number {
+  return needsYouItems(herd.agents, [], herd.projects).length;
 }
 
 /** Agents at their prompt with nothing for you: not asking, and not a session a pull request to review rides on. */
@@ -126,6 +144,11 @@ const prKey = (url: string | undefined) => {
   return match ? { key: `${match[1]}/${match[2]}#${match[3]}`, repo: match[2]! } : undefined;
 };
 const checksPassed = (checks: ReviewEntry["checks"]) => !!checks && checks.passed > 0 && !checks.failed && !checks.pending;
+
+/** Approved, not a draft, no check failing or running and nothing else blocking: one merge away. */
+export function readyToMerge(entry: ReviewEntry): boolean {
+  return !entry.draft && entry.review === "approved" && !entry.checks?.failed && !entry.checks?.pending && !entry.mergeBlocker;
+}
 
 /**
  * Home's review list: the person's open pull requests from GitHub, joined with the PRs Organizations

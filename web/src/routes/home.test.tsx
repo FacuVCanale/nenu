@@ -70,6 +70,7 @@ async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
     { path: "/pane/:paneId", element: <p>Pane opened</p>, ...(paneLoader ? { loader: paneLoader } : {}) },
     { path: "/project/:projectSlug", element: <p>Project page</p> },
+    { path: "/project/:projectSlug/node/:nodeId", element: <p>Node opened</p> },
   ] }], { initialEntries: ["/?s=work"] });
   render(<RouterProvider router={router} />);
   await screen.findAllByRole("heading");
@@ -456,10 +457,10 @@ it("lists the pull requests no session carries as one row each, ready to merge f
   expect(prs.queryByRole("link", { name: /Abandoned carts/ })).not.toBeInTheDocument();
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("target", "_blank");
-  await user.click(prs.getByRole("link", { name: /^Orders panel,/ }));
-  expect(router.state.location.pathname).toBe("/project/hub/node/t9");
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ });
   expect(row).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
+  await user.click(prs.getByRole("link", { name: /^Orders panel,/ }));
+  expect(router.state.location.pathname).toBe("/project/hub/node/t9");
 });
 
 it("shows the first rows and the rest on request", async () => {
