@@ -168,6 +168,24 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(live).toHaveLength(1);
   });
 
+  test("an agent's own Waiting for you report reaches the client as selfWaiting, from --json and from the files", async () => {
+    const root = fixture();
+    writeFileSync(join(root, "demo", "threads", "t-0002.toml"), `id = "t-0002"\ntitle = "Copy"\nstatus = "open"\nlast_group = "waiting-on-you"\nactivity = "Waiting for you"\n`);
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({ group: "waiting-on-you", note: "idle", activity: "Waiting for you" }),
+      overviewThread({ id: "t-0002", group: "waiting-on-you", note: "blocked", activity: "Fixing the build" }),
+    ]) });
+    const files = registry.list("default", true, [])[0]!.threads;
+    expect(files.find((thread) => thread.id === "t-0002")).toMatchObject({ group: "waiting-on-you", selfWaiting: true });
+    expect(files.find((thread) => thread.id === "t-0001")).not.toHaveProperty("selfWaiting");
+
+    await registry.refresh();
+    const [waiting, dialog] = registry.list("default", true, [])[0]!.threads;
+    expect(waiting).toMatchObject({ group: "waiting-on-you", note: "idle", selfWaiting: true });
+    // Any other activity is the agent's own progress text, not a reason to wait.
+    expect(dialog).not.toHaveProperty("selfWaiting");
+  });
+
   test("an unread PR under --json shows no numbers, and a contract without PR actions hides them", async () => {
     const { auto_fix_ci: _fix, auto_merge: _merge, ...withoutFlags } = overviewThread({
       pr: { url: "https://github.com/acme/demo/pull/9", state: "", review: "", checks: null, additions: null, deletions: null, failing: [], comment_count: null, draft: null, mergeable: null, merge_blocker: "the ticker has not read this pull request yet" },

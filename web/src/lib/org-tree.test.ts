@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { closeRefusal, historyCount, nodeState, orgTree, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, historyCount, nodeState, orgTree, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -22,6 +22,22 @@ describe("nodeState", () => {
     expect(nodeState(node("a", "root", { status: "starting" }))).toBe("working");
     // A live status reported for a node with no pane is not evidence of anything.
     expect(nodeState(node("a", "root", { liveStatus: "working" }))).toBe("idle");
+  });
+});
+
+describe("awaits", () => {
+  it("tells a dialog on screen from an agent that said it waits for your reply", () => {
+    // Herdr reads the pane blocked: a question or a permission prompt waits on screen.
+    expect(awaits(node("a", "root", { paneId: "p", liveStatus: "blocked" }))).toBe("question");
+    expect(awaits(node("a", "root", { paneId: "p", liveStatus: "blocked", group: "waiting-on-you", selfWaiting: true }))).toBe("question");
+    // Organizations groups it Waiting on you because the agent reported so; the pane is idle at its prompt.
+    expect(awaits(node("a", "root", { paneId: "p", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true }))).toBe("reply");
+    // Other reasons Organizations has (a closed pane, a failed or stuck start) are neither.
+    expect(awaits(node("a", "root", { group: "waiting-on-you", note: "pane closed" }))).toBeUndefined();
+    expect(awaits(node("a", "root", { status: "failed", paneId: "p", liveStatus: "idle", selfWaiting: true }))).toBeUndefined();
+    expect(awaits(node("a", "root", { paneId: "p", liveStatus: "idle", group: "waiting-on-you" }))).toBeUndefined();
+    // A stale report on a node that no longer needs you says nothing.
+    expect(awaits(node("a", "root", { paneId: "p", liveStatus: "working", group: "working", selfWaiting: true }))).toBeUndefined();
   });
 });
 

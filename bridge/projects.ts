@@ -2,7 +2,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdir
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
-import { defaultOrgRun, readOverview, upstreamOnly, type OrgOverviewProject, type OrgOverviewThread, type OrgRun } from "./org-cli.ts";
+import { WAITING_ACTIVITY, defaultOrgRun, readOverview, upstreamOnly, type OrgOverviewProject, type OrgOverviewThread, type OrgRun } from "./org-cli.ts";
 import type { AgentView, LivePublisher, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
@@ -235,6 +235,7 @@ function tomlThread(record: TomlObject): OrgThreadView | undefined {
     depth: 1,
     reportUnacked: reportHash !== "" && reportHash !== string(record.acked_report_hash),
     ...(group ? { group } : {}),
+    ...(string(record.activity) === WAITING_ACTIVITY ? { selfWaiting: true } : {}),
     ...(branch ? { branch } : {}),
     ...(pr ? { pr } : {}),
   };
@@ -264,6 +265,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     reportUnacked: record.report_unacked,
     ...(record.group ? { group: record.group, groupLabel: record.group_label } : {}),
     ...(record.note ? { note: record.note } : {}),
+    ...(record.activity === WAITING_ACTIVITY ? { selfWaiting: true } : {}),
     ...(record.branch ? { branch: record.branch } : {}),
     ...(prActions ? { autoFixCi: record.auto_fix_ci === true, autoMerge: record.auto_merge === true } : {}),
     ...(pr ? { pr } : {}),

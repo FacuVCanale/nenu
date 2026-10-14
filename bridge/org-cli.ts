@@ -251,6 +251,8 @@ export async function resolveNode(
 // ── The `--json` contract (Organizations docs/json.md, schema_version 1) ─────────────────────────
 
 const SCHEMA_VERSION = 1;
+/** The activity an agent reports when it stops for the person (Organizations' `progress::WAITING`). */
+export const WAITING_ACTIVITY = "Waiting for you";
 
 export interface OrgOverviewPullRequest {
   url: string;
@@ -275,6 +277,8 @@ export interface OrgOverviewThread {
   group: string;
   group_label: string;
   note: string;
+  /** The agent's own last activity (`report --activity`); empty without one. */
+  activity: string;
   branch: string;
   workspace_id: string;
   tab_id: string;
@@ -350,6 +354,7 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     group: text("group"),
     group_label: text("group_label"),
     note: text("note"),
+    activity: text("activity"),
     branch: text("branch"),
     workspace_id: text("workspace_id"),
     tab_id: text("tab_id"),
