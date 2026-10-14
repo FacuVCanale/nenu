@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
 import { House, PanelLeft, Search, Settings2, SquarePen } from "lucide-react";
 
+import { ProjectGlyph } from "@/components/project-glyph";
 import { StatusDot } from "@/components/status-badge";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { needYou } from "@/lib/home-stats";
@@ -161,17 +162,18 @@ interface Tile {
   status?: AgentStatus;
 }
 
-function RailTile({ tile, monogram }: { tile: Tile; monogram: string }) {
+/** A project draws its own glyph; a loose workspace, which has none, its two letters on its hue. */
+function RailTile({ tile, mark }: { tile: Tile; mark: ReactNode }) {
   return (
     <Link className="rail-link hit-area" to={tile.to} data-rail-tip={tile.name} aria-current={tile.current ? "page" : undefined}>
-      <span className="rail-tile" style={{ "--rail-hue": railHue(tile.name) } as CSSProperties} aria-hidden>{monogram}</span>
+      {mark}
       {tile.status && <StatusDot status={tile.status} className="rail-tile-dot size-2" />}
       <span className="sr-only">{tile.status ? `${tile.name}, ${STATUS_LABEL[tile.status]}` : tile.name}</span>
     </Link>
   );
 }
 
-/** The collapsed sidebar: the same actions as icons, then two letters per project and loose workspace. */
+/** The collapsed sidebar: the same actions as icons, then each project's glyph and two letters per loose workspace. */
 export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch }: {
   data: HomeData;
   attention: number;
@@ -195,7 +197,7 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
     key: workspace.workspaceId, name: workspaceName(workspace), to: workspacePath(workspace.workspaceId, data, data.session),
     current: currentSpace === workspace.workspaceId, status: liveliest(loose.agents.filter((pane) => pane.workspaceId === workspace.workspaceId)),
   }));
-  const monograms = railMonograms([...projects, ...workspaces].map((tile) => tile.name));
+  const monograms = railMonograms(workspaces.map((tile) => tile.name));
   return (
     <nav className="workbench-sidebar-rail" aria-label="Collapsed sidebar" {...tip.handlers}>
       <button ref={expandRef} type="button" className="workbench-expand workbench-icon-button" aria-label="Expand sidebar" data-rail-tip="Expand sidebar"
@@ -208,9 +210,10 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
         <House aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
       </Link>
       <span className="rail-divider" aria-hidden />
-      {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} monogram={monograms[i]!} />)}
+      {projects.map((tile) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} />} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}
-      {workspaces.map((tile, i) => <RailTile key={tile.key} tile={tile} monogram={monograms[projects.length + i]!} />)}
+      {workspaces.map((tile, i) => <RailTile key={tile.key} tile={tile}
+        mark={<span className="rail-tile" style={{ "--rail-hue": railHue(tile.name) } as CSSProperties} aria-hidden>{monograms[i]}</span>} />)}
       <span className="flex-1" />
       <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings" data-rail-tip="Settings"><Settings2 aria-hidden size={16} /></Link>
       {tip.element}
