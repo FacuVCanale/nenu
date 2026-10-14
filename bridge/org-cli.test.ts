@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   createProject,
   listProfiles,
+  listRoutines,
   listTemplates,
   mergeThread,
   openProject,
@@ -236,6 +237,64 @@ describe("herdr-organizations --json contract", () => {
 
     const pr = (await readOverview(run, "/root"))![0]!.threads[0]!.pr!;
     expect(pr).toMatchObject({ checks: null, additions: null, deletions: null, comment_count: null });
+  });
+});
+
+const routineRecord = {
+  name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
+  command: "bun outdated", command_status: "approved", prompt: "Check the dependencies.",
+  last_run: "2026-10-09T03:00:00Z", next_run: "2026-10-10T03:00:00Z", skipped_unhandled: 0, skipped_no_coordinator: 0,
+};
+const prRoutineRecord = {
+  ...routineRecord, name: "pr-follow-up", trigger: "pr", schedule: "", events: ["checks-failed", "review"],
+  command: "", command_status: "none", last_run: "", next_run: "",
+};
+
+describe("herdr-organizations routine list", () => {
+  it("reads a project's routines with exact argv, keeping only what a list shows", async () => {
+    const { run, calls } = fakeRun({
+      code: 0,
+      stdout: JSON.stringify({ schema_version: 1, project: "demo", routine_commands: true, routines: [routineRecord, prRoutineRecord], broken: [{ file: "routines/x.md", error: "bad" }] }),
+      stderr: "",
+    });
+
+    expect(await listRoutines(run, "demo")).toEqual({
+      available: true,
+      broken: 1,
+      routines: [
+        { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, lastRun: "2026-10-09T03:00:00Z", nextRun: "2026-10-10T03:00:00Z" },
+        { name: "pr-follow-up", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, lastRun: "", nextRun: "" },
+      ],
+    });
+    expect(calls).toEqual([{ argv: ["routine", "list", "demo", "--json"], opts: { timeoutMs: 10_000 } }]);
+  });
+
+  it("drops a malformed routine rather than showing a half-read one", async () => {
+    const { run } = fakeRun({
+      code: 0,
+      stdout: JSON.stringify({ schema_version: 1, routines: [routineRecord, { ...routineRecord, trigger: "cron" }, { ...routineRecord, name: 3 }, { ...routineRecord, enabled: "yes" }], broken: [] }),
+      stderr: "",
+    });
+
+    expect((await listRoutines(run, "demo")).routines.map((routine) => routine.name)).toEqual(["nightly-deps"]);
+  });
+
+  it("says it cannot list routines when the installed CLI has no routine list --json", async () => {
+    for (const result of [
+      { code: 2, stdout: "", stderr: "error: unexpected argument '--json' found" },
+      { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'routine'" },
+      { code: 0, stdout: JSON.stringify({ schema_version: 2, routines: [] }), stderr: "" },
+    ]) {
+      expect(await listRoutines(fakeRun(result).run, "demo")).toEqual({ available: false, routines: [], broken: 0 });
+    }
+  });
+
+  it("validates the slug before running anything and reports a real failure", async () => {
+    const { run, calls } = fakeRun({ code: 1, stdout: "", stderr: "error: no project demo" });
+
+    await expect(listRoutines(run, "../etc")).rejects.toThrow("Project must use lowercase");
+    expect(calls).toHaveLength(0);
+    await expect(listRoutines(run, "demo")).rejects.toThrow("herdr-organizations failed (1): error: no project demo");
   });
 });
 
