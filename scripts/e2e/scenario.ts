@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -207,4 +208,78 @@ export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" 
       threads,
     }],
   };
+}
+
+/** git in the bench's folder, with none of the caller's GIT_* and no signing or identity of the operator's. */
+function git(dir: string, ...args: string[]): string {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+  const result = Bun.spawnSync(["git", "-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd: dir, env });
+  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr.toString()}`);
+  return result.stdout.toString();
+}
+
+/** `count` lines of plausible TypeScript about `topic`; `edit` rewrites line `i`. */
+function code(topic: string, count: number, edit: (line: string, i: number) => string = (line) => line): string {
+  return Array.from({ length: count }, (_, i) =>
+    edit(i % 6 === 0 ? `export function ${topic}Step${i}(input: ${topic[0]!.toUpperCase()}${topic.slice(1)}Input) {` : i % 6 === 5 ? "}" : `  const value${i} = input.items.filter((item) => item.${topic} > ${i}).length; // ${topic} ${i}`, i),
+  ).join("\n") + "\n";
+}
+
+/**
+ * The demo panes' folder as a pull request's worktree: `main` (also `origin/main`) and the checked-out
+ * `e2e-demo`, one commit changing six files (an edit, a new file, a removal, a rename, a binary) and
+ * an uncommitted edit. Returns what GitHub would count for the PR: the committed lines.
+ */
+export function seedDiffRepo(dir: string): { additions: number; deletions: number } {
+  const files: Record<string, string | Uint8Array> = {
+    "app/cart.ts": code("cart", 40),
+    "app/checkout.tsx": code("checkout", 60),
+    "app/styles.css": Array.from({ length: 20 }, (_, i) => `.row-${i} { padding: ${i}px; }`).join("\n") + "\n",
+    "app/legacy.ts": code("legacy", 12),
+    "README.md": "# Comercio\n\nThe shop's storefront and admin.\n",
+    "app/logo.png": new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 1, 2, 3]),
+  };
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(join(dir, path, ".."), { recursive: true });
+    writeFileSync(join(dir, path), body);
+  }
+  git(dir, "add", "--", ...Object.keys(files));
+  git(dir, "commit", "-q", "-m", "base");
+  git(dir, "update-ref", "refs/remotes/origin/main", "HEAD");
+  git(dir, "branch", "main");
+
+  writeFileSync(join(dir, "app/cart.ts"), code("cart", 44, (line, i) => i === 3 ? `${line.replace("> 3", ">= 3")}` : i === 20 ? "  const discount = applyCoupon(input.coupon, input.total);" : line));
+  writeFileSync(join(dir, "app/checkout.tsx"), code("checkout", 66, (line, i) => i === 8 || i === 40 ? line.replace("filter", "findAll") : line));
+  writeFileSync(join(dir, "app/payment.ts"), code("payment", 30));
+  writeFileSync(join(dir, "app/logo.png"), new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 9, 9, 9, 9]));
+  git(dir, "rm", "-q", "app/legacy.ts");
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  git(dir, "mv", "README.md", "docs/README.md");
+  git(dir, "add", "--", "app");
+  git(dir, "commit", "-q", "-m", "feat: checkout with coupons");
+  const [additions, deletions] = git(dir, "diff", "--shortstat", "origin/main", "HEAD").match(/\d+(?= insertion| deletion)/g)!.map(Number);
+  // Not committed yet: what the agent is still typing.
+  writeFileSync(join(dir, "app/styles.css"), Array.from({ length: 20 }, (_, i) => `.row-${i} { padding: ${i === 4 ? 6 : i}px; }`).join("\n") + "\n.coupon { color: var(--status-done); }\n");
+  return { additions: additions!, deletions: deletions! };
+}
+
+/** A commit past every limit of the diff viewer: 320 new files and one generated file of 4,000 lines. */
+export function growDiffRepo(dir: string): void {
+  mkdirSync(join(dir, "app/generated"), { recursive: true });
+  writeFileSync(join(dir, "app/generated/catalog.ts"), code("catalog", 4000));
+  for (let n = 0; n < 320; n++) writeFileSync(join(dir, `app/generated/item-${String(n).padStart(3, "0")}.ts`), code(`item${n}`, 60));
+  git(dir, "add", "--", "app/generated");
+  git(dir, "commit", "-q", "-m", "feat: generated catalog");
+}
+
+/** `demoOrg`, with its PR #1342 on the working pane's thread, on `e2e-demo`, sized as `size` says. */
+export function diffOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at: number, size: { additions: number; deletions: number }): OrgSeed {
+  const seed = demoOrg(herd, at);
+  const project = seed.projects[0]!;
+  const pr = { ...(project.threads.find((thread) => thread.id === "t-0013")!.pr as Record<string, unknown>), ...size };
+  project.threads = project.threads.map((thread) =>
+    thread.id === "t-0012" ? { ...thread, branch: "e2e-demo", pr }
+    : thread.id === "t-0013" ? { ...thread, pr: { ...pr, url: "https://github.com/awam/comercio/pull/1338", additions: 64, deletions: 12 } }
+    : thread);
+  return seed;
 }
