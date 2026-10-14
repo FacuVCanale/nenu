@@ -6,6 +6,8 @@ import { expect, it } from "vitest";
 import type { PaneDiff } from "@/lib/types";
 import { server } from "@/test/setup";
 import { DiffStat } from "./diff-stat";
+// Loaded up front, as a phone has it cached: the lazy import then resolves at once, however busy the run.
+import "./diff-viewer";
 
 const diff: PaneDiff = {
   ok: true, pr: 1345, base: "main", head: "feat/build", source: "worktree",
