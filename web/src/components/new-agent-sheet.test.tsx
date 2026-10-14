@@ -10,8 +10,8 @@ import { NewAgentForm } from "./new-agent-sheet";
 const HOME = "/home/me";
 const TREE: Record<string, string[]> = {
   [HOME]: ["code", "Documents"],
-  [`${HOME}/code`]: ["api", "awam", "web"],
-  [`${HOME}/code/awam`]: [],
+  [`${HOME}/code`]: ["api", "kiwi", "web"],
+  [`${HOME}/code/kiwi`]: [],
 };
 const listed: string[] = [];
 
@@ -90,13 +90,13 @@ describe("NewAgentForm", () => {
     const { onSubmit } = renderSheet();
     await user.click(directory());
     await user.click(await screen.findByRole("button", { name: "code" }));
-    await user.click(await screen.findByRole("button", { name: "awam" }));
+    await user.click(await screen.findByRole("button", { name: "kiwi" }));
     await screen.findByText("No folders here.");
-    expect(within(screen.getByRole("navigation")).getAllByRole("button").map((b) => b.textContent)).toEqual(["Home", "code", "awam"]);
-    await user.click(screen.getByRole("button", { name: "Use awam" }));
-    expect(directory()).toHaveAccessibleName("Directory: ~/code/awam");
+    expect(within(screen.getByRole("navigation")).getAllByRole("button").map((b) => b.textContent)).toEqual(["Home", "code", "kiwi"]);
+    await user.click(screen.getByRole("button", { name: "Use kiwi" }));
+    expect(directory()).toHaveAccessibleName("Directory: ~/code/kiwi");
     await user.click(screen.getByRole("button", { name: "Start Claude Code" }));
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ cwd: `${HOME}/code/awam`, permission: "ask" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ cwd: `${HOME}/code/kiwi`, permission: "ask" }));
   });
 
   it("keeps recent folders to one row of names, so the folders of home come straight after", async () => {
@@ -120,7 +120,7 @@ describe("NewAgentForm", () => {
     await user.type(path, "~/code/w");
     await waitFor(() => expect(screen.queryByRole("button", { name: "api" })).toBeNull());
     expect(screen.getByRole("button", { name: "web" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "awam" })).toBeInTheDocument(); // contains "w", after prefix matches
+    expect(screen.getByRole("button", { name: "kiwi" })).toBeInTheDocument(); // contains "w", after prefix matches
     await user.type(path, "eb");
     await user.click(screen.getByRole("button", { name: "Use web" }));
     expect(directory()).toHaveAccessibleName("Directory: ~/code/web");

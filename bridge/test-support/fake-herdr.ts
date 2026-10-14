@@ -95,6 +95,10 @@ export class FakeHerdr {
   readonly customStatusline = new Set<string>();
   /** `pane.process_info` foreground processes per pane; none by default. */
   readonly processes = new Map<string, Array<{ pid: number; argv: string[] }>>();
+  /** How long every one-shot reply waits, like a Herdr on a loaded host. The subscribe ack does not. */
+  replyDelayMs = 0;
+  /** Subscriptions dropped because their socket would not take a whole event. */
+  droppedStreams = 0;
 
   constructor(opts: FakeHerdrOptions) {
     this.socketPath = opts.socketPath;
@@ -267,11 +271,16 @@ export class FakeHerdr {
       this.calls.push({ method: req.method, params, at: Date.now() });
       if (req.method === "events.subscribe") return this.subscribe(socket, id, params);
       if (req.method === "pane.wait_for_output") return this.waitForOutput(socket, id, params);
-      this.reply(socket, JSON.stringify({ id, result: this.dispatch(req.method, params) }) + "\n");
+      this.later(socket, JSON.stringify({ id, result: this.dispatch(req.method, params) }) + "\n");
     } catch (err) {
       const e = err instanceof FakeError ? err : new FakeError("internal", (err as Error).message);
-      this.reply(socket, JSON.stringify({ id, error: { code: e.code, message: e.message } }) + "\n");
+      this.later(socket, JSON.stringify({ id, error: { code: e.code, message: e.message } }) + "\n");
     }
+  }
+
+  private later(socket: Socket<unknown>, line: string): void {
+    if (this.replyDelayMs <= 0) return this.reply(socket, line);
+    setTimeout(() => this.reply(socket, line), this.replyDelayMs);
   }
 
   /** The one reply a connection gets, then the close; what the socket refuses now goes out on drain. */
@@ -430,7 +439,7 @@ export class FakeHerdr {
     const line = JSON.stringify({ event, data: { type: event, pane_id: pane.paneId, workspace_id: pane.workspaceId, ...extra } }) + "\n";
     for (const sub of this.subscribers) {
       if (sub.panes.has(`${type}@${pane.paneId}`) || (sub.types.has(type) && ![...sub.panes].some((p) => p.startsWith(`${type}@`)))) {
-        sub.socket.write(line);
+        this.send(sub, line);
       }
     }
   }
@@ -438,7 +447,25 @@ export class FakeHerdr {
   /** A global event to everyone subscribed to its type, as `emit` does for pane-scoped ones. */
   private broadcast(type: string, event: string, data: Record<string, unknown>): void {
     const line = JSON.stringify({ event, data: { type: event, ...data } }) + "\n";
-    for (const sub of this.subscribers) if (sub.types.has(type)) sub.socket.write(line);
+    for (const sub of this.subscribers) if (sub.types.has(type)) this.send(sub, line);
+  }
+
+  /** A global event that carries a whole pane record, as `pane.updated` does on protocol 22. */
+  touchPane(paneId: string): void {
+    this.broadcast("pane.updated", "pane_updated", { pane: this.wirePane(this.pane(paneId)) });
+  }
+
+  /**
+   * Herdr 0.9.3 writes events without waiting for the socket: when the reader is behind and the
+   * write would block, it logs `Resource temporarily unavailable (os error 35)` and closes the
+   * stream (live-observed). A short write here does the same.
+   */
+  private send(sub: { socket: Socket<unknown> }, line: string): void {
+    const bytes = Buffer.from(line);
+    if (sub.socket.write(bytes) >= bytes.length) return;
+    this.droppedStreams++;
+    for (const s of this.subscribers) if (s.socket === sub.socket) this.subscribers.delete(s);
+    sub.socket.end();
   }
 
   private wirePane(pane: FakePane) {

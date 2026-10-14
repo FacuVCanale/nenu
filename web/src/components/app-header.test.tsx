@@ -120,8 +120,8 @@ describe("AppHeader — the phone's leading control", () => {
   });
 
   it("takes an explicit back with its destination and name", () => {
-    renderAt("/project/awam/node/t-1", <AppHeader bridge="connected" error={false} title="Rediseño" back={{ to: "/project/awam", label: "AWAM" }} />);
-    expect(screen.getByRole("link", { name: "Back to AWAM" })).toHaveAttribute("href", "/project/awam");
+    renderAt("/project/acme/node/t-1", <AppHeader bridge="connected" error={false} title="Rediseño" back={{ to: "/project/acme", label: "Acme" }} />);
+    expect(screen.getByRole("link", { name: "Back to Acme" })).toHaveAttribute("href", "/project/acme");
   });
 
   it("keeps the mark on Home, opening navigation, and leaves the bar without a title", async () => {
@@ -173,10 +173,10 @@ describe("AppHeader — the bar title", () => {
 
   it("hides a title the page is showing as its own heading", () => {
     const visible = { ignore: '[aria-hidden="true"], [aria-hidden="true"] *' };
-    const { rerender } = render(<MemoryRouter initialEntries={["/project/awam"]}><AppHeader bridge="connected" error={false} title="AWAM" titleHidden /></MemoryRouter>);
-    expect(screen.queryByText("AWAM", visible)).toBeNull();
-    rerender(<MemoryRouter initialEntries={["/project/awam"]}><AppHeader bridge="connected" error={false} title="AWAM" /></MemoryRouter>);
-    expect(screen.getByText("AWAM", visible)).toBeInTheDocument();
+    const { rerender } = render(<MemoryRouter initialEntries={["/project/acme"]}><AppHeader bridge="connected" error={false} title="Acme" titleHidden /></MemoryRouter>);
+    expect(screen.queryByText("Acme", visible)).toBeNull();
+    rerender(<MemoryRouter initialEntries={["/project/acme"]}><AppHeader bridge="connected" error={false} title="Acme" /></MemoryRouter>);
+    expect(screen.getByText("Acme", visible)).toBeInTheDocument();
   });
 });
 

@@ -8,7 +8,7 @@ function pane(paneId: string, extra: Partial<AgentView> = {}): AgentView {
 }
 
 const projects: ProjectView[] = [{
-  slug: "awam", name: "Awam", status: "active",
+  slug: "acme", name: "Acme", status: "active",
   coordinator: { paneId: "coord", agent: "claude", liveStatus: "working" },
   threads: [
     { id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "worker", liveStatus: "blocked" },
@@ -23,7 +23,7 @@ describe("displayName", () => {
   });
 
   it("calls a project's coordinator after its project", () => {
-    expect(displayName(pane("coord", { paneLabel: "Working Claude" }), projects)).toBe("Awam coordinator");
+    expect(displayName(pane("coord", { paneLabel: "Working Claude" }), projects)).toBe("Acme coordinator");
   });
 
   it("falls back from the pane label to the session name, the terminal title, then the agent", () => {
@@ -56,7 +56,7 @@ describe("displayPlace", () => {
   });
 
   it("places a project's worker in its project", () => {
-    expect(displayPlace(pane("worker", { tabLabel: "redesign" }), projects)).toEqual({ place: "Awam", tab: null });
+    expect(displayPlace(pane("worker", { tabLabel: "redesign" }), projects)).toEqual({ place: "Acme", tab: null });
   });
 
   it("places the coordinator where it runs, since its name already says the project", () => {

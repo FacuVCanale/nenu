@@ -344,23 +344,23 @@ const herd: HomeData = {
   ...data,
   workspaces: [
     { workspaceId: "w:dev", number: 1, label: "Developer", focused: true, activeTabId: "t-dev", tabCount: 1, paneCount: 3 },
-    { workspaceId: "w:awam", number: 2, label: "AWAM producto", focused: false, activeTabId: "t-awam", tabCount: 1, paneCount: 1 },
-    { workspaceId: "w:psag", number: 3, label: "psag", focused: false, activeTabId: "t-psag", tabCount: 1, paneCount: 1 },
+    { workspaceId: "w:acme", number: 2, label: "Acme producto", focused: false, activeTabId: "t-acme", tabCount: 1, paneCount: 1 },
+    { workspaceId: "w:docs", number: 3, label: "docs", focused: false, activeTabId: "t-docs", tabCount: 1, paneCount: 1 },
   ],
   tabs: [
     { tabId: "t-dev", workspaceId: "w:dev", number: 1, label: "1", focused: true, paneCount: 3 },
-    { tabId: "t-awam", workspaceId: "w:awam", number: 1, label: "bench", focused: false, paneCount: 1 },
-    { tabId: "t-psag", workspaceId: "w:psag", number: 1, label: "1", focused: false, paneCount: 1 },
+    { tabId: "t-acme", workspaceId: "w:acme", number: 1, label: "bench", focused: false, paneCount: 1 },
+    { tabId: "t-docs", workspaceId: "w:docs", number: 1, label: "1", focused: false, paneCount: 1 },
   ],
   agents: [
     { paneId: "dev:mobile", workspaceId: "w:dev", workspaceLabel: "Developer", workspaceNumber: 1, tabId: "t-dev", agent: "claude", status: "working", cwd: "/", focused: true, paneLabel: "Brief de nenu-mobile", lastActiveAt: 40, lastSeenAt: 70 },
     { paneId: "dev:send", workspaceId: "w:dev", workspaceLabel: "Developer", workspaceNumber: 1, tabId: "t-dev", agent: "claude", status: "blocked", cwd: "/", focused: false, paneLabel: "Brief nenu-send", lastActiveAt: 60 },
     { paneId: "dev:done", workspaceId: "w:dev", workspaceLabel: "Developer", workspaceNumber: 1, tabId: "t-dev", agent: "claude", status: "done", cwd: "/", focused: false, paneLabel: "Rediseño de Nenu", lastActiveAt: 90 },
-    { paneId: "awam:bench", workspaceId: "w:awam", workspaceLabel: "AWAM producto", workspaceNumber: 2, tabId: "t-awam", agent: "claude", status: "working", cwd: "/", focused: false, paneLabel: "Afirmaciones marcadas", lastActiveAt: 80 },
-    { paneId: "psag:t76", workspaceId: "w:psag", workspaceLabel: "psag", workspaceNumber: 3, tabId: "t-psag", agent: "claude", status: "idle", cwd: "/", focused: false, paneLabel: "T-76 Mejoras", lastActiveAt: 5 },
+    { paneId: "acme:bench", workspaceId: "w:acme", workspaceLabel: "Acme producto", workspaceNumber: 2, tabId: "t-acme", agent: "claude", status: "working", cwd: "/", focused: false, paneLabel: "Afirmaciones marcadas", lastActiveAt: 80 },
+    { paneId: "docs:t76", workspaceId: "w:docs", workspaceLabel: "docs", workspaceNumber: 3, tabId: "t-docs", agent: "claude", status: "idle", cwd: "/", focused: false, paneLabel: "T-76 Mejoras", lastActiveAt: 5 },
   ],
   projects: [{
-    slug: "awam", name: "AWAM Comercio SaaS", goal: "", status: "active",
+    slug: "acme", name: "Acme Shop", goal: "", status: "active",
     threads: [{ id: "t-0101", title: "Migración de stock", parentId: "root", role: "worker", status: "open" }],
   }],
 };
@@ -384,10 +384,10 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
     .toEqual(["Rediseño de Nenu", "Afirmaciones marcadas", "Brief de nenu-mobile", "T-76 Mejoras"]);
   expect(recent[2]).toHaveAttribute("aria-current", "page");
 
-  expect(nav.getByRole("button", { name: "AWAM Comercio SaaS tasks" })).toHaveAttribute("aria-expanded", "false");
+  expect(nav.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
   const workspaces = within(nav.getByRole("region", { name: "Workspaces" }));
-  expect(workspaces.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Developer", "AWAM producto", "psag"]);
-  for (const name of ["Developer", "AWAM producto", "psag"]) expect(workspaces.getByRole("button", { name: `${name} panes` })).toHaveAttribute("aria-expanded", "false");
+  expect(workspaces.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Developer", "Acme producto", "docs"]);
+  for (const name of ["Developer", "Acme producto", "docs"]) expect(workspaces.getByRole("button", { name: `${name} panes` })).toHaveAttribute("aria-expanded", "false");
   expect(workspaces.getByRole("link", { name: /^Developer/ })).toHaveAttribute("aria-current", "true");
 
   // Opening one lasts while the drawer is open; the next open is compact again.
@@ -406,10 +406,10 @@ it("searches and starts something new from the drawer's header", async () => {
   await user.click(nav.getByRole("button", { name: "Search" }));
   const search = nav.getByRole("searchbox", { name: "Search projects and chats" });
   expect(search).toHaveFocus();
-  await user.type(search, "psag");
+  await user.type(search, "docs");
   expect(nav.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
-  expect(nav.getByRole("option", { name: /^psag/ })).toBeInTheDocument();
-  expect(nav.queryByRole("option", { name: /^AWAM producto/ })).not.toBeInTheDocument();
+  expect(nav.getByRole("option", { name: /^docs/ })).toBeInTheDocument();
+  expect(nav.queryByRole("option", { name: /^Acme producto/ })).not.toBeInTheDocument();
   await user.click(nav.getByRole("button", { name: "New" }));
   expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   expect(screen.getByText("New dialog")).toBeInTheDocument();
@@ -421,7 +421,7 @@ it("leaves Needs you and Recent to Home in the tab bar's Browse, and folds every
   const sheet = within(screen.getByRole("dialog", { name: "Navigation" }));
   expect(sheet.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
   expect(sheet.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
-  expect(sheet.getByRole("button", { name: "AWAM Comercio SaaS tasks" })).toHaveAttribute("aria-expanded", "false");
+  expect(sheet.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
   expect(sheet.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
 });
 

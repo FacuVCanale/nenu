@@ -182,7 +182,7 @@ describe("one organization, the way Herdr Organizations draws it", () => {
   const node = (id: string, title: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
     ({ id, title, parentId, role: "worker", status: "open", ...extra });
   const org: ProjectView = {
-    slug: "awam", name: "AWAM", status: "active", nodeActions: true,
+    slug: "acme", name: "Acme", status: "active", nodeActions: true,
     coordinator: { paneId: "c", agent: "claude", liveStatus: "working" },
     threads: [
       node("t-1", "Hotfix", "root", { group: "idle", updated: ago(30) }),
@@ -303,7 +303,7 @@ describe("one organization, the way Herdr Organizations draws it", () => {
     expect(agent).toHaveValue("claude");
     await user.selectOptions(agent, "codex");
     await user.click(within(dialog).getByRole("button", { name: "Replace" }));
-    await waitFor(() => expect(posted).toEqual({ project: "awam", profile: "codex" }));
+    await waitFor(() => expect(posted).toEqual({ project: "acme", profile: "codex" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

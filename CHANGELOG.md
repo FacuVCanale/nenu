@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-14
+
+### Fixed
+- A busy Mac no longer reads as "Herdr isn't responding": time the bridge itself was stalled does not count against Herdr, a slow snapshot gets 15 s, and the event stream no longer carries `pane.updated` or resubscribes when a pane closes, so Herdr stops dropping it. (5511c5f6)
+
+### Changed
+- Example data in tests and the E2E bench uses neutral names. (a19a98ea)
+
 ## [1.3.2] - 2026-10-14
 
 ### Fixed
