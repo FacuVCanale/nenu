@@ -63,7 +63,7 @@ describe("the app's side of that message", () => {
     const container = new EventTarget();
     const opened: string[] = [];
     listenForOpen(container, (path) => opened.push(path));
-    for (const path of ["//evil.test/pane", "https://evil.test/", "javascript:alert(1)", "pane/x", 42]) {
+    for (const path of ["//evil.test/pane", "/\\evil.test/pane", "https://evil.test/", "javascript:alert(1)", "pane/x", 42]) {
       container.dispatchEvent(new MessageEvent("message", { data: { type: OPEN_MESSAGE, path } }));
     }
     container.dispatchEvent(new MessageEvent("message", { data: { type: "SKIP_WAITING" } }));

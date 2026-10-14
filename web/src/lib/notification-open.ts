@@ -42,7 +42,7 @@ export function listenForOpen(container: EventTarget, open: (path: string) => vo
   container.addEventListener("message", (event) => {
     const { data, ports } = event as MessageEvent;
     if (data?.type !== OPEN_MESSAGE || typeof data.path !== "string") return;
-    if (!data.path.startsWith("/") || data.path.startsWith("//")) return;
+    if (!/^\/(?![/\\])/.test(data.path)) return; // a path of this origin: no "//host", no "/\host"
     open(data.path);
     ports[0]?.postMessage(true);
   });
