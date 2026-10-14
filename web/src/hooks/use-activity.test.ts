@@ -1,12 +1,12 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
 import { fakeLiveStream } from "@/test/live-stream";
 import { resetLiveEvents } from "@/lib/live-events";
-import { fetchTaskOutput, formatCount, formatDuration, runningCount } from "@/lib/activity";
+import { fetchTaskOutput, formatCount, formatDuration, formatElapsed, runningCount, type ActivityResponse } from "@/lib/activity";
 import fixture from "@/components/activity/activity.fixture.json";
-import { activityConcerns, useActivity, useWorkflowDetail } from "./use-activity";
+import { activityConcerns, useActivity, useActivityClock, useWorkflowDetail } from "./use-activity";
 
 afterEach(() => resetLiveEvents());
 
@@ -103,4 +103,27 @@ test("formatting helpers", () => {
   expect(formatCount(573_766)).toBe("574k");
   expect(formatCount(1_493_003)).toBe("1.49M");
   expect(runningCount(fixture.list as never)).toBe(2);
+});
+
+describe("useActivityClock", () => {
+  // Running work reads in whole minutes, so the clock under it ticks once a minute, not every second.
+  test("ticks once a minute while something runs", () => {
+    vi.useFakeTimers();
+    try {
+      const running = { ...fixture.list, available: true, tasks: [{ id: "t1", kind: "bash", title: "watch", status: "running", at: Date.now() }] } as unknown as ActivityResponse;
+      const { result } = renderHook(() => useActivityClock(running));
+      const start = result.current;
+      act(() => { vi.advanceTimersByTime(59_000); });
+      expect(result.current).toBe(start);
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(result.current).toBe(start + 60_000);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+test("formats a running span in whole minutes", () => {
+  expect(formatElapsed(44_000)).toBe("<1m");
+  expect(formatElapsed(3_437_000)).toBe("57m");
+  expect(formatElapsed(5_490_000)).toBe("1h 31m");
+  expect(formatElapsed(undefined)).toBe("");
 });
