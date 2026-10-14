@@ -1,5 +1,4 @@
-import { mkdir } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { artifactMetadata, mentionedFolders } from "../artifact-metadata.ts";
 import type { AuditLog } from "../audit.ts";
 import { chatUploadPreviewResponse, isChatUploadPath } from "../chat-upload-preview.ts";
@@ -11,20 +10,18 @@ import { deliveredFilePaths } from "../journal/delivered.ts";
 import { paneFileResponse } from "../pane-files.ts";
 import { projectFiles } from "../project-files.ts";
 import type { UploadResponse } from "../types.ts";
-import { imageExtFromBytes, SNIFF_BYTES } from "../uploads.ts";
+import { MAX_UPLOAD_BYTES, saveUpload } from "../uploads.ts";
 import type { TranscriptEntry } from "../journal/types.ts";
 import { deviceAuth } from "./access.ts";
 import type { PaneAction, PaneRouteRequest, Route, Services } from "./context.ts";
 import { json, jsonError, secure, text } from "./http.ts";
 
-// Image upload limits. Herdr's socket only carries text/keys, so we can't paste an image into the
-// terminal — instead we save it to a host file and the client references its path in the message
-// (the agent reads images by path). See uploadPane().
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
-// Multipart wraps the file in a boundary + part headers, so a legitimately-sized image arrives a
+// Upload limits. Herdr's socket only carries text/keys, so a file can't be pasted into the
+// terminal — instead it is saved to a host file and the client references its path in the message
+// (the agent opens it by path). See saveUpload().
+// Multipart wraps the file in a boundary + part headers, so a legitimately-sized file arrives a
 // little over MAX_UPLOAD_BYTES on the wire. Allow a small slack for the Content-Length pre-check.
 const MAX_UPLOAD_OVERHEAD = 64 * 1024; // 64 KB
-// Image type is sniffed from magic bytes in uploadPane — never from the client-supplied MIME.
 
 /**
  * The pane a file request reads from and its journal, resolved one way for both /file and
@@ -69,7 +66,7 @@ export const filePaneActions: Record<string, PaneAction> = {
       const ifNoneMatch = req.headers.get("if-none-match");
       if (isChatUploadPath(services.cfg.stateDir, requestedPath))
         return secure(await chatUploadPreviewResponse(services.cfg.stateDir, requestedPath, await journalEntries(), ifNoneMatch));
-      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered }));
+      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, stateDir: services.cfg.stateDir }));
     },
   },
   "html-preview": {
@@ -78,7 +75,7 @@ export const filePaneActions: Record<string, PaneAction> = {
     async handle(services, request) {
       const { cwd, delivered } = await paneFileScope(services, request);
       return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
-        { delivered, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined }));
+        { delivered, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, stateDir: services.cfg.stateDir }));
     },
   },
   files: {
@@ -110,9 +107,10 @@ export const filePaneActions: Record<string, PaneAction> = {
   },
 };
 
-// Save an uploaded image to a host file and return its absolute path. The client then references
-// that path in a message; Claude Code / Codex read images by path (the terminal can't take a
-// pasted image over the socket). Validated by MIME and size; the filename is server-generated.
+// Save an attached file to a host file and return its absolute path. The client then references
+// that path in a message; Claude Code / Codex open files by path (the terminal can't take a pasted
+// file over the socket). Any kind, up to MAX_UPLOAD_BYTES; the filename is server-generated and the
+// file is never served back (ADR 0074).
 async function uploadPane(
   cfg: Config,
   paneId: string,
@@ -123,16 +121,13 @@ async function uploadPane(
 ): Promise<Response> {
   const ae = req.headers.get("accept-encoding");
   // Reject an oversize upload by its declared Content-Length BEFORE buffering — req.formData()
-  // reads the whole body into memory first, so a 100 MB "image" would be materialised just to fail
-  // the size check below. Multipart adds a boundary + part headers, so allow a small slack.
+  // reads the whole body into memory first, so a 100 MB file would be materialised just to fail
+  // the size check. Multipart adds a boundary + part headers, so allow a small slack.
   const declared = Number(req.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES + MAX_UPLOAD_OVERHEAD) {
     return secure(
       new Response(
-        JSON.stringify({
-          ok: false,
-          error: "image too large (max 10 MB)",
-        } satisfies UploadResponse),
+        JSON.stringify({ ok: false, error: "File too large (max 25 MB)." } satisfies UploadResponse),
         { status: 413, headers: { "content-type": "application/json; charset=utf-8" } },
       ),
     );
@@ -147,31 +142,18 @@ async function uploadPane(
   if (!(file instanceof File)) {
     return json({ ok: false, error: "no file" } satisfies UploadResponse, ae);
   }
-  const head = new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer());
-  const ext = imageExtFromBytes(head);
-  if (!ext) {
-    return json({ ok: false, error: "unsupported type" } satisfies UploadResponse, ae);
-  }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return json({ ok: false, error: "image too large (max 10 MB)" } satisfies UploadResponse, ae);
-  }
   try {
-    const dir = join(cfg.stateDir, "uploads");
-    // 0700 — uploads (and the state dir they live under) may hold sensitive images; keep them
-    // owner-only. recursive:true applies the mode to any intermediate dirs it creates too.
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    const safePane = paneId.replace(/[^A-Za-z0-9_-]/g, "_");
-    const filename = `${safePane}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
-    const fullPath = join(dir, filename);
-    await Bun.write(fullPath, file);
-    audit.record({
-      action: "upload",
-      paneId,
-      session,
-      device,
-      detail: { filename: file.name, size: file.size, saved: filename },
-    });
-    return json({ ok: true, path: fullPath } satisfies UploadResponse, ae);
+    const result = await saveUpload(join(cfg.stateDir, "uploads"), paneId, file);
+    if (result.ok) {
+      audit.record({
+        action: "upload",
+        paneId,
+        session,
+        device,
+        detail: { filename: file.name, size: file.size, saved: basename(result.path) },
+      });
+    }
+    return json(result, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies UploadResponse, ae);
   }

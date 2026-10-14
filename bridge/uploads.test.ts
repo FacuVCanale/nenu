@@ -188,7 +188,7 @@ describe("saveUpload", () => {
     expect(MAX_UPLOAD_BYTES).toBe(25 * 1024 * 1024);
     const result = await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "big.zip"));
     expect(result).toEqual({ ok: false, error: "File too large (max 25 MB)." });
-    expect(await readdir(dir)).toEqual([]);
+    expect(await readdir(dir).catch(() => [])).toEqual([]);
     expect((await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES)], "edge.zip"))).ok).toBe(true);
   });
 });
