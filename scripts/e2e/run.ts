@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
@@ -1463,12 +1463,12 @@ async function home(): Promise<void> {
       await phone.close();
 
       const herd = bridge.herd!;
-      const { agents } = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string; agentSession?: { value: string } }> }>);
       const token = crypto.randomUUID();
       await writeFile(join(bridge.dir, "state", CLAUDE_HOOK_TOKEN_FILE), token);
       const hook = await fetch(bridge.url + CLAUDE_HOOK_PATH, {
         method: "POST", headers: { "content-type": "application/json", [CLAUDE_HOOK_TOKEN_HEADER]: token },
-        body: JSON.stringify({ hook_event_name: "PermissionRequest", session_id: agents.find((a) => a.paneId === herd.blocked)?.agentSession?.value,
+        // The snapshot keeps Claude's session id to the bridge; the demo journal is named after it.
+        body: JSON.stringify({ hook_event_name: "PermissionRequest", session_id: basename(herd.journals.get(herd.blocked)!, ".jsonl"),
           tool_name: "Bash", tool_input: { command: "mkfifo fixture-fifo" } }),
       });
       if (hook.status !== 204) throw new Error(`the hook was refused: ${hook.status}`);
