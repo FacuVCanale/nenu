@@ -1,10 +1,11 @@
-import { closeSync, openSync } from "node:fs";
+import { closeSync, openSync, readFileSync, realpathSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { defaultSocketPath } from "../../bridge/config.ts";
+import { HerdrClient } from "../../bridge/herdr-client.ts";
 import { FakeHerdr } from "../../bridge/test-support/fake-herdr.ts";
 import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
@@ -14,9 +15,11 @@ import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 // any socket that is, or sits next to, Herdr's default one, and stubs the CLIs the bridge shells out to.
 //
 //   bun scripts/e2e/bridge.ts --port 8797 --fake            # runs until Ctrl-C
+//   bun scripts/e2e/bridge.ts --port 8797 --herdr           # a real Herdr server of its own
 //   bun scripts/e2e/bridge.ts --port 8797 --socket <path>   # a disposable real Herdr session
 //
-// The inherited HERDR_SOCKET_PATH is never used: inside a Herdr pane it names the live server.
+// The inherited HERDR_SOCKET_PATH is never used: inside a Herdr pane it names the live server. A
+// real Herdr must also keep its session apart from the operator's (assertIsolatedHerdrEnv).
 
 export const LIVE_PORT = 8787;
 const ROOT = resolve(import.meta.dir, "../..");
@@ -31,6 +34,8 @@ export interface TestBridge {
   now(): number;
   fake: FakeHerdr | null;
   herd: DemoHerd | null;
+  /** The temporary HOME the bridge runs with, and with --herdr the Herdr server and its panes too. */
+  home: string;
   /** Every argv the bridge ran Organizations with, oldest first (empty without `org`). */
   orgCalls(): Promise<string[][]>;
   stop(): Promise<void>;
@@ -46,6 +51,111 @@ export function assertDisposableSocket(socketPath: string, inherited = process.e
   if (inherited && target === resolve(inherited)) {
     throw new Error(`refusing Herdr socket ${target}: it is this shell's HERDR_SOCKET_PATH (the live server)`);
   }
+}
+
+type Env = Record<string, string | undefined>;
+
+function realpathOr(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+/** Where Herdr keeps session.json, its default socket and named sessions, for a process with `env`. */
+export function herdrConfigDir(env: Env): string | null {
+  const base = env.XDG_CONFIG_HOME || (env.HOME ? join(env.HOME, ".config") : "");
+  return base ? join(realpathOr(base), "herdr") : null;
+}
+
+/**
+ * Throws unless a Herdr server running with `serverEnv` keeps its session apart from the operator's.
+ * A socket of its own is not enough, and neither is HERDR_CONFIG_PATH: Herdr still reads and rewrites
+ * session.json in `$XDG_CONFIG_HOME/herdr` (else `~/.config/herdr`) and restores the operator's
+ * workspaces from it. So the server needs an XDG_CONFIG_HOME, and not the operator's.
+ */
+export function assertIsolatedHerdrEnv(serverEnv: Env, operatorEnv: Env = process.env): void {
+  if (!serverEnv.XDG_CONFIG_HOME) {
+    throw new Error("refusing Herdr server: it runs without an XDG_CONFIG_HOME of its own, so it shares session.json with the operator's Herdr");
+  }
+  const dir = herdrConfigDir(serverEnv);
+  const operator = [herdrConfigDir(operatorEnv), herdrConfigDir({ HOME: homedir() }), realpathOr(dirname(defaultSocketPath()))];
+  if (operator.includes(dir)) throw new Error(`refusing Herdr server: its config dir ${dir} is the operator's`);
+}
+
+/** `ps -wwE -o command=` prints the command, then `KEY=value` pairs; a value may hold spaces. */
+export function parsePsEnvironment(line: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  const keys = [...line.matchAll(/ ([A-Za-z_][A-Za-z0-9_]*)=/g)];
+  keys.forEach((match, i) => {
+    const end = i + 1 < keys.length ? keys[i + 1]!.index : line.length;
+    env[match[1]!] = line.slice(match.index + match[0].length, end);
+  });
+  return env;
+}
+
+function processEnvironment(pid: number): Record<string, string> | null {
+  try {
+    if (process.platform === "linux") {
+      const pairs = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").filter(Boolean);
+      return Object.fromEntries(pairs.map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]));
+    }
+    const ps = Bun.spawnSync(["ps", "-wwE", "-o", "command=", "-p", String(pid)]);
+    return ps.exitCode === 0 ? parsePsEnvironment(ps.stdout.toString().trimEnd()) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Throws unless every process serving `socketPath` is an isolated Herdr (see assertIsolatedHerdrEnv). */
+export function assertIsolatedHerdr(socketPath: string): void {
+  const lsof = Bun.spawnSync(["lsof", "-t", "--", socketPath]);
+  const pids = lsof.stdout.toString().split(/\s+/).filter(Boolean).map(Number).filter((pid) => pid !== process.pid);
+  const envs = pids.map(processEnvironment);
+  if (envs.length === 0 || envs.includes(null)) {
+    throw new Error(`refusing Herdr socket ${socketPath}: can't tell which config the server behind it uses (no process found, or its environment is unreadable)`);
+  }
+  for (const env of envs) assertIsolatedHerdrEnv(env!);
+}
+
+/**
+ * The environment of the Herdr server `--herdr` starts: the bench's temporary HOME and XDG dirs, its
+ * own socket, nothing inherited from the live Herdr (inside a pane HERDR_* name the live server) or
+ * from Nenu, and the operator's PATH without the bridge's stubs, so its panes run the real CLIs.
+ */
+export function disposableHerdrEnv(opts: { home: string; socketPath: string }, base: Env = process.env): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && !/^(COLLIE|HERDR)_/.test(k)) env[k] = v;
+  return Object.assign(env, {
+    HOME: opts.home,
+    XDG_CONFIG_HOME: join(opts.home, ".config"),
+    XDG_DATA_HOME: join(opts.home, ".local", "share"),
+    XDG_STATE_HOME: join(opts.home, ".local", "state"),
+    XDG_CACHE_HOME: join(opts.home, ".cache"),
+    HERDR_SOCKET_PATH: opts.socketPath,
+    // An agent started in a pane runs the version the operator has, and never updates it.
+    DISABLE_AUTOUPDATER: "1",
+  });
+}
+
+async function startDisposableHerdr(opts: { home: string; socketPath: string; log: number }): Promise<() => Promise<void>> {
+  const env = disposableHerdrEnv(opts);
+  assertIsolatedHerdrEnv(env);
+  const server = Bun.spawn(["herdr", "server"], { cwd: opts.home, env, stdout: opts.log, stderr: opts.log });
+  const stop = async () => {
+    server.kill("SIGTERM");
+    await Promise.race([server.exited, Bun.sleep(3000)]);
+    if (server.exitCode === null) server.kill("SIGKILL");
+  };
+  const client = new HerdrClient(opts.socketPath, 1000);
+  for (let i = 0; i < 100; i++) {
+    if (server.exitCode !== null) break;
+    if (await client.sessionSnapshot().then(() => true, () => false)) return stop;
+    await Bun.sleep(100);
+  }
+  await stop();
+  throw new Error(`disposable Herdr did not come up on ${opts.socketPath}`);
 }
 
 export function assertTestPort(port: number): void {
@@ -72,10 +182,14 @@ async function portIsFree(port: number): Promise<boolean> {
  * `repo` fills the demo panes' folder after it becomes a git repo (with $NENU_E2E_GH_PRS) and before
  * the projects are seeded, so a seed can carry numbers the repo produced.
  */
-export async function startTestBridge(opts: { port: number; fake?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; repo?: (dir: string) => void }): Promise<TestBridge> {
+export async function startTestBridge(opts: { port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; repo?: (dir: string) => void }): Promise<TestBridge> {
   assertTestPort(opts.port);
-  if (!opts.fake && !opts.socketPath) throw new Error("pass --fake or --socket <disposable herdr socket>");
+  if (!opts.fake && !opts.herdr && !opts.socketPath) throw new Error("pass --fake, --herdr or --socket <disposable herdr socket>");
   if (!(await portIsFree(opts.port))) throw new Error(`port ${opts.port} is busy`);
+  if (opts.socketPath) {
+    assertDisposableSocket(opts.socketPath);
+    assertIsolatedHerdr(opts.socketPath);
+  }
 
   const dir = await mkdtemp(join(tmpdir(), "nenu-e2e-"));
   const socketPath = opts.socketPath ?? join(dir, "herdr.sock");
@@ -109,6 +223,21 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
     await chmod(join(paths.bin, name), 0o755);
   }
   const shift = opts.epoch === undefined ? 0 : opts.epoch - Date.now();
+  const logPath = join(dir, "bridge.log");
+  const logFd = openSync(logPath, "a");
+
+  let stopHerdr: (() => Promise<void>) | null = null;
+  if (opts.herdr) {
+    try {
+      stopHerdr = await startDisposableHerdr({ home: paths.home, socketPath, log: logFd });
+      assertIsolatedHerdr(socketPath);
+    } catch (err) {
+      await stopHerdr?.();
+      closeSync(logFd);
+      await rm(dir, { recursive: true, force: true });
+      throw err;
+    }
+  }
 
   let fake: FakeHerdr | null = null;
   let herd: DemoHerd | null = null;
@@ -164,8 +293,9 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
     HERDR_PLUGIN_CONFIG_DIR: paths.config,
     HERDR_SOCKET_PATH: socketPath,
     COLLIE_MULTI_SESSION: "0",
-    COLLIE_TRANSCRIPT_ROOT: paths.claude,
-    COLLIE_CODEX_ROOT: paths.codex,
+    // With --herdr the agents run in panes under this same HOME, so the bridge reads their journals.
+    COLLIE_TRANSCRIPT_ROOT: opts.herdr ? join(paths.home, ".claude", "projects") : paths.claude,
+    COLLIE_CODEX_ROOT: opts.herdr ? join(paths.home, ".codex", "sessions") : paths.codex,
     COLLIE_PI_ROOT: paths.other,
     COLLIE_OPENCODE_ROOT: paths.other,
     COLLIE_GROK_ROOT: paths.other,
@@ -176,8 +306,6 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
   const orgCalls = async () => (await Bun.file(`${orgState}.calls`).text().catch(() => ""))
     .split("\n").filter(Boolean).map((line) => JSON.parse(line) as string[]);
 
-  const logPath = join(dir, "bridge.log");
-  const logFd = openSync(logPath, "a");
   const child = Bun.spawn(["bun", "--preload", join(import.meta.dir, "clock-shift.ts"), join(ROOT, "bridge/index.ts")], { cwd: ROOT, env, stdout: logFd, stderr: logFd });
 
   const url = `http://127.0.0.1:${opts.port}`;
@@ -185,6 +313,7 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
     child.kill("SIGTERM");
     await Promise.race([child.exited, Bun.sleep(3000)]);
     if (child.exitCode === null) child.kill("SIGKILL");
+    await stopHerdr?.();
     closeSync(logFd);
     fake?.stop();
     if (!process.env.NENU_E2E_KEEP) await rm(dir, { recursive: true, force: true });
@@ -193,7 +322,7 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) break;
     const ok = await fetch(`${url}/api/snapshot`).then((r) => r.ok, () => false);
-    if (ok) return { url, port: opts.port, dir, socketPath, pid: child.pid, now: () => Date.now() + shift, fake, herd, orgCalls, stop };
+    if (ok) return { url, port: opts.port, dir, socketPath, pid: child.pid, now: () => Date.now() + shift, fake, herd, home: paths.home, orgCalls, stop };
     await Bun.sleep(100);
   }
   const tail = (await Bun.file(logPath).text()).slice(-2000);
@@ -203,13 +332,13 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
 
 if (import.meta.main) {
   const { values } = parseArgs({
-    options: { port: { type: "string", default: "8797" }, fake: { type: "boolean", default: false }, socket: { type: "string" } },
+    options: { port: { type: "string", default: "8797" }, fake: { type: "boolean", default: false }, herdr: { type: "boolean", default: false }, socket: { type: "string" } },
   });
   try {
-    const bridge = await startTestBridge({ port: Number(values.port), fake: values.fake, socketPath: values.socket });
+    const bridge = await startTestBridge({ port: Number(values.port), fake: values.fake, herdr: values.herdr, socketPath: values.socket });
     console.log(`[e2e] bridge ${bridge.url} (pid ${bridge.pid})`);
     console.log(`[e2e] state ${bridge.dir}`);
-    console.log(`[e2e] herdr ${bridge.socketPath}${bridge.fake ? " (fake)" : ""}`);
+    console.log(`[e2e] herdr ${bridge.socketPath}${bridge.fake ? " (fake)" : values.herdr ? ` (disposable, HOME ${bridge.home})` : ""}`);
     const shutdown = async () => {
       if (bridge.fake) console.log(`[e2e] fake herdr calls ${JSON.stringify(bridge.fake.counts())}`);
       await bridge.stop();
