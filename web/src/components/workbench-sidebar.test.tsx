@@ -350,14 +350,14 @@ describe("the sidebar", () => {
       render(<RouterProvider router={router} />);
     };
 
-    it("keeps Search to its results", () => {
+    it("holds what Browse did under its box until you type, then only the results", async () => {
       sheet({ target: "search", seq: 1 });
-      expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
-    });
-
-    it("shows the host in Browse", () => {
-      sheet();
+      expect(screen.getByRole("searchbox")).toHaveFocus();
+      expect(screen.getByRole("region", { name: "Workspaces" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+      await userEvent.setup().type(screen.getByRole("searchbox"), "panel");
+      expect(screen.queryByRole("region", { name: "Workspaces" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
     });
   });
 
