@@ -3,6 +3,7 @@ import { useLoaderData, useLocation, useNavigate, useParams, useRevalidator, use
 
 import { AgentChat } from "@/components/agent-chat";
 import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
+import { InspectorToggle, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
@@ -27,6 +28,8 @@ export function DetailRoute() {
   const navigate = useNavigate();
   const location = useLocation();
   const { revalidate } = useRevalidator();
+  // Kept here, above the frames, so a switch between sessions leaves the desk's panel as it was.
+  const inspector = useSessionInspector();
 
   // The loader opened the chat before the pane's read landed (paneLoader): ask for that read now, so
   // it shows as soon as it lands rather than at the next poll. Only the pane loader re-runs.
@@ -106,7 +109,15 @@ export function DetailRoute() {
     />
   );
 
-  return owner ? <ProjectFrame owner={owner} paneId={paneId} data={root}>{chat}</ProjectFrame> : chat();
+  if (owner) return <ProjectFrame owner={owner} paneId={paneId} data={root} inspector={inspector}>{chat}</ProjectFrame>;
+  const pr = sessionPr(root, paneId);
+  return (
+    <div className="project-frame">
+      {chat({ headerAction: inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined })}
+      {inspector.desk && inspector.open && <SessionInspector inspector={inspector} paneId={paneId} session={session}
+        artifacts={root.agents.some((pane) => pane.paneId === paneId)} pr={pr} />}
+    </div>
+  );
 }
 
 /** What closed and where the route went: a link to a pane this page never saw names no pane at all. */

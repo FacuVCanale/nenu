@@ -1,13 +1,13 @@
-import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
-import { ListChecks, MessageSquare, PanelRightClose } from "lucide-react";
+import { ListChecks, MessageSquare } from "lucide-react";
 
 import { PrBar } from "@/components/pr-bar";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
+import { InspectorToggle, SessionInspector, sessionPr, type SessionInspectorState } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { ThreadCards } from "@/components/thread-cards";
 import { PrList, ThreadsPanel, prLists } from "@/components/threads-panel";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import type { HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
@@ -24,17 +24,8 @@ export interface ProjectChatSlots {
   composerTop?: ReactNode;
 }
 
-const PANEL_KEY = "nenu:project-panel:v1";
-/** The search param naming the thread docked beside its coordinator on a wide screen. */
+/** The search param naming the thread docked beside its coordinator on a desk. */
 export const SPLIT_PARAM = "thread";
-
-function readPanelPref(): boolean {
-  try {
-    return localStorage.getItem(PANEL_KEY) !== "closed";
-  } catch {
-    return true;
-  }
-}
 
 type PhoneView = "chat" | "threads" | "prs";
 
@@ -58,25 +49,25 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
 }
 
 /**
- * A pane that belongs to a project renders inside this frame. A wide screen keeps the project panel
- * beside a coordinator's chat, or docks a thread there (`?thread=`), and lists its threads as cards
- * under the chat only while the panel is put away. A phone switches the coordinator between Chat,
+ * A pane that belongs to a project renders inside this frame. A desk keeps the session panel beside
+ * the chat, with the project's own panel behind its ⋯, or docks a thread there (`?thread=`), and lists
+ * a coordinator's threads as cards under the chat only while the panel is put away. A phone switches the coordinator between Chat,
  * Threads and PRs in place, keeping the chat mounted so its draft and scroll survive; a thread shows
  * its siblings as chips, a header button to the project's threads, and its pull request above the
  * composer.
  */
-export function ProjectFrame({ owner, paneId, data, children }: {
+export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   owner: PaneProject;
   paneId: string;
   data: HomeData;
+  inspector: SessionInspectorState;
   children: (slots: ProjectChatSlots) => ReactNode;
 }) {
   const { project, thread } = owner;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const [search, setSearch] = useSearchParams();
-  const wide = useMediaQuery("(min-width: 1280px)");
-  const [panelOpen, setPanelOpenState] = useState(readPanelPref);
+  const desk = inspector.desk;
   const [view, setView] = useState<PhoneView>("chat");
   const scope = projectScope(owner, data);
   const readOnly = isReadOnly(data.device);
@@ -84,9 +75,9 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   const openPane = (id: string) => { setView("chat"); if (id !== paneId) navigate(panePath(id, data.session)); };
   const openNode = (id: string) => navigate(nodePath(project.slug, id, data.session));
 
-  // A docked thread is only meaningful beside its own coordinator on a wide screen.
+  // A docked thread is only meaningful beside its own coordinator on a desk.
   const splitPane = search.get(SPLIT_PARAM);
-  const docked = wide && scope.coordinating && splitPane
+  const docked = desk && scope.coordinating && splitPane
     ? scope.threads.find((candidate): candidate is ProjectThreadView & { paneId: string } => candidate.paneId === splitPane && data.agents.some((pane) => pane.paneId === splitPane))
     : undefined;
   const setDocked = (id: string | null) => setSearch((current) => {
@@ -95,7 +86,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     else next.delete(SPLIT_PARAM);
     return next;
   }, { replace: true });
-  const panelShown = wide && panelOpen && !docked;
+  const panelShown = desk && inspector.open && !docked;
   const onDock = useContext(WorkbenchNavigationContext)?.onDock;
   const isDocked = docked !== undefined;
   useEffect(() => {
@@ -104,34 +95,13 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     return () => onDock(false);
   }, [onDock, isDocked]);
 
-  // Toggling unmounts the button that was pressed; hand focus to its counterpart.
-  const toggleFocus = useRef<HTMLButtonElement>(null);
-  const toggled = useRef(false);
-  useEffect(() => {
-    if (toggled.current) toggleFocus.current?.focus({ preventScroll: true });
-    toggled.current = false;
-  }, [panelOpen]);
-  function setPanelOpen(next: boolean) {
-    toggled.current = true;
-    setPanelOpenState(next);
-    try {
-      localStorage.setItem(PANEL_KEY, next ? "open" : "closed");
-    } catch {
-      // A blocked store only forgets the choice.
-    }
-  }
-
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;
   // A phone thread switches between its chat and the project's threads with one header button.
-  const phoneWorker = !wide && !scope.coordinating;
+  const phoneWorker = !desk && !scope.coordinating;
   const tasksShown = phoneWorker && view === "threads";
-  const headerAction = wide && !panelShown && !docked ? (
-    <button ref={toggleFocus} type="button" className="project-toggle" aria-label={`Threads, ${openCount} open`} onClick={() => setPanelOpen(true)}>
-      <MessageSquare aria-hidden className="size-3.5" />Threads
-      {openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
-    </button>
-  ) : phoneWorker ? (
+  const pr = sessionPr(data, paneId, thread);
+  const headerAction = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : phoneWorker ? (
     <button type="button" className="project-toggle" aria-label={tasksShown ? "Back to chat" : `Threads, ${openCount} open`}
       onClick={() => setView(tasksShown ? "chat" : "threads")}>
       {tasksShown ? <><MessageSquare aria-hidden className="size-3.5" />Chat</> : <>
@@ -141,7 +111,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     </button>
   ) : undefined;
 
-  const phoneTabs = !wide && scope.coordinating ? (
+  const phoneTabs = !desk && scope.coordinating ? (
     <div className="project-segmented-band">
       <div role="tablist" aria-label="Project" className="project-segmented">
         {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
@@ -169,7 +139,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
 
   // The cards list the threads only where nothing else does: a phone's tabs list them, and so does the
   // panel until it is put away.
-  const cards = scope.coordinating && wide && !panelShown ? (
+  const cards = scope.coordinating && desk && !panelShown ? (
     <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
       onOpen={(target) => { if (target.paneId) setDocked(target.paneId); else openNode(target.id); }} />
   ) : undefined;
@@ -181,8 +151,8 @@ export function ProjectFrame({ owner, paneId, data, children }: {
         headerAction,
         overlay,
         conversationFooter: cards,
-        // Project chips or tabs replace the workspace tabs; on a wide screen the panel stands in for them.
-        strip: phoneTabs ?? chips ?? (wide ? null : undefined),
+        // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.
+        strip: phoneTabs ?? chips ?? (desk ? null : undefined),
         composerTop: thread?.pr && !scope.coordinating
           ? <PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={refresh} />
           : undefined,
@@ -195,15 +165,11 @@ export function ProjectFrame({ owner, paneId, data, children }: {
           onClose={() => setDocked(null)} />
       )}
       {panelShown && (
-        <aside className="flex min-h-0 w-[400px] shrink-0 flex-col border-l border-border" aria-label="Project">
-          <ThreadsPanel project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle}
+        <SessionInspector inspector={inspector} paneId={paneId} session={data.session} artifacts={data.agents.some((pane) => pane.paneId === paneId)} pr={pr}
+          project={<ThreadsPanel project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle}
             activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
             onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }}
-            onOpenNode={openNode} onChanged={refresh}
-            action={<button ref={toggleFocus} type="button" className="workbench-icon-button" aria-label="Hide project panel" onClick={() => setPanelOpen(false)}>
-              <PanelRightClose aria-hidden className="size-4" />
-            </button>} />
-        </aside>
+            onOpenNode={openNode} onChanged={refresh} />} />
       )}
     </div>
   );
