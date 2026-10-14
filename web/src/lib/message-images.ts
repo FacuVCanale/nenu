@@ -8,13 +8,22 @@ import type { TranscriptEntry, TranscriptImagePart } from "./types";
 // converts between the two shapes.
 
 export const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
-/** Nenu's own generated upload names (bridge/chat-upload-preview.ts UPLOAD_NAME), in an uploads dir. */
-const UPLOAD_PATH = /\/uploads\/[A-Za-z0-9_-]+-[a-z0-9]+-[a-f0-9]{8}\.(?:png|jpg|gif|webp)$/;
+/**
+ * Nenu's own generated upload names (bridge/uploads.ts saveUpload), in an uploads dir: an image named
+ * by its bytes (chat-upload-preview.ts UPLOAD_NAME), or any other file with the name it was attached
+ * under after the generated part (group 1).
+ */
+const UPLOAD_PATH = /\/uploads\/[A-Za-z0-9_-]+-[a-z0-9]+-[a-f0-9]{8}(?:\.(?:png|jpg|gif|webp)|-([A-Za-z0-9._-]+))$/;
 /** Claude Code's own placeholder when it turns a pasted image path into an attachment. */
 const IMAGE_TOKEN = /\[Image #\d+\]/g;
 
 export function isUploadPath(path: string): boolean {
   return UPLOAD_PATH.test(path);
+}
+
+/** The name a non-image upload was attached under; null for an image (named by its bytes) or any other path. */
+export function uploadName(path: string): string | null {
+  return UPLOAD_PATH.exec(path)?.[1] ?? null;
 }
 
 function removePaths(text: string, paths: string[]): string {
@@ -30,13 +39,14 @@ export function splitMessageImages(text: string): { text: string; images: string
   return images.length ? { text: removePaths(text, images), images } : { text, images };
 }
 
-/** Same split, but only Nenu's own uploads leave the text — a path the operator typed stays prose. */
+/** Nenu's own uploads, of every kind, leave the text — a path the operator typed stays prose. The
+ *  wire puts each upload path after a space (serializeMessage), and none holds a space itself. */
 export function splitDraftUploads(text: string): { text: string; uploads: string[] } {
-  const uploads = splitMessageImages(text).images.filter(isUploadPath);
+  const uploads = [...new Set(text.split(/\s+/).filter(isUploadPath))];
   return uploads.length ? { text: removePaths(text, uploads), uploads } : { text, uploads };
 }
 
-/** The wire text: the prose, then every image path, space-separated (what the composer always sent). */
+/** The wire text: the prose, then every attached file's path, space-separated (what the composer always sent). */
 export function serializeMessage(text: string, paths: readonly string[]): string {
   const body = text.trimEnd();
   if (!paths.length) return body;

@@ -244,6 +244,7 @@ export function AgentChat({
 
   const listRef = useRef<ChatMessageListHandle>(null);
   const composerRef = useRef<ComposerHandle>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
   // The header keeps one ⋯ on a phone; a desktop also shows the terminal switch.
   const desktop = useMediaQuery("(min-width: 1024px)");
   // While a phone keyboard is up, the tab and pane strips step aside so the chat keeps the height.
@@ -1140,8 +1141,9 @@ export function AgentChat({
       {/* The pane's folder, for every work log under it: the conversation's and a subagent's. */}
       <PaneCwdContext value={agent?.cwd ?? ""}>
       <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
-      {/* Content region below the header — the mirror inside is the scroller. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Content region below the header — the mirror inside is the scroller. Files dropped anywhere
+          on it attach to the composer. */}
+      <div ref={dropZoneRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Terminal mirror — tapping it focuses the composer so you can start typing right away
             (unless you're selecting text to copy, which the tap must not collapse). */}
         {/* min-w-0 only — do NOT set overflow-x-hidden here: that forces overflow-y to `auto` (CSS
@@ -1316,6 +1318,7 @@ export function AgentChat({
           )}
           <Composer
             ref={composerRef}
+            dropZoneRef={dropZoneRef}
             paneId={paneId}
             session={session}
             agent={agent?.agent}

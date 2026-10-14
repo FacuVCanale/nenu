@@ -1,13 +1,37 @@
 import { useState } from "react";
-import { ImageIcon, Loader2, RotateCw, X } from "lucide-react";
+import { File as FileIcon, FileArchive, FileCode, FileImage, FileText, Loader2, RotateCw, X, type LucideIcon } from "lucide-react";
 
 import type { Attachment } from "@/hooks/use-composer-attachments";
 import { imageLabel } from "@/lib/message-images";
 import { cn } from "@/lib/utils";
 
+const ARCHIVE = /^(?:zip|gz|tgz|tar|bz2|xz|7z|rar|zst)$/;
+const CODE = /^(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|sh|json|ya?ml|toml|html?|css|sql)$/;
+const TEXT = /^(?:pdf|txt|md|csv|tsv|log|docx?|rtf)$/;
+
+function extension(name: string): string | null {
+  return /\.([A-Za-z0-9]{1,10})$/.exec(name)?.[1]!.toLowerCase() ?? null;
+}
+
+function fileIcon(item: Attachment, ext: string | null): LucideIcon {
+  if (item.image) return FileImage;
+  if (ext && ARCHIVE.test(ext)) return FileArchive;
+  if (ext && CODE.test(ext)) return FileCode;
+  if (ext && TEXT.test(ext)) return FileText;
+  return FileIcon;
+}
+
+/** "2.4 MB", "18 KB", "512 B". */
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
 /**
- * The draft's images, above the text: a 40px thumbnail, "Image N", and a small remove control that
- * a touch screen reaches at 44px through the shared .hit-area. One row; it scrolls sideways when it overflows.
+ * The draft's files, above the text: a 26px tile (an image's thumbnail, any other file's icon), its
+ * name, its kind and size, and a small remove control that a touch screen reaches at 44px through
+ * the shared .hit-area. One row; it scrolls sideways when it overflows.
  */
 export function AttachmentChips({
   items,
@@ -22,12 +46,12 @@ export function AttachmentChips({
 }) {
   if (!items.length) return null;
   return (
-    <ul aria-label="Attached images" className="flex gap-1.5 overflow-x-auto px-1.5 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <ul aria-label="Attached files" className="flex gap-1.5 overflow-x-auto px-1.5 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {items.map((item, index) => (
         <AttachmentChip
           key={item.id}
           item={item}
-          label={imageLabel(index)}
+          label={item.name ?? imageLabel(index)}
           onRemove={() => onRemove(item.id)}
           onRetry={() => onRetry(item.id)}
           disabled={disabled}
@@ -52,39 +76,39 @@ function AttachmentChip({
 }) {
   const [broken, setBroken] = useState(false);
   const failed = item.status === "error";
+  const ext = item.name ? extension(item.name) : null;
+  const Icon = fileIcon(item, ext);
+  const kind = item.image ? "Photo" : ext?.toUpperCase() ?? "File";
+  const meta = item.status === "uploading" ? "Uploading…" : failed ? "Failed · tap to retry" : [kind, item.size === undefined ? "" : formatSize(item.size)].filter(Boolean).join(" · ");
   const body = (
     <>
-      <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-l-[calc(var(--radius)-1px)] bg-muted">
-        {broken ? (
-          <ImageIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-        ) : (
+      <span className="relative grid size-[26px] shrink-0 place-items-center overflow-hidden rounded-md border border-border/70 bg-muted text-muted-foreground">
+        {item.url && !broken ? (
           <img src={item.url} alt="" className="size-full object-cover" onError={() => setBroken(true)} />
+        ) : (
+          <Icon aria-hidden="true" className="size-3.5" />
         )}
         {item.status === "uploading" && (
-          <span className="absolute inset-0 grid place-items-center bg-background/60">
-            <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+          <span className="absolute inset-0 grid place-items-center bg-background/70">
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" />
           </span>
         )}
         {failed && (
-          <span className="absolute inset-0 grid place-items-center bg-background/70 text-destructive">
-            <RotateCw aria-hidden="true" className="size-4" />
+          <span className="absolute inset-0 grid place-items-center bg-background/80 text-destructive">
+            <RotateCw aria-hidden="true" className="size-3.5" />
           </span>
         )}
       </span>
       <span className="flex min-w-0 flex-col items-start leading-tight">
-        <span className="text-caption font-medium">{label}</span>
-        {item.status !== "ready" && (
-          <span className={cn("text-caption", failed ? "text-destructive" : "text-muted-foreground")}>
-            {failed ? "Failed · tap to retry" : "Uploading…"}
-          </span>
-        )}
+        <span className="max-w-40 truncate text-caption font-medium">{label}</span>
+        <span className={cn("text-caption", failed ? "text-destructive" : "text-muted-foreground")}>{meta}</span>
       </span>
     </>
   );
   return (
     <li
       className={cn(
-        "flex shrink-0 items-center gap-1 rounded-lg border bg-background pr-1",
+        "flex h-10 shrink-0 items-center gap-1 rounded-lg border bg-background pl-2 pr-1",
         failed ? "border-destructive/50" : "border-border/70",
       )}
       title={failed ? item.error : undefined}

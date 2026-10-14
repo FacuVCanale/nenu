@@ -28,6 +28,12 @@ export function isTextPath(path: string): boolean {
 const PRIVATE_PART = /^(?:\.env(?:\..*)?|\.git|\.ssh|\.aws|\.azure|\.gnupg|\.kube|\.config|\.codex|\.claude|\.npmrc|\.pypirc|\.netrc|credentials(?:\..*)?|auth\.json|id_(?:rsa|ed25519|ecdsa|dsa)(?:\..*)?)$/i;
 const PRIVATE_EXTENSION = /\.(?:pem|key|p12|pfx|keystore)$/i;
 
+/** Whether a resolved path sits in `dir`, compared on real paths so a link into it is caught too. */
+async function insideDir(path: string, dir: string): Promise<boolean> {
+  const root = await realpath(dir).catch(() => resolve(dir));
+  return path === root || path.startsWith(root + sep);
+}
+
 /** Apply the same policy to the supplied name and the resolved target of an in-project symlink. */
 export function isPrivateProjectPath(path: string): boolean {
   return path.split(/[\\/]/).some((part) => PRIVATE_PART.test(part)) || PRIVATE_EXTENSION.test(path);
@@ -79,6 +85,7 @@ export async function openPaneFile(
   cwd: string | undefined,
   requestedPath: string | null,
   delivered: () => Promise<readonly string[]> = async () => [],
+  stateDir?: string,
 ): Promise<PaneFile | Response> {
   if (!requestedPath || requestedPath.length > 4096 || /[\x00-\x1f]/.test(requestedPath)) {
     return fileError("A valid project file path is required.", 400);
@@ -107,7 +114,7 @@ export async function openPaneFile(
       ? unavailable()
       : fileError(OUTSIDE_PROJECT_MESSAGE, 404, { [FILE_STATE_HEADER]: "outside-project" });
   }
-  if (isPrivateProjectPath(path)) return unavailable();
+  if (isPrivateProjectPath(path) || (stateDir && await insideDir(path, stateDir))) return unavailable();
   const kind = fileKind(path);
   if (!kind) return fileError("This file type cannot be previewed.", 415);
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
@@ -162,9 +169,11 @@ export async function paneFileResponse(
     range?: string | null;
     ifNoneMatch?: string | null;
     delivered?: () => Promise<readonly string[]>;
+    /** Nenu's own state, uploads included: never served, even from a folder that holds it (ADR 0074). */
+    stateDir?: string;
   } = {},
 ): Promise<Response> {
-  const file = await openPaneFile(cwd, requestedPath, options.delivered);
+  const file = await openPaneFile(cwd, requestedPath, options.delivered, options.stateDir);
   if (file instanceof Response) return file;
   let streaming = false;
   try {

@@ -300,6 +300,11 @@ The chat gallery also previews Nenu-generated raster uploads outside cwd through
 configured uploads directory and the exact path in a user message from the current pane's contained
 journal. Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
 never generalize it to arbitrary transcript paths or all files under the state directory.
+The composer attaches any file up to 25 MB through `bridge/uploads.ts` `saveUpload`: the name is
+generated (an image by its bytes, anything else with a flat copy of its own name), only an image
+previews, and nothing in the state directory, uploads included, is served by `/file` or Render, even
+from a pane folder that holds it. Don't preview other uploads by widening either route
+([ADR 0074](./.adr/0074-an-attached-file-is-saved-for-the-agent-and-never-served.md)).
 
 ## Security posture (don't regress)
 

@@ -2,18 +2,24 @@ import { useEffect, useRef, useState } from "react";
 
 import { downscaleImage } from "@/lib/image-downscale";
 import { isLocalImageUrl, localImageUrl, rememberLocalImage } from "@/lib/local-sends";
+import { uploadName } from "@/lib/message-images";
 import type { UploadResponse } from "@/lib/types";
 
-// Images attached to the draft, kept as structured state beside the text — the textarea never shows
+// Files attached to the draft, kept as structured state beside the text — the textarea never shows
 // a path. Each one is uploaded as soon as it is picked; the message only carries the server paths
-// (lib/message-images.ts serializeMessage) when it is sent.
+// (lib/message-images.ts serializeMessage) when it is sent. Only an image gets a preview.
 
 export type AttachmentStatus = "uploading" | "ready" | "error";
 
 export interface Attachment {
   id: string;
-  /** What the thumbnail shows: a local object URL, or the server preview for a restored draft. */
-  url: string;
+  /** Whether it previews: a picked image, or a restored upload the bridge named by its image bytes. */
+  image: boolean;
+  /** An image's thumbnail: a local object URL, or the server preview for a restored draft. */
+  url?: string;
+  /** What it was called when attached; a restored image has none and shows as "Image N". */
+  name?: string;
+  size?: number;
   status: AttachmentStatus;
   /** Server path, once uploaded. */
   path?: string;
@@ -22,8 +28,16 @@ export interface Attachment {
 }
 
 export const MAX_ATTACHMENTS = 10;
+/** One file, at most (bridge/uploads.ts MAX_UPLOAD_BYTES); a bigger one is refused before it uploads. */
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
-export function isImageFile(file: File): boolean {
+/** What `add` turned away: files over the size limit, by name, and how many found no room. */
+export interface AttachRefusal {
+  tooLarge: string[];
+  overLimit: number;
+}
+
+function isImageFile(file: File): boolean {
   return file.type.startsWith("image/");
 }
 
@@ -42,7 +56,9 @@ export function readyPaths(list: readonly Attachment[]): string[] {
 }
 
 function restored(path: string, previewUrl: (path: string) => string): Attachment {
-  return { id: crypto.randomUUID(), url: localImageUrl(path) ?? previewUrl(path), status: "ready", path };
+  const name = uploadName(path);
+  if (name !== null) return { id: crypto.randomUUID(), image: false, name, status: "ready", path };
+  return { id: crypto.randomUUID(), image: true, url: localImageUrl(path) ?? previewUrl(path), status: "ready", path };
 }
 
 export function useComposerAttachments({ upload, previewUrl, onPathsChange, initialPaths = [] }: Options) {
@@ -66,7 +82,7 @@ export function useComposerAttachments({ upload, previewUrl, onPathsChange, init
 
   /** A local object URL nobody else owns is revoked; one handed to the sent-image cache is not. */
   function release(item: Attachment) {
-    if (item.file && !isLocalImageUrl(item.url)) URL.revokeObjectURL(item.url);
+    if (item.file && item.url && !isLocalImageUrl(item.url)) URL.revokeObjectURL(item.url);
   }
 
   async function start(id: string, file: File) {
@@ -80,20 +96,24 @@ export function useComposerAttachments({ upload, previewUrl, onPathsChange, init
     // Removed while uploading, or the composer is gone: its URL was released then.
     if (!item || !alive.current) return;
     if (result.ok) {
-      rememberLocalImage(result.path, item.url);
+      if (item.url) rememberLocalImage(result.path, item.url);
       patch(id, { status: "ready", path: result.path, error: undefined });
     } else patch(id, { status: "error", error: result.error });
   }
 
-  /** Attach and upload. Returns how many files were refused (not images, or over the limit). */
-  function add(files: Iterable<File>): number {
+  /** Attach and upload. Returns what was refused: too large, or past the count limit. */
+  function add(files: Iterable<File>): AttachRefusal {
     const list = [...files];
-    const room = MAX_ATTACHMENTS - itemsRef.current.length;
-    const accepted = list.filter(isImageFile).slice(0, Math.max(0, room));
-    const added = accepted.map((file) => ({ id: crypto.randomUUID(), url: URL.createObjectURL(file), status: "uploading" as const, file }));
+    const fitting = list.filter((file) => file.size <= MAX_ATTACHMENT_BYTES);
+    const accepted = fitting.slice(0, Math.max(0, MAX_ATTACHMENTS - itemsRef.current.length));
+    const added = accepted.map((file): Attachment & { file: File } => {
+      const image = isImageFile(file);
+      // Only an image is read into the page, for its thumbnail; a PDF or an archive never is.
+      return { id: crypto.randomUUID(), image, url: image ? URL.createObjectURL(file) : undefined, name: file.name, size: file.size, status: "uploading", file };
+    });
     if (added.length) commit([...itemsRef.current, ...added]);
     added.forEach((item) => void start(item.id, item.file));
-    return list.length - accepted.length;
+    return { tooLarge: list.filter((file) => file.size > MAX_ATTACHMENT_BYTES).map((file) => file.name), overLimit: fitting.length - accepted.length };
   }
 
   function retry(id: string) {
