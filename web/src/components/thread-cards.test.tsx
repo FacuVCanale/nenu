@@ -9,7 +9,7 @@ const node = (id: string, title: string, parentId: string, extra: Partial<Projec
 
 it("shows the coordinator's open work in the tree's order and leaves the resolved to History", () => {
   const project: ProjectView = {
-    slug: "awam", name: "AWAM", status: "active",
+    slug: "acme", name: "Acme", status: "active",
     threads: [
       node("t-1", "Hotfix", "root", { group: "idle" }),
       node("t-2", "Depot", "root", { paneId: "depot", liveStatus: "blocked" }),

@@ -144,7 +144,7 @@ async function project(): Promise<void> {
       const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
       const page = await context.newPage();
       await page.clock.install({ time: bridge.now() });
-      await page.goto(bridge.url + "/project/awam");
+      await page.goto(bridge.url + "/project/acme");
       await page.locator('main >> text="Panel depósito"').waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1500);
       return { page, close: () => context.close() };
@@ -231,7 +231,7 @@ async function org(): Promise<void> {
 
   await withBench(async (bridge, browser) => {
     for (const [name, device] of [["phone", TALL_PHONE], ["desktop", DESKTOP]] as const) {
-      const { page, close } = await open(browser, bridge, device, "/project/awam", 'main >> text="Panel depósito"');
+      const { page, close } = await open(browser, bridge, device, "/project/acme", 'main >> text="Panel depósito"');
       await shoot(page, `page-${name}`);
       await history(page.locator("main")).click({ timeout: 5000 });
       await page.waitForTimeout(300);
@@ -271,13 +271,13 @@ async function org(): Promise<void> {
         await page.getByRole("button", { name: "OK" }).click();
         await panel.getByRole("button", { name: "Close Hotfix login" }).click({ timeout: 5000 });
         await page.getByRole("dialog", { name: "Close this thread?" }).getByRole("button", { name: "Close thread" }).click({ timeout: 5000 });
-        await calledWith("node", "resolve", "awam", "t-0108", "--close-view");
+        await calledWith("node", "resolve", "acme", "t-0108", "--close-view");
         await panel.getByRole("button", { name: "Replace coordinator" }).click({ timeout: 5000 });
         const dialog = page.getByRole("dialog", { name: "Replace the coordinator?" });
         await dialog.getByLabel("New one runs on").selectOption("claude");
         await shoot(page, "replace-desktop");
         await dialog.getByRole("button", { name: "Replace" }).click();
-        await calledWith("coordinator", "replace", "awam", "--profile=claude");
+        await calledWith("coordinator", "replace", "acme", "--profile=claude");
         await page.waitForTimeout(500);
         await shoot(page, "after-actions-desktop");
       } catch (error) {
@@ -651,8 +651,8 @@ async function layout(): Promise<void> {
     await addOps(bridge);
     await capture(bridge, browser, [
       ["home", "/", "h1"],
-      ["project", "/project/awam", 'main >> text="Panel depósito"'],
-      ["node", "/project/awam/node/t-0101", 'main >> text="Migración de stock"'],
+      ["project", "/project/acme", 'main >> text="Panel depósito"'],
+      ["node", "/project/acme/node/t-0101", 'main >> text="Migración de stock"'],
       ["settings", "/settings", "text=Push notifications"],
       ["workspace", "/space/w4", `main:has-text("ops"), ${tabBar}`],
       ["chat", "/pane/w4%3Aagent", tabBar],
@@ -1303,7 +1303,7 @@ async function diffs(before: boolean): Promise<void> {
   }, CAPTURE_EPOCH, (herd, now) => diffOrg(herd, now, size), (dir) => {
     size = seedDiffRepo(dir);
     writeFileSync(prs, JSON.stringify([{
-      number: 1342, title: "Landing a 390 px", url: "https://github.com/awam/comercio/pull/1342", headRefName: "e2e-demo", baseRefName: "main",
+      number: 1342, title: "Landing a 390 px", url: "https://github.com/acme/shop/pull/1342", headRefName: "e2e-demo", baseRefName: "main",
       isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [], ...size, updatedAt: new Date(CAPTURE_EPOCH).toISOString(),
     }]));
   });

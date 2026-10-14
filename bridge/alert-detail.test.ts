@@ -12,23 +12,23 @@ import type { AgentView } from "./types.ts";
 const pane = (over: Partial<AgentView> = {}): AgentView => ({
   paneId: "p1",
   workspaceId: "w1",
-  workspaceLabel: "fisgon",
+  workspaceLabel: "assistant",
   workspaceNumber: 1,
   tabId: "w1:t1",
   agent: "claude",
   status: "done",
-  cwd: "/home/me/fisgon",
+  cwd: "/home/me/assistant",
   focused: false,
   kind: "agent",
   ...over,
 });
 
 const project: OrgProjectView = {
-  slug: "awam",
-  name: "AWAM Comercio",
+  slug: "acme",
+  name: "Acme Shop",
   status: "active",
   coordinator: { paneId: "pc", agent: "claude", liveStatus: "done" },
-  threads: [{ id: "t-0093", title: "Mi Cúcula pedidos", parentId: "root", role: "worker", status: "open", paneId: "pt", depth: 1, reportUnacked: false }],
+  threads: [{ id: "t-0093", title: "Wholesale orders", parentId: "root", role: "worker", status: "open", paneId: "pt", depth: 1, reportUnacked: false }],
   source: "json",
   prActions: true,
   nodeActions: true,
@@ -49,25 +49,25 @@ const taskDone = (uuid: string) => ({
 describe("describeAlert", () => {
   test("a project's thread is named by its title, and placed in its project", () => {
     const d = describeAlert(pane({ paneId: "pt" }), "done", [project]);
-    expect(d).toMatchObject({ kind: "thread", name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", startedBy: "person" });
+    expect(d).toMatchObject({ kind: "thread", name: "t-0093 Wholesale orders", where: "Acme Shop", startedBy: "person" });
   });
 
   test("a project's coordinator is named as the project's coordinator", () => {
-    expect(describeAlert(pane({ paneId: "pc" }), "blocked", [project])).toMatchObject({ kind: "coordinator", name: "AWAM Comercio coordinator", where: "AWAM Comercio" });
+    expect(describeAlert(pane({ paneId: "pc" }), "blocked", [project])).toMatchObject({ kind: "coordinator", name: "Acme Shop coordinator", where: "Acme Shop" });
   });
 
   test("a loose agent is named by its own label before the CLI's name", () => {
     expect(describeAlert(pane({ paneLabel: "pedidos" }), "done").name).toBe("pedidos");
     expect(describeAlert(pane({ sessionName: "fix-login" }), "done").name).toBe("fix-login");
-    expect(describeAlert(pane({ tabLabel: "api" }), "done")).toMatchObject({ kind: "agent", name: "api", where: "fisgon" });
-    expect(describeAlert(pane({ terminalTitle: "Estado del RAG" }), "done")).toMatchObject({ name: "Estado del RAG", where: "fisgon" });
+    expect(describeAlert(pane({ tabLabel: "api" }), "done")).toMatchObject({ kind: "agent", name: "api", where: "assistant" });
+    expect(describeAlert(pane({ terminalTitle: "Estado del RAG" }), "done")).toMatchObject({ name: "Estado del RAG", where: "assistant" });
   });
 
   test("a positional tab number or the CLI's default title names nobody, so the workspace does", () => {
     // Measured on a live herd: a tab labelled "1" and a pane titled "Claude Code".
     expect(describeAlert(pane({ tabLabel: "1", terminalTitle: "Estado del RAG" }), "done").name).toBe("Estado del RAG");
-    expect(describeAlert(pane({ terminalTitle: "Claude Code" }), "done")).toMatchObject({ name: "fisgon", where: "" });
-    expect(describeAlert(pane(), "done")).toMatchObject({ name: "fisgon", where: "" });
+    expect(describeAlert(pane({ terminalTitle: "Claude Code" }), "done")).toMatchObject({ name: "assistant", where: "" });
+    expect(describeAlert(pane(), "done")).toMatchObject({ name: "assistant", where: "" });
   });
 
   test("a finished turn carries the first line of its last answer", () => {
@@ -85,8 +85,8 @@ describe("launched", () => {
   test("a loose agent with a Herdr name was started by another agent; a project's panes never count", () => {
     expect(describeAlert(pane({ agentName: "perf-deep-dive" }), "done").launched).toBe(true);
     expect(describeAlert(pane(), "done").launched).toBe(false);
-    expect(describeAlert(pane({ paneId: "pt", agentName: "hp-awam-t-0093" }), "done", [project]).launched).toBe(false);
-    expect(describeAlert(pane({ paneId: "pc", agentName: "hpc-awam" }), "done", [project]).launched).toBe(false);
+    expect(describeAlert(pane({ paneId: "pt", agentName: "hp-acme-t-0093" }), "done", [project]).launched).toBe(false);
+    expect(describeAlert(pane({ paneId: "pc", agentName: "hpc-acme" }), "done", [project]).launched).toBe(false);
   });
 });
 

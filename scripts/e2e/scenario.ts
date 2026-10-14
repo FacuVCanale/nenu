@@ -127,12 +127,12 @@ export function demoOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
   return {
     profiles: ["claude", "codex"],
     projects: [{
-      slug: "awam",
-      name: "AWAM Comercio SaaS",
-      goal: "Coordinar iniciativas de AWAM que requieran varios threads o PRs",
+      slug: "acme",
+      name: "Acme Shop",
+      goal: "Coordinar iniciativas de Acme que requieran varios threads o PRs",
       status: "active",
       threads: [
-        thread("t-0001", "Cierre Mi Cúcula", "root", "coordinator", "resolved", "resolved", 3000),
+        thread("t-0001", "Cierre Wholesale", "root", "coordinator", "resolved", "resolved", 3000),
         thread("t-0002", "Extraer requisitos", "t-0001", "worker", "resolved", "resolved", 3100),
         thread("t-0003", "Auditar código y PRs", "t-0001", "worker", "resolved", "resolved", 3050),
         thread("t-0004", "Revisar grupos", "root", "worker", "resolved", "resolved", 2800),
@@ -141,7 +141,7 @@ export function demoOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
         thread("t-0012", "Landing a 390 px", "t-0010", "worker", "open", "working", 0, bound(herd.working, "w1:t1")),
         thread("t-0013", "Panel mercadería", "t-0010", "worker", "open", "ready-for-review", 12, {
           pr: {
-            url: "https://github.com/awam/comercio/pull/1342", state: "OPEN", review: "APPROVED", checks: { passed: 6, pending: 0, failed: 0 },
+            url: "https://github.com/acme/shop/pull/1342", state: "OPEN", review: "APPROVED", checks: { passed: 6, pending: 0, failed: 0 },
             additions: 182, deletions: 40, failing: [], comment_count: 1, draft: false, mergeable: "MERGEABLE", merge_blocker: null,
           },
         }),
@@ -171,7 +171,7 @@ export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" 
   let id = 0;
   // Resolved coordinators, oldest first, each with the threads it ran.
   const teams: Array<[string, number]> = [
-    ["Cierre Mi Cúcula", 2], ["Publicación Mi Cúcula", 2], ["Revisar PRs a develop", 4], ["Mergear PRs restantes", 10],
+    ["Cierre Wholesale", 2], ["Publicación Wholesale", 2], ["Revisar PRs a develop", 4], ["Mergear PRs restantes", 10],
     ["Preparar release", 2], ["Investigar WhatsApp", 0], ["Stock y vínculos", 0], ["Prueba de plantilla", 0],
   ];
   for (const [index, [title, size]] of teams.entries()) {
@@ -187,7 +187,7 @@ export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" 
     node(103, "Landing a 390 px", "t-0102", "worker", "working", 0, bound(herd.working, "w1:t1")),
     node(104, "Panel mercadería", "t-0102", "worker", "ready-for-review", 12, {
       pr: {
-        url: "https://github.com/awam/comercio/pull/1342", state: "OPEN", review: "APPROVED", checks: { passed: 6, pending: 0, failed: 0 },
+        url: "https://github.com/acme/shop/pull/1342", state: "OPEN", review: "APPROVED", checks: { passed: 6, pending: 0, failed: 0 },
         additions: 182, deletions: 40, failing: [], comment_count: 1, draft: false, mergeable: "MERGEABLE", merge_blocker: null,
       },
     }),
@@ -200,9 +200,9 @@ export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" 
   return {
     profiles: ["claude", "codex"],
     projects: [{
-      slug: "awam",
-      name: "AWAM Comercio SaaS",
-      goal: "Coordinar iniciativas de AWAM que requieran varios threads o PRs",
+      slug: "acme",
+      name: "Acme Shop",
+      goal: "Coordinar iniciativas de Acme que requieran varios threads o PRs",
       status: "active",
       ...(coordinator ? { coordinator: bound(herd.codex, "w2:t1") } : {}),
       threads,
@@ -220,7 +220,7 @@ export function projectChatSeed(herd: Pick<DemoHerd, "working" | "blocked">, at:
   const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
   const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0]!, tab_id: tabId, pane_id: paneId });
   const pr = (number: number, extra: Record<string, unknown> = {}) => ({
-    url: `https://github.com/awam/comercio/pull/${number}`, state: "OPEN", review: "REVIEW_REQUIRED", checks: { passed: 6, pending: 0, failed: 0 },
+    url: `https://github.com/acme/shop/pull/${number}`, state: "OPEN", review: "REVIEW_REQUIRED", checks: { passed: 6, pending: 0, failed: 0 },
     additions: 120, deletions: 30, failing: [], comment_count: 0, draft: false, mergeable: "MERGEABLE", merge_blocker: "review required", ...extra,
   });
   const node = (id: number, title: string, group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
@@ -231,17 +231,17 @@ export function projectChatSeed(herd: Pick<DemoHerd, "working" | "blocked">, at:
   return {
     profiles: ["claude", "codex"],
     projects: [{
-      slug: "awam",
-      name: "AWAM Comercio SaaS",
-      goal: "Coordinar iniciativas de AWAM que requieran varios threads o PRs",
+      slug: "acme",
+      name: "Acme Shop",
+      goal: "Coordinar iniciativas de Acme que requieran varios threads o PRs",
       status: "active",
       coordinator: bound(herd.working, "w1:t1"),
       threads: [
         node(1, "Hotfix login", "resolved", 600, { pr: pr(1700, { state: "MERGED" }) }),
-        node(2, "Pedidos de la tienda", "ready-for-review", 8, { branch: "awam-t-0002", pr: pr(1352, { review: "APPROVED", merge_blocker: null }) }),
-        node(3, "Pedidos mayoristas", "working", 2, { branch: "awam-t-0003", pr: pr(1351, { checks: { passed: 3, pending: 3, failed: 0 }, merge_blocker: "checks pending" }) }),
-        node(4, "Release de pedidos", "ready-for-review", 30, { branch: "awam-t-0004", pr: pr(1345) }),
-        node(5, "Bugs del asistente", "ready-for-review", 5, { branch: "awam-t-0005", pr: pr(1350) }),
+        node(2, "Pedidos de la tienda", "ready-for-review", 8, { branch: "acme-t-0002", pr: pr(1352, { review: "APPROVED", merge_blocker: null }) }),
+        node(3, "Pedidos mayoristas", "working", 2, { branch: "acme-t-0003", pr: pr(1351, { checks: { passed: 3, pending: 3, failed: 0 }, merge_blocker: "checks pending" }) }),
+        node(4, "Release de pedidos", "ready-for-review", 30, { branch: "acme-t-0004", pr: pr(1345) }),
+        node(5, "Bugs del asistente", "ready-for-review", 5, { branch: "acme-t-0005", pr: pr(1350) }),
         node(6, "Panel depósito", "waiting-on-you", 4, bound(herd.blocked, "w2:t1")),
       ],
     }],
@@ -304,7 +304,7 @@ export function seedDiffRepo(dir: string): { additions: number; deletions: numbe
     "app/checkout.tsx": code("checkout", 60),
     "app/styles.css": Array.from({ length: 20 }, (_, i) => `.row-${i} { padding: ${i}px; }`).join("\n") + "\n",
     "app/legacy.ts": code("legacy", 12),
-    "README.md": "# Comercio\n\nThe shop's storefront and admin.\n",
+    "README.md": "# Acme Shop\n\nThe shop's storefront and admin.\n",
     "app/logo.png": new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 1, 2, 3]),
   };
   for (const [path, body] of Object.entries(files)) {
@@ -347,7 +347,7 @@ export function diffOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
   const pr = { ...(project.threads.find((thread) => thread.id === "t-0013")!.pr as Record<string, unknown>), ...size };
   project.threads = project.threads.map((thread) =>
     thread.id === "t-0012" ? { ...thread, branch: "e2e-demo", pr }
-    : thread.id === "t-0013" ? { ...thread, pr: { ...pr, url: "https://github.com/awam/comercio/pull/1338", additions: 64, deletions: 12 } }
+    : thread.id === "t-0013" ? { ...thread, pr: { ...pr, url: "https://github.com/acme/shop/pull/1338", additions: 64, deletions: 12 } }
     : thread);
   return seed;
 }

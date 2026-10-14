@@ -15,7 +15,7 @@ describe("local document links", () => {
     expect(parseInline("[PDF](https://example.com/a.pdf)")[0]).toMatchObject({ kind: "link", href: "https://example.com/a.pdf" });
   });
   it("reads a local file:// URL as the absolute path it names", () => {
-    expect(localFilePath("file:///Users/fran/board/resultado-shopify.html")).toBe("/Users/fran/board/resultado-shopify.html");
+    expect(localFilePath("file:///Users/demo/board/board-summary.html")).toBe("/Users/demo/board/board-summary.html");
     expect(localFilePath("file://localhost/srv/My%20Report.md")).toBe("/srv/My Report.md");
     expect(localFilePath("<file:///srv/notes.md:12>")).toBe("/srv/notes.md");
     expect(parseInline("[board](file:///srv/board.html)")).toEqual([{ kind: "file", path: "/srv/board.html", spans: [{ kind: "text", text: "board" }] }]);

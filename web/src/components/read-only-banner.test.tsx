@@ -8,14 +8,14 @@ describe("ReadOnlyBanner", () => {
     expect(container).toBeEmptyDOMElement();
     rerender(<ReadOnlyBanner device={{ enforced: false, authorized: false, device: null }} />);
     expect(container).toBeEmptyDOMElement();
-    rerender(<ReadOnlyBanner device={{ enforced: true, authorized: true, device: "fran-iphone" }} />);
+    rerender(<ReadOnlyBanner device={{ enforced: true, authorized: true, device: "alex-iphone" }} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("says it once, in one short line that names the device", () => {
-    render(<ReadOnlyBanner device={{ enforced: true, authorized: false, device: "fran-iphone" }} />);
+    render(<ReadOnlyBanner device={{ enforced: true, authorized: false, device: "alex-iphone" }} />);
     const banner = screen.getByRole("status");
-    expect(banner).toHaveTextContent(/^Read-only on this device · fran-iphone$/);
+    expect(banner).toHaveTextContent(/^Read-only on this device · alex-iphone$/);
   });
 
   it("drops the device part when the proxy names none", () => {

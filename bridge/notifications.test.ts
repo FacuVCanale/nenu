@@ -192,7 +192,7 @@ describe("NotificationCoordinator — type preferences", () => {
 
 describe("NotificationCoordinator — who, what and where", () => {
   const thread = (status: "blocked" | "done", over: Partial<AlertDetail> = {}): AlertDetail => ({
-    status, kind: "thread", startedBy: "person", requested: false, launched: false, name: "t-0093 Mi Cúcula pedidos", where: "AWAM Comercio", ...over,
+    status, kind: "thread", startedBy: "person", requested: false, launched: false, name: "t-0093 Wholesale orders", where: "Acme Shop", ...over,
   });
 
   test("a finished thread is named by its title and says what it answered, then where", async () => {
@@ -200,7 +200,7 @@ describe("NotificationCoordinator — who, what and where", () => {
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
     await settle();
-    expect(sink.last).toEqual({ title: "t-0093 Mi Cúcula pedidos finished", body: "El HTML de avance ya está abierto.\nAWAM Comercio", paneId: "p1", renotify: true });
+    expect(sink.last).toEqual({ title: "t-0093 Wholesale orders finished", body: "El HTML de avance ya está abierto.\nAcme Shop", paneId: "p1", renotify: true });
   });
 
   test("a turn a subagent's result started stays quiet while Subagents is off", async () => {
@@ -213,7 +213,7 @@ describe("NotificationCoordinator — who, what and where", () => {
     coord.onTransition(agent("p2", "done"), "working", "done");
     clock.fireAll();
     await settle();
-    expect(sink.last?.title).toBe("t-0093 Mi Cúcula pedidos got a subagent's result");
+    expect(sink.last?.title).toBe("t-0093 Wholesale orders got a subagent's result");
   });
 
   test("an alert resolved while it was being described never shows", async () => {

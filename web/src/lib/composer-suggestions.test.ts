@@ -52,7 +52,7 @@ describe("provider-aware composer suggestions", () => {
 
   it("does not suggest a native slash command inside ordinary prose or a filesystem path", () => {
     expect(detectComposerCompletion("Explain /mod", 12, "codex")).toBeNull();
-    expect(detectComposerCompletion("/Users/fran", 11, "claude")).toBeNull();
+    expect(detectComposerCompletion("/Users/demo", 11, "claude")).toBeNull();
     expect(detectComposerCompletion("/", 1, "bash")).toBeNull();
   });
 });
