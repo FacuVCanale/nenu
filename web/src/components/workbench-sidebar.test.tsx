@@ -206,6 +206,12 @@ describe("the sidebar", () => {
     expect(within(project).getByRole("link", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
   });
 
+  it("marks the project's coordinator with the workflow glyph", () => {
+    open();
+    const coordinator = within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: /^Coordinator/ });
+    expect(coordinator.querySelector("svg.lucide")).toHaveClass("lucide-workflow");
+  });
+
   it("lists only the workspaces no project holds, and folds a coordinator's threads", async () => {
     const user = open();
     const workspaces = screen.getByRole("region", { name: "Workspaces" });

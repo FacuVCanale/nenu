@@ -1,5 +1,5 @@
 import { useContext, type ReactNode } from "react";
-import { ChevronLeft, Settings } from "lucide-react";
+import { ChevronLeft, Settings2 } from "lucide-react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
@@ -145,7 +145,7 @@ export function SettingsGear({ session }: { session?: string }) {
       // breadcrumb absorbs — it already truncates by design.
       className="grid size-11 place-items-center text-muted-foreground transition-colors hover:text-foreground"
     >
-      <Settings className="size-5" />
+      <Settings2 className="size-5" />
     </button>
   );
 }

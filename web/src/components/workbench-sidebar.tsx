@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { Bot, ChevronRight, House, Inbox, LayoutGrid, Plus, Search, Settings } from "lucide-react";
+import { ChevronRight, House, Inbox, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "lucide-react";
 
 import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -127,7 +127,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
     <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : mode}>
       {(!phone || searching) && <div className="nav-top">
         {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
-          <Plus aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
+          <SquarePen aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
         </button>}
         {searching ? (
           <label className="nav-row nav-search">
@@ -383,7 +383,7 @@ function HostRow({ data }: { data: HomeData }) {
           {connected ? `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}` : "Not connected"}
         </span>
       </span>
-      <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings"><Settings aria-hidden size={16} /></Link>
+      <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings"><Settings2 aria-hidden size={16} /></Link>
     </div>
   );
 }
@@ -453,7 +453,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
           {project.coordinator && (
             <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(project.coordinator.paneId, session)}
               aria-current={project.coordinator.paneId === paneId ? "page" : undefined}>
-              <span className="nav-tree-mark"><OpeningMark to={panePath(project.coordinator.paneId, session)}><Bot aria-hidden size={14} /></OpeningMark></span>
+              <span className="nav-tree-mark"><OpeningMark to={panePath(project.coordinator.paneId, session)}><Workflow aria-hidden size={14} /></OpeningMark></span>
               <span className="nav-row-text">Coordinator</span>
               <span className="sr-only">, {STATUS_LABEL[project.coordinator.liveStatus]}</span>
               {isAttention(project.coordinator.liveStatus)

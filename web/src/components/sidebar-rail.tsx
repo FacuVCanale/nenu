@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
-import { House, Inbox, PanelLeft, Plus, Search, Settings } from "lucide-react";
+import { House, Inbox, PanelLeft, Search, Settings2, SquarePen } from "lucide-react";
 
 import { StatusDot } from "@/components/status-badge";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
@@ -200,20 +200,20 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
     <nav className="workbench-sidebar-rail" aria-label="Collapsed sidebar" {...tip.handlers}>
       <button ref={expandRef} type="button" className="workbench-expand workbench-icon-button" aria-label="Expand sidebar" data-rail-tip="Expand sidebar"
         aria-expanded="false" aria-controls={sidebarId} onClick={onExpand}>
-        <PanelLeft aria-hidden="true" size={18} />
+        <PanelLeft aria-hidden="true" size={16} />
       </button>
-      <button type="button" className="workbench-icon-button" aria-label="New" data-rail-tip="New" onClick={onNewChat} disabled={!onNewChat}><Plus aria-hidden size={17} /></button>
-      <button type="button" className="workbench-icon-button" aria-label="Search" data-rail-tip="Search" onClick={onSearch}><Search aria-hidden size={17} /></button>
+      <button type="button" className="workbench-icon-button" aria-label="New" data-rail-tip="New" onClick={onNewChat} disabled={!onNewChat}><SquarePen aria-hidden size={16} /></button>
+      <button type="button" className="workbench-icon-button" aria-label="Search" data-rail-tip="Search" onClick={onSearch}><Search aria-hidden size={16} /></button>
       <button type="button" className="workbench-icon-button rail-attention" aria-label={attention ? `Needs you, ${attention}` : "Needs you"} data-rail-tip="Needs you" onClick={onNeedsYou}>
-        <Inbox aria-hidden size={17} />{attention > 0 && <span className="rail-dot" aria-hidden />}
+        <Inbox aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
       </button>
-      <Link className="workbench-icon-button" to={homePath(data.session)} aria-label="Home" data-rail-tip="Home"><House aria-hidden size={17} /></Link>
+      <Link className="workbench-icon-button" to={homePath(data.session)} aria-label="Home" data-rail-tip="Home"><House aria-hidden size={16} /></Link>
       <span className="rail-divider" aria-hidden />
       {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} monogram={monograms[i]!} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}
       {workspaces.map((tile, i) => <RailTile key={tile.key} tile={tile} monogram={monograms[projects.length + i]!} />)}
       <span className="flex-1" />
-      <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings" data-rail-tip="Settings"><Settings aria-hidden size={17} /></Link>
+      <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings" data-rail-tip="Settings"><Settings2 aria-hidden size={16} /></Link>
       {tip.element}
     </nav>
   );
