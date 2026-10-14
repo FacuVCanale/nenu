@@ -63,8 +63,10 @@ export function HomeRoute() {
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const panes = [...data.agents, ...data.shellPanes];
-  const needs = needsYouItems(data.agents, interactions.interactions, data.projects);
   const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
+  // A pane just answered may still read blocked until the next snapshot: its receipt is its row meanwhile.
+  const answered = new Set(receipts.map((receipt) => receipt.paneId));
+  const needs = needsYouItems(data.agents, interactions.interactions, data.projects).filter((item) => item.interaction || !answered.has(item.paneId));
   // "Nothing needs you" only from a live herd whose dialogs were read; anything older cannot vouch for it.
   const calm = live && interactions.loaded && !interactions.stale && data.agents.length > 0 && !needs.length && !receipts.length;
   const reviews = reviewQueue(data.projects, data.pullRequests);
