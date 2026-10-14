@@ -187,6 +187,37 @@ export function herdrErrorCode(err: unknown): string | undefined {
 /** Per-request wall-clock budget. Exported so callers can pass it explicitly alongside a dial mode. */
 export const DEFAULT_TIMEOUT_MS = 5000;
 
+// A timer that fires this late was held up by our own event loop, not by Herdr.
+const STALL_SLACK_MS = 250;
+// After such a stall, the time a request gets for the callbacks queued meanwhile (connect, write, the
+// reply already in the socket) to run before its silence counts.
+const STALL_GRACE_MS = 1000;
+const MAX_STALL_GRACES = 3;
+
+/**
+ * `setTimeout` for a request budget that does not count time this process was not running. When the
+ * event loop resumes after a stall (a page-in, a GC pause, a long synchronous task on a loaded host),
+ * Bun runs due timers before a pending connect's callback: a 1.5 s stall right after a dial rejected a
+ * 1 s request that was never written (measured), and Herdr logged a connection that sent nothing
+ * ("timed out reading api request") at the outage. So a timer that fires late gives the request a short
+ * grace instead. Only a timer that fires on time — the loop ran and Herdr stayed silent — times out.
+ */
+export function requestTimeout(onTimeout: () => void, ms: number, now: () => number = () => performance.now()): () => void {
+  let due = now() + ms;
+  let graces = 0;
+  let timer: ReturnType<typeof setTimeout>;
+  const fire = () => {
+    if (now() - due > STALL_SLACK_MS && graces++ < MAX_STALL_GRACES) {
+      due = now() + STALL_GRACE_MS;
+      timer = setTimeout(fire, STALL_GRACE_MS);
+      return;
+    }
+    onTimeout();
+  };
+  timer = setTimeout(fire, ms);
+  return () => clearTimeout(timer);
+}
+
 export class HerdrClient {
   constructor(
     private readonly socketPath: string,
@@ -215,7 +246,7 @@ export class HerdrClient {
       const finish = (fn: () => void) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
+        cancelTimeout();
         fn();
         if (socket) {
           try {
@@ -234,7 +265,7 @@ export class HerdrClient {
         }
         cancelDial = null;
       };
-      const timer = setTimeout(
+      const cancelTimeout = requestTimeout(
         () => finish(() => reject(new Error(`herdr ${method}: timed out after ${timeoutMs}ms`))),
         timeoutMs,
       );
@@ -312,8 +343,8 @@ export class HerdrClient {
    * tab.list for the poll loop. An older server rejects the method with an "unknown variant" error
    * reply — StateEngine treats only that as a permanent signal to fall back to the three list calls.
    */
-  async sessionSnapshot(): Promise<WireSnapshot> {
-    const r = await this.request<{ type: string; snapshot: WireSnapshot }>("session.snapshot");
+  async sessionSnapshot(timeoutMs = this.timeoutMs): Promise<WireSnapshot> {
+    const r = await this.request<{ type: string; snapshot: WireSnapshot }>("session.snapshot", {}, timeoutMs);
     return r.snapshot;
   }
 
@@ -384,7 +415,7 @@ export class HerdrClient {
     const fireDown = (reason: string, code?: string) => {
       if (down) return;
       down = true;
-      clearTimeout(ackTimer);
+      cancelAck();
       if (socket) {
         try {
           socket.end();
@@ -406,7 +437,7 @@ export class HerdrClient {
     };
 
     // A server that accepts the connection but never acks (hung) counts as down, not healthy.
-    const ackTimer = setTimeout(() => fireDown("ack timeout"), 5000);
+    const cancelAck = requestTimeout(() => fireDown("ack timeout"), 5000);
 
     const handleLine = (line: string) => {
       if (line === "") return;
@@ -424,7 +455,7 @@ export class HerdrClient {
       if (decoded.kind === "ack") {
         if (acked) return;
         acked = true;
-        clearTimeout(ackTimer);
+        cancelAck();
         opts.onUp();
         return;
       }

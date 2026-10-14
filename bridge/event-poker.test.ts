@@ -276,14 +276,14 @@ describe("EventPoker — protocol gate", () => {
     const { client, poker, health } = makePoker({ protocol: 22 });
     poker.start();
     await tick();
-    expect(types(client.last)).toContain("pane.updated");
-    client.last.onDown("invalid_request: invalid request: unknown variant `pane.updated`", "invalid_request");
+    expect(types(client.last)).toContain("tab.moved");
+    client.last.onDown("invalid_request: invalid request: unknown variant `tab.moved`", "invalid_request");
     expect(client.streams.length).toBe(2); // retried at once, no backoff
-    expect(types(client.last)).not.toContain("pane.updated");
+    expect(types(client.last)).not.toContain("tab.moved");
     client.last.onUp();
     poker.setAgentPanes(["w1:p1"]);
     await tick();
-    expect(types(client.last)).not.toContain("pane.updated"); // remembered across resubscribes
+    expect(types(client.last)).not.toContain("tab.moved"); // remembered across resubscribes
     expect(health).toEqual([true]); // the rejected stream never counted as down
     poker.stop();
   });
