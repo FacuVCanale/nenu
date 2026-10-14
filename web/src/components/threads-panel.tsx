@@ -4,8 +4,8 @@ import { Activity, ArrowLeft, BookText, Check, ChevronRight, CircleCheck, Circle
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
 import { DiffStat } from "@/components/diff-stat";
+import { MergeDialog } from "@/components/merge-dialog";
 import { ProjectTasks, canMerge, threadAge } from "@/components/project-tasks";
-import { MergeDialog } from "@/components/thread-cards";
 import { Button } from "@/components/ui/button";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
