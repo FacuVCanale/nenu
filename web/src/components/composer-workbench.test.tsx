@@ -106,10 +106,10 @@ it("publishes its secondary controls, grouped, instead of rendering them", async
   const input = screen.getByRole("textbox");
   await user.type(input, "draft survives navigation");
   expect(controls().map(({ group, label }) => `${group}: ${label}`)).toEqual([
-    "Attach: Photo", "Replies: Quick replies", "Replies: Commands", "Terminal: Keys", "Terminal: Type into terminal",
+    "Attach: Files and photos", "Replies: Quick replies", "Replies: Commands", "Terminal: Keys", "Terminal: Type into terminal",
     "Session: Context and usage", "View: Display",
   ]);
-  for (const name of ["Photo", "Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  for (const name of ["Files and photos", "Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   expect(input).toHaveValue("draft survives navigation");
 });
 
@@ -200,7 +200,7 @@ it("opens one menu from the +, grouped Attach, Replies, Terminal and Session, an
   const menu = screen.getByRole("dialog", { name: "Message actions" });
   const groups = [...menu.querySelectorAll("section")].map((section) =>
     `${section.getAttribute("aria-label")}: ${within(section).getAllByRole("button").map((button) => button.textContent).join(", ")}`);
-  expect(groups).toEqual(["Attach: Photo", "Replies: Quick replies, Commands", "Terminal: Keys, Type into terminal", "Session: Context and usage"]);
+  expect(groups).toEqual(["Attach: Files and photos", "Replies: Quick replies, Commands", "Terminal: Keys, Type into terminal", "Session: Context and usage"]);
   // "Type into terminal" stays a row with its name, never a gesture; Display stays in the header.
   expect(within(menu).getByRole("button", { name: "Type into terminal" })).toBeVisible();
   expect(within(menu).queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
@@ -228,7 +228,7 @@ it("reaches the + menu's rows from the keyboard and hands focus back to the + on
   await user.keyboard("{Enter}");
   const menu = screen.getByRole("dialog", { name: "Message actions" });
   // The menu takes focus on its first row and Tab walks the rest; leaving it is Escape.
-  expect(within(menu).getByRole("button", { name: "Photo" })).toHaveFocus();
+  expect(within(menu).getByRole("button", { name: "Files and photos" })).toHaveFocus();
   await user.tab();
   expect(within(menu).getByRole("button", { name: "Quick replies" })).toHaveFocus();
   expect(menu).toBeVisible();
@@ -268,12 +268,12 @@ it("closes the + menu when the pane locks, so it does not come back by itself on
   expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
 });
 
-it("opens the image picker from the menu's Photo row", async () => {
+it("opens the file picker from the menu's Files and photos row", async () => {
   const { user } = setup();
   const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!;
   const click = vi.spyOn(picker, "click").mockImplementation(() => {});
   await user.click(screen.getByRole("button", { name: "Message actions" }));
-  await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name: "Photo" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Message actions" })).getByRole("button", { name: "Files and photos" }));
   expect(click).toHaveBeenCalledOnce();
   expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
 });

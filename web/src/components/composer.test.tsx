@@ -1722,7 +1722,7 @@ describe("Composer — reload-guard hold (no-SW self-update safety gate)", () =>
 });
 
 describe("Composer — quick keys / image attach", () => {
-  it("attaches from the Photo row without the quick-key strip being visible", async () => {
+  it("attaches from the Files and photos row without the quick-key strip being visible", async () => {
     renderComposer();
 
     // The quick-key strip only renders once composerFocused && keyboardOpen — keyboardOpen defaults
@@ -1731,9 +1731,11 @@ describe("Composer — quick keys / image attach", () => {
     expect(screen.queryByRole("button", { name: "Tab" })).not.toBeInTheDocument();
 
     // Attaching is the menu's first row, a named choice like the others.
-    const attach = control(/^photo$/i);
+    const attach = control(/^files and photos$/i);
     expect(attach).toBeEnabled();
     fireEvent.click(attach); // clickable without throwing (opens the hidden file input)
+    // No type filter: a phone's picker then offers files, the photo library and the camera.
+    expect(document.querySelector('input[type="file"]')).not.toHaveAttribute("accept");
   });
 
   it("does not render digit shortcut buttons in the composer (they live on the Keys dock's 123 tab)", () => {
@@ -1741,6 +1743,57 @@ describe("Composer — quick keys / image attach", () => {
     for (const d of ["1", "2", "3", "4", "5"]) {
       expect(screen.queryByRole("button", { name: d })).not.toBeInTheDocument();
     }
+  });
+});
+
+describe("Composer — attaching any file", () => {
+  const pick = (...files: File[]) =>
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files } });
+
+  it("uploads a PDF, an archive and source as chips named by the file", async () => {
+    let uploads = 0;
+    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: `/st/uploads/w1_p1-mv8g-0a1b2c3d-${++uploads}.bin` })));
+    renderComposer();
+    pick(new File(["%PDF"], "spec.pdf", { type: "application/pdf" }), new File(["PK"], "bundle.zip"), new File(["x"], "cart.ts"));
+    for (const name of ["spec.pdf", "bundle.zip", "cart.ts"]) expect(await screen.findByRole("button", { name: `Remove ${name}` })).toBeInTheDocument();
+    await waitFor(() => expect(uploads).toBe(3));
+    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
+    const list = screen.getByRole("list", { name: "Attached files" });
+    expect(list).toHaveTextContent("spec.pdfPDF · 4 B");
+    expect(list.querySelectorAll("img")).toHaveLength(0);
+  });
+
+  it("refuses a file over 25 MB before uploading it, and says why", async () => {
+    let uploads = 0;
+    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => { uploads++; return HttpResponse.json({ ok: true, path: "/x" }); }));
+    renderComposerWithStatus();
+    pick(new File([new Uint8Array(25 * 1024 * 1024 + 1)], "too-big.bin"));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("too-big.bin is over 25 MB, the limit for one file."));
+    expect(screen.queryByRole("button", { name: "Remove too-big.bin" })).not.toBeInTheDocument();
+    expect(uploads).toBe(0);
+  });
+
+  it("takes the drop overlay down when the drag leaves, even when the leave carries no file list", async () => {
+    renderComposer();
+    const zone = screen.getByPlaceholderText(/type a reply/i);
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ["Files"], files: [] } });
+    expect(await screen.findByText("Drop to attach")).toBeInTheDocument();
+    fireEvent.dragLeave(zone);
+    await waitFor(() => expect(screen.queryByText("Drop to attach")).not.toBeInTheDocument());
+  });
+
+  it("shows where to drop while files are dragged over it, and attaches what is dropped", async () => {
+    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: "/st/uploads/w1_p1-mv8g-0a1b2c3d-spec.pdf" })));
+    renderComposer();
+    const zone = screen.getByPlaceholderText(/type a reply/i);
+    const file = new File(["%PDF"], "spec.pdf", { type: "application/pdf" });
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ["Files"], files: [file] } });
+    fireEvent.dragOver(zone, { dataTransfer: { types: ["Files"], files: [file] } });
+    expect(await screen.findByText("Drop to attach")).toBeInTheDocument();
+    expect(screen.getByText(/Any file type, up to 25 MB each/)).toBeInTheDocument();
+    fireEvent.drop(zone, { dataTransfer: { types: ["Files"], files: [file] } });
+    await waitFor(() => expect(screen.queryByText("Drop to attach")).not.toBeInTheDocument());
+    expect(await screen.findByRole("button", { name: "Remove spec.pdf" })).toBeInTheDocument();
   });
 });
 
@@ -1756,7 +1809,7 @@ describe("Composer — clipboard image paste", () => {
 
     fireEvent.paste(box, { clipboardData: { items: [item] } });
 
-    expect(await screen.findByRole("button", { name: "Remove Image 1" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
     expect(box).toHaveValue("");
   });
@@ -2273,7 +2326,7 @@ describe("Composer — images and the pending bubble", () => {
     fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
     });
-    await screen.findByRole("button", { name: "Remove Image 1" });
+    await screen.findByRole("button", { name: "Remove shot.png" });
     await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
     await userEvent.type(box, text);
     return box;
@@ -2291,7 +2344,7 @@ describe("Composer — images and the pending bubble", () => {
 
     await waitFor(() => expect(sends.map((send) => send.text)).toEqual([`see the edge ${UPLOAD}`]));
     expect(box).toHaveValue("");
-    expect(screen.queryByRole("button", { name: "Remove Image 1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).not.toBeInTheDocument();
     const scope = localSendScope("w1:p1", undefined);
     expect(listLocalSends(scope)).toEqual([expect.objectContaining({ text: `see the edge ${UPLOAD}`, state: "sending" })]);
 

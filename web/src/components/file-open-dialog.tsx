@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,7 +22,15 @@ type GrantState = { state: "loading" } | { state: "ready"; grant: FileOpenGrant 
  * PWA blocks a new tab opened after an await. The link is single-use and short-lived, so a used or
  * stale one is replaced by asking again.
  */
-export function FileOpenButton({ paneId, session, path }: { paneId: string; session?: string; path: string }) {
+export function FileOpenButton({ paneId, session, path, label, className, children }: {
+  paneId: string;
+  session?: string;
+  path: string;
+  /** A trigger of the caller's own (a list row) in place of the plain Open button. */
+  label?: string;
+  className?: string;
+  children?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [grant, setGrant] = useState<GrantState>({ state: "loading" });
   const request = useRef(0);
@@ -51,9 +59,11 @@ export function FileOpenButton({ paneId, session, path }: { paneId: string; sess
   const ready = grant.state === "ready" ? grant.grant : null;
 
   return <>
-    <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-4" onClick={() => setOpen(true)}>
-      <ExternalLink className="size-4" aria-hidden="true" />Open
-    </button>
+    {children
+      ? <button type="button" aria-label={label} className={className} onClick={() => setOpen(true)}>{children}</button>
+      : <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-4" onClick={() => setOpen(true)}>
+          <ExternalLink className="size-4" aria-hidden="true" />Open
+        </button>}
     {/* Keys belong to this dialog: Escape must not also close the preview behind it, nor Tab hit its focus trap. */}
     <div onKeyDown={(event) => event.stopPropagation()}>
       <Dialog open={open} onClose={close} title="Open this file outside Nenu's preview?"

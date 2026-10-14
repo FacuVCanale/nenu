@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
@@ -328,24 +328,23 @@ describe("a project's coordinator", () => {
   });
 });
 
-it("lists pull requests ready to review with their diff and checks", async () => {
+it("says a session is ready to review on its own row, with its pull request and size, instead of in a second list", async () => {
   const { user, router, main } = await setup(projectData);
   expect(headline()).toBe("1 thread needs you");
   expect(subline()).toBe("1 to review · 1 working");
-  const review = within(main.getByRole("region", { name: /^Ready to review/ }));
-  expect(review.getByText("Mobile panel")).toBeInTheDocument();
-  expect(review.getByText("#1342")).toBeInTheDocument();
-  // The diff sits in its own column on a desk and under the title on a phone.
-  expect(review.getAllByText("+212")).toHaveLength(2);
-  expect(review.getByText("checks")).toBeInTheDocument();
-  await user.click(review.getByRole("link", { name: "Review Mobile panel" }));
+  const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
+  expect(row).toHaveAccessibleName(/,\s*Ready to review,\s*Hub,\s*PR #1342,\s*\+212 −148$/);
+  expect(main.queryByRole("region", { name: /^Ready to review/ })).not.toBeInTheDocument();
+  await user.click(row);
   expect(router.state.location.pathname).toBe("/pane/w2%3Ap2");
 });
 
-describe("Recent", () => {
+describe("Recents and Workspaces", () => {
   const now = Date.now();
+  const shell = { ...data.agents[0]!, paneId: "w1:s1", agent: "shell", kind: "shell" as const, paneLabel: "Dev server", lastActiveAt: now - 10 * 60_000 };
   const recentData: HomeData = {
     ...projectData,
+    shellPanes: [shell],
     agents: projectData.agents.map((agent) => ({
       "w1:p1": { ...agent, tabLabel: "docs", lastActiveAt: now - 3 * 3_600_000 },
       "w1:p2": { ...agent, lastActiveAt: now - 60_000 },
@@ -355,14 +354,16 @@ describe("Recent", () => {
     } as Record<string, typeof agent>)[agent.paneId] ?? agent),
   };
 
-  it("lists the chats that moved last, each with its state and place, and opens one in a tap", async () => {
+  it("lists every session that moved last, shells included, each with its state and place, and opens one in a tap", async () => {
     const { user, router, main } = await setup(recentData);
-    const recent = within(main.getByRole("region", { name: /^Recent/ }));
-    // "Review changes" is waiting on you, so Needs you shows it and Recent does not.
+    const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
+    expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
+    // "Review changes" is waiting on you, so Needs you shows it and Recents does not.
     expect(recent.getAllByRole("link").map((link) => link.getAttribute("href")))
-      .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work", "/pane/w1%3Ap1?s=work"]);
-    // Each row reads as one sentence: title, "New", state, place, tab, how long ago.
-    for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Hub coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
+      .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w1%3As1?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work", "/pane/w1%3Ap1?s=work"]);
+    // Each row reads as one sentence: title, "New", state, place, pull request or tab, size, how long ago.
+    for (const parts of [["Mobile panel", "New", "Ready to review", "Hub", "PR #1342", "\\+212 −148", "5m ago"], ["Dev server", "Shell", "Nenu", "10m ago"],
+      ["Landing", "Working", "Hub", "20m ago"], ["Hub coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
       expect(recent.getByRole("link", { name: new RegExp(`^${parts.join(",\\s*")}$`) })).toBeInTheDocument();
     }
     // How many are working is the headline's to say ("1 working" under it), not Recent's again.
@@ -372,10 +373,67 @@ describe("Recent", () => {
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
   });
 
+  it("groups every session by its Herdr workspace, and a workspace opens on the pane it opens on everywhere", async () => {
+    const { user, router, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    const groups = within(main.getByRole("tabpanel", { name: "Workspaces" }));
+    // The workspace that moved last comes first; a pane that needs you belongs to its workspace too.
+    expect(groups.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/pane/w1%3Ap2?s=work", "/pane/w1%3Ap1?s=work", "/pane/w1%3Ap2?s=work", "/pane/w1%3As1?s=work",
+      "/pane/w2%3Ap2?s=work", "/pane/c1?s=work", "/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work",
+    ]);
+    // Under its workspace's name a row leaves that name out.
+    expect(groups.getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/^Earlier thread,\s*Idle,\s*docs,\s*3h ago$/);
+    // The workspace's own link is the one every way in uses (ADR 0065): here, the pane asking for you.
+    await user.click(groups.getByRole("link", { name: "Nenu" }));
+    expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
+  });
+
+  it("says which session waits for your reply, which Needs you leaves to the list", async () => {
+    const waiting: ProjectView = { ...hub, threads: hub.threads.map((thread) => thread.id === "t3" ? { ...thread, liveStatus: "idle", group: "waiting-on-you", selfWaiting: true } : thread) };
+    const { main } = await setup({ ...recentData, projects: [waiting], agents: recentData.agents.map((agent) => agent.paneId === "w2:p3" ? { ...agent, status: "idle" } : agent) });
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Landing,/ })).toHaveAccessibleName(/^Landing,\s*Waiting for your reply,\s*Hub,\s*20m ago$/);
+  });
+
+  it("remembers on this device which list it shows", async () => {
+    const first = await setup(recentData);
+    await first.user.click(first.main.getByRole("tab", { name: "Workspaces" }));
+    cleanup();
+    const { main } = await setup(recentData);
+    expect(main.getByRole("tab", { name: "Workspaces" })).toHaveAttribute("aria-selected", "true");
+    expect(main.getByRole("tabpanel", { name: "Workspaces" })).toBeInTheDocument();
+  });
+
+  it("still switches lists where the browser refuses storage", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("denied"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
+    try {
+      const { user, main } = await setup(recentData);
+      await user.click(main.getByRole("tab", { name: "Workspaces" }));
+      expect(main.getByRole("tabpanel", { name: "Workspaces" })).toBeInTheDocument();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("switches lists from the snapshot it already has, without a request", async () => {
+    const { user, main } = await setup(recentData);
+    const requests: string[] = [];
+    const record = ({ request }: { request: Request }) => void requests.push(request.url);
+    server.events.on("request:start", record);
+    try {
+      await user.click(main.getByRole("tab", { name: "Workspaces" }));
+      await user.click(main.getByRole("tab", { name: "Recents" }));
+    } finally {
+      server.events.removeListener("request:start", record);
+    }
+    expect(requests).toEqual([]);
+  });
+
   it("shows the first chats and the rest on request", async () => {
     const agents = Array.from({ length: 8 }, (_, i) => ({ ...data.agents[0]!, paneId: `w1:x${i}`, paneLabel: `Chat ${i}`, lastActiveAt: now - i * 60_000 }));
     const { user, main } = await setup({ ...data, agents });
-    const recent = within(main.getByRole("region", { name: /^Recent/ }));
+    const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
     expect(recent.getAllByRole("listitem")).toHaveLength(6);
     await user.click(recent.getByRole("button", { name: "Show all 8" }));
     expect(recent.getAllByRole("listitem")).toHaveLength(8);
@@ -386,7 +444,7 @@ it("marks the tapped row as opening while a slow pane read holds the navigation"
   let release!: () => void;
   const read = new Promise<null>((resolve) => { release = () => resolve(null); });
   const { user, main } = await setup(data, { paneLoader: () => read });
-  const row = within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ });
+  const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ });
   const tapped = performance.now();
   await user.click(row);
   // A fast read never flashes a spinner; a slow one shows on the row that was tapped.
@@ -400,7 +458,7 @@ it("marks the tapped row as opening while a slow pane read holds the navigation"
 
 it("waits its own 120ms again when the same row is tapped a second time", async () => {
   const { user, router, main } = await setup(data, { paneLoader: () => new Promise(() => {}) });
-  const row = () => within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ });
+  const row = () => within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ });
   await user.click(row());
   await waitFor(() => expect(row()).toHaveAttribute("aria-busy", "true"));
   // Back on Home before the read came back (the tab bar's Home, or a redirect), then the same row again.
@@ -419,10 +477,9 @@ it("marks a Needs you row as opening too", async () => {
   await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
 });
 
-it("leaves projects and workspaces to the sidebar instead of repeating them", async () => {
+it("leaves projects and search to the sidebar instead of repeating them", async () => {
   const { main } = await setup(projectData);
   expect(main.queryByRole("region", { name: /^Projects/ })).not.toBeInTheDocument();
-  expect(main.queryByRole("region", { name: /^Workspaces/ })).not.toBeInTheDocument();
   expect(main.queryByRole("searchbox")).not.toBeInTheDocument();
   const sidebar = within(screen.getByRole("complementary", { name: "Workspace sidebar" }));
   expect(sidebar.getByText("Hub")).toBeInTheDocument();
@@ -495,14 +552,15 @@ it("lists the pull requests agents opened outside Organizations and reviews them
   ] });
   expect(headline()).toBe("1 thread needs you");
   expect(subline()).toBe("3 to review");
+  // A PR on a session's branch rides on that session's row; the rest have no row, so they keep this list.
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
-  expect(review.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual(["Review Publish products", "Review Abandoned carts", "Review Email campaigns"]);
-  expect(review.getByText("#1698")).toBeInTheDocument();
-  expect(review.getByText("1 failing")).toBeInTheDocument();
+  expect(review.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual(["Review Publish products", "Review Email campaigns"]);
   expect(review.getByText("Draft")).toBeInTheDocument();
   expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("target", "_blank");
-  await user.click(review.getByRole("link", { name: "Review Abandoned carts" }));
+  const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ });
+  expect(row).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
+  await user.click(row);
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
 });
 
@@ -539,7 +597,7 @@ describe("an outage", () => {
     await update({ ...data, error: true });
     expect(headline()).toBe("1 thread needs you");
     expect(main.queryByText(/Can't reach|Last synced|Showing the last herd/)).not.toBeInTheDocument();
-    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
   });
 
   // Known gap, pinned so it turns red the day it is fixed: a failed snapshot read makes canCreate
@@ -574,7 +632,7 @@ describe("an outage", () => {
     expect(await needs.findByText("Answers are paused.")).toBeVisible();
     expect(needs.queryByText(/Herdr/)).not.toBeInTheDocument();
     expect(needs.getByRole("button", { name: "Yes" })).toBeDisabled();
-    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
   });
 
@@ -671,6 +729,6 @@ it("keeps existing threads navigable while answering and creating are read-only"
   expect(needs.queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
   expect(within(needs.getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
   expect(needs.getByRole("button", { name: /open thread/i })).toBeEnabled();
-  const recent = within(main.getByRole("region", { name: /^Recent/ }));
+  const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
   expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
 });

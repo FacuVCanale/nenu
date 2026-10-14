@@ -8,6 +8,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-14
+
+### Added
+- Attach any file up to 25 MB from "Files and photos", a paste or a drop anywhere on the chat; only images preview, and an upload is never served (ADR 0074). (e126b662, 175a06bd)
+- Home lists every session, shells included, under a Recents / Workspaces switch, each row with its state, place and pull request; the choice is kept per device. (64058277)
+
+### Changed
+- Artifacts shows what the agent delivered and what it published on claude.ai, with a thumbnail only when Nenu can serve it; images named outside the pane's folder sit in one row that opens with confirmation. The Media tab is gone. (b8d5132d)
+
+### Fixed
+- A pane opened in a folder that holds Nenu's state no longer serves uploads or other state files through the file preview or Render. (e126b662)
+- Resuming the Artifacts scan no longer reports that the conversation changed. (b8d5132d)
+
 ## [1.3.3] - 2026-10-14
 
 ### Fixed

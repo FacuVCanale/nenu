@@ -31,6 +31,20 @@ test("HTML executes only with a response-enforced opaque sandbox and no network"
   }
 });
 
+test("Render never runs an upload or anything else in Nenu's state, even from a folder that holds it", async () => {
+  const root = await mkdtemp(join(tmpdir(), "nenu-html-state-"));
+  try {
+    const state = join(root, "state");
+    await mkdir(join(state, "uploads"), { recursive: true });
+    await writeFile(join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-page.html"), "<script>alert(1)</script>");
+    await writeFile(join(root, "page.html"), '<img src="state/uploads/w1_p1-mv8g-0a1b2c3d-page.html">');
+    expect((await renderedHtmlResponse(root, "state/uploads/w1_p1-mv8g-0a1b2c3d-page.html", { stateDir: state })).status).toBe(404);
+    expect((await renderedHtmlResponse(root, "page.html", { stateDir: state })).status).toBe(200);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("Render finds a delivered file outside the project exactly as /file does", async () => {
   const dir = await mkdtemp(join(tmpdir(), "nenu-html-delivered-"));
   try {

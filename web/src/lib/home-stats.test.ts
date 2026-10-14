@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewItems, reviewQueue, runningWorkflows, unboundReviews } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -147,4 +147,48 @@ describe("recent chats", () => {
     // The coordinator goes by its project's name in every view, never a bare "Coordinator".
     expect(coord).toMatchObject({ title: "Hub coordinator", place: "nenu" });
   });
+
+  it("carries a session's pull request: GitHub's on its branch first, else the one its thread records", () => {
+    const hub: ProjectView = {
+      ...project, source: "json",
+      threads: [
+        { id: "t1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "worker", liveStatus: "done", group: "ready-for-review",
+          pr: { state: "open", number: 7, diff: { additions: 9, deletions: 2 } } },
+        { id: "t4", title: "Plan", parentId: "root", role: "coordinator", status: "open", paneId: "chat-old", liveStatus: "idle", group: "idle" },
+      ],
+    };
+    const gh: PullRequestView = { repo: "acme/shop", number: 8, title: "Docs", url: "https://github.com/acme/shop/pull/8", branch: "docs", draft: false,
+      diff: { additions: 30, deletions: 1 }, paneIds: ["chat-quiet"], updatedAt: 1 };
+    const rows = recentChats(panes, [hub], new Set(["chat-asks"]), reviewQueue([hub], [gh]));
+    const by = (id: string) => rows.find((row) => row.agent.paneId === id)!;
+    expect(by("worker")).toMatchObject({ review: true, detail: "PR #7", diff: { additions: 9, deletions: 2 } });
+    expect(by("chat-quiet")).toMatchObject({ review: false, detail: "PR #8", diff: { additions: 30, deletions: 1 } });
+    // A coordinator thread says what it is where a worker would name its tab.
+    expect(by("chat-old")).toMatchObject({ title: "Plan", place: "Hub", detail: "coordinator" });
+    expect(by("coord")).toMatchObject({ review: false, detail: null });
+    expect(by("coord")).not.toHaveProperty("diff");
+  });
+
+  it("says a session's thread waits for your reply, as Organizations' own word puts it", () => {
+    const hub: ProjectView = {
+      ...project, source: "json",
+      threads: [{ id: "t1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "worker", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true }],
+    };
+    expect(recentChats(panes, [hub], new Set()).find((row) => row.agent.paneId === "worker")).toMatchObject({ ask: "reply" });
+    expect(recentChats(panes, [project], new Set()).find((row) => row.agent.paneId === "worker")).not.toHaveProperty("ask");
+  });
+
+  it("lists shells by the same clock, as plain sessions", () => {
+    const shell = agent("sh", "idle", { kind: "shell", agent: "shell", paneLabel: "Logs", lastActiveAt: NOW - 3 * MIN });
+    expect(recentChats([...panes, shell], [project], new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
+      .toEqual(["worker", "sh", "chat-old", "coord", "chat-quiet"]);
+  });
+});
+
+it("keeps for Ready to review only the pull requests no live session carries", () => {
+  const gh = (number: number, paneIds: string[]): PullRequestView => ({
+    repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`, branch: `b${number}`, draft: false, paneIds, updatedAt: number,
+  });
+  const reviews = reviewQueue([], [gh(1, ["live"]), gh(2, []), gh(3, ["gone"])]);
+  expect(unboundReviews(reviews, [agent("live", "idle")]).map((entry) => entry.number)).toEqual([3, 2]);
 });
