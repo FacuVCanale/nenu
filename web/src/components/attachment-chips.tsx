@@ -101,7 +101,7 @@ function AttachmentChip({
       </span>
       <span className="flex min-w-0 flex-col items-start leading-tight">
         <span className="max-w-40 truncate text-caption font-medium">{label}</span>
-        <span className={cn("text-[11px]", failed ? "text-destructive" : "text-muted-foreground")}>{meta}</span>
+        <span className={cn("text-caption", failed ? "text-destructive" : "text-muted-foreground")}>{meta}</span>
       </span>
     </>
   );
