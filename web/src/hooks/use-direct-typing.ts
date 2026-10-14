@@ -25,6 +25,8 @@ const SPECIAL_KEYS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`F${i + 1}`, `F${i + 1}`])),
 };
 
+const BARE_UNDER_SHIFT = new Set(["Enter", "Backspace", "Escape"]);
+
 function keyForInputType(inputType: string): string | null {
   if (inputType === "deleteContentBackward") return "Backspace";
   if (inputType === "insertLineBreak" || inputType === "insertParagraph") return "Enter";
@@ -32,11 +34,12 @@ function keyForInputType(inputType: string): string | null {
 }
 
 /**
- * A desk's keyboard carries what the phone's Keys tray sends: a named key keeps the Ctrl, Option and
- * Shift held with it (`shift+Tab`, `alt+Left`), and Ctrl with a printable key is that chord
- * (`ctrl+c`). Command stays the browser's (copy, paste, close the tab), and so does Ctrl+V where it is
- * the paste: the pasted text reaches the pane through the change path. Option alone with a printable
- * key types a character on a Mac, so it stays text as well.
+ * A desk's keyboard carries what the phone's Keys tray sends: a named key keeps the Ctrl and Option
+ * held with it (`alt+Left`), and Ctrl with a printable key is that chord (`ctrl+c`). Shift rides only
+ * on keys a phone keyboard has no Shift for (`shift+Tab`): its auto-capital must not turn Return into
+ * another key. Command stays the browser's (copy, paste, close the tab), and so does Ctrl+V where it
+ * is the paste: the pasted text reaches the pane through the change path. Option alone with a
+ * printable key types a character on a Mac, so it stays text as well.
  */
 function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string | undefined {
   const named = SPECIAL_KEYS[event.key];
@@ -44,7 +47,7 @@ function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altK
     const held: Modifier[] = [];
     if (event.ctrlKey) held.push("ctrl");
     if (event.altKey) held.push("alt");
-    if (event.shiftKey) held.push("shift");
+    if (event.shiftKey && !BARE_UNDER_SHIFT.has(named)) held.push("shift");
     return composeKey(held, named);
   }
   if (!event.ctrlKey || event.altKey || event.metaKey || event.key.length !== 1) return undefined;
@@ -77,9 +80,9 @@ interface DirectTypingOptions {
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
 // Herdr writes.
 //
-// It does NOT own the entry point. Arming is an explicit NAMED choice beside Keys: the "Type into
-// terminal" row of the composer's + menu on a phone, or the switch of that name in a desk's Terminal
-// tab, which also disarms when the tab leaves the screen (composer.tsx, ADR 0077).
+// It does NOT own the entry point. Arming is an explicit NAMED choice: the "Type into terminal" row
+// beside Keys in the composer's + menu on a phone, or the switch of that name in a desk's Terminal
+// tab, which also disarms when the tab leaves the screen (composer.tsx, ADR 0077, ADR 0079).
 //
 // WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
 // bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per
