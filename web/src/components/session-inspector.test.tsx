@@ -67,6 +67,8 @@ const panel = () => screen.getByRole("complementary", { name: "Session panel" })
 
 it("reads only the tab on screen: Changes first, Files and Artifacts when picked", async () => {
   render(<Desk />);
+  // The panel is a chunk of its own; React resolves it once, on the first render.
+  await screen.findByRole("complementary", { name: "Session panel" });
   await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
   expect(seen).toEqual(["diff?scope=branch"]);
 

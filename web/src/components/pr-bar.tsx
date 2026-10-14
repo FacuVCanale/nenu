@@ -19,7 +19,7 @@ export function ciLabel(checks: Checks | undefined): string {
   return total ? `CI ${checks.passed}/${total}` : "CI";
 }
 
-function ciTone(checks: Checks | undefined): string {
+export function ciTone(checks: Checks | undefined): string {
   if (!checks) return "bg-muted-foreground/50";
   if (checks.failed) return "bg-status-blocked";
   return checks.pending ? "bg-status-working" : "bg-status-done";
