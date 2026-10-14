@@ -212,6 +212,27 @@ describe("the sidebar", () => {
     expect(coordinator.querySelector("svg.lucide")).toHaveClass("lucide-workflow");
   });
 
+  it("marks each project with its own glyph, never its initial, in the tree, the drawer and Search", async () => {
+    const docs: ProjectView = { slug: "docs-site", name: "Docs", status: "active", threads: [] };
+    const source = { ...herd, projects: [acme, docs] } as unknown as HomeData;
+    const glyphs = () => [...document.querySelectorAll(".nav-project svg[data-glyph]")].map((svg) => svg.getAttribute("data-glyph"));
+    const user = open("/", source);
+    expect(glyphs()).toEqual(["bolt", "spark"]);
+    expect(document.querySelector(".nav-avatar")).toBeNull();
+    expect(screen.getByRole("link", { name: /^Docs/ })).toHaveTextContent(/^Docs$/);
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.keyboard("docs");
+    const hit = within(screen.getByRole("group", { name: "Projects" })).getByRole("option", { name: /^Docs/ });
+    expect(hit.querySelector("svg[data-glyph]")).toHaveAttribute("data-glyph", "spark");
+  });
+
+  it("marks the drawer's projects with the same glyphs", () => {
+    const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={herd} variant="drawer" /> }]);
+    render(<RouterProvider router={router} />);
+    expect([...document.querySelectorAll(".nav-project svg[data-glyph]")].map((svg) => svg.getAttribute("data-glyph"))).toEqual(["bolt"]);
+    expect(document.querySelector(".nav-avatar")).toBeNull();
+  });
+
   it("lists only the workspaces no project holds, and folds a coordinator's threads", async () => {
     const user = open();
     const workspaces = screen.getByRole("region", { name: "Workspaces" });

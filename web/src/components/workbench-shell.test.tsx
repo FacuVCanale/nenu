@@ -497,6 +497,17 @@ it("folds every workspace to two letters no other tile shares, and names it on h
   expect(tiles[6]).toHaveFocus();
 });
 
+it("folds each project to its own glyph and each loose workspace to two letters in the rail", async () => {
+  desktop();
+  const { sidebar, user } = setup(herd);
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
+  const acme = rail.getByRole("link", { name: /^Acme Shop\b/ });
+  expect(acme.querySelector("svg[data-glyph]")).toHaveAttribute("data-glyph", "bolt");
+  expect(shownText(acme)).toBe("");
+  expect(shownText(rail.getByRole("link", { name: /^docs\b/ }))).toMatch(/^[A-Z0-9]{2}$/);
+});
+
 /** The fleet's folded rail with client-alpha-portal's name up; from there the test drives the clock. */
 async function railNamed() {
   desktop();

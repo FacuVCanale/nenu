@@ -35,6 +35,16 @@ it("lists the coordinator, then the open threads, with the resolved ones folded 
   expect(onOpenPane).toHaveBeenCalledWith("c");
 });
 
+it("heads the project with its own glyph, and a coordinator's scope with its title alone", () => {
+  setup();
+  const glyph = () => document.querySelector(".project-tasks header svg[data-glyph]");
+  expect(glyph()).toHaveAttribute("data-glyph", "orbit");
+  expect(glyph()).toHaveAttribute("width", "20");
+  document.body.innerHTML = "";
+  setup({ title: "Checkout redesign" });
+  expect(glyph()).toBeNull();
+});
+
 it("marks the project coordinator's row You're here when its chat is the one on screen", () => {
   setup({ currentPaneId: "c" });
   const own = screen.getByRole("button", { name: /^Coordinator/ });

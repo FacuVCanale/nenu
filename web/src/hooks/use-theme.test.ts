@@ -111,13 +111,13 @@ describe("useTheme store", () => {
 
   it("gives both theme-color metas the pinned colour, so whichever matches is right", async () => {
     document.head.innerHTML =
-      '<meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">' +
-      '<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">';
+      '<meta name="theme-color" content="#f7f7f7" media="(prefers-color-scheme: light)">' +
+      '<meta name="theme-color" content="#161617" media="(prefers-color-scheme: dark)">';
     await bootstrap("light");
     const contents = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')].map(
       (m) => m.content,
     );
-    expect(contents).toEqual(["#fcfcfc", "#fcfcfc"]);
+    expect(contents).toEqual(["#f7f7f7", "#f7f7f7"]);
   });
 
   it("hands the metas back their own values on system", async () => {
@@ -128,7 +128,7 @@ describe("useTheme store", () => {
     const contents = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')].map(
       (m) => m.content,
     );
-    expect(contents).toEqual(["#fcfcfc", "#0a0a0a"]);
+    expect(contents).toEqual(["#f7f7f7", "#161617"]);
   });
 });
 
