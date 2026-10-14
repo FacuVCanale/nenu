@@ -6,7 +6,13 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 // $NENU_E2E_ORG.calls so a run can report exactly what Nenu asked for. It reaches no Herdr.
 
 interface FakeThread { id: string; title: string; parent_id: string; role: "worker" | "coordinator"; status: string; [key: string]: unknown }
-interface FakeState { profiles: string[]; projects: Array<{ slug: string; threads: FakeThread[]; [key: string]: unknown }> }
+/**
+ * A project may carry what the newer documents print: `tasks` (task list), `detail` (project show's
+ * extra fields) and `routines` (routine list). Without them the fake answers those commands the way an
+ * Organizations that predates them does: an unrecognized subcommand.
+ */
+interface FakeProject { slug: string; threads: FakeThread[]; tasks?: unknown[]; detail?: Record<string, unknown>; routines?: unknown[]; [key: string]: unknown }
+interface FakeState { profiles: string[]; projects: FakeProject[] }
 
 const file = process.env.NENU_E2E_ORG;
 if (!file) {
@@ -64,8 +70,15 @@ function resolve(slug: string, id: string): void {
   writeFileSync(file!, JSON.stringify(state, null, 2));
 }
 
+/** The project a newer document is about, or the unrecognized-subcommand error of an older Organizations. */
+function newer(slug: string | undefined, field: "tasks" | "detail" | "routines"): FakeProject {
+  const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
+  if (project[field] === undefined) fail(`unrecognized subcommand '${command}'`);
+  return project;
+}
+
 const [command, sub] = argv;
-const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator"].includes(command ?? "") ? 2 : 1));
+const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") ? 2 : 1));
 if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
@@ -79,6 +92,15 @@ if (command === "overview") {
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
   if (!state.profiles.includes(flags.profile ?? "")) fail(`there is no profile \`${flags.profile}\`; \`profile list\` shows them`);
   console.log(`stopped 1 coordinator agent(s) and started a new one on ${flags.profile}`);
+} else if (command === "task" && sub === "list" && "json" in flags) {
+  const project = newer(positionals[0], "tasks");
+  console.log(JSON.stringify({ schema_version: 1, project: project.slug, tasks: project.tasks }));
+} else if (command === "project" && sub === "show" && "json" in flags) {
+  const { threads: _threads, tasks: _tasks, detail, routines: _routines, coordinator: _coordinator, ...project } = newer(positionals[0], "detail");
+  console.log(JSON.stringify({ schema_version: 1, project: { ...project, dir: `/srv/projects/${project.slug}`, counts: {}, icon: "", tone: "", ...detail } }));
+} else if (command === "routine" && sub === "list" && "json" in flags) {
+  const project = newer(positionals[0], "routines");
+  console.log(JSON.stringify({ schema_version: 1, project: project.slug, routine_commands: false, routines: project.routines, broken: [] }));
 } else if (command === "open") {
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
   console.log(`started claude as hp-${positionals[0]}; it reads AGENTS.md and primes itself`);
