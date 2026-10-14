@@ -23,7 +23,7 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 // (answered in place), the pull requests no session carries (ready to merge first), then one list of
 // every session that reads as Recents or by Workspace, each row carrying its pull request, and the
 // workflows still running. Starting something is New's; writing to a coordinator is its own chat's.
-// Projects live in the sidebar (Home's mark on a phone). Figures come from the snapshot, the bridge's
+// Projects live in the sidebar (Search on a phone). Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
 // When the link fails, the connection banner (root.tsx) is the one place that names the problem and
