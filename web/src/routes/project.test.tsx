@@ -13,14 +13,14 @@ import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
-interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
+interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; projectChips?: { thread?: { title: string }; threads: unknown[] }; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, project, title, headerAction, overlay, strip, conversationFooter, composerTop, docked }: StubProps) => (
+  AgentChat: ({ paneId, project, title, headerAction, overlay, strip, conversationFooter, projectChips, docked }: StubProps) => (
     <div data-testid={docked ? "docked" : "chat"} data-role={project?.role}>
       {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>}
       {strip === undefined ? <nav aria-label="Workspace tabs" /> : strip}
       {overlay ?? <div data-testid="conversation">{`conversation:${paneId}`}{conversationFooter}</div>}
-      {composerTop}
+      {projectChips && <p data-testid="chips">{`chips for ${projectChips.thread?.title ?? "the project"}`}</p>}
     </div>
   ),
 }));
@@ -105,7 +105,8 @@ it("opens a project on its coordinator's chat, and switches Chat, Threads and PR
   // The shared strip, which steps aside with the tab and pane strips while a phone keyboard is up.
   expect(build.closest("[data-workbench-navigation-band]")).not.toBeNull();
   expect(chips.getByRole("button", { name: /coordinator/ })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
+  // Its PR, siblings and background work ride in the row above the composer.
+  expect(screen.getByTestId("chips")).toHaveTextContent("chips for Build");
 });
 
 it("counts on a phone's PRs tab only the pull requests still open, never a resolved thread's", async () => {
@@ -146,7 +147,7 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   expect(await screen.findByTestId("docked")).toHaveAttribute("data-role", "worker");
   const docked = within(screen.getByTestId("docked"));
   expect(docked.getByText("conversation:worker")).toBeInTheDocument();
-  expect(docked.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
+  expect(docked.getByTestId("chips")).toHaveTextContent("chips for Build");
   // The docked header keeps the chat's own menu (keys, find, files and the rest).
   expect(docked.getByRole("button", { name: "More actions" })).toBeInTheDocument();
   // The panel steps aside for the docked thread.

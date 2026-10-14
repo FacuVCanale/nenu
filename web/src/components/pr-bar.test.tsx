@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { PrBar, ciLabel } from "./pr-bar";
+import { PrChecks, ciLabel } from "./pr-bar";
 
 const thread: ProjectThreadView = {
   id: "T1", title: "Build", parentId: "root", role: "worker", status: "open", branch: "feat/build", autoFixCi: true, autoMerge: false,
@@ -20,10 +20,11 @@ it("shows the PR and its checks, and toggles Organizations' automation", async (
     return HttpResponse.json({ ok: true, flags: { id: "T1", autoFixCi: true, autoMerge: true } });
   }));
   const onChanged = vi.fn();
-  render(<PrBar project={project(true)} thread={thread} session="s" readOnly={false} onChanged={onChanged} />);
+  render(<PrChecks project={project(true)} thread={thread} session="s" readOnly={false} onChanged={onChanged} />);
   expect(screen.getByText("#1345")).toBeInTheDocument();
   expect(screen.getByText("+212")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "CI 4/6, checks" }));
+  // Inline in the PRs panel now: the checks and the automation need no second tap.
+  expect(screen.getByText("Passed").nextElementSibling).toHaveTextContent("4");
   expect(screen.getByRole("checkbox", { name: "Auto-fix CI & address comments" })).toBeChecked();
   await userEvent.click(screen.getByRole("checkbox", { name: "Auto-merge when ready" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalled());
@@ -31,8 +32,7 @@ it("shows the PR and its checks, and toggles Organizations' automation", async (
 });
 
 it("keeps the checks read-only when Organizations has no PR actions", async () => {
-  render(<PrBar project={project(false)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
-  await userEvent.click(screen.getByRole("button", { name: "CI 4/6, checks" }));
+  render(<PrChecks project={project(false)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(screen.getByText(/checks are read-only/)).toBeInTheDocument();
 });
@@ -43,12 +43,12 @@ it("labels CI by passed checks out of all reported", () => {
 });
 
 it("opens the PR's diff from its size when the thread has a pane", async () => {
-  render(<PrBar project={project(true)} thread={{ ...thread, paneId: "w1:p1" }} session="s" readOnly={false} onChanged={vi.fn()} />);
+  render(<PrChecks project={project(true)} thread={{ ...thread, paneId: "w1:p1" }} session="s" readOnly={false} onChanged={vi.fn()} />);
   expect(screen.getByRole("button", { name: "View changes: 212 added, 148 removed" })).toHaveTextContent("+212 −148");
 });
 
 it("keeps a merged PR's size as text: there is no open PR to read", () => {
-  render(<PrBar project={project(true)} thread={{ ...thread, paneId: "w1:p1", pr: { ...thread.pr!, state: "merged" } }} readOnly={false} onChanged={vi.fn()} />);
+  render(<PrChecks project={project(true)} thread={{ ...thread, paneId: "w1:p1", pr: { ...thread.pr!, state: "merged" } }} readOnly={false} onChanged={vi.fn()} />);
   expect(screen.getByText("+212")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /View changes/ })).not.toBeInTheDocument();
 });

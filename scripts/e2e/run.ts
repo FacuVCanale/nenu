@@ -30,6 +30,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, o
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
 //   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
 //   bun scripts/e2e/run.ts surface  [--port 8797] [--out DIR] [--seconds 60]  Surfaces and project marks on every screen, idle CPU, memory and DOM
+//   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -2196,6 +2197,125 @@ async function surface(): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/**
+ * The row above a project chat's composer (homeOrg): the worker "Checkout flow" (PR #42 on the working
+ * pane, with background work) and its coordinator, on a phone and a desk, dark and light. Each chip's
+ * panel is opened and captured; `--before` captures the PR bar, its CI popover and the Background
+ * chip instead. Then, on the real clock, one fresh WebKit on the worker's desk view left alone for
+ * `--seconds`: CPU, resident memory and DOM elements, twice.
+ */
+async function chips(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const prs = join(outDir, "gh-prs.json");
+  process.env.NENU_E2E_GH_PRS = prs;
+  let size = { additions: 0, deletions: 0 };
+  const windowMs = Number(values.seconds) * 1000;
+  const fixture = JSON.parse(await Bun.file(join(import.meta.dir, "../../web/src/components/activity/activity.fixture.json")).text());
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const now = bridge.now();
+    const iso = (ago: number) => new Date(now - ago).toISOString();
+    const list = { ...fixture.list, workflows: [], artifacts: [], tasks: [
+      { id: "b0001", kind: "bash", title: "bun test --watch", status: "running", at: now - 8_000, hasOutput: true },
+      { id: "b0002", kind: "bash", title: "bun run build", status: "completed", exitCode: 0, at: now - 900_000, hasOutput: true },
+    ] };
+    const subagents = { available: true, sessionKey: "bench", truncated: false, agents: [
+      { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the cart diff", status: "waiting", updatedAt: iso(120_000) },
+      { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
+    ] };
+    const hour = 3_600_000;
+    const routines = { ok: true, available: true, broken: 0, routines: [
+      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, lastRun: "", nextRun: "" },
+      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, lastRun: iso(20 * hour), nextRun: new Date(now + 4 * hour).toISOString() },
+    ] };
+    const mock = async (page: Page) => {
+      await page.route("**/api/pane/*/activity*", (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "412 pass", truncated: false, updatedAt: now } });
+        return route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? list : { ...list, tasks: [] } });
+      });
+      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
+      await page.route("**/api/org/routines*", (route) => route.fulfill({ json: routines }));
+    };
+    const shots: string[] = [];
+    const found: Record<string, boolean> = {};
+    const views: Array<[string, typeof PHONE | typeof DESKTOP, string, "dark" | "light"]> = [
+      ["worker-desk-dark", DESKTOP, herd.working, "dark"], ["worker-desk-light", DESKTOP, herd.working, "light"],
+      ["worker-phone-dark", PHONE, herd.working, "dark"], ["worker-phone-light", PHONE, herd.working, "light"],
+      ["coordinator-desk-dark", DESKTOP, herd.idle, "dark"], ["coordinator-phone-dark", PHONE, herd.idle, "dark"],
+    ];
+    for (const [name, device, paneId, colorScheme] of views) {
+      bridge.fake!.setStatus(herd.working, "working");
+      const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: now });
+      await mock(page);
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(paneId)}`);
+      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1800);
+      const shoot = async (step: string) => {
+        const path = join(outDir, `${name}-${step}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      const tap = async (locator: Locator, key: string) => {
+        found[`${name}:${key}`] = await locator.waitFor({ timeout: 2500 }).then(() => true, () => false);
+        if (found[`${name}:${key}`]) await locator.click();
+        await page.waitForTimeout(500);
+        return found[`${name}:${key}`];
+      };
+      await shoot("rest");
+      if (before) {
+        if (await tap(page.getByRole("button", { name: /^CI.*checks$/ }).first(), "ci")) { await shoot("ci"); await page.keyboard.press("Escape"); }
+        if (await tap(page.getByRole("button", { name: /^Processes/ }).first(), "background")) { await shoot("background"); await page.keyboard.press("Escape"); }
+      } else {
+        const row = page.getByRole("group", { name: "Status" });
+        for (const chip of ["Needs you", "Working", "PRs", "Routines"]) {
+          if (!await tap(row.getByRole("button", { name: new RegExp(`^${chip}`) }).first(), chip)) continue;
+          await shoot(chip.toLowerCase().replace(" ", "-"));
+          await tap(page.getByRole("button", { name: "Close", exact: true }).first(), `${chip}:close`);
+        }
+      }
+      await context.close();
+    }
+
+    // Idle cost: a WebKit of its own, so its processes are only this page's.
+    const idle = [];
+    for (let run = 1; run <= 2; run++) {
+      const known = new Set((await webkitProcesses()).keys());
+      const own = await launchWebkit();
+      try {
+        const context = await own.newContext({ ...DESKTOP, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await mock(page);
+        await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
+        await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+        await page.waitForTimeout(10_000);
+        const mine = (procs: Map<number, { rssKb: number; cpuMs: number }>) => [...procs].filter(([pid]) => !known.has(pid));
+        const start = new Map(mine(await webkitProcesses()));
+        await page.waitForTimeout(windowMs);
+        const end = mine(await webkitProcesses());
+        const cpuMs = end.reduce((acc, [pid, p]) => acc + p.cpuMs - (start.get(pid)?.cpuMs ?? 0), 0);
+        const dom = await page.evaluate(() => document.getElementsByTagName("*").length, null);
+        const running = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running").length, null);
+        idle.push({ run, seconds: windowMs / 1000, cpuMs, cpuPercent: Math.round((cpuMs / windowMs) * 1000) / 10,
+          rssMb: Math.round(end.reduce((acc, [, p]) => acc + p.rssKb, 0) / 1024), dom, runningAnimations: running });
+        await context.close();
+      } finally {
+        await own.close();
+      }
+    }
+    return { shots, found, idle, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => {
+    size = seedDiffRepo(dir);
+    benchRepo(dir);
+    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
+  });
+  await writeFile(join(outDir, "chips.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -2216,6 +2336,7 @@ else if (command === "inspector") await inspector(values.before === true);
 else if (command === "terminal") await terminal(values.before === true);
 else if (command === "motion") await motion(values.before === true);
 else if (command === "surface") await surface();
+else if (command === "chips") await chips(values.before === true);
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
   console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface [--before] [--port 8797] [--out DIR] | compare A.png B.png");

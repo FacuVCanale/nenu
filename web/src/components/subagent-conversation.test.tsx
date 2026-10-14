@@ -34,7 +34,7 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
 }
 
 async function openReviewer(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: /^Processes/ }));
+  await user.click(await screen.findByRole("button", { name: /^Needs you, / }));
   await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   await screen.findByText("Child result");
