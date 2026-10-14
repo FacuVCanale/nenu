@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { demoOrg, orgTreeSeed, projectChatSeed, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
@@ -12,6 +12,7 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts smoke    [--port 8797] [--out DIR]   Home screenshots, phone + desktop
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
 //   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
+//   bun scripts/e2e/run.ts threads  [--port 8797] [--out DIR] [--seconds 60]  A coordinator's chat: tabs, panel, DOM and React renders
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
@@ -311,6 +312,113 @@ async function org(): Promise<void> {
   await writeFile(join(outDir, "org.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (flowError) process.exit(1);
+}
+
+/**
+ * Counts React commits and the components each one rendered, through the hook React DevTools uses
+ * (a production build calls it too). A component counts when it mounted or performed work; a
+ * subtree React bailed out of keeps its old children and is not walked.
+ */
+function countRenders(): void {
+  const stats = { commits: 0, renders: 0 };
+  const components = new Set([0, 1, 11, 14, 15]); // function, class, forwardRef, memo, simple memo
+  type Fiber = { tag: number; flags: number; alternate: Fiber | null; child: Fiber | null; sibling: Fiber | null };
+  const walk = (first: Fiber | null) => {
+    for (let fiber = first; fiber; fiber = fiber.sibling) {
+      const before = fiber.alternate;
+      if (components.has(fiber.tag) && (before === null || (fiber.flags & 1) !== 0)) stats.renders++;
+      if (fiber.child && before?.child !== fiber.child) walk(fiber.child);
+    }
+  };
+  Object.assign(window, {
+    __nenuRenders: stats,
+    __REACT_DEVTOOLS_GLOBAL_HOOK__: {
+      supportsFiber: true, renderers: new Map(), inject: () => 1, checkDCE: () => {}, setStrictMode: () => {},
+      onCommitFiberUnmount: () => {}, onPostCommitFiberRoot: () => {},
+      onCommitFiberRoot: (_id: number, root: { current: Fiber }) => { stats.commits++; walk(root.current.child); },
+    },
+  });
+}
+
+/**
+ * A project coordinator's chat (scenario.ts `projectChatSeed`): the phone's Chat, Threads and PRs
+ * tabs at 390x844 and the desk at 1440x900 beside the project panel and without it, captured on the
+ * pinned clock. Then the phone's Chat tab measured on the real clock, twice: DOM elements, and the
+ * React commits and component renders over `--seconds` of polling.
+ */
+async function threads(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const windowMs = Number(values.seconds) * 1000;
+  const result = await withBench(async (bridge, browser) => {
+    const coordinator = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
+    const open = async (device: typeof PHONE | typeof DESKTOP, opts: { pinned: boolean; counted?: boolean }) => {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      if (opts.counted) await page.addInitScript(countRenders, null);
+      if (opts.pinned) await page.clock.install({ time: bridge.now() });
+      const requests: string[] = [];
+      page.on("request", (req) => requests.push(req.url()));
+      await page.goto(bridge.url + coordinator);
+      await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(2000);
+      return { page, requests, close: () => context.close() };
+    };
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    const cards = (page: Page) => page.locator('section[aria-label="Threads"] article').count();
+
+    const seen: Record<string, unknown> = {};
+    {
+      const { page, close } = await open(PHONE, { pinned: true });
+      seen.phoneChatCards = await cards(page);
+      await shoot(page, "phone-chat");
+      for (const tab of ["Threads", "PRs"] as const) {
+        await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
+        await page.locator(".project-overlay").waitFor({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        seen[`phone${tab}Rows`] = await page.locator(".project-overlay .task-main").count();
+        await shoot(page, `phone-${tab.toLowerCase()}`);
+      }
+      await close();
+    }
+    {
+      const { page, close } = await open(DESKTOP, { pinned: true });
+      seen.desktopPanelCards = await cards(page);
+      await shoot(page, "desktop-panel");
+      await page.getByRole("button", { name: "Hide project panel" }).click();
+      await page.waitForTimeout(500);
+      seen.desktopNoPanelCards = await cards(page);
+      await shoot(page, "desktop-no-panel");
+      await close();
+    }
+
+    const runs = [];
+    for (let run = 1; run <= 2; run++) {
+      const { page, requests, close } = await open(PHONE, { pinned: false, counted: true });
+      const dom = await page.evaluate(() => ({
+        document: document.getElementsByTagName("*").length,
+        thread: document.querySelector(".chat-thread")?.getElementsByTagName("*").length ?? 0,
+      }), null);
+      const from = requests.length;
+      await page.evaluate(() => Object.assign((window as unknown as { __nenuRenders: object }).__nenuRenders, { commits: 0, renders: 0 }), null);
+      await page.waitForTimeout(windowMs);
+      const react = await page.evaluate(() => ({ ...(window as unknown as { __nenuRenders: { commits: number; renders: number } }).__nenuRenders }), null);
+      const byRoute = tally(requests.slice(from));
+      const polls = byRoute.snapshot ?? 0;
+      runs.push({ run, cards: await cards(page), dom, seconds: windowMs / 1000, ...react, byRoute,
+        rendersPerCommit: react.commits ? Math.round(react.renders / react.commits) : 0,
+        rendersPerSnapshot: polls ? Math.round(react.renders / polls) : null });
+      await close();
+    }
+    return { shots, seen, runs, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => projectChatSeed(herd, now));
+  await writeFile(join(outDir, "threads.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
 }
 
 /**
@@ -1046,6 +1154,7 @@ const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
+else if (command === "threads") await threads();
 else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "layout") await layout();
@@ -1055,6 +1164,6 @@ else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|processes|stop-state|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|tabs|workspace|layout|stop|processes|stop-state|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
