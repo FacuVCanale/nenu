@@ -28,6 +28,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, o
 //   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  A busy Home, calm then asked: captures, each list, requests per minute
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
+//   bun scripts/e2e/run.ts surface  [--port 8797] [--out DIR] [--seconds 60]  Surfaces and project marks on every screen, idle CPU, memory and DOM
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -1819,6 +1820,130 @@ async function terminal(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/** Every WebKit process Playwright runs (its browser cache is in the path), with RSS in KB and CPU time in ms. */
+async function webkitProcesses(): Promise<Map<number, { rssKb: number; cpuMs: number }>> {
+  const out = await new Response(Bun.spawn(["ps", "-A", "-o", "pid=,rss=,time=,command="]).stdout).text();
+  const procs = new Map<number, { rssKb: number; cpuMs: number }>();
+  for (const line of out.split("\n")) {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
+    if (!match || !/ms-playwright\/webkit/.test(match[4]!)) continue;
+    const [clock, days] = match[3]!.includes("-") ? [match[3]!.split("-")[1]!, Number(match[3]!.split("-")[0])] : [match[3]!, 0];
+    const seconds = clock.split(":").map(Number).reduce((acc, n) => acc * 60 + n, 0);
+    procs.set(Number(match[1]), { rssKb: Number(match[2]), cpuMs: Math.round((days * 86400 + seconds) * 1000) });
+  }
+  return procs;
+}
+
+/**
+ * The surfaces every screen sits on, with five projects so each draws its own mark: Home, a session
+ * (the desk's session panel beside it), a project, Settings and Search, on a phone and a desk, dark
+ * and light, plus the phone's navigation drawer. Then, on the real clock, one fresh WebKit per view
+ * left alone for `--seconds`: its processes' CPU and resident memory, and the page's DOM elements.
+ */
+async function surface(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const prs = join(outDir, "gh-prs.json");
+  process.env.NENU_E2E_GH_PRS = prs;
+  let size = { additions: 0, deletions: 0 };
+  const windowMs = Number(values.seconds) * 1000;
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const shots: string[] = [];
+    const chat = `/pane/${encodeURIComponent(herd.working)}`;
+    const pages: Array<[string, string, string]> = [
+      ["home", "/", '[role="tab"]:has-text("Recents")'],
+      ["chat", chat, "textarea"],
+      ["project", "/project/acme-shop", 'main >> text="Checkout flow"'],
+      ["settings", "/settings", "text=Push notifications"],
+    ];
+    for (const [deviceName, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      for (const scheme of ["dark", "light"] as const) {
+        const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await page.clock.install({ time: bridge.now() });
+        const shoot = async (name: string) => {
+          const path = join(outDir, `${name}-${deviceName}-${scheme}.png`);
+          await page.screenshot({ path, animations: "disabled" });
+          shots.push(path);
+        };
+        for (const [name, path, ready] of pages) {
+          await page.goto(bridge.url + path);
+          await page.locator(ready).first().waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(1500);
+          await shoot(name);
+        }
+        await page.goto(bridge.url + "/");
+        await page.locator(pages[0]![2]).first().waitFor({ timeout: 15_000 });
+        if (deviceName === "phone") {
+          await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
+        } else {
+          await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^Search/ }).click();
+        }
+        await page.getByRole("searchbox").first().fill("a");
+        await page.waitForTimeout(600);
+        await shoot("search");
+        if (deviceName === "phone") {
+          await page.keyboard.press("Escape");
+          // A chat in no project: its title opens the drawer (a project's chat leads back to its project instead).
+          await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.codex)}`);
+          await page.locator("[data-chat-title]").first().click();
+          await page.waitForTimeout(600);
+          await shoot("drawer");
+        }
+        await context.close();
+      }
+    }
+
+    // Idle cost: a WebKit of its own per view, so its processes are only this page's.
+    const idle = [];
+    for (const [view, path, ready] of [["home", "/", pages[0]![2]], ["chat", chat, "textarea"]] as const) {
+      for (let run = 1; run <= 2; run++) {
+        const known = new Set((await webkitProcesses()).keys());
+        const own = await launchWebkit();
+        try {
+          const context = await own.newContext({ ...DESKTOP, timezoneId: "UTC", locale: "en-US" });
+          const page = await context.newPage();
+          await page.goto(bridge.url + path);
+          await page.locator(ready).first().waitFor({ timeout: 15_000 });
+          // Past the load and the service worker's precache, so the window holds only the page at rest.
+          await page.waitForTimeout(10_000);
+          const mine = (procs: Map<number, { rssKb: number; cpuMs: number }>) => [...procs].filter(([pid]) => !known.has(pid));
+          const before = new Map(mine(await webkitProcesses()));
+          await page.waitForTimeout(windowMs);
+          const after = mine(await webkitProcesses());
+          const cpuMs = after.reduce((acc, [pid, p]) => acc + p.cpuMs - (before.get(pid)?.cpuMs ?? 0), 0);
+          const dom = await page.evaluate(() => document.getElementsByTagName("*").length, null);
+          idle.push({
+            view, run, seconds: windowMs / 1000, processes: after.length, cpuMs, cpuPercent: Math.round((cpuMs / windowMs) * 1000) / 10,
+            rssMb: Math.round(after.reduce((acc, [, p]) => acc + p.rssKb, 0) / 1024), dom,
+          });
+          await context.close();
+        } finally {
+          await own.close();
+        }
+      }
+    }
+    return { shots, idle, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => {
+    const seed = homeOrg(herd, now, size);
+    const neighbour = (slug: string, name: string, goal: string) => ({ slug, name, goal, status: "active" as const, threads: [] });
+    seed.projects.push(
+      neighbour("docs-site", "Docs site", "Guides and the API reference"),
+      neighbour("mobile-app", "Mobile app", "The iOS and Android clients"),
+      neighbour("billing-api", "Billing API", "Invoices, plans and webhooks"),
+      neighbour("data-pipeline", "Data pipeline", "Nightly exports and the warehouse"),
+    );
+    return seed;
+  }, (dir) => {
+    size = seedDiffRepo(dir);
+    benchRepo(dir);
+    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
+  });
+  await writeFile(join(outDir, "surface.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -1837,8 +1962,9 @@ else if (command === "artifacts") await artifacts();
 else if (command === "home") await home();
 else if (command === "inspector") await inspector(values.before === true);
 else if (command === "terminal") await terminal(values.before === true);
+else if (command === "surface") await surface();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|surface [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
