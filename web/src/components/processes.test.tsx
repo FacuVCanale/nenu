@@ -62,7 +62,7 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
 
 const row = () => screen.findByRole("group", { name: "Status" });
 const chip = async (name: RegExp) => within(await row()).getByRole("button", { name });
-const working = () => chip(/^(Working|Done), \d+$/);
+const working = () => chip(/^(Working|Done|Published), \d+$/);
 const needs = () => chip(/^Needs you, \d+$/);
 
 it("names what waits on you and what runs in two chips, each listing only its own", async () => {
@@ -104,6 +104,16 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   expect(within(sheet).getByText("Nothing running in the background.")).toBeVisible();
   await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
   expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
+});
+
+it("says Published when all the session left is pages it published", async () => {
+  activityList = { ...list, workflows: [], tasks: [] };
+  subagentList = subagents([]);
+  const { user } = renderChat();
+  const button = await working();
+  expect(button).toHaveAccessibleName("Published, 1");
+  await user.click(button);
+  expect(within(screen.getByRole("region", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toBeVisible();
 });
 
 it("shows no chip when the session has nothing at all", async () => {
