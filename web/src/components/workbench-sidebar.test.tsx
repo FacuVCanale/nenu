@@ -253,28 +253,17 @@ describe("the sidebar", () => {
     expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs you");
   });
 
-  it("counts what needs you and narrows the list to it", async () => {
-    const user = open();
-    const needsYou = screen.getByRole("button", { name: "Needs you, 1" });
-    await user.click(needsYou);
-    expect(needsYou).toHaveAttribute("aria-pressed", "true");
-    const list = screen.getByRole("region", { name: "Needs you" });
-    expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual(["panel depoAcme, needs you"]);
-    await user.click(needsYou);
-    expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+  it("counts what needs you on Home, and keeps no Needs you list of its own", () => {
+    open();
+    expect(screen.getByRole("link", { name: "Home, 1 needs you" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   });
 
-  it("brings the tree back to where it was scrolled after Needs you or a search", async () => {
+  it("brings the tree back to where it was scrolled after a search", async () => {
     const user = open();
     const scroller = document.querySelector<HTMLElement>(".nav-scroll")!;
     const scrollTo = (top: number) => { scroller.scrollTop = top; fireEvent.scroll(scroller); };
     scrollTo(300);
-
-    await user.click(screen.getByRole("button", { name: "Needs you, 1" }));
-    // The shorter list starts at its own top; scrolling it is not the tree's place.
-    scrollTo(0);
-    await user.click(screen.getByRole("button", { name: "Needs you, 1" }));
-    expect(scroller.scrollTop).toBe(300);
 
     await user.click(screen.getByRole("button", { name: /^Search/ }));
     await user.type(screen.getByRole("searchbox"), "panel");
@@ -312,11 +301,11 @@ describe("the sidebar", () => {
     expect(names().slice(7)).toEqual(["newer plan", "old plan", "old step", "new fix"]);
   });
 
-  it("calls the coordinator what every other view calls it, in Needs you and the drawer's Recent", async () => {
+  it("calls the coordinator what every other view calls it, in the drawer's Needs you", () => {
     const asking = { ...acme, coordinator: { ...acme.coordinator!, liveStatus: "blocked" as const } };
     const source = { ...herd, agents: herd.agents.map((agent) => agent.paneId === "c" ? { ...agent, status: "blocked" as const, tabLabel: "lead" } : agent), projects: [asking] };
-    const user = open("/", source);
-    await user.click(screen.getByRole("button", { name: "Needs you, 2" }));
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={source} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
+    render(<RouterProvider router={router} />);
     const list = screen.getByRole("region", { name: "Needs you" });
     expect(within(list).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent)).toEqual(["Acme coordinator", "panel depo"]);
   });
@@ -347,12 +336,12 @@ describe("the sidebar", () => {
 
   it("marks Home as the page on screen only on Home", () => {
     open("/");
-    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^Home\b/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("leaves Home unmarked in a chat", () => {
     open("/pane/depo");
-    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /^Home\b/ })).not.toHaveAttribute("aria-current");
   });
 
   describe("in the phone's sheets", () => {
@@ -360,13 +349,6 @@ describe("the sidebar", () => {
       const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={herd} variant="sheet" request={request} /> }]);
       render(<RouterProvider router={router} />);
     };
-
-    it("lets the Needs you sheet's own title name its list, and leaves the host to Browse", () => {
-      sheet({ target: "needs-you", seq: 1 });
-      expect(screen.getByRole("region", { name: "Needs you" })).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: "Needs you" })).toBeNull();
-      expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
-    });
 
     it("keeps Search to its results", () => {
       sheet({ target: "search", seq: 1 });

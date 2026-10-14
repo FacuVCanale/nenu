@@ -110,16 +110,13 @@ it("disables New on a read-only device, in the sidebar and the tab bar", () => {
   expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "New" })).toBeDisabled();
 });
 
-it("shows the tab bar off a pane, and its tabs open the navigation in the matching mode", async () => {
+it("shows the tab bar off a pane with Home, New and Search, Home counting what needs you", async () => {
   const { user } = setup({ ...data, agents: [{ ...data.agents[0]!, status: "blocked" }] });
   const bar = within(screen.getByRole("navigation", { name: "Primary" }));
-  expect(bar.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  await user.click(bar.getByRole("button", { name: "Needs you, 1" }));
-  const sheet = within(screen.getByRole("dialog", { name: "Needs you" }));
-  // The tab bar already offers New, Search and Home, so the sheet starts at the list.
-  expect(sheet.queryByRole("button", { name: "New" })).not.toBeInTheDocument();
-  expect(sheet.getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
-  await user.keyboard("{Escape}");
+  expect(bar.getAllByRole("link").concat(bar.getAllByRole("button")).map((tab) => tab.textContent)).toEqual(["Home1", "New", "Search"]);
+  expect(bar.getByRole("link", { name: "Home, 1 needs you" })).toHaveAttribute("aria-current", "page");
+  expect(bar.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
+  expect(bar.queryByRole("button", { name: "Browse" })).not.toBeInTheDocument();
   await user.click(bar.getByRole("button", { name: "Search" }));
   expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
 });
@@ -153,7 +150,7 @@ it("draws no tab bar on a project whose live coordinator is opening its pane", (
 it("draws New as a tab with its own label, like its neighbours", () => {
   setup();
   const bar = within(screen.getByRole("navigation", { name: "Primary" }));
-  for (const name of ["Home", "Browse", "Search", "New"]) expect(bar.getByRole(name === "Home" ? "link" : "button", { name })).toHaveTextContent(name);
+  for (const name of ["Home", "Search", "New"]) expect(bar.getByRole(name === "Home" ? "link" : "button", { name })).toHaveTextContent(name);
 });
 
 // New is a pen on a page and Settings the sliders wherever the navigation draws them, at 16 px on a
@@ -191,8 +188,11 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   // A workspace of one pane opens that pane.
   expect(rail.getByRole("link", { name: /^Nenu\b/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(rail.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
-  await user.click(rail.getByRole("button", { name: "Needs you, 1" }));
-  expect(sidebar.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "true");
+  // Home carries what needs you; there is no second place for it.
+  expect(rail.getByRole("link", { name: "Home, 1 needs you" })).toHaveAttribute("href", "/?s=work");
+  expect(rail.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
+  expect(sidebar.getByRole("link", { name: "Home, 1 needs you" })).toBeInTheDocument();
+  expect(sidebar.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   await user.keyboard("{Meta>}k{/Meta}");
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
@@ -229,11 +229,11 @@ it("opens a workspace on the same pane from the sidebar, search and the collapse
   expect(rail.getByRole("link", { name: /^ops\b/ })).toHaveAttribute("href", opsPane);
 });
 
-it("opens a workspace on the same pane from the phone's Browse", async () => {
+it("opens a workspace on the same pane from the navigation Home's mark opens on a phone", async () => {
   const { user, router } = setup(ops);
-  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
-  const sheet = within(screen.getByRole("dialog", { name: "Navigation" }));
-  await user.click(sheet.getByRole("link", { name: /^ops/ }));
+  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  const drawer = within(screen.getByRole("dialog", { name: "Navigation" }));
+  await user.click(drawer.getByRole("link", { name: /^ops/ }));
   expect(router.state.location.pathname + router.state.location.search).toBe(opsPane);
 });
 
@@ -310,21 +310,22 @@ it("can reopen the mobile workspace drawer from the chat title after navigation 
   expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
 });
 
-it("keeps the Browse sheet on the tapped row, marked as opening, until its chat is on screen", async () => {
+it("keeps the Search sheet on the tapped row, marked as opening, until its chat is on screen", async () => {
   let land!: () => void;
   const landed = new Promise<null>((resolve) => { land = () => resolve(null); });
   const element = <WorkbenchShell data={data}><span>Screen</span></WorkbenchShell>;
   const router = createMemoryRouter([{ path: "/pane/:paneId", element, loader: () => landed }, { path: "*", element }], { initialEntries: ["/?s=work"] });
   render(<RouterProvider router={router} />);
   const user = userEvent.setup();
-  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
-  const row = within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("link", { name: /^Nenu/ });
+  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Search" }));
+  await user.type(screen.getByRole("searchbox"), "Nenu");
+  const row = within(screen.getByRole("dialog", { name: "Search" })).getByRole("option", { name: /^Nenu/ });
   await user.click(row);
   // A slow read leaves the sheet up, with the tapped row saying it is on its way.
   expect(await within(row).findByText("Opening")).toBeInTheDocument();
-  expect(screen.getByRole("dialog", { name: "Navigation" })).toContainElement(row);
+  expect(screen.getByRole("dialog", { name: "Search" })).toContainElement(row);
   land();
-  await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument());
+  await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument());
   expect(router.state.location.pathname).toBe("/pane/w%3A1%3Ap2");
 });
 
@@ -440,14 +441,16 @@ it("searches and starts something new from the drawer's header", async () => {
   expect(screen.getByText("New dialog")).toBeInTheDocument();
 });
 
-it("leaves Needs you and Recent to Home in the tab bar's Browse, and folds every project and workspace there", async () => {
-  const { user } = setup(herd, "/?s=work");
-  await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Browse" }));
-  const sheet = within(screen.getByRole("dialog", { name: "Navigation" }));
-  expect(sheet.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
-  expect(sheet.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
-  expect(sheet.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
-  expect(sheet.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+it("opens from Home's mark the navigation Browse held: what needs you, recent chats, folded projects and workspaces, sessions and host", async () => {
+  const { user } = setup({ ...herd, sessions: [{ name: "default", isPrimary: true, reachable: true, agents: 1, working: 1, blocked: 0 }, { name: "remote", isPrimary: false, reachable: true, agents: 0, working: 0, blocked: 0 }] }, "/?s=work");
+  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  const drawer = within(screen.getByRole("dialog", { name: "Navigation" }));
+  const sections = drawer.getAllByRole("region").filter((region) => region.parentElement?.classList.contains("nav-scroll"));
+  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Recent", "Projects", "Workspaces"]);
+  expect(drawer.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
+  expect(drawer.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+  expect(drawer.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
+  expect(drawer.getByText(/^herdr ·/)).toBeInTheDocument();
 });
 
 // The audit's folded rail: six client-*-portal workspaces read as six "C" tiles, api and acme as two "A".
