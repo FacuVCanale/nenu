@@ -541,8 +541,8 @@ async function workspace(): Promise<void> {
         ["old-link", (page, name) => page.goto(`${bridge.url}/space/${ids[name]}`).then(() => undefined)],
       ],
       phone: [
-        ["navigation", async (page, name) => {
-          await page.getByRole("button", { name: "Open navigation" }).click();
+        ["search-tree", async (page, name) => {
+          await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
           await page.locator(row("[role=dialog]", name)).click();
         }],
         ["search", async (page, name) => {
@@ -1209,15 +1209,15 @@ async function needsYou(): Promise<void> {
       await close();
     }
     {
-      // Home's mark opens the navigation on a phone; a chat opens it from its title.
+      // The tab bar's Search holds the project tree under its box until something is typed.
       const { page, close } = await open(PHONE);
       await page.goto(`${bridge.url}/`);
-      await page.getByRole("button", { name: "Open navigation" }).click();
+      await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
       const project = page.locator('[role=dialog] button[aria-label="Demo shop tasks"]');
       if (await project.count() && !(await page.locator('[role=dialog] .nav-tree-row', { hasText: "Checkout copy" }).count())) await project.click();
       await page.waitForTimeout(600);
-      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneNavigation ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
-      await shoot(page, "phone-navigation");
+      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneSearch ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
+      await shoot(page, "phone-search");
       await close();
     }
     {
@@ -1512,6 +1512,13 @@ async function home(): Promise<void> {
                 await shoot(page, `home-${name}-workspace-open`);
               }
               await page.getByRole("tab", { name: "Recents" }).click();
+            }
+            if (name === "phone") {
+              // Search before anything is typed: the project tree, the sessions and the host under its box.
+              await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
+              await page.waitForTimeout(600);
+              await shoot(page, "home-phone-search");
+              await page.keyboard.press("Escape");
             }
           }
           await close();

@@ -32,9 +32,10 @@ export interface SidebarRequest {
 
 /**
  * Where the navigation is drawn. The desk's sidebar leads with New, Search and Home, which counts
- * what needs you. A phone's Search sheet (the tab bar's) keeps to its results; its drawer (Home's or a
- * chat's Nenu mark) leaves New and Search to its header, leads with what needs you and the chats that
- * moved last, and starts every project and workspace folded.
+ * what needs you. A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
+ * something is typed, every project and workspace folded, the sessions and the host. Its drawer
+ * (Home's or a chat's Nenu mark) leaves New and Search to its header and leads with what needs you
+ * and the chats that moved last.
  */
 export type SidebarVariant = "sidebar" | "sheet" | "drawer";
 
@@ -154,8 +155,8 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           </>}
       </div>
 
-      {/* The host belongs to browsing; a phone's Search sheet keeps to its results. */}
-      {(!phone || !searching) && <div className="nav-footer">
+      {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}
+      {(!phone || !query.trim()) && <div className="nav-footer">
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
         <HostRow data={data} />
       </div>}
