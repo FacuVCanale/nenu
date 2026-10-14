@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
 import { ListChecks, ChatCircle } from "@/components/ui/icon";
 
-import { PrBar } from "@/components/pr-bar";
+import type { ProjectChipsSource } from "@/components/composer-chips";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
@@ -19,7 +19,7 @@ export interface ProjectChatSlots {
   headerAction?: ReactNode;
   overlay?: ReactNode;
   strip?: ReactNode;
-  composerTop?: ReactNode;
+  projectChips?: ProjectChipsSource;
   /** The desk's session panel beside the chat, absent while a thread is docked there instead. */
   sessionPanel?: SessionPanelLink;
 }
@@ -53,8 +53,8 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
  * the chat, with the project's own panel behind its ⋯, or docks a thread there (`?thread=`); the
  * sidebar lists the threads, so the chat carries none of them. A phone switches the coordinator between Chat,
  * Threads and PRs in place, keeping the chat mounted so its draft and scroll survive; a thread shows
- * its siblings as chips, a header button to the project's threads, and its pull request above the
- * composer.
+ * its siblings as chips and a header button to the project's threads; every chat counts the threads
+ * around it, their pull requests and the project's routines in the chips above the composer.
  */
 export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   owner: PaneProject;
@@ -145,9 +145,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
         overlay,
         // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.
         strip: phoneTabs ?? chips ?? (desk ? null : undefined),
-        composerTop: thread?.pr && !scope.coordinating
-          ? <PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={refresh} />
-          : undefined,
+        projectChips: { project, thread, threads: scope.threads, session: data.session, readOnly, onOpenPane: openPane, onOpenNode: openNode, onChanged: refresh },
         sessionPanel: desk && !docked ? panelLink(inspector) : undefined,
       })}
       {docked && (

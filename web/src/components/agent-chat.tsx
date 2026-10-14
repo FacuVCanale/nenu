@@ -7,7 +7,11 @@ import { SubagentConversation, SubagentSubtitle } from "@/components/subagent-co
 import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
-import { detailTitle, ProcessDetailView, ProcessesChip, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
+import { detailTitle, ProcessDetailView, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
+import { ComposerChips, ComposerPlace, NEEDS_MARK, RoutineRows, ThreadRows, threadsAround, useRoutines, WORKING_MARK, type ChipId, type ChipView, type ProjectChipsSource } from "@/components/composer-chips";
+import { PrChecks } from "@/components/pr-bar";
+import { PrList, prLists } from "@/components/threads-panel";
+import { RunNamedAbove } from "@/components/activity/workflow-detail";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -137,8 +141,8 @@ interface AgentChatProps {
   overlay?: ReactNode;
   /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
   strip?: ReactNode;
-  /** A band right above the composer (a thread's pull request). */
-  composerTop?: ReactNode;
+  /** The project around this chat, counted in the row of chips above the composer. */
+  projectChips?: ProjectChipsSource;
   /** Shown beside another pane instead of as the route: its own compact header, and its mirror is
    *  watched through `onMirrorShown` rather than the route's flag. */
   docked?: DockedChat;
@@ -203,7 +207,7 @@ export function AgentChat({
   headerAction,
   overlay,
   strip,
-  composerTop,
+  projectChips,
   docked,
   sessionPanel,
   text,
@@ -253,9 +257,10 @@ export function AgentChat({
   const keyboardOpen = useKeyboardOpen();
   const [composerControls, setComposerControls] = useState<ComposerControl[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
-  const [processesOpen, setProcessesOpen] = useState(false);
+  const [chip, setChip] = useState<ChipId | null>(null);
+  const processesOpen = chip === "needs" || chip === "working";
   const [processDetail, setProcessDetail] = useState<ProcessDetail | null>(null);
-  useEffect(() => { setProcessesOpen(false); setProcessDetail(null); }, [displayScope]);
+  useEffect(() => { setChip(null); setProcessDetail(null); }, [displayScope]);
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
   const [subagent, setSubagent] = useState<SubagentSelection | null>(null);
@@ -961,23 +966,64 @@ export function AgentChat({
   const processesNow = useActivityClock(activity.data, processesOpen || processDetail !== null);
   const openProcessDetail = (next: ProcessDetail) => {
     setProcessDetail(next);
-    if (desktop) setProcessesOpen(false);
+    if (desktop) setChip(null);
   };
   const processDetailContent = processDetail &&
     <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={processDetail} now={processesNow} onChange={setProcessDetail} />;
   const published = activity.data?.available ? activity.data.artifacts : [];
-  const processesControl = !isShell && !subagent && <ProcessesChip processes={processes} published={published.length} desktop={desktop} open={processesOpen}
-    onOpenChange={(open) => { setProcessesOpen(open); if (!open && !desktop) setProcessDetail(null); }}
-    list={<ProcessesList processes={processes} artifacts={published} now={processesNow} stale={activity.stale || subagents.stale}
+  // The row above the composer: what needs you and what works, this session's background work beside
+  // the project's threads around it, then the project's open PRs and its routines.
+  const processList = (part: Partial<typeof processes>, artifacts: typeof published = []) => (
+    <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
       onOpenSubagent={(item) => {
         if (!subagents.list?.available) return;
-        setProcessesOpen(false);
+        setChip(null);
         setProcessDetail(null);
         selectSubagent({ agent: item.agent, parentKey: subagents.list.sessionKey });
-      }} />}
-    detail={processDetail} detailContent={processDetailContent} detailName={processDetail ? detailTitle(processDetail, activity) : undefined}
-    onBack={() => setProcessDetail(null)} />;
+      }} />
+  );
+  const around = projectChips && threadsAround(projectChips, paneId);
+  const openThread = (thread: ProjectThreadView) => {
+    setChip(null);
+    if (thread.paneId) projectChips?.onOpenPane(thread.paneId);
+    else projectChips?.onOpenNode(thread.id);
+  };
+  const threadRows = (threads: readonly ProjectThreadView[]) => threads.length > 0 &&
+    <ThreadRows threads={threads} panes={agents} now={Date.now()} onOpen={openThread} />;
+  const sessionWork = !isShell;
+  const needsCount = (around?.needs.length ?? 0) + (sessionWork ? processes.waiting.length : 0);
+  const workingCount = (around?.working.length ?? 0) + (sessionWork ? processes.running.length : 0);
+  const finished = sessionWork ? processes.done.length : 0;
+  const publishedCount = sessionWork ? published.length : 0;
+  const openPrs = projectChips ? prLists(projectChips.threads).open : [];
+  const ownPr = projectChips?.thread?.pr ? projectChips.thread : undefined;
+  const routines = useRoutines(projectChips?.project.slug, projectChips?.session, chip === "routines");
+  const chips: ChipView[] = [
+    ...(needsCount > 0 ? [{ id: "needs" as const, label: "Needs you", count: needsCount, mark: NEEDS_MARK, content: <>
+      {around && threadRows(around.needs)}
+      {sessionWork && processes.waiting.length > 0 && processList({ waiting: processes.waiting })}
+    </> }] : []),
+    // Nothing runs: the chip says what finished instead, so done work stays one tap away.
+    ...(workingCount > 0 || finished > 0 || publishedCount > 0 ? [{ id: "working" as const,
+      label: workingCount > 0 ? "Working" : finished > 0 ? "Done" : "Published",
+      count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined, content: <>
+      {around && threadRows(around.working)}
+      {sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) && processList({ running: processes.running, done: processes.done }, published)}
+    </> }] : []),
+    ...(projectChips && (openPrs.length > 0 || ownPr) ? [{ id: "prs" as const, label: "PRs", title: "Pull requests", count: openPrs.length, content: <div className="flex flex-col gap-2">
+      <PrList project={projectChips.project} threads={projectChips.threads} session={projectChips.session} readOnly={projectChips.readOnly}
+        onOpenPane={(id) => { setChip(null); projectChips.onOpenPane(id); }} onOpenNode={(id) => { setChip(null); projectChips.onOpenNode(id); }} onChanged={projectChips.onChanged} />
+      {ownPr && <div className="border-t border-border pt-2">
+        <PrChecks project={projectChips.project} thread={ownPr} session={projectChips.session} readOnly={projectChips.readOnly} onChanged={projectChips.onChanged} />
+      </div>}
+    </div> }] : []),
+    ...(routines.length > 0 ? [{ id: "routines" as const, label: "Routines", count: routines.filter((routine) => routine.enabled).length,
+      content: <RoutineRows routines={routines} now={Date.now()} /> }] : []),
+  ];
+  const chipDetail = !desktop && processDetail && processDetailContent
+    ? { title: detailTitle(processDetail, activity), content: <RunNamedAbove value>{processDetailContent}</RunNamedAbove>, onBack: () => setProcessDetail(null) }
+    : null;
   // The pane's one name, as its row in the sidebar and Home say it, and where it lives under it.
   const title = titleOverride ?? (agent ? displayName(agent, projects) : "");
   const place = agent && displayPlace(agent, projects);
@@ -1322,7 +1368,8 @@ export function AgentChat({
               off the mirror, so this is its one surface. One row until tapped (agents-footer.tsx). */}
           {!showConversation && agentsFooter.length > 0 && <AgentsFooter rows={agentsFooter} />}
 
-          {!subagent && composerTop}
+          {!subagent && <ComposerChips chips={chips} open={chip} detail={chipDetail}
+            onOpenChange={(next) => { setChip(next); if (!desktop) setProcessDetail(null); }} />}
           <Composer
             ref={composerRef}
             dropZoneRef={dropZoneRef}
@@ -1337,7 +1384,7 @@ export function AgentChat({
             disconnected={unavailable}
             lockReason={lock}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
-            processesControl={processesControl}
+            place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             workingSince={workingSince}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}

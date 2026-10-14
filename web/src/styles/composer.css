@@ -79,8 +79,9 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   /* The keyboard covers the home indicator, whose inset iOS still reports; the composer sits on the keys. */
   .workbench-chat[data-keyboard-open] .workbench-composer { margin-bottom: 8px; }
-  /* While typing, the model and background-work row gives its height back to the thread. */
+  /* While typing, the chips above the box and the model row under it give their height back to the thread. */
   .workbench-chat[data-keyboard-open] .composer-meta { display: none; }
+  .workbench-chat[data-keyboard-open] .composer-chip-row { display: none; }
   /* …and a typed draft gets the +'s width, so it wraps no sooner than it did without one; the + is
      back as soon as the box is empty or the keyboard goes down. The draft's inset moves with the
      column, so the text slides over as one piece, and the + is hidden only once it has faded. */
@@ -88,9 +89,41 @@
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s 150ms; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
 }
+/* The row above the box: one chip per kind of work around the chat (composer-chips.tsx), and the open
+   chip's panel over it. Marks are still; only opening a panel moves, once, for 180ms. The row scrolls
+   sideways when a phone cannot fit it, so each chip keeps its 44px reach inside the row's own padding. */
+.composer-chips { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.composer-chip-row { display: flex; align-items: center; gap: 6px; padding: 4px 2px; overflow-x: auto; scrollbar-width: none; }
+.composer-chip-row::-webkit-scrollbar { display: none; }
+.composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); color: var(--foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale 120ms ease-out; }
+.composer-chip[aria-expanded="true"] { background: var(--popover); border-color: color-mix(in oklab, var(--foreground) 14%, transparent); box-shadow: var(--shadow-float); }
+.composer-chip:active { scale: 0.97; }
+@media (hover: hover) { .composer-chip:hover { background: var(--popover); } }
+@media (pointer: coarse) {
+  .composer-chip { height: 36px; padding: 0 10px; }
+  .composer-chip::before { content: ""; position: absolute; inset: -4px 0; }
+}
+.composer-chip-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.composer-chip-panel { display: flex; flex-direction: column; max-height: min(22rem, 45dvh); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); opacity: 1; translate: 0 0; transition: opacity 180ms ease-out, translate 180ms ease-out; }
+@starting-style { .composer-chip-panel { opacity: 0; translate: 0 6px; } }
+.composer-chip-panel-head { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 8px 0 14px; color: var(--muted-foreground); font-size: var(--text-footnote); }
+.composer-chip-panel-head h2 { font-weight: 400; }
+.composer-chip-panel-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 8px 8px; }
+.composer-chip-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
+@media (hover: hover) { .composer-chip-icon:hover { color: var(--foreground); background: var(--accent); } }
+@media (pointer: coarse) { .composer-chip-icon { width: 44px; height: 44px; margin: -8px -8px -8px 0; } }
+.composer-chip-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 6px; border-radius: var(--radius-md); font-size: var(--text-footnote); text-align: left; }
+@media (pointer: coarse) { .composer-chip-item { min-height: 44px; } }
+@media (hover: hover) { button.composer-chip-item:hover { background: var(--accent); } }
+/* Under the box, after the model: the branch the chat works on and the machine it runs on. */
+.composer-place { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; padding: 0 6px; }
+.composer-place-item { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }
+.composer-place-item .font-mono { font-size: 0.75rem; }
 @media (prefers-reduced-motion: reduce) {
   .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }
   .composer-fold { transition: opacity 120ms ease-out; }
   .composer-plus:active { scale: none; }
+  .composer-chip, .composer-chip-panel { transition: none; }
+  .composer-chip:active { scale: none; }
 }

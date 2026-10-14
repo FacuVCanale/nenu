@@ -2227,11 +2227,6 @@ async function chips(before: boolean): Promise<void> {
       { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the cart diff", status: "waiting", updatedAt: iso(120_000) },
       { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
     ] };
-    const hour = 3_600_000;
-    const routines = { ok: true, available: true, broken: 0, routines: [
-      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, lastRun: "", nextRun: "" },
-      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, lastRun: iso(20 * hour), nextRun: new Date(now + 4 * hour).toISOString() },
-    ] };
     const mock = async (page: Page) => {
       await page.route("**/api/pane/*/activity*", (route) => {
         const url = new URL(route.request().url());
@@ -2239,7 +2234,6 @@ async function chips(before: boolean): Promise<void> {
         return route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? list : { ...list, tasks: [] } });
       });
       await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
-      await page.route("**/api/org/routines*", (route) => route.fulfill({ json: routines }));
     };
     const shots: string[] = [];
     const found: Record<string, boolean> = {};
@@ -2277,6 +2271,14 @@ async function chips(before: boolean): Promise<void> {
         for (const chip of ["Needs you", "Working", "PRs", "Routines"]) {
           if (!await tap(row.getByRole("button", { name: new RegExp(`^${chip}`) }).first(), chip)) continue;
           await shoot(chip.toLowerCase().replace(" ", "-"));
+          if (chip === "PRs" && name.startsWith("worker-phone")) {
+            // The PR bar's diff, from the PRs panel now: its size opens the PR's changes.
+            if (await tap(page.getByRole("button", { name: /^View changes/ }).first(), "prs:diff")) {
+              await shoot("prs-diff");
+              await page.keyboard.press("Escape");
+              await page.waitForTimeout(400);
+            }
+          }
           await tap(page.getByRole("button", { name: "Close", exact: true }).first(), `${chip}:close`);
         }
       }
@@ -2310,7 +2312,17 @@ async function chips(before: boolean): Promise<void> {
       }
     }
     return { shots, found, idle, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => {
+  }, CAPTURE_EPOCH, (herd, now) => {
+    const seed = homeOrg(herd, now, size);
+    const hour = 3_600_000;
+    // As `routine list --json` prints them; an Organizations without the document lists none.
+    seed.projects[0]!.routines = [
+      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
+      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
+        last_run: new Date(now - 20 * hour).toISOString(), next_run: new Date(now + 4 * hour).toISOString() },
+    ];
+    return seed;
+  }, (dir) => {
     size = seedDiffRepo(dir);
     benchRepo(dir);
     writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
