@@ -716,7 +716,8 @@ export type SendOutcome =
       stage: SendStage;
       error: string;
       textDelivered: boolean;
-      code?: "prompt_changed" | "not_ready" | "busy";
+      /** `incomplete`: submitted, but the CLI logged less than was sent (ADR 0075). */
+      code?: "prompt_changed" | "not_ready" | "busy" | "incomplete";
     };
 
 // ── Queue rows: the fields the delivery rework adds ────────────────────────────────────────────────

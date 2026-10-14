@@ -779,7 +779,8 @@ export type SendOutcome =
       error: string;
       /** True when text reached the input box: a resend would duplicate it. */
       textDelivered: boolean;
-      code?: "prompt_changed" | "not_ready" | "busy";
+      /** `incomplete`: submitted, but the CLI logged less than was sent (ADR 0075). */
+      code?: "prompt_changed" | "not_ready" | "busy" | "incomplete";
     };
 
 /** Why a queued row is still waiting (mirrors bridge/types.ts). */

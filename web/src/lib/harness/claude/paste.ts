@@ -173,6 +173,23 @@ export function isPastePlaceholderOnly(draft: string): boolean {
   return tokens > 0 && fragments.length === 0;
 }
 
+/**
+ * Claude takes a single terminal read of more than this many characters as a paste (2.1.299, read in
+ * the binary; on 2.1.300 a 790-character bracketed paste is typed and an 810-character one collapses).
+ */
+const CLAUDE_PASTE_CHARS = 800;
+
+/**
+ * Whether a send must reach Claude as ONE bracketed paste (ADR 0075). Past the threshold the PTY can
+ * hand the text over in pieces (1 022 + 478 bytes on macOS), Claude takes the first as a paste, and
+ * about two times in three it then keeps only the last piece: measured on 2.1.296, 2.1.299 and
+ * 2.1.300, where 1 500 characters arrived as their last 478. Framed as one paste it arrived whole
+ * every time. A send at or below the threshold is never read as a paste, so it stays typed text.
+ */
+export function sendsAsOnePaste(text: string): boolean {
+  return text.length > CLAUDE_PASTE_CHARS;
+}
+
 function countNewlines(s: string): number {
   let n = 0;
   for (const ch of s) if (ch === "\n") n++;
