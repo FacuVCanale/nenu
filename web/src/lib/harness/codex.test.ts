@@ -1404,6 +1404,9 @@ describe("Codex 0.162.1 started with no client attached", () => {
       expect(accepts(`  ${FG}model\u001b[48;2;9;9;9m ${OFF}· ${FG2}/dir${OFF}`)).toBe(false);
       // A dot in the field's colour is a glyph of that field, not a separator.
       expect(accepts(`  ${FG}model ·${OFF} ${FG2}/dir${OFF}`)).toBe(false);
+      // A field that holds a dot keeps it, and the separator beside it keeps its spaces.
+      expect(accepts(`  ${FG}a·b${OFF} · ${FG2}·dir${OFF}`)).toBe(true);
+      expect(accepts(`  ${FG}model·${OFF} · ${FG2}/dir${OFF}`)).toBe(true);
       // Mixed separator paints are still refused once the spaces have moved.
       expect(accepts(`  ${FG}model ${OFF}· ${FG2}/dir ${OFF}\u001b[2m· ${OFF}${FG}main${OFF}`)).toBe(false);
       // And text alone still is not a status row.
