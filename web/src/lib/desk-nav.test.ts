@@ -58,3 +58,17 @@ describe("a project's row", () => {
     expect(liveliest([pane("a")])).toBeUndefined();
   });
 });
+
+describe("a chat's +1", () => {
+  it("marks a chat that finished or needs you since it was last opened, and nothing else", () => {
+    const agents = [
+      pane("flow", { status: "done", lastActiveAt: now, lastSeenAt: now - MIN }),
+      pane("loose", { workspaceId: "w2", paneLabel: "asked", status: "blocked", lastActiveAt: now, lastSeenAt: now - MIN }),
+      pane("seen", { workspaceId: "w2", paneLabel: "seen", status: "blocked", lastActiveAt: now - MIN, lastSeenAt: now }),
+      pane("busy", { workspaceId: "w2", paneLabel: "busy", status: "working", lastActiveAt: now, lastSeenAt: now - MIN }),
+    ];
+    expect(deskChats({ agents, projects: [acme] }).map((chat) => [chat.title, chat.unread])).toEqual([
+      ["Checkout flow", true], ["Cart badge", false], ["asked", true], ["seen", false], ["busy", false],
+    ]);
+  });
+});

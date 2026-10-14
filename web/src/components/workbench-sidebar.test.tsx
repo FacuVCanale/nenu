@@ -559,4 +559,14 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(home.querySelector(".nav-badge")).toBeNull();
     expect(home.querySelector(".nav-row-meta")).toHaveTextContent("1");
   });
+
+  it("marks a chat that finished or needs you since you last opened it with a quiet +1, and not the one on screen", () => {
+    const finished = { ...herd, agents: herd.agents.map((agent) =>
+      agent.paneId === "hook" || agent.paneId === "flow" ? { ...agent, status: agent.paneId === "flow" ? "done" as const : agent.status, lastActiveAt: now, lastSeenAt: now - MIN } : agent) };
+    open("/pane/hook", finished);
+    const flow = section("Today").getByRole("link", { name: /^Checkout flow/ });
+    expect(flow.querySelector("[data-unread]")).toHaveTextContent("+1");
+    expect(flow).toHaveAccessibleName(/, new$/);
+    expect(section("Today").getByRole("link", { name: /^Payments webhook/ }).querySelector("[data-unread]")).toBeNull();
+  });
 });

@@ -136,7 +136,7 @@ describe("workbench notifications", () => {
     clientHeight.mockRestore();
   });
 
-  it("makes a notice with a destination one control that opens it and clears the notice", async () => {
+  it("makes a notice with a destination a control that opens it and clears the notice", async () => {
     const router = createMemoryRouter([
       { path: "/", element: <><p>Home page</p><StatusArea /></> },
       { path: "/pane/:paneId", element: <><p>Pane page</p><StatusArea /></> },
@@ -146,12 +146,22 @@ describe("workbench notifications", () => {
     const open = screen.getByRole("link", { name: /Working Claude needs your input/ });
     expect(open).toHaveAccessibleName(/nenu · redesign/);
     expect(open).toHaveAttribute("href", "/pane/w1%3Aworking");
-    // The control is the whole toast; there is no second, competing close button on it.
-    expect(screen.queryByRole("button", { name: "Dismiss notification" })).not.toBeInTheDocument();
     await act(async () => { fireEvent.click(open); });
     expect(router.state.location.pathname).toBe("/pane/w1%3Aworking");
     finishExit();
     expect(screen.queryByText("Working Claude needs your input")).not.toBeInTheDocument();
+    router.dispose();
+  });
+
+  // Every notice can be closed where it sits: one that opens a chat used to offer only its link.
+  it("gives a notice with a destination its own close button, which closes it without opening anything", async () => {
+    const router = createMemoryRouter([{ path: "/", element: <StatusArea /> }, { path: "/pane/:paneId", element: <p>Pane page</p> }]);
+    render(<RouterProvider router={router} />);
+    act(() => setStatus("Codex finished", "success", undefined, { to: "/pane/w1%3Aworking" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" })); });
+    expect(router.state.location.pathname).toBe("/");
+    finishExit();
+    expect(screen.queryByText("Codex finished")).not.toBeInTheDocument();
     router.dispose();
   });
 });
