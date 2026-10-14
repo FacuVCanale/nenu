@@ -94,7 +94,7 @@ const NEW_QUESTION = /^\s*Trust this folder\?/;
 // The paragraph under the question wraps with the pane; at 50 columns it runs to seven rows.
 const NEW_QUESTION_REACH = 16;
 
-function pointerWalk(pointed: number, target: number): string[] {
+export function pointerWalk(pointed: number, target: number): string[] {
   const steps = target - pointed;
   const arrow = steps > 0 ? "Down" : "Up";
   return [...Array<string>(Math.abs(steps)).fill(arrow), "Enter"];

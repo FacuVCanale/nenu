@@ -133,14 +133,15 @@ export function meaningfulTerminalTitle(
 
 /**
  * The status the snapshot reports for a pane: Herdr's, except that `done` lasts only until you look
- * in Nenu.
+ * in Nenu, and `unknown` reads `blocked` while the bridge holds a dialog card for the pane (`asking`).
  *
  * Herdr's `done` is `idle` plus Herdr's own seen bit: its CLI help says a focus marks the pane seen
  * and a read does not. Nenu only reads, so a pane opened from the phone stayed `done` until someone
  * focused it at the desk, and every list kept drawing it green. Only what happens in Nenu counts
  * as seeing (.adr/0003), so Nenu's ledger decides here. A pane with no entry keeps Herdr's status.
  */
-export function shownStatus(status: AgentStatus, activity: PaneActivity | undefined): AgentStatus {
+export function shownStatus(status: AgentStatus, activity: PaneActivity | undefined, asking = false): AgentStatus {
+  if (status === "unknown" && asking) return "blocked";
   return status === "done" && activity && activity.seenAt >= activity.activeAt ? "idle" : status;
 }
 
