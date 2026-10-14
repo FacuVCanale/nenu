@@ -146,7 +146,7 @@ the unit name; the Herdr action runs from anywhere.
   are the strips above that chat, and `/space/:spaceId` only resolves old links and an empty workspace
   ([ADR 0065](./.adr/0065-a-workspace-opens-on-its-pane.md)).
 - **A desk's session opens with its own panel** (`web/src/components/session-inspector.tsx`): Changes,
-  Files and Artifacts for that pane from 1024 px, each read only while on screen, folded with ⌘⌥B;
+  Files, Artifacts and Terminal for that pane from 1024 px, each read only while on screen, folded with ⌘⌥B;
   the project's Threads, PRs, Activity and Memory sit behind its ⋯
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)).
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
@@ -156,7 +156,7 @@ the unit name; the Herdr action runs from anywhere.
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped
   notification opens in place. `bun scripts/e2e/run.ts motion` must count 0 transitions while quiet
-  ([ADR 0077](./.adr/0077-page-motion-runs-only-on-navigations-the-app-starts.md)).
+  ([ADR 0078](./.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
   failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
   describe connection health. Brief failures retry quietly; only sustained outages show the
@@ -174,8 +174,11 @@ the unit name; the Herdr action runs from anywhere.
   encoded form. `bun scripts/history-response-bench.ts <history-response.json>` measures this path
   without printing transcript content.
 - **"Type into terminal" is armed by a named choice and dies with the pane view.** It is a named row
-  of the composer's + menu; no gesture arms it. It disarms on a pane switch, a composer lock (gone
-  pane, read-only, idle pause), a hidden page, and a failed batch — never persisted, never restored.
+  of the phone's + menu and, beside a desk's session panel, a switch in its Terminal tab, where Keys
+  live too ([ADR 0077](./.adr/0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md)); no
+  gesture arms it. It disarms on a pane switch, a composer lock (gone pane, read-only, idle pause), a
+  hidden page, a failed batch and, on a desk, the Terminal tab leaving the screen — never persisted,
+  never restored.
   Don't lift it, and don't add the reply guard's `composerReady` pre-flight to it; the reasoning for
   both sits in `web/src/hooks/use-direct-typing.ts`'s header.
 - **The operator's rows in `commands.toml` replace the shipped command catalog on the panes they

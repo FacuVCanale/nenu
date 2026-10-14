@@ -8,6 +8,22 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-14
+
+### Added
+- On a desk, the session panel's Terminal tab shows the pane's screen with Keys and a Type into terminal switch; the + menu keeps Files and photos, Commands and Context (ADR 0077). (335b8af9)
+
+### Changed
+- Home leads with what needs you: the headline never names pull requests, PRs are one row each with ready to merge first, Workspaces lists each Herdr workspace once, and the coordinator box is gone. (fd91e999)
+- The phone's tab bar is Home, New and Search: Browse is folded into Search and Needs you sits on top of Home, with its count on the Home icon; every count of what needs you is the same. (1b930e24, c891c425)
+
+## [1.5.2] - 2026-10-14
+
+### Fixed
+- A long message sent since 1.5.1 reads in the chat as the text it held, without Claude's paste tags, and no longer leaves a second "Sent" copy under the reply. (03d7c893)
+- A message from Nenu's queue is checked against Claude's log like a direct send: one Claude logs incomplete stays paused as incomplete instead of delivered, and a long "Send now" keeps its place in Claude's queue. (5f4aa03a)
+- A Codex started without a Herdr client attached has its input box found, so sends no longer ask to "Type anyway". (ed1045c4)
+
 ## [1.5.1] - 2026-10-14
 
 **Read this if you send long messages to Claude Code from Nenu.** Before this release, a message whose last part after 1,022 bytes was shorter than Claude's paste threshold could arrive without its beginning, and Nenu still said "Sent" (measured on Claude Code 2.1.296 to 2.1.300).

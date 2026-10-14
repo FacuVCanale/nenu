@@ -1,8 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { createMemoryRouter, matchRoutes, Outlet, RouterProvider } from "react-router";
 
 import { routes } from "./router";
-import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { PANE_ROUTE_ID, ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 
 const home: HomeData = {
   bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], sessions: [],
@@ -22,6 +22,27 @@ function open(path: string, data: HomeData = home) {
 }
 
 describe("routes", () => {
+  // A push opens /pane/:id (with ?s= for another session), "/" for a test push, /settings for an
+  // update (sw.ts); an in-app notice opens the pane, or Home for several (use-transitions.ts). Needs
+  // you is no tab of its own any more: it is the top of Home, so every one of those still lands.
+  it("still opens every place a notification leads to: a pane, Home with what needs you on top, Settings", async () => {
+    const leaf = (path: string) => matchRoutes(routes, path)?.at(-1)?.route;
+    expect(leaf("/pane/w1%3Ap2")?.id).toBe(PANE_ROUTE_ID);
+    expect(leaf("/settings")?.path).toBe("settings");
+    expect(leaf("/")?.index).toBe(true);
+    const asking: HomeData = {
+      ...home,
+      session: "qa",
+      workspaces: [{ workspaceId: "w1", number: 1, label: "api", focused: true, activeTabId: "t1", tabCount: 1, paneCount: 1 }],
+      agents: [{ paneId: "w1:p2", workspaceId: "w1", workspaceLabel: "api", workspaceNumber: 1, tabId: "t1", agent: "claude", status: "blocked", cwd: "/", focused: false, paneLabel: "Migrate the orders table" }],
+    };
+    const router = open("/?s=qa", asking);
+    expect(await screen.findByRole("heading", { level: 1, name: "1 needs you" })).toBeInTheDocument();
+    const needs = screen.getByRole("region", { name: "Needs you" });
+    expect(within(needs).getByRole("link", { name: /Migrate the orders table/ })).toHaveAttribute("href", "/pane/w1%3Ap2?s=qa");
+    router.dispose();
+  });
+
   it("answers an unknown URL with Page not found inside the app, not the crash screen", () => {
     const router = open("/this/does/not/exist?s=qa");
     expect(screen.getByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();

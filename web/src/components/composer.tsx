@@ -1,8 +1,9 @@
 import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
 import { useStopTurn } from "@/hooks/use-stop-turn";
 import { MessageQueueStrip } from "./message-queue-strip";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
+import { createPortal } from "react-dom";
 import { useRevalidator } from "react-router";
 import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Loader2, Paperclip, Plus, Settings2, Slash, TextCursorInput, X, Zap, type LucideIcon } from "lucide-react";
 
@@ -20,6 +21,8 @@ import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
 import { DisplayPrefsContent } from "@/components/display-prefs";
 import { SectionLabel } from "@/components/ui/section-label";
+import { ListRow, ListSection } from "@/components/ui/list-group";
+import { Switch } from "@/components/ui/switch";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
@@ -37,6 +40,7 @@ import { splitLines } from "@/lib/blocks";
 import { detectNoEchoPrompt } from "@/lib/no-echo";
 import type { DeliveryMode } from "@/lib/types";
 import type { LockReason } from "@/components/question-card";
+import type { SessionPanelLink } from "@/components/session-inspector";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
@@ -74,7 +78,9 @@ export interface ComposerHandle {
 /**
  * One of the composer's secondary controls. The composer owns their state and behaviour. The + at
  * the start of the box reaches every message-side group in this order; View is published to the
- * pane header's ⋯ menu, so the header keeps the view and the composer keeps the message.
+ * pane header's ⋯ menu, so the header keeps the view and the composer keeps the message. Beside a
+ * desk's session panel, Quick replies stay on the phone and the Terminal group moves to the panel's
+ * Terminal tab.
  */
 export interface ComposerControl {
   id: "attach" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
@@ -153,6 +159,8 @@ interface ComposerProps {
   onSent: () => void;
   /** Receives the secondary controls whenever their state changes (see ComposerControl). */
   onControlsChange?: (controls: ComposerControl[]) => void;
+  /** Beside a desk's session panel: Keys and Type into terminal live in its Terminal tab, not the +. */
+  sessionPanel?: SessionPanelLink;
 }
 
 // The composer cluster at the bottom of the pane view — everything a phone keyboard can't do on its
@@ -301,7 +309,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -569,15 +577,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // lone `once` modifier, no chips) does not arm the confirm — one tap of setup isn't work worth
   // protecting, and over-guarding just trains you to double-tap through it reflexively.
   function requestDrawer(next: ComposerDrawer) {
-    if (drawer === "keys" && next !== "keys" && queuedKeys > 0 && !discardConfirm.confirm("discard")) {
-      setStatus(
-        `Tap again to discard ${queuedKeys} queued key${queuedKeys === 1 ? "" : "s"}`,
-        "info",
-      );
-      return;
-    }
+    if (drawer === "keys" && next !== "keys" && !releaseKeys()) return;
     discardConfirm.reset();
     setDrawer(next);
+  }
+  /** Whether the tray may go with its staged queue: the first try with keys staged asks for a second. */
+  function releaseKeys(): boolean {
+    if (queuedKeys === 0 || discardConfirm.confirm("discard")) return true;
+    setStatus(`Tap again to discard ${queuedKeys} queued key${queuedKeys === 1 ? "" : "s"}`, "info");
+    return false;
   }
   const closeDrawer = () => requestDrawer(null);
   // Two-tap guard for destructive commands (rm -rf, force-push, …): the first tap arms a "Really
@@ -1176,10 +1184,38 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     onControlsChange?.(latestControls.current);
   }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
+  // Beside a desk's session panel the + keeps the message. Quick replies stay on the phone, and Keys and
+  // Type into terminal sit in the panel's Terminal tab, beside the mirror they act on.
+  const inTerminalTab = (id: ComposerControl["id"]) => sessionPanel !== undefined && (id === "quick" || id === "keys" || id === "type");
   const menuGroups: ConversationActionGroup[] = MESSAGE_GROUPS.map((group) => ({
     label: group,
-    actions: controls.filter((control) => control.group === group),
+    actions: controls.filter((control) => control.group === group && !inTerminalTab(control.id)),
   }));
+  const terminalTab = sessionPanel?.terminal ?? null;
+
+  // Armed from the Terminal tab, the mode leaves with it: another tab, ⋯ Project or folding the panel
+  // disarms it, as a hidden page does. An edge, not a state: the password notice's Use Type arms while
+  // it opens the tab (below), and the tab arrives a render later.
+  const tabShown = terminalTab !== null;
+  const tabWasShown = useRef(tabShown);
+  useEffect(() => {
+    if (tabWasShown.current && !tabShown && direct.active) {
+      direct.deactivate();
+      setStatus("Stopped typing into the terminal — the Terminal tab closed.", "info");
+    }
+    tabWasShown.current = tabShown;
+  }, [tabShown]);
+
+  // The panel asks before it stops showing Terminal, where the Keys tray holds its staged queue
+  // (ADR 0005: the guard is on every way out, and the panel's ways out are its own).
+  const release = useRef(releaseKeys);
+  release.current = releaseKeys;
+  const leaving = sessionPanel?.leaving;
+  useLayoutEffect(() => {
+    if (!leaving) return;
+    leaving.current = () => release.current();
+    return () => { leaving.current = null; };
+  }, [leaving]);
   const [menuOpen, setMenuOpen] = useState(false);
   // The menu hangs from the box's leading column, which spans the box's full height: anchored there,
   // it opens above the box's top edge however tall the draft has grown, and never over the draft.
@@ -1310,6 +1346,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                     // any draft is present, which would make the offered remedy fail on the spot.
                     updateInput("");
                     requestDrawer(null);
+                    // On a desk the mode belongs to the Terminal tab, so the tab comes up with it.
+                    sessionPanel?.showTerminal();
                     direct.activate();
                   }
             }
@@ -1519,6 +1557,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </div>
         )}
       </div>
+
+      {/* The desk's Terminal tab, under the mirror agent-chat.tsx draws above: Keys, then the switch
+          that arms the same mode the phone's + row does. */}
+      {terminalTab && createPortal(
+        <div className="flex flex-col gap-3 py-3">
+          <section aria-label="Keys">
+            <NavTray onSend={pressKeys} presets={keyPresets} onQueueChange={setQueuedKeys} disabled={locked} />
+          </section>
+          <div className="px-3">
+            <ListSection footer="Quick replies stay on the phone. On a desk, type.">
+              <ListRow title="Type into terminal" hint={direct.active ? "On. Keys go straight into this pane." : "Off. Arms for this pane only, ends when you leave it."}>
+                <Switch checked={direct.active} disabled={locked || sending} aria-label="Type into terminal"
+                  onCheckedChange={() => controlActions.current.type()} />
+              </ListRow>
+            </ListSection>
+          </div>
+        </div>,
+        terminalTab.controls,
+      )}
 
       {/* Slash-command palette */}
       <CommandPalette

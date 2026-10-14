@@ -1,0 +1,40 @@
+
+  [0m[38;2;99;168;248m>_ [0m[1mOpenAI Codex[0m[2m (v0.162.1)[0m
+     [0m[2m/private/var/folders/xx/sanitizedtempdirtoken000000000/T/nenu-e2e-000000/home/demo[0m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  [0m[1mWarnings · 1 of 1 · MCP · docs[0m
+
+  The docs MCP server is not logged in. Run `codex mcp login docs`.
+
+  MCP startup incomplete (failed: docs)
+
+
+
+ 
+
+
+  [0m[1mk [0mkeep & next · [0m[1mesc[0m dismiss & close · [0m[1m⌃o [0mcopy · [0m[1m←/→ [0mwarning · [0m[1m↓ [0mscroll

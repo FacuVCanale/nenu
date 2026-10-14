@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { deliveryVerdict, loggedMessage, unwrapPastes } from "./delivery-check.ts";
+import { deliveryVerdict, loggedMessage } from "./delivery-check.ts";
 
 // Shapes measured on Claude Code 2.1.296, 2.1.299 and 2.1.300 under Herdr 0.9.3 on macOS. The PTY
 // hands a 1 500-character send to Claude as two reads, 1 022 and 478 bytes; Claude takes the first
@@ -26,15 +26,6 @@ describe("loggedMessage", () => {
     expect(loggedMessage(row("<bash-input>ls</bash-input>"))).toBeNull();
     expect(loggedMessage(JSON.stringify({ type: "assistant", message: { content: "hi" }, timestamp: "2026-10-14T19:57:00Z" }))).toBeNull();
     expect(loggedMessage("not json")).toBeNull();
-  });
-});
-
-describe("unwrapPastes", () => {
-  test("puts a logged paste back as the text it held", () => {
-    expect(unwrapPastes(wrap("alpha bravo"))).toBe("alpha bravo");
-    expect(unwrapPastes(`${wrap("alpha", "a1")}${wrap("bravo", "b2")}`)).toBe("alphabravo");
-    expect(unwrapPastes(`${wrap("alpha bravo charlie")}\nK.`)).toBe("alpha bravo charlie\nK.");
-    expect(unwrapPastes("no paste here")).toBe("no paste here");
   });
 });
 

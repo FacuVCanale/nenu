@@ -20,6 +20,7 @@ export interface Locator {
   first(): Locator;
   last(): Locator;
   innerText(): Promise<string>;
+  getAttribute(name: string): Promise<string | null>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;

@@ -1,4 +1,4 @@
-# 0077. Page motion runs only on navigations the app starts
+# 0078. Page motion runs only on navigations the app starts
 
 - **Status:** Accepted (2026-10-15).
 - **Trail:** `web/src/lib/motion.ts` · `web/src/router.tsx` · `web/src/index.css` (Page motion) ·

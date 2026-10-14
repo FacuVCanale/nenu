@@ -58,7 +58,7 @@ function terminal(agent: string, paint: () => string, keys: string[][] = []): Se
 test("a connection failure before typing is safe to wait for", async () => {
   let writes = 0;
   const herdr = { ...terminal("claude", screen), async readPane(): Promise<never> { throw new Error("offline"); } } as SendHerdr;
-  const result = await deliverQueuedMessage(row, herdr, async () => (writes++, { ok: true }), async () => true, "enter", noSleep);
+  const result = await deliverQueuedMessage(row, herdr, async () => (writes++, { ok: true }), async () => true, "enter", { sleep: noSleep });
   expect(result.status).toBe("blocked");
   expect(writes).toBe(0);
 });
@@ -66,7 +66,7 @@ test("a connection failure before typing is safe to wait for", async () => {
 test("an overlay keeps the message out of the terminal", async () => {
   const overlay = [rule, "  New environment setup", "", "  ❯ 1. Yes", "    2. Not now", "", "  Enter to confirm · Esc to cancel", screen()].join("\n");
   let writes = 0;
-  const result = await deliverQueuedMessage(row, terminal("claude", () => overlay), async () => (writes++, { ok: true }), async () => true, "enter", noSleep);
+  const result = await deliverQueuedMessage(row, terminal("claude", () => overlay), async () => (writes++, { ok: true }), async () => true, "enter", { sleep: noSleep });
   expect(result.status).toBe("blocked");
   expect(writes).toBe(0);
 });
@@ -74,7 +74,7 @@ test("an overlay keeps the message out of the terminal", async () => {
 test("a draft at the terminal is the operator's: the row waits and nothing is swept", async () => {
   const keys: string[][] = [];
   let writes = 0;
-  const result = await deliverQueuedMessage(row, terminal("claude", () => screen("half a thought"), keys), async () => (writes++, { ok: true }), async () => true, "enter", noSleep);
+  const result = await deliverQueuedMessage(row, terminal("claude", () => screen("half a thought"), keys), async () => (writes++, { ok: true }), async () => true, "enter", { sleep: noSleep });
   expect(result.status).toBe("blocked");
   expect(writes).toBe(0);
   expect(keys).toEqual([]);
@@ -93,7 +93,7 @@ test("types once through the audited route and confirms the box let go after Ent
     },
     async () => true,
     "enter",
-    noSleep,
+    { sleep: noSleep },
   );
   expect(result.status).toBe("sent");
   expect(writes).toEqual([
@@ -117,7 +117,7 @@ test("Enter acknowledgement with a stranded draft is uncertain and never types t
     },
     async () => true,
     "enter",
-    noSleep,
+    { sleep: noSleep },
   );
   expect(result.status).toBe("uncertain");
   expect(types).toBe(1);
@@ -125,7 +125,7 @@ test("Enter acknowledgement with a stranded draft is uncertain and never types t
 
 test("a conversation that changed before typing types nothing", async () => {
   let writes = 0;
-  const result = await deliverQueuedMessage(row, terminal("claude", () => screen()), async () => (writes++, { ok: true }), async () => false, "enter", noSleep);
+  const result = await deliverQueuedMessage(row, terminal("claude", () => screen()), async () => (writes++, { ok: true }), async () => false, "enter", { sleep: noSleep });
   expect(result.status).toBe("blocked");
   expect(writes).toBe(0);
 });
@@ -146,7 +146,7 @@ test("a second message reaches Claude's own queue while the first waits there (P
     },
     async () => true,
     "enter",
-    noSleep,
+    { sleep: noSleep },
   );
   expect(result.status).toBe("sent");
   expect(writes).toEqual(["Then say KIWI.", "Enter"]);
@@ -175,7 +175,7 @@ test("Codex's next-turn queue: bracketed paste through the audited route, then T
     },
     async () => true,
     "tab",
-    noSleep,
+    { sleep: noSleep },
   );
   expect(result.status).toBe("sent");
   expect(writes).toEqual([{ text: codex.text, paste: true }]);

@@ -32,7 +32,7 @@ let drawing: object | null = null;
  * `useNavigate` and our own code call it: a poll's revalidation, a loader's redirect and the browser's
  * Back never come through here, so they never start a transition. React Router's own `viewTransition`
  * flag stays unused, because it replays a transition on every revalidation after a Back
- * (.adr/0077-page-motion-runs-only-on-navigations-the-app-starts.md).
+ * (.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md).
  */
 export function animateNavigations(router: DataRouter): void {
   active = router;

@@ -153,8 +153,7 @@ export function BootSplash() {
           </PageBody>
           {/* The app's own tab bar, so it does not change on hand-off; inert until there is a herd to open. */}
           <div inert className="contents">
-            <BottomTabBar active={pathname === "/" ? "home" : null} homeTo={homePath(session)} attention={0}
-              onNeedsYou={noop} onBrowse={noop} onSearch={noop} />
+            <BottomTabBar active={pathname === "/" ? "home" : null} homeTo={homePath(session)} attention={0} onSearch={noop} />
           </div>
         </div>
       </div>

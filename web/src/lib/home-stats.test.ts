@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewItems, reviewQueue, runningWorkflows, unboundReviews } from "./home-stats";
+import { greeting, homeHeadline, needsYouItems, readyToMerge, recentChats, reviewItems, reviewQueue, runningWorkflows, unboundReviews } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -20,24 +20,24 @@ const project: ProjectView = {
 };
 
 describe("headline", () => {
-  it("leads with the one fact that needs you most, as a sentence with its noun", () => {
-    expect(homeHeadline({ needs: 2, review: 2, working: 5, idle: 0 }, 9).title).toBe("2 need you");
-    expect(homeHeadline({ needs: 1, review: 0, working: 5, idle: 0 }, 9).title).toBe("1 needs you");
-    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 0 }, 9).title).toBe("1 pull request ready to review");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 0 }, 9).title).toBe("2 agents at work");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 4 }, 9).title).toBe("All quiet");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 0 }, 0).title).toBe("What should we work on?");
+  it("leads with what needs you, never the pull requests, and says nothing does only once that was read", () => {
+    expect(homeHeadline({ needs: 2, review: 2, working: 5, idle: 0 }, 9, true).title).toBe("2 need you");
+    expect(homeHeadline({ needs: 1, review: 0, working: 5, idle: 0 }, 9, false).title).toBe("1 needs you");
+    expect(homeHeadline({ needs: 0, review: 17, working: 8, idle: 7 }, 15, true).title).toBe("Nothing needs you");
+    // Until the dialogs were read on a live herd, it says what the herd is doing instead.
+    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 0 }, 9, false).title).toBe("3 agents at work");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 4 }, 9, false).title).toBe("All quiet");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 0 }, 0, true).title).toBe("What should we work on?");
   });
 
   it("puts the rest on a second line, idle agents last, and leaves it out when there is nothing else", () => {
-    expect(homeHeadline({ needs: 1, review: 1, working: 1, idle: 4 }, 9).detail).toBe("1 to review · 1 working · 4 idle");
-    expect(homeHeadline({ needs: 1, review: 3, working: 5, idle: 0 }, 9).detail).toBe("3 to review · 5 working");
-    expect(homeHeadline({ needs: 2, review: 0, working: 1, idle: 0 }, 9).detail).toBe("1 working");
-    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 2 }, 9).detail).toBe("3 working · 2 idle");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 1 }, 9).detail).toBe("1 idle");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 0 }, 9).detail).toBeNull();
+    expect(homeHeadline({ needs: 1, review: 1, working: 1, idle: 4 }, 9, true).detail).toBe("1 to review · 1 working · 4 idle");
+    expect(homeHeadline({ needs: 0, review: 17, working: 8, idle: 7 }, 15, true).detail).toBe("17 to review · 8 working · 7 idle");
+    expect(homeHeadline({ needs: 2, review: 0, working: 1, idle: 0 }, 9, true).detail).toBe("1 working");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 2 }, 9, false).detail).toBe("1 to review · 2 idle");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 0 }, 9, false).detail).toBeNull();
     // "All quiet" already says it: a count of idle agents under it would repeat it.
-    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 3 }, 9).detail).toBeNull();
+    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 3 }, 9, false).detail).toBeNull();
   });
 
   it("greets by the local hour", () => {
@@ -106,6 +106,20 @@ describe("review queue", () => {
     ]);
     expect(rows.map((row) => row.number)).toEqual([3, 5, 4, 1, 2]);
     expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
+  });
+
+  it("calls a pull request ready to merge only when it is approved, its checks pass and nothing blocks it", () => {
+    const green = { passed: 3, failed: 0, pending: 0 };
+    const rows = reviewQueue([], [
+      gh(1, { review: "approved", checks: green }),
+      gh(2, { checks: green }),
+      gh(3, { review: "approved", checks: { passed: 2, failed: 1, pending: 0 } }),
+      gh(4, { review: "approved", checks: { passed: 2, failed: 0, pending: 1 } }),
+      gh(5, { review: "approved", checks: green, draft: true }),
+      gh(6, { review: "approved", checks: green }),
+      gh(7, { review: "approved" }),
+    ]).sort((a, b) => a.number! - b.number!).map((row) => row.number === 6 ? { ...row, mergeBlocker: "branch out of date" } : row);
+    expect(rows.map(readyToMerge)).toEqual([true, false, false, false, false, false, true]);
   });
 
   it("opens the agent on the PR's branch, else the PR on GitHub", () => {

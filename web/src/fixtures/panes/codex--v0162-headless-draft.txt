@@ -1,0 +1,40 @@
+
+  [0m[38;2;99;168;248m>_ [0m[1mOpenAI Codex[0m[2m (v0.162.1)[0m
+     [0m[2m/private/var/folders/xx/sanitizedtempdirtoken000000000/T/nenu-e2e-000000/home/demo[0m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[0m[1m› [0mhello from the phone probe
+
+  [0m[38;2;246;226;183mGPT-6.1-Sol default [0m· [0m[38;2;171;223;167m/private/var/folders/xx/sanitizedtempdirtoken000000000/T/nenu-e2e-000000/home/demo[0m
+                                                                                              ⚠ [0m[38;2;196;167;103m1 warning [0m· [0m[1mf2 [0mto view

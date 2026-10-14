@@ -688,3 +688,33 @@ quota percentages on the Claude statusline become zeroes. The drafts were typed 
 Seen and NOT captured into the corpus: Claude's background-agents screen (it lists the operator's
 other sessions by title), and the slash and `@` completion popups, which 2.1.285 paints ABOVE the
 input box where they read as transcript.
+
+## Codex 0.162.1 freshly started (captured 2026-10-14, herdr 0.9.3, disposable e2e Herdr)
+
+Byte-faithful `herdr pane read --source visible --format ansi` captures from the e2e bench's own Herdr
+(`bun scripts/e2e/bridge.ts --herdr`), Codex 0.162.1 under its temporary `HOME` with only a linked
+`auth.json`, in a scratch git folder. One sanitization pass, LENGTH-PRESERVING: the Darwin temp-dir
+token becomes `sanitizedtempdirtoken000000000` (and its parents `xx` and `000000`), and the MCP
+server named in the warning becomes `docs`. The drafts were typed with `herdr pane send-text`, the
+4,000 characters as one bracketed paste, and cleared with `ctrl+u`.
+
+**The headline: with no Herdr client attached, the space before a status separator carries the
+field's colour.** The row arrives as `GPT-6.1-Sol default ` (coloured, edge space included) then a
+plain `· `. The reader took the edge space as part of the field and the separator as not ` · `, so a
+freshly started headless 0.162.1 pane had no composer and every send asked for "Type anyway", with
+the MCP warning on the hint row and without it. The paint of a space moves between frames (the same
+`? for shortcuts` hint came back as `? ` bold, then `?` bold plus a plain space), and a space with no
+background shows none. The status row now gives the spaces around a dot to the separator
+(`isStatusRow` in `lib/harness/codex/markers.ts`). With a client attached, Codex paints the
+separator apart and the row already read fine; `codex--v0162-idle-warning.txt` keeps that as the
+control.
+
+| Fixture | State / what's in it | Herdr status |
+|---|---|---|
+| `codex--v0162-headless-idle-warning.txt` | No client: the logo, the dim placeholder with no fill, the status row `GPT-6.1-Sol default ` + `· ` + the folder, and the hint row `← for agents · ? for shortcuts` with `⚠ 1 warning · f2 to view` at the right. `composerReady` must be TRUE | `idle` |
+| `codex--v0162-headless-idle.txt` | The same after the warning was dismissed (f2, Escape): the hint row alone | `idle` |
+| `codex--v0162-headless-draft.txt` | The draft `hello from the phone probe`; the hint row holds only the notice | `idle` |
+| `codex--v0162-headless-draft-wrapped.txt` | A 300-character draft wrapped onto two continuation rows, no hint row | `idle` |
+| `codex--v0162-headless-paste.txt` | 4,000 characters pasted in one bracketed paste: `[Pasted Content 4000 chars]` | `idle` |
+| `codex--v0162-warnings.txt` | The f2 warnings view: `Warnings · 1 of 1 · MCP · docs`, the login hint, footer `k keep & next · esc dismiss & close · …`. No composer | `idle` |
+| `codex--v0162-idle-warning.txt` | A client attached (a pty that answers the colour queries): the composer on its fill, separators in a muted foreground of their own. Already read fine before the fix | `idle` |
