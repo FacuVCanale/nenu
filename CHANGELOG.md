@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-14
+
+### Added
+- On a desk, the session panel's Terminal tab shows the pane's screen with Keys and a Type into terminal switch; the + menu keeps Files and photos, Commands and Context (ADR 0077). (335b8af9)
+
+### Changed
+- Home leads with what needs you: the headline never names pull requests, PRs are one row each with ready to merge first, Workspaces lists each Herdr workspace once, and the coordinator box is gone. (fd91e999)
+- The phone's tab bar is Home, New and Search: Browse is folded into Search and Needs you sits on top of Home, with its count on the Home icon; every count of what needs you is the same. (1b930e24, c891c425)
+
 ## [1.5.2] - 2026-10-14
 
 ### Fixed
