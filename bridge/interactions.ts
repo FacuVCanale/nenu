@@ -104,7 +104,7 @@ const HEAD_ROWS = 12;
 /** Rows of a plan's on-screen tail a plan hint must contain. */
 const PLAN_TAIL_ROWS = 3;
 
-const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip)/i;
+const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip|continue without)/i;
 const TYPE_SOMETHING = /^type something\b/i;
 /** A select question's escape row; Claude's prompt model carries no flag for it (wizard and multi-select do). */
 const QUESTION_ESCAPE = /^chat about this$/i;
@@ -529,15 +529,17 @@ export class Interactions {
   }
 
   /**
-   * Re-detect the session's eligible panes (blocked, or a dialog regex matched lately) and forget the
-   * rest. A pane is read every time (one local read, no revision to skip on: pane.read's is 0) but only
-   * parsed when its text or hints changed. Publishes `interaction` for every pane whose card changed.
+   * Re-detect the session's eligible panes (blocked, unknown, or a dialog regex matched lately) and
+   * forget the rest. Unknown is read because a dialog Herdr's manifest does not name (Codex's hooks
+   * review) leaves the pane there, and only the screen can tell. A pane is read every time (one local
+   * read, no revision to skip on: pane.read's is 0) but only parsed when its text or hints changed.
+   * Publishes `interaction` for every pane whose card changed.
    */
   async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string, maxAgeMs = 0): Promise<Interaction[]> {
     const now = this.now();
     const eligible = agents.filter((a) => {
       const matchedAt = this.matched.get(paneKey(session, a.paneId));
-      return a.status === "blocked" || this.waiting(session, a.paneId) || (matchedAt !== undefined && now - matchedAt <= OUTPUT_MATCH_WINDOW_MS);
+      return a.status === "blocked" || a.status === "unknown" || this.waiting(session, a.paneId) || (matchedAt !== undefined && now - matchedAt <= OUTPUT_MATCH_WINDOW_MS);
     });
     const live = new Set(eligible.map((a) => a.paneId));
     if (only === undefined) {

@@ -13,7 +13,7 @@ export const snapshotRoutes: Route[] = [
     path: "/api/snapshot",
     access: "read",
     session: true,
-    async handle({ cfg, activity, agentStates, hasJournal, projects, pullRequests, registry, snooze, updateMonitor }, { req, rt }) {
+    async handle({ cfg, activity, agentStates, hasJournal, interactions, projects, pullRequests, registry, snooze, updateMonitor }, { req, rt }) {
       const { agents, shellPanes, workspaces, tabs, bridge } = rt.engine.current();
       // The CLIs' own turn state (ADR 0067), attached like the activity timestamps: the engine stays a
       // Herdr poller, and Stop's button reads the same entry Stop's press re-reads.
@@ -22,10 +22,12 @@ export const snapshotRoutes: Route[] = [
       // Attach each pane's activity timestamps, and the status they imply (shownStatus). Done here
       // rather than in the state engine so the engine stays a pure Herdr-poller with no knowledge of
       // the ledger — and so the two numbers are read at serialise time, i.e. as fresh as the request.
+      // A dialog Herdr's manifest does not name leaves the pane `unknown`; the bridge's card says it asks.
       const withActivity = (p: AgentView): AgentView => {
         const a = activity.get(rt.name, p.paneId);
         const withTurn = agentStates.attach(rt.name, p);
-        return a ? { ...withTurn, status: shownStatus(p.status, a), lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : withTurn;
+        const status = shownStatus(p.status, a, interactions.current(rt.name, p.paneId) !== null);
+        return a ? { ...withTurn, status, lastActiveAt: a.activeAt, lastSeenAt: a.seenAt } : { ...withTurn, status };
       };
       const shownAgents = agents.map(withActivity);
       const shownShells = shellPanes.map(withActivity);

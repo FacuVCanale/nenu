@@ -217,6 +217,18 @@ describe("ActivityLedger — the unseen derivation", () => {
   });
 });
 
+describe("shownStatus — a dialog the bridge read on a pane Herdr cannot classify", () => {
+  test("an unknown pane holding a card reads blocked", () => {
+    expect(shownStatus("unknown", undefined, true)).toBe("blocked");
+  });
+
+  test("without a card, or with a status Herdr did name, nothing is promoted", () => {
+    expect(shownStatus("unknown", undefined, false)).toBe("unknown");
+    expect(shownStatus("idle", undefined, true)).toBe("idle");
+    expect(shownStatus("working", undefined, true)).toBe("working");
+  });
+});
+
 describe("shownStatus — Herdr's done is Herdr's own unseen", () => {
   test("a pane opened in Nenu after it finished is no longer reported done", () => {
     const { l, advance } = ledger();
