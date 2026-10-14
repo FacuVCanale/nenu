@@ -36,6 +36,7 @@ beforeEach(() => {
   server.use(
     http.get(/\/api\/pane\/[^/]+\/subagents$/, () => HttpResponse.json({ available: true, sessionKey: "k", agents: [], truncated: false })),
     http.get(/\/api\/pane\/[^/]+\/activity$/, () => HttpResponse.json({ available: true, sessionKey: "k", workflows: [], tasks: [], artifacts: [] })),
+    http.get("/api/org/routines", () => HttpResponse.json({ ok: true, available: false, routines: [], broken: 0 })),
   );
 });
 
@@ -129,4 +130,37 @@ it("draws no row for a chat with nothing around it", async () => {
   await screen.findByRole("textbox");
   await act(async () => {});
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
+});
+
+it("lists the project's routines behind Routines, read when the chat opens and again on a tap, never on a timer", async () => {
+  const reads: string[] = [];
+  const hour = 3_600_000;
+  server.use(http.get("/api/org/routines", ({ request }) => {
+    reads.push(new URL(request.url).searchParams.get("project") ?? "");
+    return HttpResponse.json({ ok: true, available: true, broken: 0, routines: [
+      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, lastRun: "", nextRun: "" },
+      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, lastRun: "", nextRun: new Date(Date.now() + 4 * hour + 90_000).toISOString() },
+      { name: "weekly-report", trigger: "schedule", schedule: "every 7d", events: [], enabled: false, lastRun: "", nextRun: "" },
+    ] });
+  }));
+  const { user } = renderChat();
+  // Two of three listen: the count is what is switched on.
+  const chip = await within(await row()).findByRole("button", { name: "Routines, 2" });
+  expect(reads).toEqual(["acme-shop"]);
+  await user.click(chip);
+  const panel = screen.getByRole("region", { name: "Routines" });
+  const item = (name: string) => within(panel).getByText(name).closest("li")!;
+  expect(item("pr-followup")).toHaveTextContent("on checks-failed, review");
+  expect(item("pr-followup")).toHaveTextContent(/on$/);
+  expect(item("nightly-deps")).toHaveTextContent("daily 03:00");
+  expect(item("nightly-deps")).toHaveTextContent(/in 4h$/);
+  expect(item("weekly-report")).toHaveTextContent(/off$/);
+  await waitFor(() => expect(reads).toHaveLength(2));
+});
+
+it("draws no Routines chip while Organizations cannot list routines", async () => {
+  renderChat();
+  await row();
+  await act(async () => {});
+  expect(screen.queryByRole("button", { name: /^Routines/ })).not.toBeInTheDocument();
 });
