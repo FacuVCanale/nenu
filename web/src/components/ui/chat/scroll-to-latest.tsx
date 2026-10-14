@@ -1,4 +1,4 @@
-import { ArrowDown } from "lucide-react";
+import { ArrowDown } from "@/components/ui/icon";
 
 import { cn } from "@/lib/utils";
 

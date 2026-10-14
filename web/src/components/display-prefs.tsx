@@ -1,5 +1,5 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { AArrowDown, AArrowUp } from "lucide-react";
+import { AArrowDown, AArrowUp } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";

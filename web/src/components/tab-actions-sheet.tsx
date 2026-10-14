@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Pencil, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, CircleX } from "@/components/ui/icon";
 
 import { BottomSheet } from "@/components/ui/sheet";
 import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
@@ -149,7 +149,7 @@ export function TabActionsSheet({
             />
           )}
           <ActionRow
-            icon={<XCircle className="size-4 shrink-0" />}
+            icon={<CircleX className="size-4 shrink-0" />}
             label="Close tab"
             destructive
             onClick={() => setMode("confirm")}

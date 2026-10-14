@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import { Layers } from "lucide-react";
+import { Layers } from "@/components/ui/icon";
 
 import { RowBody } from "@/components/nav-rows";
 import { StatusDot } from "@/components/status-badge";

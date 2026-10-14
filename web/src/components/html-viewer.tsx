@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { Code2, Expand, Eye, Loader2, Monitor, ShieldCheck, Smartphone } from "lucide-react";
+import { CodeXml, Expand, Eye, Pending, Monitor, ShieldCheck, Smartphone } from "@/components/ui/icon";
 import { fetchPaneFile, paneFileError, paneFileUrl, type PaneFileError } from "@/lib/api";
 
 // The in-app HTML viewer. The document only ever runs in the opaque-origin `allow-scripts` iframe
@@ -97,7 +97,7 @@ export function HtmlViewer({ paneId, session, path, name, reload, onError }: {
     <div className="file-preview-tabs html-viewer-bar">
       <div ref={tabs} role="tablist" aria-label="HTML preview mode" className="flex gap-1">
         {tab("render", "Render", Eye)}
-        {tab("code", "Code", Code2)}
+        {tab("code", "Code", CodeXml)}
       </div>
       {view === "render" && <div role="group" aria-label="Preview width" className="html-viewer-widths">
         {([["desktop", "Desktop", Monitor], ["phone", "Phone", Smartphone]] as const).map(([value, label, Icon]) =>
@@ -124,7 +124,7 @@ export function HtmlViewer({ paneId, session, path, name, reload, onError }: {
             onLoad={() => setLoaded(true)}
           />
         : source === null
-          ? <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin motion-reduce:animate-none" />Loading source…</div>
+          ? <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Pending className="size-4" />Loading source…</div>
           : <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{source.text}</pre>}
     </div>
   </>;

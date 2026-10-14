@@ -1,4 +1,4 @@
-import { Check, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { Check, Ellipsis, type IconComponent } from "@/components/ui/icon";
 import { forwardRef, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { cn } from "@/lib/utils";
@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export interface ConversationAction {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   run: () => void;
   disabled?: boolean;
   /** An open dock or an armed mode, shown as a check. */
@@ -34,7 +34,7 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
   return <>
     <button ref={trigger} type="button" aria-label="Conversation actions" aria-haspopup="dialog" aria-expanded={open}
       onClick={() => setOpen(!open)} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted lg:size-8">
-      <MoreHorizontal aria-hidden="true" className="size-5 lg:size-4" />
+      <Ellipsis aria-hidden="true" className="size-5 lg:size-4" />
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
       <ActionGroups groups={groups} onRun={run} />

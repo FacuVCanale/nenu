@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { Check } from "lucide-react";
+import { Check } from "@/components/ui/icon";
 
 import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { buttonVariants } from "@/components/ui/button";

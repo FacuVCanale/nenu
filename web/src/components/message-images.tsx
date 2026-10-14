@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon } from "@/components/ui/icon";
 
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localImageUrl } from "@/lib/local-sends";

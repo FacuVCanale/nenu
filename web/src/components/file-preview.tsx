@@ -1,6 +1,6 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, Copy, Download, FileText, Globe, Loader2, MoreHorizontal, RefreshCw, X } from "lucide-react";
+import { Check, ChevronLeft, Copy, Download, FileText, Globe, Pending, Ellipsis, RefreshCw, X } from "@/components/ui/icon";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchArtifactMetadata, fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
 import { displayPath } from "@/lib/display-path";
@@ -237,7 +237,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
           <div className="file-preview-actions">
             {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-5" aria-hidden="true" /></a>}
             <button ref={more} type="button" aria-label="More actions" aria-haspopup="dialog" aria-expanded={menu} className="file-preview-action"
-              onClick={() => { setCopied(false); setMenu(!menu); }}><MoreHorizontal className="size-5" aria-hidden="true" /></button>
+              onClick={() => { setCopied(false); setMenu(!menu); }}><Ellipsis className="size-5" aria-hidden="true" /></button>
             <button type="button" aria-label="Close document" onClick={close} className="file-preview-action preview-close"><X className="size-5" aria-hidden="true" /></button>
           </div>
           <WorkbenchPopover open={menu} onDismiss={() => setMenu(false)} anchorRef={more} label="More actions" className="w-56 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
@@ -275,4 +275,4 @@ function DocumentContent({ data, name, openRelated, onError }: { data: DocumentD
   }
 }
 
-function Loading() { return <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin motion-reduce:animate-none" />Loading document…</div>; }
+function Loading() { return <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Pending className="size-4" />Loading document…</div>; }

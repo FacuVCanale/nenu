@@ -102,6 +102,14 @@ export function formatDuration(ms: number | undefined): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+/** A running span in whole minutes ("<1m", "57m", "1h 31m"): it is read against a clock that ticks once a minute. */
+export function formatElapsed(ms: number | undefined): string {
+  if (ms === undefined || !Number.isFinite(ms) || ms < 0) return "";
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "<1m";
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 /** "574k", "1.49M". */
 export function formatCount(n: number | undefined): string {
   if (n === undefined) return "";
@@ -119,15 +127,15 @@ export const allAgents = (wf: ActivityWorkflow): ActivityAgent[] => wf.phases.fl
 export const phaseRunning = (p: ActivityPhase): boolean => p.agents.some((a) => a.state === "running");
 export const phaseDone = (p: ActivityPhase): number => p.agents.filter((a) => a.state !== "running").length;
 
-/** Elapsed for a running workflow, total for a finished one. */
-export function workflowElapsed(wf: ActivityWorkflow, now: number): number | undefined {
-  if (wf.durationMs !== undefined) return wf.durationMs;
-  return wf.startedAt !== undefined && wf.status === "running" ? now - wf.startedAt : undefined;
+/** Elapsed for a running workflow in whole minutes, total for a finished one to the second. */
+export function workflowElapsed(wf: ActivityWorkflow, now: number): string {
+  if (wf.durationMs !== undefined) return formatDuration(wf.durationMs);
+  return wf.startedAt !== undefined && wf.status === "running" ? formatElapsed(now - wf.startedAt) : "";
 }
 
-export function agentElapsed(agent: ActivityAgent, now: number): number | undefined {
-  if (agent.durationMs !== undefined) return agent.durationMs;
-  return agent.startedAt !== undefined && agent.state === "running" ? now - agent.startedAt : undefined;
+export function agentElapsed(agent: ActivityAgent, now: number): string {
+  if (agent.durationMs !== undefined) return formatDuration(agent.durationMs);
+  return agent.startedAt !== undefined && agent.state === "running" ? formatElapsed(now - agent.startedAt) : "";
 }
 
 /** How many running things the Activity tab badge counts. */

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, MessageSquarePlus } from "lucide-react";
+import { Pending, ChatCircleText } from "@/components/ui/icon";
 
 import type { PromptFeedbackPurpose, PromptModel, PromptOption } from "@/lib/blocks";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
@@ -126,7 +126,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
   }
 
   const busyIcon = (
-    <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+    <Pending className="size-4 shrink-0 text-muted-foreground" aria-label="Sending" />
   );
 
   return (
@@ -147,8 +147,8 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
               onClick={() => press(id, { kind: "option", option })}
               trailing={
                 busy ? (
-                  <Loader2
-                    className="size-4 shrink-0 animate-spin text-muted-foreground"
+                  <Pending
+                    className="size-4 shrink-0 text-muted-foreground"
                     aria-label="Sending"
                   />
                 ) : null
@@ -174,7 +174,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
         </p>
       ) : feedback && feedbackCopy && feedback.text !== "" ? (
         <div className="flex items-start gap-2 rounded-lg bg-muted/60 px-3.5 py-2.5">
-          <MessageSquarePlus
+          <ChatCircleText
             className="mt-0.5 size-4 shrink-0 text-muted-foreground"
             aria-label="Existing feedback"
           />
@@ -186,7 +186,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
       ) : feedback && feedbackCopy && feedbackCopy.offer && editorOpen ? (
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-1.5 text-footnote font-medium text-muted-foreground">
-            <MessageSquarePlus className="size-4 shrink-0" />
+            <ChatCircleText className="size-4 shrink-0" />
             {feedbackCopy.editorLabel}
           </label>
           <textarea
@@ -231,7 +231,7 @@ export function PromptSelectBlock({ prompt, onAction, disabled }: PromptSelectBl
             }}
             className={SECONDARY_ACTION}
           >
-            <MessageSquarePlus aria-hidden className="size-4 shrink-0" />
+            <ChatCircleText aria-hidden className="size-4 shrink-0" />
             {feedbackCopy.offer}
           </button>
         </SecondaryActions>

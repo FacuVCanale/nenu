@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Check, ExternalLink, GitPullRequest, X } from "lucide-react";
+import { Check, ExternalLink, GitPullRequest, X } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
 import { errorMessage } from "@/components/node-start";

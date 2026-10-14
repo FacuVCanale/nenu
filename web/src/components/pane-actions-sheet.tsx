@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, XCircle } from "lucide-react";
+import { Pencil, CircleX } from "@/components/ui/icon";
 
 import { BottomSheet } from "@/components/ui/sheet";
 import { ActionRow, ConfirmView, RenameView } from "@/components/action-sheet-rows";
@@ -119,7 +119,7 @@ export function PaneActionsSheet({
             onClick={() => setMode("rename")}
           />
           <ActionRow
-            icon={<XCircle className="size-4 shrink-0" />}
+            icon={<CircleX className="size-4 shrink-0" />}
             label="Close pane"
             destructive
             onClick={() => setMode("confirm")}

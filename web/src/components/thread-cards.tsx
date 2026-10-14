@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, GitPullRequest } from "lucide-react";
+import { Eye, GitPullRequest } from "@/components/ui/icon";
 
 import { errorMessage } from "@/components/node-start";
 import { NodeDot } from "@/components/node-row";

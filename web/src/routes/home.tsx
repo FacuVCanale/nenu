@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { useRouteLoaderData } from "react-router";
-import { MessagesSquare, Wifi } from "lucide-react";
+import { ChatsCircle, Wifi } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -105,7 +105,7 @@ export function HomeRoute() {
 function HomeWithoutHerd({ refused, lost }: { refused: boolean; lost: boolean }) {
   if (!refused && !lost) return <EmptyState icon={Wifi} title="Connecting to Nenu…">Looking for Nenu at {window.location.host}.</EmptyState>;
   return (
-    <EmptyState icon={MessagesSquare} title="Nothing to show yet">
+    <EmptyState icon={ChatsCircle} title="Nothing to show yet">
       Your threads, questions and reviews show up here once {refused ? "you sign in again." : "Nenu answers. Check this device's network or VPN."}
     </EmptyState>
   );

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { Inbox } from "lucide-react";
+import { Inbox } from "@/components/ui/icon";
 
 import { Button } from "./button";
 import { EmptyState } from "./empty-state";

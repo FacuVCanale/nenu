@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Folder, History } from "lucide-react";
+import { ChevronRight, Folder, History } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { fetchHomeDirs, type HomeDirs } from "@/lib/api";

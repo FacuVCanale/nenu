@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock } from "@/components/ui/icon";
 
 import { isReadOnly } from "@/lib/types";
 import type { DeviceAuth } from "@/lib/types";

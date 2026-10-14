@@ -1,5 +1,5 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { Ellipsis, ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, PanelRightClose, RefreshCw, SquareTerminal, type LucideIcon } from "lucide-react";
+import { Ellipsis, ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
 
 import { ArtifactsPanel } from "@/components/artifacts-panel";
 import { useConversationScan } from "@/components/chat-files-browser";
@@ -14,7 +14,7 @@ import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { DiffScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const TABS: ReadonlyArray<readonly [InspectorTab, string, LucideIcon]> = [
+const TABS: ReadonlyArray<readonly [InspectorTab, string, IconComponent]> = [
   ["changes", "Changes", GitCompareArrows],
   ["files", "Files", FolderTree],
   ["artifacts", "Artifacts", Layers],

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
-import { ListChecks, MessageSquare } from "lucide-react";
+import { ListChecks, ChatCircle } from "@/components/ui/icon";
 
 import { PrBar } from "@/components/pr-bar";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
@@ -106,7 +106,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const headerAction = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : phoneWorker ? (
     <button type="button" className="project-toggle" aria-label={tasksShown ? "Back to chat" : `Threads, ${openCount} open`}
       onClick={() => setView(tasksShown ? "chat" : "threads")}>
-      {tasksShown ? <><MessageSquare aria-hidden className="size-3.5" />Chat</> : <>
+      {tasksShown ? <><ChatCircle aria-hidden className="size-3.5" />Chat</> : <>
         <ListChecks aria-hidden className="size-3.5" />Threads
         {openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
       </>}

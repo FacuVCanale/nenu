@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Pending } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { DOCK_TILE } from "@/components/dock-tile";
@@ -62,7 +62,7 @@ function Group({
               onClick={() => onFire(t)}
               className={cn("hit-area h-10 gap-1.5 rounded-full px-4 text-subhead font-normal", phase === "idle" ? DOCK_TILE : "border border-foreground")}
             >
-              {phase === "pending" && <Loader2 className="size-4 animate-spin" />}
+              {phase === "pending" && <Pending className="size-4" />}
               {phase === "done" && <Check className="size-4" />}
               {t}
             </Button>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { TriangleAlert, Pending } from "@/components/ui/icon";
 
 import type { MultiSelectModel } from "@/lib/blocks";
 import type { MultiSelectIntent } from "@/lib/multi-select-action";
@@ -57,10 +57,10 @@ export function MultiSelectBlock({ multi, onAction, disabled }: MultiSelectBlock
 }
 
 const spinner = (
-  <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+  <Pending className="size-4 shrink-0 text-muted-foreground" aria-label="Sending" />
 );
 /** The same spinner on the ink primary, in the label's own colour. */
-const busyOnInk = <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" />;
+const busyOnInk = <Pending className="size-4 shrink-0" aria-label="Sending" />;
 
 function CheckboxPhase({
   multi,
@@ -163,7 +163,7 @@ function ReviewPhase({
         // role="alert" so a screen reader announces the incomplete-answers warning when the review
         // screen mounts — otherwise a user could confirm a partial set without ever hearing it.
         <p role="alert" className="flex items-center gap-2 text-body text-status-working">
-          <AlertTriangle aria-hidden className="size-4 shrink-0" />
+          <TriangleAlert aria-hidden className="size-4 shrink-0" />
           You have not answered all questions
         </p>
       ) : null}

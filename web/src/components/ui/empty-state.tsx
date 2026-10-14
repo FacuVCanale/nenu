@@ -1,11 +1,11 @@
-import type { LucideIcon } from "lucide-react";
+import type { IconComponent } from "@/components/ui/icon";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 interface EmptyStateProps {
   /** An icon, or a picture where the screen has none of the app's chrome to say whose it is (the crash). */
-  icon?: LucideIcon | ReactElement;
+  icon?: IconComponent | ReactElement;
   /** What is missing or empty, as a sentence. */
   title: string;
   /** h1 where the screen draws no header of its own (the crash, the boot splash), so the page keeps a title. */

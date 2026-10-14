@@ -1,45 +1,49 @@
 import { useEffect, useRef } from "react";
-import { LoaderCircle } from "lucide-react";
+import { formatElapsed } from "@/lib/activity";
 import { isLocked, useLocked } from "@/lib/idle";
 import { cn } from "@/lib/utils";
-import { formatWorkDuration } from "@/lib/work-timeline";
+
+const MINUTE = 60_000;
 
 /**
- * The time since `since` ("1m 37s", after `prefix`), or `fallback` without a usable start. Only this
- * text node ticks, so the transcript around it never re-renders for it; it stops while the page is
- * hidden or the idle lock is up and catches up when either ends.
+ * The time since `since` in whole minutes ("3m", after `prefix`), or `fallback` without a usable
+ * start. Only this text node changes, once a minute on the minute since `since`, so the transcript
+ * around it never re-renders for it; it stops while the page is hidden or the idle lock is up and
+ * catches up when either ends. The exact duration shows once the turn ends.
  */
 export function Elapsed({ since, prefix = "", fallback = "", className }: { since?: string; prefix?: string; fallback?: string; className?: string }) {
   const text = useRef<HTMLSpanElement>(null);
   const locked = useLocked();
   const start = since ? Date.parse(since) : NaN;
-  const label = () => Number.isFinite(start) && start <= Date.now() ? `${prefix}${formatWorkDuration(Date.now() - start)}` : fallback;
+  const label = () => Number.isFinite(start) && start <= Date.now() ? `${prefix}${formatElapsed(Date.now() - start)}` : fallback;
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const update = () => { if (text.current) text.current.textContent = label(); };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      if (text.current) text.current.textContent = label();
+      timer = setTimeout(tick, MINUTE - (((Date.now() - start) % MINUTE) + MINUTE) % MINUTE);
+    };
     const sync = () => {
-      if (timer) clearInterval(timer);
+      if (timer) clearTimeout(timer);
       timer = undefined;
       if (document.hidden || isLocked()) return;
-      update();
-      if (Number.isFinite(start)) timer = setInterval(update, 1000);
+      if (Number.isFinite(start)) tick();
+      else if (text.current) text.current.textContent = label();
     };
     sync();
     document.addEventListener("visibilitychange", sync);
-    return () => { if (timer) clearInterval(timer); document.removeEventListener("visibilitychange", sync); };
+    return () => { if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", sync); };
   }, [since, prefix, fallback, locked]);
   return <span ref={text} className={cn("tabular-nums", className)}>{label()}</span>;
 }
 
-/** The live mark: a spinner, or a steady dot under reduced motion, so the state never rests on motion. */
+/** The live mark: a still dot in the working colour. The words say the state; nothing here moves. */
 export function LiveGlyph({ className }: { className?: string }) {
   return <span data-live-glyph aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center text-status-working", className)}>
-    <LoaderCircle className="size-full animate-spin motion-reduce:hidden" />
-    <span className="hidden size-2 rounded-full bg-current motion-reduce:block" />
+    <span className="size-2 rounded-full bg-current" />
   </span>;
 }
 
-/** "Working for 1m 37s" with its live mark, where no turn line says it yet. */
+/** "Working for 3m" with its live mark, where no turn line says it yet. */
 export function WorkActivityLabel({ startedAt }: { startedAt?: string }) {
   return <span className="inline-flex items-center gap-1.5 text-footnote text-muted-foreground">
     <LiveGlyph className="size-3.5" />

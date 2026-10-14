@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "@/components/ui/icon";
 import type { ReactNode } from "react";
 
 import type { WizardStepChip } from "@/lib/blocks";

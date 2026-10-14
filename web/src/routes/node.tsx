@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
-import { ExternalLink, MessageSquare, MessageSquareOff } from "lucide-react";
+import { ExternalLink, ChatCircle, ChatCircleSlash } from "@/components/ui/icon";
 
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
@@ -34,7 +34,7 @@ export function NodeRoute() {
   if (!project) {
     body = <ProjectMissing session={data.session} />;
   } else if (!node) {
-    body = <EmptyState icon={MessageSquareOff} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
+    body = <EmptyState icon={ChatCircleSlash} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
       <Link to={projectPath(project.slug, data.session)} className={buttonVariants()}>Open project</Link>
       <Link to={homePath(data.session)} className={buttonVariants({ variant: "outline" })}>Go to Home</Link>
     </div>}>{project.name} no longer lists it.</EmptyState>;
@@ -62,7 +62,7 @@ export function NodeRoute() {
         {thread.branch && <p className="mt-1.5 truncate font-mono text-xs text-muted-foreground">{thread.branch}</p>}
         {(live || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {live && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
-            <MessageSquare aria-hidden className="size-4" />Open chat</Button>}
+            <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
           {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
             className="border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive">
             Close {coordinator ? "coordinator" : "thread"}</Button>}

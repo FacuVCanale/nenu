@@ -89,7 +89,7 @@ describe("WorkActivityLabel", () => {
     rerender(<WorkActivityLabel startedAt="2026-09-08T11:58:10Z" />);
     expect(screen.getByText("Working for 1m")).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(1);
-    act(() => { vi.advanceTimersByTime(4000); });
+    act(() => { vi.advanceTimersByTime(5000); });
     expect(screen.getByText("Working for 2m")).toBeInTheDocument();
   });
 

@@ -1,4 +1,4 @@
-import { Pencil, RotateCcw, Send, TerminalSquare, Trash2, Zap, type LucideIcon } from "lucide-react";
+import { Pencil, RotateCcw, Send, SquareTerminal, Trash2, Zap, type IconComponent } from "@/components/ui/icon";
 
 import { QueuedMessage, type QueuedAction, type QueuedTone } from "@/components/queued-message";
 import { queueRowStatus } from "@/hooks/use-message-queue";
@@ -30,9 +30,9 @@ export function pendingStatus(send: LocalSend): {
 
 // Managing the message lives behind its ⋯; a remedy for what went wrong (or a read it can still get)
 // stays on the status line.
-const ACTION: Record<keyof LocalSendActions, { label: string; icon: LucideIcon; remedy: boolean }> = {
+const ACTION: Record<keyof LocalSendActions, { label: string; icon: IconComponent; remedy: boolean }> = {
   retry: { label: "Retry", icon: RotateCcw, remedy: true },
-  openTerminal: { label: "Open Terminal", icon: TerminalSquare, remedy: true },
+  openTerminal: { label: "Open Terminal", icon: SquareTerminal, remedy: true },
   readNow: { label: "Read it now", icon: Zap, remedy: true },
   sendNow: { label: "Send now", icon: Send, remedy: false },
   edit: { label: "Edit", icon: Pencil, remedy: false },
