@@ -400,7 +400,7 @@ async function threads(): Promise<void> {
       const { page, close } = await open(DESKTOP, { pinned: true });
       seen.desktopPanelCards = await cards(page);
       await shoot(page, "desktop-panel");
-      await page.getByRole("button", { name: "Hide project panel" }).click();
+      await page.getByRole("button", { name: "Hide session panel" }).click();
       await page.waitForTimeout(500);
       seen.desktopNoPanelCards = await cards(page);
       await shoot(page, "desktop-no-panel");
@@ -1757,6 +1757,10 @@ async function terminal(before: boolean): Promise<void> {
       await page.waitForTimeout(400);
       seen.phoneMenu = await text(page.getByRole("dialog", { name: "Message actions" }));
       await shoot(page, "phone-menu");
+      // The phone keeps its Keys dock whatever the desk does.
+      await page.getByRole("dialog", { name: "Message actions" }).getByRole("button", { name: "Keys" }).click();
+      await page.waitForTimeout(400);
+      await shoot(page, "phone-keys");
       await close();
     }
     const desk = await open(DESKTOP, chat);
@@ -1778,31 +1782,31 @@ async function terminal(before: boolean): Promise<void> {
       seen.terminalStreams = [...desk.streams];
       await shoot(page, "desktop-terminal");
 
+      // What the tab holds besides the mirror: the switch, and no keyboard of its own.
+      seen.tabKeyButtons = await panel.getByRole("button", { name: /^(Esc|Ctrl C|Presets|F keys)$/ }).count();
+      seen.tabQuickRepliesNote = await panel.getByText(/Quick replies stay on the phone/).count();
+
       const toggle = panel.getByRole("switch", { name: /Type into terminal/ });
       await toggle.click();
       await page.waitForTimeout(400);
       seen.armedStrip = await page.getByText("Typing into terminal").count();
       seen.armedSwitch = await toggle.getAttribute("aria-checked");
-      await page.keyboard.press("x");
-      await page.waitForTimeout(600);
+      // The desk's own keyboard while armed: each key pressed, and what reached the pane for it.
+      const physical: Record<string, string[]> = {};
+      for (const key of ["Escape", "Control+c", "Control+d", "Control+l", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab", "Shift+Tab", "Enter", "Backspace", "F5", "x"]) {
+        const from = fake.calls.length;
+        await page.keyboard.press(key);
+        await page.waitForTimeout(300);
+        physical[key] = fake.calls.slice(from).filter((call) => call.method === "pane.send_keys" && call.params.pane_id === herd.working)
+          .flatMap((call) => call.params.keys as string[]);
+      }
+      seen.physicalKeys = physical;
+      seen.stillArmed = await toggle.getAttribute("aria-checked");
       await shoot(page, "desktop-terminal-armed");
       await panel.getByRole("tab", { name: /Changes/ }).click();
       await page.waitForTimeout(600);
       seen.stripAfterLeavingTab = await page.getByText("Typing into terminal").count();
       seen.changesAgainReads = await reads(page);
-
-      await terminalTab.click();
-      await page.waitForTimeout(600);
-      await panel.getByRole("button", { name: "Ctrl", exact: true }).click();
-      await panel.getByRole("button", { name: "Tab", exact: true }).click();
-      await panel.getByRole("tab", { name: /Changes/ }).click();
-      await page.waitForTimeout(300);
-      seen.queueGuardStatus = await text(page.getByText(/discard/).first()).catch(() => "(none)");
-      seen.queueGuardKeptTerminal = await terminalTab.getAttribute("aria-selected");
-      await shoot(page, "desktop-terminal-queue-guard");
-      await panel.getByRole("tab", { name: /Changes/ }).click();
-      await page.waitForTimeout(300);
-      seen.queueGuardSecondTap = await terminalTab.getAttribute("aria-selected");
     }
     await desk.close();
     if (!before) {
@@ -1812,7 +1816,7 @@ async function terminal(before: boolean): Promise<void> {
       await shoot(page, "desktop-terminal-light");
       await close();
     }
-    // The only write this drives is the one key typed while armed, into the working pane.
+    // The only writes this drives are the keys typed while armed, into the working pane.
     const unexpectedWrites = fake.writes().filter((call) => !(call.method === "pane.send_keys" && call.params.pane_id === herd.working));
     return { shots, seen, writes: fake.writes().length, unexpectedWrites };
   }, CAPTURE_EPOCH);
