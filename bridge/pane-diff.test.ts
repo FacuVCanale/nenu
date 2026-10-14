@@ -1,0 +1,207 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { paneDiff, type DiffTarget, type GitRun } from "./pane-diff.ts";
+
+// Real git in a temporary repo: the parser's job is to agree with git, so git writes the fixtures.
+const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+function git(cwd: string, ...args: string[]): string {
+  const result = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd, env: cleanEnv });
+  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr.toString()}`);
+  return result.stdout.toString();
+}
+const lines = (count: number, label = "line") => Array.from({ length: count }, (_, i) => `${label} ${i + 1}`).join("\n") + "\n";
+
+let repo = "";
+const target = (extra: Partial<DiffTarget> = {}): DiffTarget => ({ number: 7, head: "feat/x", base: "main", checkedOut: "feat/x", ...extra });
+
+beforeAll(() => {
+  repo = realpathSync(mkdtempSync(join(tmpdir(), "nenu-diff-")));
+  git(repo, "init", "-q", "-b", "main");
+  mkdirSync(join(repo, "src"));
+  mkdirSync(join(repo, "docs"));
+  writeFileSync(join(repo, "src/a.ts"), lines(10));
+  writeFileSync(join(repo, "src/b.ts"), lines(4, "b"));
+  writeFileSync(join(repo, "docs/old.md"), lines(20, "doc"));
+  writeFileSync(join(repo, "gone.txt"), lines(2, "gone"));
+  writeFileSync(join(repo, "logo.bin"), new Uint8Array([0, 1, 2, 3, 0, 255]));
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "base");
+  git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+
+  // A pushed branch the pane is not on: one changed line in b.ts.
+  git(repo, "checkout", "-q", "-b", "feat/y");
+  writeFileSync(join(repo, "src/b.ts"), lines(4, "b").replace("b 2", "b two"));
+  git(repo, "commit", "-q", "-am", "y");
+  git(repo, "update-ref", "refs/remotes/origin/feat/y", "HEAD");
+
+  git(repo, "checkout", "-q", "main");
+  git(repo, "checkout", "-q", "-b", "feat/x");
+  writeFileSync(join(repo, "src/a.ts"), lines(10).replace("line 3\n", "line three\n") + "line 11\n");
+  writeFileSync(join(repo, "src/new.ts"), lines(3, "new"));
+  git(repo, "rm", "-q", "gone.txt");
+  git(repo, "mv", "docs/old.md", "docs/new.md");
+  writeFileSync(join(repo, "logo.bin"), new Uint8Array([0, 1, 2, 3, 0, 254, 9]));
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "x");
+  // Uncommitted, and an untracked file that a diff of tracked files leaves out.
+  writeFileSync(join(repo, "src/b.ts"), lines(4, "b") + "b 5\n");
+  writeFileSync(join(repo, "scratch.txt"), "not added\n");
+});
+
+afterAll(() => {
+  if (repo) rmSync(repo, { recursive: true, force: true });
+});
+
+describe("the pull request checked out in the pane", () => {
+  test("lists every changed file against the merge base, uncommitted edits included", async () => {
+    const diff = await paneDiff(repo, target());
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff.source).toBe("worktree");
+    expect({ pr: diff.pr, base: diff.base, head: diff.head }).toEqual({ pr: 7, base: "main", head: "feat/x" });
+    expect(diff.files.map((file) => [file.path, file.status, file.additions, file.deletions])).toEqual([
+      ["docs/new.md", "renamed", 0, 0],
+      ["gone.txt", "deleted", 0, 2],
+      ["logo.bin", "modified", 0, 0],
+      ["src/a.ts", "modified", 2, 1],
+      ["src/b.ts", "modified", 1, 0],
+      ["src/new.ts", "added", 3, 0],
+    ]);
+    expect(diff.files[0]!.from).toBe("docs/old.md");
+    expect(diff.files[2]).toMatchObject({ binary: true, omitted: "binary" });
+    expect(diff.files[2]!.hunks).toBeUndefined();
+    expect(diff.totals).toEqual({ files: 6, additions: 6, deletions: 3 });
+    expect(diff.truncated).toBeUndefined();
+  });
+
+  test("keeps each hunk's start lines and its lines with their markers", async () => {
+    const diff = await paneDiff(repo, target());
+    if (!diff.ok) throw new Error(diff.message);
+    const a = diff.files.find((file) => file.path === "src/a.ts")!;
+    expect(a.hunks).toHaveLength(1);
+    const [hunk] = a.hunks!;
+    expect(hunk!.oldStart).toBe(1);
+    expect(hunk!.newStart).toBe(1);
+    expect(hunk!.header.startsWith("@@ -1,")).toBe(true);
+    expect(hunk!.lines).toContain("-line 3");
+    expect(hunk!.lines).toContain("+line three");
+    expect(hunk!.lines).toContain("+line 11");
+    expect(hunk!.lines).toContain(" line 2");
+    expect(diff.files.find((file) => file.path === "src/new.ts")!.hunks![0]!.lines).toEqual(["+new 1", "+new 2", "+new 3"]);
+  });
+
+  test("a folder inside the repo sees only the changes under it", async () => {
+    const diff = await paneDiff(join(repo, "src"), target());
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff.files.map((file) => file.path)).toEqual(["a.ts", "b.ts", "new.ts"]);
+    expect(diff.totals).toEqual({ files: 3, additions: 6, deletions: 1 });
+  });
+
+  test("reads without writing: the index is left as it was", async () => {
+    // A touched file is stat-dirty: a refreshing command would rewrite the index.
+    utimesSync(join(repo, "src/a.ts"), new Date(), new Date(Date.now() + 5_000));
+    const before = statSync(join(repo, ".git/index"));
+    await paneDiff(repo, target());
+    const after = statSync(join(repo, ".git/index"));
+    expect([after.mtimeMs, after.size, after.ino]).toEqual([before.mtimeMs, before.size, before.ino]);
+  });
+
+  test("a GIT_DIR in the bridge's environment does not redirect the read", async () => {
+    const saved = process.env.GIT_DIR;
+    process.env.GIT_DIR = join(tmpdir(), "nowhere");
+    try {
+      const diff = await paneDiff(repo, target());
+      expect(diff.ok).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = saved;
+    }
+  });
+});
+
+describe("a pull request on another branch of the same repo", () => {
+  test("diffs the pushed branch, without the pane's own edits", async () => {
+    const diff = await paneDiff(repo, target({ head: "feat/y" }));
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff.source).toBe("branch");
+    expect(diff.files.map((file) => [file.path, file.additions, file.deletions])).toEqual([["src/b.ts", 1, 1]]);
+  });
+
+  test("a branch this repo has never fetched is said so, not guessed at", async () => {
+    const diff = await paneDiff(repo, target({ head: "feat/missing" }));
+    expect(diff).toMatchObject({ ok: false, reason: "head-missing" });
+  });
+});
+
+describe("limits", () => {
+  test("lists at most `files` files and says how many there are", async () => {
+    const diff = await paneDiff(repo, target(), { limits: { files: 2 } });
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff.files.map((file) => file.path)).toEqual(["docs/new.md", "gone.txt"]);
+    expect(diff.totals).toEqual({ files: 6, additions: 6, deletions: 3 });
+    expect(diff.truncated).toEqual({ files: true });
+  });
+
+  test("a file longer than `fileLines` keeps its counts and loses its lines", async () => {
+    const diff = await paneDiff(repo, target(), { limits: { fileLines: 4 } });
+    if (!diff.ok) throw new Error(diff.message);
+    const a = diff.files.find((file) => file.path === "src/a.ts")!;
+    expect(a).toMatchObject({ additions: 2, deletions: 1, omitted: "large" });
+    expect(a.hunks).toBeUndefined();
+    expect(diff.files.find((file) => file.path === "src/new.ts")!.hunks).toHaveLength(1);
+  });
+
+  test("past `bytes` the read stops, and the files it did not reach keep only their counts", async () => {
+    const diff = await paneDiff(repo, target(), { limits: { bytes: 700 } });
+    if (!diff.ok) throw new Error(diff.message);
+    expect(diff.truncated).toEqual({ bytes: true });
+    expect(diff.files).toHaveLength(6);
+    expect(diff.files.at(-1)).toMatchObject({ path: "src/new.ts", additions: 3, omitted: "budget" });
+    expect(diff.files.at(-1)!.hunks).toBeUndefined();
+    expect(diff.files[0]!.omitted).toBeUndefined();
+  });
+});
+
+describe("refusals", () => {
+  const never: GitRun = async () => {
+    throw new Error("git must not run");
+  };
+
+  test("no pull request read from GitHub for this repo", async () => {
+    expect(await paneDiff(repo, undefined, { run: never })).toMatchObject({ ok: false, reason: "no-pr" });
+  });
+
+  test("a folder that is not absolute, or is gone", async () => {
+    expect(await paneDiff("relative/dir", target(), { run: never })).toMatchObject({ ok: false, reason: "no-folder" });
+    expect(await paneDiff(undefined, target(), { run: never })).toMatchObject({ ok: false, reason: "no-folder" });
+    expect(await paneDiff(join(repo, "missing"), target(), { run: never })).toMatchObject({ ok: false, reason: "no-folder" });
+  });
+
+  test("a branch name git could read as an option or a range never reaches git", async () => {
+    for (const base of ["-x", "--output=/tmp/x", "a..b", "main\n", "", "a b"]) {
+      expect(await paneDiff(repo, target({ base }), { run: never })).toMatchObject({ ok: false, reason: "no-base" });
+    }
+    expect(await paneDiff(repo, target({ base: undefined }), { run: never })).toMatchObject({ ok: false, reason: "no-base" });
+    expect(await paneDiff(repo, target({ head: "-p" }), { run: never })).toMatchObject({ ok: false, reason: "head-missing" });
+  });
+
+  test("a base branch this repo does not have", async () => {
+    expect(await paneDiff(repo, target({ base: "release" }))).toMatchObject({ ok: false, reason: "no-base" });
+  });
+
+  test("git runs with fixed arguments, from the pane's real folder", async () => {
+    const calls: Array<{ argv: string[]; cwd: string }> = [];
+    const spy: GitRun = async (argv, opts) => {
+      calls.push({ argv, cwd: opts.cwd });
+      return { code: 1, stdout: "", truncated: false };
+    };
+    await paneDiff(repo, target(), { run: spy });
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call.cwd).toBe(repo);
+      expect(call.argv[0]).toBe("git");
+    }
+  });
+});

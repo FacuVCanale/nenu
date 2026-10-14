@@ -41,3 +41,8 @@ it("labels CI by passed checks out of all reported", () => {
   expect(ciLabel(undefined)).toBe("CI");
   expect(ciLabel({ passed: 6, failed: 0, pending: 0 })).toBe("CI 6/6");
 });
+
+it("opens the PR's diff from its size when the thread has a pane", async () => {
+  render(<PrBar project={project(true)} thread={{ ...thread, paneId: "w1:p1" }} session="s" readOnly={false} onChanged={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "View changes: 212 added, 148 removed" })).toHaveTextContent("+212 −148");
+});
