@@ -1,12 +1,12 @@
-import { useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { Ellipsis, ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, PanelRightClose, RefreshCw, type LucideIcon } from "lucide-react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { Ellipsis, ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, PanelRightClose, RefreshCw, SquareTerminal, type LucideIcon } from "lucide-react";
 
 import { ArtifactsPanel } from "@/components/artifacts-panel";
 import { useConversationScan } from "@/components/chat-files-browser";
 import { DiffBody, useDiffRead } from "@/components/diff-viewer";
 import { ciLabel, ciTone } from "@/components/pr-bar";
 import { ProjectFilesBrowser } from "@/components/project-files-browser";
-import { clampWidth, ICON_BUTTON, PANEL_WIDTH, type InspectorTab, type InspectorView, type SessionInspectorState, type SessionPr } from "@/components/session-inspector";
+import { clampWidth, ICON_BUTTON, PANEL_WIDTH, type InspectorTab, type InspectorView, type SessionInspectorState, type SessionPr, type TerminalSlots } from "@/components/session-inspector";
 import { fetchActivity, type ActivityArtifact } from "@/lib/activity";
 import { fetchSessionDiff } from "@/lib/api";
 import { chatFileReferences } from "@/lib/chat-files";
@@ -14,16 +14,16 @@ import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { DiffScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// Terminal joins these as the fourth tab in a later release; its place is after Artifacts.
 const TABS: ReadonlyArray<readonly [InspectorTab, string, LucideIcon]> = [
   ["changes", "Changes", GitCompareArrows],
   ["files", "Files", FolderTree],
   ["artifacts", "Artifacts", Layers],
+  ["terminal", "Terminal", SquareTerminal],
 ];
 
 /**
- * A session's panel on a desk, right of its chat: Changes, Files and Artifacts for that pane, each
- * read only while it is on screen, and the project's own panel behind ⋯ when the pane has one.
+ * A session's panel on a desk, right of its chat: Changes, Files, Artifacts and Terminal for that
+ * pane, each read only while it is on screen, and the project's own panel behind ⋯ when the pane has one.
  */
 export default function SessionPanel({ inspector, paneId, session, artifacts, pr, project }: {
   inspector: SessionInspectorState;
@@ -85,16 +85,34 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
         </button>
       </div>
       {view === "project" ? <div className="flex min-h-0 flex-1 flex-col">{project}</div> : (
-        <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className="min-h-0 flex-1 overflow-y-auto">
-          <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} />
+        <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className={cn("min-h-0 flex-1", view === "terminal" ? "flex flex-col" : "overflow-y-auto")}>
+          {view === "terminal" ? <Terminal publish={inspector.setTerminal} />
+            : <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} />}
         </div>
       )}
     </aside>
   );
 }
 
+/**
+ * The Terminal tab is two empty places the chat draws into while the tab is on screen: the pane's
+ * mirror, then Keys and Type into terminal (agent-chat.tsx and composer.tsx own all three).
+ */
+function Terminal({ publish }: { publish: (slots: TerminalSlots | null) => void }) {
+  const mirror = useRef<HTMLDivElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    publish({ mirror: mirror.current!, controls: controls.current! });
+    return () => publish(null);
+  }, [publish]);
+  return <>
+    <div ref={mirror} className="min-h-0 flex-1" />
+    <div ref={controls} className="shrink-0 border-t border-border/60" />
+  </>;
+}
+
 /** The body of the tab on screen; the panel remounts it for another pane. */
-function TabBody({ tab, paneId, session, pr }: { tab: InspectorTab; paneId: string; session?: string; pr?: SessionPr }) {
+function TabBody({ tab, paneId, session, pr }: { tab: Exclude<InspectorTab, "terminal">; paneId: string; session?: string; pr?: SessionPr }) {
   const openFile = useContext(FilePreviewContext);
   const open = (path: string) => openFile?.(path);
   if (tab === "changes") return <Changes paneId={paneId} session={session} pr={pr} />;

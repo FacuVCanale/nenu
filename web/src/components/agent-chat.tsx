@@ -9,6 +9,7 @@ import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesChip, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, PanelTop, ScrollText, Search, TerminalSquare } from "lucide-react";
@@ -43,6 +44,7 @@ import { Composer, type ComposerControl, type ComposerHandle } from "@/component
 import { ConnectConversation } from "@/components/connect-conversation";
 import { LiveConversation } from "@/components/live-conversation";
 import { PaneCwdContext } from "@/components/work-log-tools";
+import type { SessionPanelLink } from "@/components/session-inspector";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
 import { useLiveConversation } from "@/hooks/use-live-conversation";
 import { useModelMenuSource } from "@/hooks/use-model-menu-source";
@@ -142,6 +144,8 @@ interface AgentChatProps {
   /** Shown beside another pane instead of as the route: its own compact header, and its mirror is
    *  watched through `onMirrorShown` rather than the route's flag. */
   docked?: DockedChat;
+  /** Beside a desk's session panel, whose Terminal tab shows this pane's mirror, Keys and Type. */
+  sessionPanel?: SessionPanelLink;
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
@@ -204,6 +208,7 @@ export function AgentChat({
   strip,
   composerTop,
   docked,
+  sessionPanel,
   text,
   pending = false,
   nativeTelemetry,
@@ -434,6 +439,14 @@ export function AgentChat({
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   const cardReadOnly = readOnly || gone || connecting;
   const refused = interaction && interactions.refusalFor(interaction);
+  // Keys for a dialog the conversation can't draw: on a desk, the panel's Terminal tab holds them.
+  const panelRef = useRef(sessionPanel);
+  panelRef.current = sessionPanel;
+  const openKeys = useCallback(() => {
+    if (panelRef.current) return panelRef.current.showTerminal();
+    setRawTerminal(true);
+    composerRef.current?.openDock("keys");
+  }, [setRawTerminal]);
   const { answer } = interactions;
   const { revalidate } = revalidator;
   const refreshConversation = conversation.refresh;
@@ -444,7 +457,7 @@ export function AgentChat({
     <div data-follow-stop className="chat-follow-stop mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
         readOnly={cardReadOnly} lockReason={lock} refused={refused} onOpen={() => setRawTerminal(true)}
-        onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
+        onKeys={openKeys}
         onAnswer={async (option, extra) => {
           const outcome = await answer(interaction!, option, extra);
           if (outcome.ok) {
@@ -455,10 +468,11 @@ export function AgentChat({
           return outcome;
         }} />
     </div>
-  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, answer, revalidate, refreshConversation]);
-  // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
-  // (lib/live-events.ts). Leaving the pane restores the default.
-  const mirrorShown = !showConversation || dialogPresent;
+  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, openKeys, answer, revalidate, refreshConversation]);
+  // The mirror's poll may relax only while neither the mirror, a dialog drawn from it, nor the desk's
+  // Terminal tab is on screen (lib/live-events.ts). Leaving the pane restores the default.
+  const terminalTab = sessionPanel?.terminal ?? null;
+  const mirrorShown = !showConversation || dialogPresent || terminalTab !== null;
   const onDockedMirror = docked?.onMirrorShown;
   useEffect(() => {
     if (onDockedMirror) return onDockedMirror(mirrorShown);
@@ -1258,7 +1272,7 @@ export function AgentChat({
           {!showConversation && conversationFooter && <div className="max-h-[40dvh] overflow-y-auto px-3 pb-1">{conversationFooter}</div>}
           {!subagent && showConversation && wait?.kind === "interaction" && (
             <TerminalWaitRow key={wait.hint} hint={wait.hint} agent={agent?.agent} onShow={() => setRawTerminal(true)}
-              onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }} />
+              onKeys={openKeys} />
           )}
           {!subagent && showConversation && waitNotice !== null && (
             <p data-terminal-notice className="flex min-w-0 items-center gap-2 px-4 pb-1 text-xs text-muted-foreground">
@@ -1348,12 +1362,23 @@ export function AgentChat({
             setTapToFocus={setTapToFocus}
             onSent={() => { onSent(); setFollowKey((key) => key + 1); conversation.refresh(); }}
             onControlsChange={setComposerControls}
+            sessionPanel={sessionPanel}
           />
         </div>}
       </div>
       {desktop && processDetail && <ProcessPanel title={detailTitle(processDetail, activity)} onClose={() => setProcessDetail(null)}>{processDetailContent}</ProcessPanel>}
       </div>
       </PaneCwdContext>
+
+      {/* The desk's Terminal tab: this pane's screen as Herdr renders it, every grammar off, so the
+          keys under it (the composer's) act on exactly what it shows. */}
+      {terminalTab && createPortal(
+        <ChatMessageList dep={text} className="py-3">
+          {text ? <AnsiOutput text={text} wrap={prefs.wrap} fontSize={prefs.fontSize} />
+            : <p className="py-16 text-center text-sm text-muted-foreground">{pending ? "Reading the terminal…" : "(no recent output)"}</p>}
+        </ChatMessageList>,
+        terminalTab.mirror,
+      )}
 
       {/* Closing the open pane or its tab moves the route to the pane beside it (DetailRoute). */}
       {agent && <PaneActionsSheet open={paneSheet === "pane"} onClose={() => setPaneSheet(null)} pane={agent} name={title}

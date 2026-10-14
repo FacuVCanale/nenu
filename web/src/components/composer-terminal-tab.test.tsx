@@ -177,7 +177,7 @@ describe("Composer on a desk — the session panel's Terminal tab", () => {
     renderDesk();
     expect(leaving.current?.()).toBe(true);
     fireEvent.click(tab().getByRole("button", { name: "Ctrl" }));
-    fireEvent.click(tab().getByRole("button", { name: "Tab", exact: true }));
+    fireEvent.click(tab().getByRole("button", { name: /^Tab$/ }));
     let first: boolean | undefined;
     act(() => { first = leaving.current?.(); });
     expect(first).toBe(false);
