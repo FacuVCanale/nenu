@@ -1,5 +1,4 @@
 import type { HerdrClient, OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
-import { allowedTokens } from "./state-engine.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Event-poked polling. A long-lived events.subscribe stream whose ONLY job is to
@@ -36,12 +35,17 @@ const GLOBAL_SUBSCRIPTIONS: readonly string[] = [
 /**
  * Types an older server does not know. One unknown subscription type rejects the WHOLE subscribe,
  * so these go out only when `ping` reports this protocol or newer, and a server that still rejects
- * them is remembered and served the base list. `pane.updated` is a metadata poke (title, tokens,
- * session id), about once a second for Codex's animated title; it never tracks status.
+ * them is remembered and served the base list.
+ *
+ * `pane.updated` stays out. Each one carries a whole pane record (~1 KB), Codex's animated title and
+ * every plugin token refresh send one, and it never tracks status: measured on a live 21-agent herd,
+ * 30 of 51 events and 93% of the stream's bytes in a minute, up to 9 KB in one second. That is more
+ * than a macOS Unix socket buffers (8 KiB), and Herdr 0.9.3 closes a stream whose write would block,
+ * so a bridge held up for a second under load lost its stream (`os error 35` in Herdr's log). The
+ * label, session and tokens it announced reach Nenu on the next poll instead.
  */
 export const EXTENDED_SUBSCRIPTIONS_PROTOCOL = 22;
 const EXTENDED_SUBSCRIPTIONS: readonly string[] = [
-  "pane.updated",
   "workspace.metadata_updated",
   "workspace.moved",
   "workspace.reordered",
@@ -98,14 +102,6 @@ export function sameIdSet(a: string[], b: string[]): boolean {
   return true;
 }
 
-/**
- * What a `pane.updated` record must change for Nenu to re-poll early. The title is left out on
- * purpose: Codex animates it about once a second, and the regular poll already carries it.
- */
-function paneMetaKey(pane: Record<string, unknown>): string {
-  return JSON.stringify([pane.agent, pane.label, pane.agent_session, allowedTokens(pane.tokens as Record<string, unknown>)]);
-}
-
 const watchKey = (watches: OutputWatch[]) =>
   JSON.stringify(watches.map((w) => [w.paneId, w.source, w.match.type, w.match.value, w.lines ?? null]).sort());
 
@@ -148,8 +144,8 @@ export class EventPoker {
   private readonly healthListeners = new Set<(healthy: boolean) => void>();
   private readonly outputListeners = new Set<(event: OutputMatched) => void>();
   private readonly watchRejectedListeners = new Set<(reason: string) => void>();
-  // Last `paneMetaKey` per pane seen on this stream; reset on every subscribe.
-  private readonly paneMeta = new Map<string, string>();
+  // The agent panes the open stream subscribed, or null while none is open.
+  private subscribed: Set<string> | null = null;
 
   constructor(
     private readonly client: HerdrClient,
@@ -204,14 +200,20 @@ export class EventPoker {
     // Detach BEFORE closing so the close's `onDown` is seen as stale (no health flip, no reconnect).
     const s = this.stream;
     this.stream = null;
+    this.subscribed = null;
     if (s) s.close();
   }
 
-  /** The fresh snapshot after any pane lifecycle event feeds this; a changed set means re-subscribe. */
+  /**
+   * The fresh snapshot after any pane lifecycle event feeds this. Only a pane the open stream does not
+   * cover resubscribes: a closed pane just stops sending (Herdr 0.9.3 keeps the stream open), and the
+   * next subscribe leaves it out.
+   */
   setAgentPanes(ids: string[]): void {
     if (sameIdSet(ids, this.agentPanes)) return;
     this.agentPanes = [...ids];
-    if (this.started) this.reconnect();
+    const covered = this.subscribed;
+    if (this.started && !(covered && ids.every((id) => covered.has(id)))) this.reconnect();
   }
 
   /** Replace the standing output watches; a changed set means re-subscribe. */
@@ -256,13 +258,14 @@ export class EventPoker {
   private open(protocol: number): void {
     const extended = protocol >= EXTENDED_SUBSCRIPTIONS_PROTOCOL && !this.extendedRejected;
     const subs = buildSubscriptions(this.agentPanes, { extended, outputWatches: this.outputWatches });
-    this.paneMeta.clear();
+    const subscribed = new Set(this.agentPanes);
     let acked = false;
     const handle = this.client.subscribeEvents({
       subscriptions: subs,
       onUp: () => {
         if (this.stream !== handle) return;
         acked = true;
+        this.subscribed = subscribed;
         this.backoffIdx = 0;
         // A resubscribe acks while already healthy, so setHealthy dedupes it silently — but it's
         // the only journal evidence that the per-pane subscriptions followed the herd. Log it.
@@ -274,12 +277,12 @@ export class EventPoker {
         // Pane-scoped events arrive dot-form on 0.9.3 (`pane.agent_status_changed`), globals snake_case.
         const kind = event.replace(".", "_");
         if (kind === "pane_output_matched") return this.emitOutput(data);
-        if (kind === "pane_updated" && !this.paneMetaChanged(data)) return;
         this.schedulePoke();
       },
       onDown: (reason, code) => {
         if (this.stream !== handle) return;
         this.stream = null;
+        this.subscribed = null;
         if (!this.started) return;
         // The server rejected a type its protocol number promised: serve it the base list from now on.
         if (extended && !acked && reason.includes("unknown variant")) {
@@ -313,17 +316,6 @@ export class EventPoker {
     this.stream = handle;
   }
 
-  private paneMetaChanged(data: unknown): boolean {
-    const pane = (data as { pane?: unknown } | null)?.pane;
-    if (!pane || typeof pane !== "object") return true;
-    const { pane_id: id } = pane as { pane_id?: unknown };
-    if (typeof id !== "string") return true;
-    const key = paneMetaKey(pane as Record<string, unknown>);
-    if (this.paneMeta.get(id) === key) return false;
-    this.paneMeta.set(id, key);
-    return true;
-  }
-
   private emitOutput(data: unknown): void {
     if (!data || typeof data !== "object") return;
     const d = data as { pane_id?: unknown; matched_line?: unknown; read?: PaneRead };
@@ -343,6 +335,7 @@ export class EventPoker {
     }
     const old = this.stream;
     this.stream = null;
+    this.subscribed = null;
     if (old) old.close();
     this.connect();
   }
