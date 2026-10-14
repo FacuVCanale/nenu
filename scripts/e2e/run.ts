@@ -27,6 +27,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, o
 //   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
 //   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  Home with a project: captures, each list, requests per minute
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
+//   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -1623,6 +1624,116 @@ async function inspector(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/**
+ * The Terminal tab on a desk and the + menu on both: captures, how often the bridge reads the open pane
+ * with the panel on Changes and on Terminal (it watches only a mirror on screen, ADR 0058), arming
+ * and disarming Type into terminal from the tab, and the key queue's discard confirm.
+ */
+async function terminal(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const fake = bridge.fake!;
+    const shots: string[] = [];
+    const seen: Record<string, unknown> = {};
+    const open = async (device: typeof PHONE | typeof DESKTOP, path: string, colorScheme: "dark" | "light" = "dark") => {
+      const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      const streams: string[] = [];
+      page.on("request", (request) => {
+        const url = new URL(request.url());
+        if (url.pathname === "/api/events") streams.push(decodeURIComponent(url.search) || "(no watch)");
+      });
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + path);
+      await page.waitForTimeout(1500);
+      return { page, streams, close: () => context.close() };
+    };
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    // The bridge's reads of the open pane over five seconds: a handful from its own poll, many more
+    // while a browser watches the pane's screen.
+    const reads = async (page: Page) => {
+      const from = fake.calls.length;
+      await page.waitForTimeout(5000);
+      return fake.calls.slice(from).filter((call) => call.method === "pane.read" && call.params.pane_id === herd.working).length;
+    };
+    const text = (locator: Locator) => locator.innerText().then((t) => t.replace(/\s+/g, " ").trim());
+    const chat = `/pane/${encodeURIComponent(herd.working)}`;
+
+    {
+      const { page, close } = await open(PHONE, chat);
+      await page.getByRole("button", { name: "Message actions" }).click();
+      await page.waitForTimeout(400);
+      seen.phoneMenu = await text(page.getByRole("dialog", { name: "Message actions" }));
+      await shoot(page, "phone-menu");
+      await close();
+    }
+    const desk = await open(DESKTOP, chat);
+    const { page } = desk;
+    const panel = page.getByRole("complementary", { name: "Session panel" });
+    await panel.waitFor({ timeout: 15_000 });
+    seen.changesReads = await reads(page);
+    seen.changesStreams = [...desk.streams];
+    await shoot(page, "desktop-changes");
+    await page.getByRole("button", { name: "Message actions" }).click();
+    await page.waitForTimeout(400);
+    seen.deskMenu = await text(page.getByRole("dialog", { name: "Message actions" }));
+    await shoot(page, "desktop-menu");
+    await page.keyboard.press("Escape");
+    if (!before) {
+      const terminalTab = panel.getByRole("tab", { name: /Terminal/ });
+      await terminalTab.click();
+      seen.terminalReads = await reads(page);
+      seen.terminalStreams = [...desk.streams];
+      await shoot(page, "desktop-terminal");
+
+      const toggle = panel.getByRole("switch", { name: /Type into terminal/ });
+      await toggle.click();
+      await page.waitForTimeout(400);
+      seen.armedStrip = await page.getByText("Typing into terminal").count();
+      seen.armedSwitch = await toggle.getAttribute("aria-checked");
+      await page.keyboard.press("x");
+      await page.waitForTimeout(600);
+      await shoot(page, "desktop-terminal-armed");
+      await panel.getByRole("tab", { name: /Changes/ }).click();
+      await page.waitForTimeout(600);
+      seen.stripAfterLeavingTab = await page.getByText("Typing into terminal").count();
+      seen.changesAgainReads = await reads(page);
+
+      await terminalTab.click();
+      await page.waitForTimeout(600);
+      await panel.getByRole("button", { name: "Ctrl", exact: true }).click();
+      await panel.getByRole("button", { name: "Tab", exact: true }).click();
+      await panel.getByRole("tab", { name: /Changes/ }).click();
+      await page.waitForTimeout(300);
+      seen.queueGuardStatus = await text(page.getByText(/discard/).first()).catch(() => "(none)");
+      seen.queueGuardKeptTerminal = await terminalTab.getAttribute("aria-selected");
+      await shoot(page, "desktop-terminal-queue-guard");
+      await panel.getByRole("tab", { name: /Changes/ }).click();
+      await page.waitForTimeout(300);
+      seen.queueGuardSecondTap = await terminalTab.getAttribute("aria-selected");
+    }
+    await desk.close();
+    if (!before) {
+      const { page, close } = await open(DESKTOP, chat, "light");
+      await page.getByRole("complementary", { name: "Session panel" }).getByRole("tab", { name: /Terminal/ }).click();
+      await page.waitForTimeout(1200);
+      await shoot(page, "desktop-terminal-light");
+      await close();
+    }
+    // The only write this drives is the one key typed while armed, into the working pane.
+    const unexpectedWrites = fake.writes().filter((call) => !(call.method === "pane.send_keys" && call.params.pane_id === herd.working));
+    return { shots, seen, writes: fake.writes().length, unexpectedWrites };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "terminal.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -1640,8 +1751,9 @@ else if (command === "diffs") await diffs(values.before === true);
 else if (command === "artifacts") await artifacts();
 else if (command === "home") await home();
 else if (command === "inspector") await inspector(values.before === true);
+else if (command === "terminal") await terminal(values.before === true);
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

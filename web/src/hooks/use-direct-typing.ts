@@ -56,8 +56,9 @@ interface DirectTypingOptions {
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
 // Herdr writes.
 //
-// It does NOT own the entry point. Arming is an explicit NAMED choice — the "Type into terminal" row
-// of the composer's + menu, beside Keys (a ComposerControl).
+// It does NOT own the entry point. Arming is an explicit NAMED choice beside Keys: the "Type into
+// terminal" row of the composer's + menu on a phone, or the switch of that name in a desk's Terminal
+// tab, which also disarms when the tab leaves the screen (composer.tsx, ADR 0077).
 //
 // WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
 // bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per
@@ -125,8 +126,8 @@ export function useDirectTyping({
     activeRef.current = true;
     setActive(true);
     // No toast: the armed strip above the composer says it, and stays while the mode does.
-    // Focus synchronously while the tap on the + menu's "Type into terminal" row still carries
-    // browser user activation; a deferred focus selects the field but mobile browsers may refuse to
+    // Focus synchronously while the tap on "Type into terminal" (the + row, or the desk's switch)
+    // still carries browser user activation; a deferred focus selects the field but mobile browsers may refuse to
     // open their software keyboard once that activation has expired. The existing callback still runs after
     // React swaps the controlled value so selection lands at the end.
     inputRef.current?.focus({ preventScroll: true });

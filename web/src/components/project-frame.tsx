@@ -4,7 +4,7 @@ import { ListChecks, MessageSquare } from "lucide-react";
 
 import { PrBar } from "@/components/pr-bar";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
-import { InspectorToggle, SessionInspector, sessionPr, type SessionInspectorState } from "@/components/session-inspector";
+import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { ThreadCards } from "@/components/thread-cards";
 import { PrList, ThreadsPanel, prLists } from "@/components/threads-panel";
@@ -22,6 +22,8 @@ export interface ProjectChatSlots {
   conversationFooter?: ReactNode;
   strip?: ReactNode;
   composerTop?: ReactNode;
+  /** The desk's session panel beside the chat, absent while a thread is docked there instead. */
+  sessionPanel?: SessionPanelLink;
 }
 
 /** The search param naming the thread docked beside its coordinator on a desk. */
@@ -156,6 +158,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
         composerTop: thread?.pr && !scope.coordinating
           ? <PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={refresh} />
           : undefined,
+        sessionPanel: desk && !docked ? panelLink(inspector) : undefined,
       })}
       {docked && (
         <DockedThread thread={docked} project={project} siblings={coordinatedThreads(project, docked.parentId === "root" ? undefined : docked.parentId)} data={data}
