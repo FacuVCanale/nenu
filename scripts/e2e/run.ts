@@ -27,6 +27,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, o
 //   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
 //   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  Home with a project: captures, each list, requests per minute
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
+//   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -1623,6 +1624,207 @@ async function inspector(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/**
+ * Page motion (web/src/lib/motion.ts). Counts document.startViewTransition calls in the page, so a poll
+ * that starts one shows up; steps each transition frame by frame by pausing its animations; and times
+ * a tap to the next page in the DOM and on screen. `--before` runs the same flows on a build without
+ * motion, opening a notification the way the service worker did then (a full navigation).
+ */
+async function motion(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const windowMs = Number(values.seconds) * 1000;
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const stopJournal = tickJournal(herd.journals.get(herd.working)!, bridge.now);
+    const shots: string[] = [];
+    const out: Record<string, unknown> = { before, browser: "WebKit (playwright-core 1.60.0, webkit-2287)" };
+    // In the page: count every startViewTransition, and when `hold` is set pause its animations once they
+    // start, so the bench can seek them to any point and capture that frame.
+    const instrument = () => {
+      const w = window as unknown as { __motion: { calls: number; hold: boolean; paused: Animation[] | null; last: { finished: Promise<void> } | null } };
+      w.__motion = { calls: 0, hold: false, paused: null, last: null };
+      const native = Document.prototype.startViewTransition;
+      if (!native) return;
+      Document.prototype.startViewTransition = function (this: Document, arg?: ViewTransitionUpdateCallback | StartViewTransitionOptions) {
+        w.__motion.calls++;
+        const transition = native.call(this, arg as ViewTransitionUpdateCallback);
+        w.__motion.last = transition;
+        if (w.__motion.hold) void transition.ready.then(() => {
+          const running = document.getAnimations().filter((a) => (a.effect as KeyframeEffect | null)?.pseudoElement?.startsWith("::view-transition"));
+          for (const animation of running) animation.pause();
+          w.__motion.paused = running;
+        }, () => {});
+        return transition;
+      };
+    };
+    const open = async (device: typeof PHONE | typeof DESKTOP, reducedMotion: "reduce" | "no-preference", path = "/") => {
+      const context = await browser.newContext({ ...device, reducedMotion, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.addInitScript(instrument, null);
+      await page.goto(bridge.url + path);
+      await page.getByText("Working Claude").first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1200);
+      return { page, close: () => context.close() };
+    };
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path });
+      shots.push(path);
+    };
+    const paneHref = (id: string) => `/pane/${encodeURIComponent(id)}`;
+    // What each step waits for: the next page's path and its own marker, in the DOM. Data, not code: the
+    // app's CSP refuses string evaluation, so the page tests it with `arrived`.
+    type Target = { path: string; marker: string };
+    const isPane = (href: string): Target => ({ path: href, marker: "textarea" });
+    const isHome: Target = { path: "/", marker: '[role="tablist"][aria-label="Sessions"], #home-recent' };
+    const isSettings: Target = { path: "/settings", marker: "main" };
+    const arrived = (t: Target) => location.pathname === t.path && document.querySelector(t.marker) !== null;
+    const reach = (page: Page, t: Target) => page.waitForFunction(arrived, t, { timeout: 15_000 });
+
+    /** Run `act`, then capture the transition it starts at 0, 25, 50, 75 and 100 %, or (none) the cut. */
+    const frames = async (page: Page, name: string, act: () => Promise<void>, done: Target) => {
+      await page.evaluate(() => { const m = (window as unknown as { __motion: { hold: boolean; paused: unknown } }).__motion; m.hold = true; m.paused = null; }, null);
+      const calls0 = await page.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
+      await shoot(page, `${name}-0-start`);
+      await act();
+      const deadline = Date.now() + 3000;
+      let held = false;
+      while (Date.now() < deadline) {
+        held = await page.evaluate(() => (window as unknown as { __motion: { paused: unknown } }).__motion.paused !== null, null);
+        if (held) break;
+        await sleep(20);
+      }
+      const steps: Array<{ at: number; transforms: string[] }> = [];
+      if (held) {
+        for (const at of [0, 0.25, 0.5, 0.75, 1]) {
+          const transforms = await page.evaluate((p: number) => {
+            const running = (window as unknown as { __motion: { paused: Animation[] } }).__motion.paused;
+            for (const a of running) a.currentTime = p * Number(a.effect!.getComputedTiming().endTime);
+            return running.map((a) => `${(a.effect as KeyframeEffect).pseudoElement}: ${JSON.stringify((a.effect as KeyframeEffect).getKeyframes().map((k) => k.transform ?? null))}`);
+          }, at);
+          steps.push({ at, transforms });
+          await shoot(page, `${name}-${Math.round(at * 100)}`);
+        }
+        await page.evaluate(() => { for (const a of (window as unknown as { __motion: { paused: Animation[] } }).__motion.paused) a.finish(); }, null);
+      } else {
+        await shoot(page, `${name}-cut`);
+      }
+      await page.evaluate(() => { (window as unknown as { __motion: { hold: boolean } }).__motion.hold = false; }, null);
+      await reach(page, done);
+      await page.waitForTimeout(400);
+      await shoot(page, `${name}-end`);
+      const calls = await page.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
+      return { transitions: calls - calls0, steps };
+    };
+
+    /** Tap → the next page in the DOM (`dom`), on the next frame (`frame`), and settled (`settled`), in ms. */
+    const time = async (page: Page, act: () => Promise<void>, done: Target) => {
+      await page.evaluate((t: Target) => {
+        const w = window as unknown as { __timing: Record<string, number> | null; __motion: { last: { finished: Promise<void> } | null } };
+        w.__timing = null;
+        w.__motion.last = null;
+        const check = () => location.pathname === t.path && document.querySelector(t.marker) !== null;
+        addEventListener("click", () => {
+          const t0 = performance.now();
+          const observer = new MutationObserver(() => {
+            if (!check()) return;
+            observer.disconnect();
+            const dom = performance.now() - t0;
+            requestAnimationFrame(() => {
+              const frame = performance.now() - t0;
+              const settle = w.__motion.last?.finished ?? Promise.resolve();
+              void settle.then(() => { w.__timing = { dom, frame, settled: performance.now() - t0 }; }, () => { w.__timing = { dom, frame, settled: performance.now() - t0 }; });
+            });
+          });
+          observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+        }, { capture: true, once: true });
+      }, done);
+      await act();
+      await page.waitForFunction(() => (window as unknown as { __timing: unknown }).__timing !== null, null, { timeout: 15_000 });
+      return page.evaluate(() => (window as unknown as { __timing: Record<string, number> }).__timing, null);
+    };
+
+    const row = (page: Page, text: string) => page.locator("main").getByText(text).first();
+    const back = (page: Page) => page.locator('header [aria-label^="Back to"]').first();
+    const tabHome = (page: Page) => page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" });
+    // A tapped notification: the service worker's message to the open app, or (before) its full navigation.
+    const notify = (page: Page, href: string) => page.evaluate(({ href, before }: { href: string; before: boolean }) => {
+      if (before) location.assign(href);
+      else navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "nenu:open", path: href } }));
+    }, { href, before });
+
+    try {
+      // 1. Each way between pages, on a phone, frame by frame.
+      const phone = await open(PHONE, "no-preference");
+      const p = phone.page;
+      const flows: Record<string, unknown> = {};
+      flows.openThread = await frames(p, "phone-open-thread", () => row(p, "Working Claude").click(), isPane(paneHref(herd.working)));
+      flows.back = await frames(p, "phone-back", () => back(p).click(), isHome);
+      await p.getByRole("button", { name: "Settings" }).first().click();
+      await reach(p, isSettings);
+      await p.waitForTimeout(600);
+      flows.homeFromTabBar = await frames(p, "phone-tab-home", () => tabHome(p).click(), isHome);
+      flows.notification = await frames(p, "phone-notification", () => notify(p, paneHref(herd.blocked)), isPane(paneHref(herd.blocked)));
+      out.phone = flows;
+
+      // 2. Tap to content, the same flows and the same clock before and after.
+      const reps = 8;
+      const timings: Record<string, Array<Record<string, number>>> = { openThread: [], back: [] };
+      await p.goto(bridge.url + "/");
+      await reach(p, isHome);
+      for (let i = 0; i < reps; i++) {
+        await p.waitForTimeout(500);
+        timings.openThread!.push(await time(p, () => row(p, "Working Claude").click(), isPane(paneHref(herd.working))));
+        await p.waitForTimeout(500);
+        timings.back!.push(await time(p, () => back(p).click(), isHome));
+      }
+      const summary = (xs: Array<Record<string, number>>, key: string) => {
+        const values = xs.map((x) => Math.round(x[key]!));
+        return { median: pct(values, 0.5), p90: pct(values, 0.9), all: values };
+      };
+      out.timing = Object.fromEntries(Object.entries(timings).map(([flow, xs]) =>
+        [flow, { dom: summary(xs, "dom"), frame: summary(xs, "frame"), settled: summary(xs, "settled") }]));
+
+      // 3. Quiet: after a browser Back and Forward (the history state that used to replay a transition on
+      // every poll), sit on a polling pane and count transitions.
+      await row(p, "Working Claude").click();
+      await reach(p, isPane(paneHref(herd.working)));
+      await p.evaluate(() => history.back(), null);
+      await reach(p, isHome);
+      await p.evaluate(() => history.forward(), null);
+      await reach(p, isPane(paneHref(herd.working)));
+      await p.waitForTimeout(1000);
+      const calls0 = await p.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
+      const requests: string[] = [];
+      p.on("request", (req) => requests.push(req.url()));
+      await sleep(windowMs);
+      const calls1 = await p.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
+      out.quiet = { seconds: windowMs / 1000, page: paneHref(herd.working), transitions: calls1 - calls0, requests: tally(requests) };
+      await phone.close();
+
+      // 4. Reduced motion: the same open, which must not move sideways.
+      const reduced = await open(PHONE, "reduce");
+      out.reduced = await frames(reduced.page, "phone-reduced-open-thread", () => row(reduced.page, "Working Claude").click(), isPane(paneHref(herd.working)));
+      await reduced.close();
+
+      // 5. A desk: a Home row, then a sideways pick in the sidebar.
+      const desk = await open(DESKTOP, "no-preference");
+      const d = desk.page;
+      const deskFlows: Record<string, unknown> = {};
+      deskFlows.openThread = await frames(d, "desk-open-thread", () => row(d, "Working Claude").click(), isPane(paneHref(herd.working)));
+      deskFlows.sidebarPick = await frames(d, "desk-sidebar-pick", () => d.locator(`aside a[href="${paneHref(herd.blocked)}"]`).first().click(), isPane(paneHref(herd.blocked)));
+      out.desk = deskFlows;
+      await desk.close();
+    } finally {
+      stopJournal();
+    }
+    return { ...out, shots, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "motion.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ ...result, shots: `${result.shots.length} in ${outDir}` }, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -1640,8 +1842,9 @@ else if (command === "diffs") await diffs(values.before === true);
 else if (command === "artifacts") await artifacts();
 else if (command === "home") await home();
 else if (command === "inspector") await inspector(values.before === true);
+else if (command === "motion") await motion(values.before === true);
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|motion [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
