@@ -10,6 +10,7 @@ import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
 import { useCloseStaleNotifications } from "@/hooks/use-close-stale-notifications";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { useMotionSettle } from "@/lib/motion";
 import { useSelfUpdate } from "@/lib/self-update";
 import { isConnecting, linkPhrase } from "@/lib/connection";
 import { lastLiveAt } from "@/lib/connection-health";
@@ -62,6 +63,7 @@ export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined, live
 export function RootLayout() {
   useAppViewport();
   useSelfUpdate();
+  useMotionSettle();
   // SAFETY: this component IS the element of the route whose `loader` is rootLoader (router.tsx pairs
   // the two), and it renders only after that loader settles — so useLoaderData returns its HomeData.
   const data = useLoaderData() as HomeData;

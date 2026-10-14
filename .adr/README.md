@@ -99,6 +99,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted; "running turn" amended by 0067 |
 | [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted |
 | [0076](./0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md) | A long Claude send is one bracketed paste, and Claude's log has the last word (amends 0010) | Accepted |
+| [0078](./0078-page-motion-runs-only-on-navigations-the-app-starts.md) | Page motion runs only on navigations the app starts (React Router's `viewTransition` flag was rejected) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never
