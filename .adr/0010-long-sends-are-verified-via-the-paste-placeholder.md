@@ -2,6 +2,8 @@
 
 Status: **Accepted** (2026-08-06)
 
+Amended by: [ADR 0076](./0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md) — `pane.send_text` does carry a bracketed paste, a Claude send past its paste threshold goes as one, and Claude's log, not the placeholder, says whether the message arrived whole.
+
 ## Context
 
 The #34 guard presses the submit key only once it can SEE the typed text on the agent's `❯` line

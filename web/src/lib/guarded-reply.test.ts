@@ -177,4 +177,9 @@ describe("the bridge's one-request send in the composer's terms", () => {
     expect(retryKeepsRequestId({ ...base, stage: "preflight", error: "gone from the box", textDelivered: true })).toBe(false);
     expect(retryKeepsRequestId({ ok: true, requestId: "r1", ack: "submitted" })).toBe(false);
   });
+
+  it("a message Claude logged incomplete goes again as a new message", () => {
+    // It was submitted, so nothing is in the box to finish; the same id would only be refused.
+    expect(retryKeepsRequestId({ ...base, stage: "confirm", error: "arrived incomplete", textDelivered: true, code: "incomplete" })).toBe(false);
+  });
 });

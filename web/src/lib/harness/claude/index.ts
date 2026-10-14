@@ -29,7 +29,7 @@ import {
   readClaudeTurn,
 } from "./chrome";
 import { withoutDialogClosingRule } from "./markers";
-import { claudeDraftCarriesSend, isPastePlaceholderOnly } from "./paste";
+import { claudeDraftCarriesSend, isPastePlaceholderOnly, sendsAsOnePaste } from "./paste";
 
 /**
  * Claude's block pipeline: detect a tail dialog (preview / wizard / prompt-select), replacing it with
@@ -158,6 +158,7 @@ export { extractStatusLines, extractAgentsFooter, extractInputDraft };
 
 export const claudeAdapter: HarnessAdapter = {
   agent: "claude",
+  bracketedPaste: sendsAsOnePaste,
   buildBlocks: claudeBuildBlocks,
   extractStatusLines,
   extractAgentsFooter,

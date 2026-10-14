@@ -21,7 +21,8 @@ revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
 | Command | What it does |
 |---|---|
 | `bun scripts/e2e/bridge.ts --port 8797 --fake` | Runs `bridge/index.ts` on 8797 against a FakeHerdr, until Ctrl-C |
-| `bun scripts/e2e/bridge.ts --port 8797 --socket <path>` | Same, against a disposable real Herdr session |
+| `bun scripts/e2e/bridge.ts --port 8797 --herdr` | Same, against a real Herdr server it starts under its own temporary HOME, and stops with the bridge |
+| `bun scripts/e2e/bridge.ts --port 8797 --socket <path>` | Same, against a disposable real Herdr you started, once it proves isolated (below) |
 | `bun scripts/e2e/run.ts smoke` | Home screenshots in WebKit at 390x844 (iPhone, @3x) and at 1440x900 |
 | `bun scripts/e2e/run.ts stop` | Stop on the working Claude, phone and desk: captures, Escapes sent, a queued message held |
 | `bun scripts/e2e/run.ts baseline [--seconds 60] [--sends 5]` | Measures the baselines below |
@@ -37,6 +38,22 @@ journals, `bridge.log`).
 - `bridge.ts` refuses port 8787 (the live service) and any Herdr socket that is the default one, sits
   under its config dir (named sessions), or equals the shell's inherited `HERDR_SOCKET_PATH`. Inside
   a Herdr pane that variable names the live server, so the bench never uses it.
+- A socket of its own does not isolate a real Herdr. Herdr keeps `session.json` in its config dir,
+  `$XDG_CONFIG_HOME/herdr` or else `~/.config/herdr`, whatever `HERDR_SOCKET_PATH` and
+  `HERDR_CONFIG_PATH` say. A server started with only those two read and rewrote the operator's
+  `session.json` and restored every live workspace as fresh shells (2026-10-14). So `--socket` finds
+  the process serving the socket (`lsof`), reads its environment (`ps -E` on macOS,
+  `/proc/<pid>/environ` on Linux) and refuses unless it has an `XDG_CONFIG_HOME` that is not the
+  operator's. When the environment cannot be read, it refuses too. `bridge.test.ts` covers both.
+- `--herdr` starts that server itself: `herdr server` with the bench's temporary `HOME`, the `XDG_*`
+  dirs under it, its own socket, no inherited `HERDR_*` or `COLLIE_*`, the operator's `PATH` without
+  the bridge's stubs, and `DISABLE_AUTOUPDATER=1` so an agent started in a pane never updates the
+  operator's install. The bridge reads Claude and Codex journals from that same `HOME`, so an agent
+  started in a pane shows its conversation, turn state and send check. Ctrl-C stops both.
+- Starting Herdr by hand instead, give it the same isolation and keep proof of it:
+  `HOME=<tmp>/home XDG_CONFIG_HOME=<tmp>/home/.config HERDR_SOCKET_PATH=<tmp>/herdr.sock herdr server`.
+  Copy `~/.config/herdr/session.json` before and `cmp` it after. The live Herdr rewrites it on its
+  own, so a difference is yours only if it lists the disposable workspaces.
 - The child bridge inherits no `COLLIE_*` or `HERDR_*` variable. `HERDR_PLUGIN_STATE_DIR` alone
   would point it at the live service's state. State, config and every journal root
   (Claude, Codex, pi, OpenCode, Grok) go to a temp dir, and multi-session is off.
@@ -55,6 +72,22 @@ journals, `bridge.log`).
   the counters leaves it alone). `smoke` and `baseline` print `unexpectedWrites`. `smoke` exits 1 on
   any write or on any project in the snapshot. `baseline` allows only the writes it drives itself:
   `send_text` and `send_keys` on the idle pane, `send_keys` on the blocked one.
+
+## A real agent in the disposable Herdr
+
+The panes of a `--herdr` server run under the temporary `HOME`, so an agent there starts with no login
+and no onboarding. What the 2026-10-14 long-send check used, all inside that `HOME`:
+
+- `claude` must be the process name Herdr sees, or the pane gets no agent: link the version you want
+  as `<home>/bin/claude` and put that dir first on the pane's `PATH`. A pinned version runs as it is;
+  `DISABLE_AUTOUPDATER=1` is already in the server's environment.
+- macOS keeps Claude's login in the keychain, which is found through `HOME`: a link from
+  `<home>/Library/Keychains` to your own keychain dir lets the pane's Claude use it. A
+  `<home>/.claude.json` with `hasCompletedOnboarding` and the work folder's
+  `hasTrustDialogAccepted` skips the first-run screens.
+- Codex reads `<home>/.codex/auth.json`; a link to yours logs it in.
+- Drive the panes with `HERDR_SOCKET_PATH=<tmp>/herdr.sock herdr pane …` from your shell, never
+  with the inherited variable.
 
 ## Comparing captures
 

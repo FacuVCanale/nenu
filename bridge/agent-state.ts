@@ -121,6 +121,12 @@ export class AgentStates {
     return this.entries.get(key(session, paneId))?.state;
   }
 
+  /** The Claude session the pane runs, from its own session file, when one is mapped. */
+  claudeSessionId(session: string, paneId: string): string | undefined {
+    const entry = this.entries.get(key(session, paneId));
+    return entry?.agent === "claude" ? entry.file?.sessionId : undefined;
+  }
+
   /** `pane` with its structured turn attached, when there is one. */
   attach<P extends AgentView>(session: string, pane: P): P {
     const turn = this.get(session, pane.paneId);

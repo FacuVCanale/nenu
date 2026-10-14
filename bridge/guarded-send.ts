@@ -18,6 +18,7 @@ import { draftCarriesSend } from "../web/src/lib/guarded-reply.ts";
 import { adapterFor, type HarnessAdapter } from "../web/src/lib/harness/index.ts";
 import { defaultSleep, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
+import { deliveryVerdict } from "./delivery-check.ts";
 import type { EventPoker } from "./event-poker.ts";
 import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
 import { verifyExpectedPrompt } from "./prompt-binding.ts";
@@ -34,6 +35,12 @@ export interface GuardedSendDeps {
   trigger?: OutputTrigger;
   sleep?: Sleep;
   now?: () => number;
+  /**
+   * One look at the CLI's own log (ADR 0067): the operator's message as it logged it at or after
+   * `since` (epoch ms), null while it has logged none, undefined when there is nothing to wait for.
+   * Without it, or when it never answers, the input box letting go of the text is the last word.
+   */
+  received?: (since: number) => Promise<string | null | undefined>;
 }
 
 /** What earlier attempts with the same request id left behind, when they failed. */
@@ -86,6 +93,8 @@ const MAYBE_SENT =
   "The earlier try of this message is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal.";
 const NOT_SUBMITTED = "Typed into the pane but not submitted — check the pane before resending.";
 const ESCAPES = "The message contains terminal escape sequences, which a paste cannot carry. Nothing was typed.";
+const incomplete = (sent: number, received: number) =>
+  `Your message reached the agent incomplete: it logged ${received} of ${sent} characters. The agent may be answering that part; send the whole message again if it needs it.`;
 
 const SCREEN_LINES = 15;
 /** One trigger wait. A miss is followed by a fresh read, so a draft the regex cannot see (windowed,
@@ -206,7 +215,7 @@ class Send {
   }
 
   /** `textDelivered` is this attempt's; text an earlier attempt delivered may still be there too. */
-  fail(error: string, textDelivered: boolean, code?: "prompt_changed" | "not_ready" | "busy"): GuardedSendResult {
+  fail(error: string, textDelivered: boolean, code?: "prompt_changed" | "not_ready" | "busy" | "incomplete"): GuardedSendResult {
     const stage: SendStage = this.trace.phase === "pre-type" ? "preflight" : this.trace.phase;
     const delivered = textDelivered || this.prior?.textDelivered === true;
     return {
@@ -264,7 +273,8 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   }
   const adapter = adapterFor(agent ?? undefined);
   const send = new Send(deps, request, adapter, prior);
-  const bracketed = adapter?.bracketedPaste === true || request.paste === true;
+  const paste = adapter?.bracketedPaste;
+  const bracketed = request.paste === true || paste === true || (typeof paste === "function" && paste(request.text));
   if (bracketed && /[\x1b\x9b]/.test(request.text)) return send.fail(ESCAPES, false);
   const wire = bracketed ? `\x1b[200~${request.text}\x1b[201~` : request.text;
 
@@ -330,6 +340,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   }
   // A forced send already overrode "no input box": the text in the box is the evidence it trusts.
   if ((last.composer === false && !request.force) || !send.carries(last)) return send.fail(MOVED, true);
+  const submittedAt = (deps.now ?? Date.now)();
   try {
     await deps.herdr.sendPaneKeys(deps.paneId, deps.submitKeys);
   } catch {
@@ -340,12 +351,35 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   for (const delay of LOCAL_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     try {
-      if (!send.carries(await send.read())) return send.done();
+      if (!send.carries(await send.read())) return await logged(send, deps, submittedAt);
     } catch {
       // A failed read confirms nothing; the bounded loop is the timeout.
     }
   }
   return send.fail(UNCONFIRMED, true);
+}
+
+/**
+ * The box let go of the message; the CLI's log says what it received. The box only proves a long
+ * send by Claude's paste token, or by a literal slice that may be all that is left of it (ADR 0076),
+ * so a log holding less than was sent turns "sent" into "incomplete". No log in time is no verdict.
+ */
+async function logged(send: Send, deps: GuardedSendDeps, since: number): Promise<GuardedSendResult> {
+  if (!deps.received) return send.done();
+  for (const delay of LOCAL_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    let text: string | null | undefined;
+    try {
+      text = await deps.received(since);
+    } catch {
+      return send.done();
+    }
+    if (text === undefined) return send.done();
+    if (text === null) continue;
+    const check = deliveryVerdict(send.request.text, text);
+    return check.verdict === "incomplete" ? send.fail(incomplete(check.sentChars, check.receivedChars), true, "incomplete") : send.done();
+  }
+  return send.done();
 }
 
 /**
