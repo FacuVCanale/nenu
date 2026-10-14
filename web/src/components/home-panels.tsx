@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { AlertCircle, ChevronRight, FolderPlus, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, FolderPlus, ListFilter, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
@@ -14,8 +14,9 @@ import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
 import { panePath, workspacePath } from "@/lib/nav";
 import { ASK } from "@/lib/org-tree";
+import { projectForPane } from "@/lib/projects";
 import type { Herd } from "@/lib/spaces";
-import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** How long a tap's navigation may run before its row says it is opening, so a fast read never flashes. */
@@ -179,33 +180,53 @@ function rememberList(list: SessionList): void {
 /**
  * Home's one list of sessions under a control that reorders it: Recents, everything that moved last
  * first (what Needs you shows stays out), or Workspaces, every session under its Herdr workspace,
- * whose name opens the pane every way into it opens (ADR 0065). Both read the snapshot Home already
- * has; the choice is remembered on this device.
+ * whose name opens the pane every way into it opens (ADR 0065). A desk narrows both to one project.
+ * Both read the snapshot Home already has; the list is remembered on this device, the project is not.
  */
-export function HomeSessions({ recent, workspaces, herd, session, now, opening }: {
+export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, herd, projects, session, now, opening }: {
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
   herd: Herd;
+  projects: readonly ProjectView[];
   session?: string;
   now: number;
   opening: string | null;
 }) {
   const [list, setList] = useState<SessionList>(readList);
-  if (!recent.length && !workspaces.length) return null;
+  // A desk narrows both lists to one project's sessions; "" is every project.
+  const [only, setOnly] = useState("");
+  if (!everyRecent.length && !everyWorkspace.length) return null;
+  const project = projects.find((candidate) => candidate.slug === only);
+  const kept = (chat: RecentChat) => !project || projectForPane([project], chat.agent.paneId) !== undefined;
+  const recent = everyRecent.filter(kept);
+  const workspaces = everyWorkspace.map((group) => ({ ...group, chats: group.chats.filter(kept) })).filter((group) => group.chats.length > 0);
   const row = (chat: RecentChat, group?: string) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} />;
   return (
     <section aria-label="Sessions" className="flex flex-col gap-2">
-      <div role="tablist" aria-label="Sessions" className="project-segmented mx-0 grid-cols-2 sm:w-60">
-        {LISTS.map(([key, label]) => (
-          <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
-            onClick={() => { setList(key); rememberList(key); }} className="project-segment">{label}</button>
-        ))}
+      <div className="flex items-center gap-2.5">
+        <div role="tablist" aria-label="Sessions" className="project-segmented mx-0 grid-cols-2 max-sm:flex-1 sm:w-60">
+          {LISTS.map(([key, label]) => (
+            <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
+              onClick={() => { setList(key); rememberList(key); }} className="project-segment">{label}</button>
+          ))}
+        </div>
+        {projects.length > 0 && (
+          <label className="relative ml-auto inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-footnote text-muted-foreground focus-within:ring-2 focus-within:ring-ring hover:text-foreground max-sm:hidden">
+            <ListFilter aria-hidden className="size-3.5 shrink-0" />
+            <span className="max-w-[12rem] truncate">{project?.name ?? "All projects"}</span>
+            <ChevronDown aria-hidden className="size-3.5 shrink-0" />
+            <select aria-label="Project" value={project?.slug ?? ""} onChange={(event) => setOnly(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0">
+              <option value="">All projects</option>
+              {projects.map((candidate) => <option key={candidate.slug} value={candidate.slug}>{candidate.name}</option>)}
+            </select>
+          </label>
+        )}
       </div>
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
         {list === "recents"
           ? recent.length
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
-            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">Every session is in Needs you.</p>
+            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
           : <ul className="flex flex-col">
             {workspaces.map((group) => {
               const to = workspacePath(group.workspaceId, herd, session);
@@ -325,7 +346,7 @@ function StarterRow({ icon: Icon, title, hint, disabled, onClick }: { icon: Luci
   return (
     <button type="button" onClick={onClick} disabled={disabled}
       className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent active:bg-muted disabled:pointer-events-none disabled:text-disabled-foreground">
-      <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+      <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-body font-medium">{title}</span>
         <span className="text-footnote text-pretty text-muted-foreground">{hint}</span>

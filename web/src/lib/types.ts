@@ -233,22 +233,27 @@ export interface DiffFile {
   deletions: number;
   binary?: true;
   hunks?: DiffHunk[];
-  omitted?: "binary" | "large" | "budget";
+  /** `untracked`: a new file git does not track yet, named without lines. */
+  omitted?: "binary" | "large" | "budget" | "untracked";
 }
 
-/** What a pull request changes, read from a pane's folder (`/api/pane/:id/diff`). Mirrors bridge/pane-diff.ts. */
+/** What a session's Changes compares: its branch against where it started, or what is not committed. */
+export type DiffScope = "branch" | "uncommitted";
+
+/** What a pull request or a session changes, read from a pane's folder (`/api/pane/:id/diff`). Mirrors bridge/pane-diff.ts. */
 export type PaneDiff =
   | {
     ok: true;
-    pr: number;
+    /** Absent for a session's scope. */
+    pr?: number;
     base: string;
     head: string;
-    source: "worktree" | "branch";
+    source: "worktree" | "branch" | "uncommitted";
     files: DiffFile[];
     totals: { files: number; additions: number; deletions: number };
     truncated?: { files?: true; bytes?: true };
   }
-  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed"; message: string };
+  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed" | "no-repo" | "no-default"; message: string };
 
 /**
  * An open pull request of the person's, read with `gh` in a repo an agent works in

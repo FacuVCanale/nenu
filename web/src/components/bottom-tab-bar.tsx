@@ -4,7 +4,8 @@ import { CirclePlus, House, Inbox, Layers, Search } from "lucide-react";
 /** Which tab reads as selected: a sheet the bar opened, else Home while Home is on screen. */
 export type TabBarTab = "home" | "needs-you" | "browse" | "search" | null;
 
-const ICON = { "aria-hidden": true, size: 24, strokeWidth: 1.75 } as const;
+// The app's stroke; the open tab's glyph is a step heavier (shell.css).
+const ICON = { "aria-hidden": true, size: 23 } as const;
 
 /** The phone's primary navigation: Home, Needs you, New in the middle, Browse and Search, all one weight. */
 export function BottomTabBar({ active, homeTo, attention, onNeedsYou, onNew, onBrowse, onSearch }: {

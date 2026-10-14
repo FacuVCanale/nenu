@@ -196,4 +196,18 @@ describe("registry", () => {
     // Answers from what the last refresh read; it never runs a command.
     expect(calls.length).toBe(before);
   });
+
+  test("finds the PR of the branch a folder has checked out, with no number to go on", async () => {
+    const { run, calls } = fakeRun({ folders, prs: { "/r/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")] } });
+    const { prs } = registry(run);
+    expect(prs.onBranch("/h/worktrees/shop/a")).toBeUndefined();
+    prs.list("main", [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a")]);
+    await prs.refresh();
+    const before = calls.length;
+    expect(prs.onBranch("/h/worktrees/shop/a")).toMatchObject({ number: 1, branch: "feat/a", base: "main" });
+    // On `develop`, which no PR is opened from.
+    expect(prs.onBranch("/r/shop")).toBeUndefined();
+    expect(prs.onBranch("/tmp")).toBeUndefined();
+    expect(calls.length).toBe(before);
+  });
 });

@@ -17,6 +17,8 @@ export interface HomeCounts {
   /** Pull requests waiting to be looked at. */
   review: number;
   working: number;
+  /** Agents waiting at their prompt with nothing for you. */
+  idle: number;
 }
 
 /** Home's headline: the one fact that needs you most, said with its noun, and the rest on a line under it. */
@@ -27,11 +29,12 @@ export interface HomeHeadline {
 }
 
 export function homeHeadline(counts: HomeCounts, total: number): HomeHeadline {
-  const { needs, review, working } = counts;
+  const { needs, review, working, idle } = counts;
   const rest = (...parts: Array<string | false>) => parts.filter(Boolean).join(" · ") || null;
-  if (needs) return { title: `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you`, detail: rest(review > 0 && `${review} to review`, working > 0 && `${working} working`) };
-  if (review) return { title: `${plural(review, "pull request")} ready to review`, detail: rest(working > 0 && `${working} working`) };
-  if (working) return { title: `${plural(working, "agent")} at work`, detail: null };
+  const idling = idle > 0 && `${idle} idle`;
+  if (needs) return { title: `${needs} ${needs === 1 ? "needs" : "need"} you`, detail: rest(review > 0 && `${review} to review`, working > 0 && `${working} working`, idling) };
+  if (review) return { title: `${plural(review, "pull request")} ready to review`, detail: rest(working > 0 && `${working} working`, idling) };
+  if (working) return { title: `${plural(working, "agent")} at work`, detail: rest(idling) };
   return { title: total ? "All quiet" : "What should we work on?", detail: null };
 }
 
@@ -43,22 +46,40 @@ export function greeting(now: number): string {
   return "Good evening";
 }
 
-/** A pane Home asks you about: its detected dialog, or none when it is blocked on something unread. */
+/**
+ * A pane Home asks you about: its detected dialog, none when it is blocked on something unread, or
+ * `reply` when its agent stopped and said it waits for your reply, with no dialog at all.
+ */
 export interface NeedsYouItem<I> {
   paneId: string;
   interaction?: I;
+  reply?: true;
 }
 
 /**
  * What needs you, oldest first: every detected dialog, then blocked panes the bridge read no dialog
- * on (still yours to look at, in the thread).
+ * on (still yours to look at, in the thread), then the live threads waiting for your reply (`awaits`).
  */
-export function needsYouItems<I extends { paneId: string; detectedAt: number }>(agents: readonly AgentView[], interactions: readonly I[]): NeedsYouItem<I>[] {
+export function needsYouItems<I extends { paneId: string; detectedAt: number }>(agents: readonly AgentView[], interactions: readonly I[], projects?: readonly ProjectView[]): NeedsYouItem<I>[] {
   const asked = [...interactions].sort((a, b) => a.detectedAt - b.detectedAt);
   const covered = new Set(asked.map((i) => i.paneId));
   const blocked = agents.filter((agent) => agent.status === "blocked" && !covered.has(agent.paneId))
     .sort((a, b) => (a.lastActiveAt ?? 0) - (b.lastActiveAt ?? 0));
-  return [...asked.map((interaction) => ({ paneId: interaction.paneId, interaction })), ...blocked.map((agent) => ({ paneId: agent.paneId }))];
+  for (const agent of blocked) covered.add(agent.paneId);
+  const live = new Set(agents.map((agent) => agent.paneId));
+  const replies = (projects ?? []).flatMap((project) => project.threads)
+    .filter((thread) => thread.paneId && live.has(thread.paneId) && !covered.has(thread.paneId) && awaits(thread) === "reply");
+  return [
+    ...asked.map((interaction) => ({ paneId: interaction.paneId, interaction })),
+    ...blocked.map((agent) => ({ paneId: agent.paneId })),
+    ...replies.map((thread) => ({ paneId: thread.paneId!, reply: true as const })),
+  ];
+}
+
+/** Agents at their prompt with nothing for you: not asking, and not a session a pull request to review rides on. */
+export function idleAgents(agents: readonly AgentView[], needs: readonly NeedsYouItem<unknown>[], reviews: readonly ReviewEntry[]): number {
+  const held = new Set([...needs.map((item) => item.paneId), ...reviews.flatMap((entry) => entry.open && "paneId" in entry.open ? [entry.open.paneId] : [])]);
+  return agents.filter((agent) => (agent.status === "idle" || agent.status === "done") && !held.has(agent.paneId)).length;
 }
 
 export interface ReviewItem {

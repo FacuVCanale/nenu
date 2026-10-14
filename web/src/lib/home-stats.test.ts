@@ -21,20 +21,23 @@ const project: ProjectView = {
 
 describe("headline", () => {
   it("leads with the one fact that needs you most, as a sentence with its noun", () => {
-    expect(homeHeadline({ needs: 2, review: 2, working: 5 }, 9).title).toBe("2 threads need you");
-    expect(homeHeadline({ needs: 1, review: 0, working: 5 }, 9).title).toBe("1 thread needs you");
-    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9).title).toBe("1 pull request ready to review");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9).title).toBe("2 agents at work");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9).title).toBe("All quiet");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 0).title).toBe("What should we work on?");
+    expect(homeHeadline({ needs: 2, review: 2, working: 5, idle: 0 }, 9).title).toBe("2 need you");
+    expect(homeHeadline({ needs: 1, review: 0, working: 5, idle: 0 }, 9).title).toBe("1 needs you");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 0 }, 9).title).toBe("1 pull request ready to review");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 0 }, 9).title).toBe("2 agents at work");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 4 }, 9).title).toBe("All quiet");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 0 }, 0).title).toBe("What should we work on?");
   });
 
-  it("puts the rest on a second line, and leaves it out when there is nothing else", () => {
-    expect(homeHeadline({ needs: 1, review: 3, working: 5 }, 9).detail).toBe("3 to review · 5 working");
-    expect(homeHeadline({ needs: 2, review: 0, working: 1 }, 9).detail).toBe("1 working");
-    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9).detail).toBe("3 working");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9).detail).toBeNull();
-    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9).detail).toBeNull();
+  it("puts the rest on a second line, idle agents last, and leaves it out when there is nothing else", () => {
+    expect(homeHeadline({ needs: 1, review: 1, working: 1, idle: 4 }, 9).detail).toBe("1 to review · 1 working · 4 idle");
+    expect(homeHeadline({ needs: 1, review: 3, working: 5, idle: 0 }, 9).detail).toBe("3 to review · 5 working");
+    expect(homeHeadline({ needs: 2, review: 0, working: 1, idle: 0 }, 9).detail).toBe("1 working");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 2 }, 9).detail).toBe("3 working · 2 idle");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 1 }, 9).detail).toBe("1 idle");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 0 }, 9).detail).toBeNull();
+    // "All quiet" already says it: a count of idle agents under it would repeat it.
+    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 3 }, 9).detail).toBeNull();
   });
 
   it("greets by the local hour", () => {
@@ -49,6 +52,19 @@ it("lists dialogs oldest first, then blocked panes the bridge read no dialog on"
   const agents = [agent("a", "blocked", { lastActiveAt: 5 }), agent("b", "blocked"), agent("c", "blocked", { lastActiveAt: 1 }), agent("d", "working")];
   const items = needsYouItems(agents, [{ paneId: "b", detectedAt: 20 }, { paneId: "a", detectedAt: 10 }]);
   expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : "blocked"}`)).toEqual(["a:asks", "b:asks", "c:blocked"]);
+});
+
+it("lists after them the threads whose agent stopped for your reply, on a live pane, once each", () => {
+  const hub: ProjectView = {
+    slug: "hub", name: "Hub", status: "active", source: "json",
+    threads: [
+      { id: "t1", title: "Copy", parentId: "root", role: "worker", status: "open", paneId: "r", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true },
+      { id: "t2", title: "Gone", parentId: "root", role: "worker", status: "open", paneId: "closed", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true },
+      { id: "t3", title: "Asks", parentId: "root", role: "worker", status: "open", paneId: "a", liveStatus: "blocked", group: "waiting-on-you", selfWaiting: true },
+    ],
+  };
+  const items = needsYouItems([agent("a", "blocked"), agent("r", "idle")], [{ paneId: "a", detectedAt: 1 }], [hub]);
+  expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : item.reply ? "reply" : "blocked"}`)).toEqual(["a:asks", "r:reply"]);
 });
 
 describe("review state", () => {

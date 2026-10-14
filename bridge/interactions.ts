@@ -10,6 +10,7 @@ import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/s
 import { previewStructureEqual, type PreviewSelectModel } from "../web/src/lib/harness/preview-model.ts";
 import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/prompt-model.ts";
 import { WIZARD_BACK_KEYS, WIZARD_CANCEL_KEYS, WIZARD_NEXT_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
+import { oneTapAnswers } from "../web/src/lib/one-tap-answers.ts";
 import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "../web/src/lib/typed-text.ts";
 import type { PaneRead } from "./herdr-client.ts";
 import { PERSISTENT, permissionSubject, promptSubjectText, questionRow, stripKeyHint, terminalOnly } from "./interaction-subject.ts";
@@ -441,16 +442,9 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   return { interaction, dialog, choices };
 }
 
-/**
- * The options a notification may answer without opening Nenu: never a persistent or free-text one,
- * only on a question or a permission whose full command/file is on the card, and only when every
- * answer fits in two actions, so the one left out is never an answer. A question's escape row
- * ("Chat about this") is not an answer; a permission's "No" is. Nothing while someone is typing.
- */
+/** A notification's actions: the answers a dialog may take in one tap (`oneTapAnswers`, shared with Home). */
 export function pushActions(i: Interaction): Array<{ optionIndex: number; title: string }> {
-  if (i.typing || (i.kind !== "question" && !(i.kind === "permission" && i.detailComplete))) return [];
-  const answers = i.options.filter((o) => o.role === "primary" || o.role === "neutral" || (i.kind === "permission" && o.role === "deny"));
-  return answers.length > 0 && answers.length <= 2 ? answers.map((o) => ({ optionIndex: o.index, title: o.label })) : [];
+  return oneTapAnswers(i).map((o) => ({ optionIndex: o.index, title: o.label }));
 }
 
 const paneKey = (session: string, paneId: string) => `${session}\u0000${paneId}`;

@@ -17,6 +17,7 @@ import type {
   NativeQueueState,
   NodeRole,
   NotifyPrefs,
+  DiffScope,
   PaneDiff,
   PaneHistoryResponse,
   PaneSkillsResponse,
@@ -899,4 +900,9 @@ export function fetchArtifactMetadata(paneId: string, paths: string[], session?:
 /** What pull request `pr` changes, read from the pane's folder (bridge/pane-diff.ts); asked for when the viewer opens. */
 export function fetchPaneDiff(paneId: string, pr: number, session?: string, signal?: AbortSignal): Promise<PaneDiff> {
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/diff?pr=${pr}`, session), { signal });
+}
+
+/** What the pane's session changed, `scope` deep, with or without a pull request (bridge/pane-diff.ts `sessionDiff`). */
+export function fetchSessionDiff(paneId: string, scope: DiffScope, session?: string, signal?: AbortSignal): Promise<PaneDiff> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/diff?scope=${scope}`, session), { signal });
 }

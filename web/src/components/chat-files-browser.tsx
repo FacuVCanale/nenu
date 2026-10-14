@@ -42,66 +42,43 @@ function mergeEntries(older: TranscriptEntry[], newer: TranscriptEntry[]): Trans
   });
 }
 
-export function ChatFilesBrowser({
-  paneId,
-  session,
-  history,
-  published,
-  open: openProp,
-  onOpenChange,
-}: {
-  paneId: string;
-  session?: string;
-  history: PaneHistoryResponse | null;
-  /** The session's claude.ai pages (Activity), listed first under Artifacts. */
-  published?: ActivityArtifact[];
-  /** Controlled from a menu item: no trigger of its own is rendered. */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-}) {
-  const controlled = openProp !== undefined;
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = controlled ? openProp : ownOpen;
-  const setOpen = (next: boolean) => {
-    if (!controlled) setOwnOpen(next);
-    onOpenChange?.(next);
-  };
-  const [filter, setFilter] = useState<"artifacts" | "project" | "file">("project");
-  const [query, setQuery] = useState("");
-  const [extension, setExtension] = useState("all");
-  const [sort, setSort] = useState("recent");
+/**
+ * The whole conversation of a pane, read page by page while `active`, for the files it names: from
+ * `seed` (the history already on screen) back to the start, in bounded batches. Pages read survive a
+ * pause; `reset` starts over from a new seed, `retry` resumes. A new pane or session starts over.
+ */
+export function useConversationScan(paneId: string, session: string | undefined, active: boolean, seedHistory?: PaneHistoryResponse | null) {
   const [runKey, setRunKey] = useState(0);
   const [scan, setScan] = useState<ScanState>(EMPTY_SCAN);
-  const seed = useRef<PaneHistoryResponse | null>(history);
+  const seed = useRef<PaneHistoryResponse | null>(seedHistory ?? null);
   const accumulated = useRef<TranscriptEntry[]>([]);
   const cursor = useRef<AvailableHistory | null>(null);
   const knownTotal = useRef(0);
   const knownFileTruncated = useRef(false);
-  const openFile = useContext(FilePreviewContext);
-
-  // Scope changes must immediately dismiss the old pane's modal and discard every old path. This
-  // is defensive even though AgentChat normally remounts by pane: a stale URL must never flash
-  // while React adopts a new route tree.
-  useEffect(() => {
-    setOpen(false);
-    seed.current = history;
+  const reset = (next: PaneHistoryResponse | null | undefined) => {
+    seed.current = next ?? null;
     accumulated.current = [];
     cursor.current = null;
     knownTotal.current = 0;
     knownFileTruncated.current = false;
     setScan(EMPTY_SCAN);
+  };
+
+  useEffect(() => {
+    reset(seedHistory);
+    // Only a new scope starts over; a newer seed waits for the next reset.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paneId, session]);
 
   useEffect(() => {
-    if (!open) seed.current = history;
-  }, [history, open]);
+    if (seedHistory !== undefined) seed.current = seedHistory;
+  }, [seedHistory]);
 
-  const scanning = open && filter !== "project";
   useEffect(() => {
-    if (!scanning) return;
+    if (!active) return;
     const controller = new AbortController();
-    let active = true;
-    const update = (value: ScanState) => { if (active) setScan(value); };
+    let live = true;
+    const update = (value: ScanState) => { if (live) setScan(value); };
 
     void (async () => {
       let page = cursor.current ?? seed.current;
@@ -175,10 +152,51 @@ export function ChatFilesBrowser({
     })();
 
     return () => {
-      active = false;
+      live = false;
       controller.abort();
     };
-  }, [scanning, paneId, session, runKey]);
+  }, [active, paneId, session, runKey]);
+
+  return { scan, reset, retry: () => setRunKey((value) => value + 1) };
+}
+
+export function ChatFilesBrowser({
+  paneId,
+  session,
+  history,
+  published,
+  open: openProp,
+  onOpenChange,
+}: {
+  paneId: string;
+  session?: string;
+  history: PaneHistoryResponse | null;
+  /** The session's claude.ai pages (Activity), listed first under Artifacts. */
+  published?: ActivityArtifact[];
+  /** Controlled from a menu item: no trigger of its own is rendered. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const controlled = openProp !== undefined;
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlled ? openProp : ownOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setOwnOpen(next);
+    onOpenChange?.(next);
+  };
+  const [filter, setFilter] = useState<"artifacts" | "project" | "file">("project");
+  const [query, setQuery] = useState("");
+  const [extension, setExtension] = useState("all");
+  const [sort, setSort] = useState("recent");
+  const openFile = useContext(FilePreviewContext);
+  const { scan, reset, retry } = useConversationScan(paneId, session, open && filter !== "project", open ? undefined : history);
+
+  // Scope changes must immediately dismiss the old pane's modal and discard every old path. This
+  // is defensive even though AgentChat normally remounts by pane: a stale URL must never flash
+  // while React adopts a new route tree.
+  useEffect(() => {
+    setOpen(false);
+  }, [paneId, session]);
 
   function openReference(path: string) {
     // Avoid stacking the preview dialog over this modal. Closing first restores focus to the trigger;
@@ -197,12 +215,7 @@ export function ChatFilesBrowser({
       : sort === "name" ? a.name.localeCompare(b.name) : 0) || b.lastSeen.order - a.lastSeen.order);
   /** Every open starts from the history on screen now, on the project tab, with no filters. */
   function begin() {
-    seed.current = history;
-    accumulated.current = [];
-    cursor.current = null;
-    knownTotal.current = 0;
-    knownFileTruncated.current = false;
-    setScan(EMPTY_SCAN);
+    reset(history);
     setFilter("project"); setQuery(""); setExtension("all");
   }
   const openedFromMenu = controlled && openProp;
@@ -264,7 +277,7 @@ export function ChatFilesBrowser({
         {scan.error && (
           <div role="alert" className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
             <span>Some older messages could not be scanned.</span>
-            <Button variant="outline" size="sm" className="min-h-11" onClick={() => setRunKey((value) => value + 1)}>
+            <Button variant="outline" size="sm" className="min-h-11" onClick={retry}>
               <RefreshCw aria-hidden="true" className="size-4" /> Retry
             </Button>
           </div>
@@ -301,7 +314,7 @@ export function ChatFilesBrowser({
         {(scan.batchPaused || scan.fileTruncated || scan.pagingBoundary) && (
           <div role="status" className="mt-4 rounded-lg bg-muted/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             {scan.batchPaused
-              ? <div className="flex items-center justify-between gap-3"><span>Scanned the newest {scan.entries.length.toLocaleString()} of {Math.max(scan.total, scan.entries.length).toLocaleString()} messages.</span><Button variant="outline" size="sm" className="min-h-11 bg-background" onClick={() => setRunKey((value) => value + 1)}>Load older files</Button></div>
+              ? <div className="flex items-center justify-between gap-3"><span>Scanned the newest {scan.entries.length.toLocaleString()} of {Math.max(scan.total, scan.entries.length).toLocaleString()} messages.</span><Button variant="outline" size="sm" className="min-h-11 bg-background" onClick={retry}>Load older files</Button></div>
               : scan.fileTruncated
                 ? "The journal retains only the newest part of this session, so earlier references are unavailable."
                 : "The conversation changed while older messages were loading; some earlier references may be missing."}

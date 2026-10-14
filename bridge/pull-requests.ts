@@ -225,6 +225,12 @@ export class PullRequestRegistry {
     return info && pr ? { pr, checkedOut: info.branch } : undefined;
   }
 
+  /** The open PR of the branch `cwd` has checked out, as the last refresh read it. Runs nothing. */
+  onBranch(cwd: string): RepoPr | undefined {
+    const info = this.cwds.get(cwd);
+    return info?.branch ? this.repos.get(info.repo)?.find((candidate) => candidate.branch === info.branch) : undefined;
+  }
+
   /** One refresh at a time; a call while one runs joins it. */
   refresh(): Promise<void> {
     this.inFlight ??= this.read().finally(() => {

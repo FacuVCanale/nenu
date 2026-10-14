@@ -45,3 +45,13 @@ the initial bundle.
   the bridge never fetches.
 - Revisit `gh pr diff` only as a fallback for PRs with no local repo, and with GitHub's 300-file
   limit handled. Revisit highlighting only with a measured size, loaded no earlier than the viewer.
+
+## Amendment (2026-10-14): a session's scopes
+
+The desk's session panel shows a pane's changes with or without a pull request. The client may name
+a scope instead of a number: `branch` (the working tree against where the checked-out branch left
+its base) or `uncommitted` (the working tree against the last commit). The base is the one the
+branch's PR names, else `origin/HEAD`, else main or master, each checked as a branch name before it
+becomes a ref. Both scopes also name the files git does not track yet, without lines. Same rules as
+above: fixed argv, the folder's real path, `--relative`, no writes, the same bounds
+(`bridge/pane-diff.ts` `sessionDiff`).

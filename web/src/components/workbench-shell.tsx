@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { PanelLeft, Plus, Search } from "lucide-react";
+import { PanelLeft, Search, SquarePen } from "lucide-react";
 
 import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
 import { SidebarRail } from "@/components/sidebar-rail";
@@ -140,7 +140,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
             <span>Nenu</span>
           </Link>
           <button ref={collapseButton} type="button" className="workbench-icon-button" aria-label="Collapse sidebar" aria-expanded={!collapsed} aria-controls={sidebarId} onClick={() => toggle(true)}>
-            <PanelLeft aria-hidden="true" size={17} />
+            <PanelLeft aria-hidden="true" size={16} />
           </button>
         </div>
         <WorkbenchSidebar data={data} onNewChat={newChat} request={request} />
@@ -167,8 +167,8 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
           <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" /><span>Nenu</span>
         </Link>}
         headerAction={<>
-          <button type="button" className="workbench-icon-button" aria-label="Search" onClick={() => setDrawerSearch((n) => n + 1)}><Search aria-hidden size={18} /></button>
-          <button type="button" className="workbench-icon-button" aria-label="New" onClick={newChat} disabled={!newChat}><Plus aria-hidden size={18} /></button>
+          <button type="button" className="workbench-icon-button" aria-label="Search" onClick={() => setDrawerSearch((n) => n + 1)}><Search aria-hidden size={16} /></button>
+          <button type="button" className="workbench-icon-button" aria-label="New" onClick={newChat} disabled={!newChat}><SquarePen aria-hidden size={16} /></button>
         </>}>
         <WorkbenchSidebar data={data} onNewChat={newChat} variant="drawer"
           request={drawerSearch ? { target: "search", seq: drawerSearch } : undefined} />

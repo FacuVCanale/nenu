@@ -4,7 +4,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Loader2, Paperclip, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Loader2, Paperclip, Plus, Settings2, Slash, TextCursorInput, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -1167,7 +1167,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     ...(commands.length > 0 ? [{ id: "commands", group: "Replies", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") } as const] : []),
     { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dockControl("keys", locked) },
     // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
-    { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
+    { id: "type", group: "Terminal", label: "Type into terminal", icon: TextCursorInput, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
     ...(usageControls ? [{ id: "usage", group: "Session", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) } as const] : []),
     { id: "display", group: "View", label: "Display", icon: Settings2, ...dockControl("display", false) },
   ];

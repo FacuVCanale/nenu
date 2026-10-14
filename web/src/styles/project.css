@@ -73,3 +73,9 @@
   .task-fold { width: 44px; height: 44px; margin: 0; }
   .task-history-toggle { min-height: 44px; }
 }
+
+/* The desk's session panel (components/session-inspector): its width is the operator's, but the chat
+   beside it keeps 22rem. The resize grip straddles the panel's left border. */
+.session-panel { position: relative; display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; max-width: calc(100% - 22rem); border-left: 1px solid var(--border); }
+.session-panel-resize { position: absolute; inset-block: 0; left: -3px; z-index: 1; width: 6px; cursor: col-resize; touch-action: none; }
+.session-panel-resize:hover, .session-panel-resize:focus-visible { background: color-mix(in srgb, var(--ring) 45%, transparent); outline: none; }

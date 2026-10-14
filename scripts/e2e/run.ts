@@ -1,9 +1,10 @@
 import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
@@ -25,6 +26,7 @@ import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, o
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
 //   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  Home with a project: captures, each list, requests per minute
+//   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -1408,7 +1410,9 @@ async function artifacts(): Promise<void> {
  * Home over a neutral project (homeOrg) and two pull requests from GitHub, one on the working pane's
  * branch and one on a branch no pane is on: phone and desk, dark and light, then each list the
  * Recents / Workspaces control offers (when the build has it), then a phone's requests on Home over
- * `--seconds`, after a 5 s warm-up.
+ * `--seconds`, after a 5 s warm-up. Last, Claude's PermissionRequest hook reaches the bridge as an
+ * installed hook delivers it, so the blocked pane's command is known whole, and a desk answers Yes
+ * from Needs you: the key the fake terminal got, and the requests from the tap to that key.
  */
 async function home(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -1458,10 +1462,41 @@ async function home(): Promise<void> {
       await sleep(windowMs);
       const http = tally(phone.requests.filter((r) => r.at >= from).map((r) => r.url));
       await phone.close();
+
+      const herd = bridge.herd!;
+      const token = crypto.randomUUID();
+      await writeFile(join(bridge.dir, "state", CLAUDE_HOOK_TOKEN_FILE), token);
+      const hook = await fetch(bridge.url + CLAUDE_HOOK_PATH, {
+        method: "POST", headers: { "content-type": "application/json", [CLAUDE_HOOK_TOKEN_HEADER]: token },
+        // The snapshot keeps Claude's session id to the bridge; the demo journal is named after it.
+        body: JSON.stringify({ hook_event_name: "PermissionRequest", session_id: basename(herd.journals.get(herd.blocked)!, ".jsonl"),
+          tool_name: "Bash", tool_input: { command: "mkfifo fixture-fifo" } }),
+      });
+      if (hook.status !== 204) throw new Error(`the hook was refused: ${hook.status}`);
+      const { page, close } = await open(DESKTOP, "dark");
+      const requests: Array<{ url: string; at: number }> = [];
+      page.on("request", (req) => requests.push({ url: req.url(), at: Date.now() }));
+      const yes = page.getByRole("region", { name: /^Needs you/ }).getByRole("button", { name: "Yes", exact: true });
+      await yes.waitFor({ timeout: 15_000 });
+      await shoot(page, "home-desktop-answer");
+      const t0 = Date.now();
+      await yes.click();
+      while (bridge.fake!.answered.length === 0 && Date.now() - t0 < 15_000) await sleep(5);
+      const answer = bridge.fake!.answered[0];
+      if (!answer) throw new Error("the answer from Home never reached the fake terminal");
+      await page.getByText(/^Approved/).first().waitFor({ timeout: 15_000 });
+      await shoot(page, "home-desktop-answered");
+      await close();
+      const phoneAsk = await open(PHONE, "dark");
+      await shoot(phoneAsk.page, "home-phone-after-answer");
+      await phoneAsk.close();
+      // The one write this run drives: the dialog's key on the blocked pane.
+      const unexpectedWrites = bridge.fake!.writes().filter((c) => !(c.method === "pane.send_keys" && c.params.pane_id === herd.blocked));
       return {
         shots, windowSeconds: windowMs / 1000,
         homeRequestsPerMinute: Math.round(sum(http) * 60_000 / windowMs), byRoute: perMinute(http, windowMs),
-        unexpectedWrites: bridge.fake!.writes(),
+        answerFromHome: { pane: answer.paneId, key: answer.key, tapToKeyMs: answer.at - t0, byRouteToKey: tally(requests.filter((r) => r.at >= t0 && r.at <= answer.at).map((r) => r.url)) },
+        unexpectedWrites,
       };
     } finally {
       stopJournal();
@@ -1477,6 +1512,113 @@ async function home(): Promise<void> {
     ]));
   });
   await writeFile(join(outDir, "home.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
+/** The bench folder also holds the test bridge's own files: git leaves them out, and the agent has one new file. */
+function benchRepo(dir: string): void {
+  writeFileSync(join(dir, ".git/info/exclude"), "/*\n!/app/\n!/docs/\n");
+  writeFileSync(join(dir, "app/coupon.test.ts"), "test(\"applies a coupon\", () => {});\n");
+}
+
+/**
+ * A session on a desk with its Inspector (homeOrg, PR #42 on the working pane's branch): phone and
+ * desk captures, then, when the build has one, each tab, the folded panel, the project behind ⋯, a
+ * session switch, light, and the shell pane, which has no PR. `requests` lists what each step asked
+ * the bridge beyond the snapshot and the chat's own reads, so a tab that loads unseen shows up.
+ */
+async function inspector(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const prs = join(outDir, "gh-prs.json");
+  process.env.NENU_E2E_GH_PRS = prs;
+  let size = { additions: 0, deletions: 0 };
+  const steps: Record<string, string[]> = {};
+  const result = await withBench(async (bridge, browser) => {
+    const shots: string[] = [];
+    const herd = bridge.herd!;
+    let log: string[] = [];
+    // Every read but the app-wide polls, so a tab that loads unseen shows up beside the chat's own reads.
+    const polls = /^\/api\/(snapshot|events|version|update)|\/(queue|subagents|interactions)$/;
+    const open = async (device: typeof PHONE | typeof DESKTOP, paneId: string, colorScheme: "dark" | "light" = "dark") => {
+      log = [];
+      const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      page.on("request", (request) => {
+        const url = new URL(request.url());
+        if (url.pathname.startsWith("/api/") && !polls.test(url.pathname)) log.push(decodeURIComponent(url.pathname + url.search).replace(paneId, ":id"));
+      });
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + `/pane/${encodeURIComponent(paneId)}`);
+      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      return { page, close: () => context.close() };
+    };
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    const step = async (name: string, page: Page, act?: () => Promise<unknown>) => {
+      log = [];
+      await act?.();
+      await page.waitForTimeout(1200);
+      steps[name] = log;
+      await shoot(page, name);
+    };
+    const panel = (page: Page) => page.getByRole("complementary", { name: "Session panel" });
+
+    for (const [name, device, paneId] of [["phone-session", PHONE, herd.working], ["phone-shell", PHONE, herd.shell], ["desktop-session", DESKTOP, herd.working]] as const) {
+      const { page, close } = await open(device, paneId);
+      steps[name] = log;
+      await shoot(page, name);
+      await close();
+    }
+    if (!before) {
+      const { page, close } = await open(DESKTOP, herd.working);
+      steps["desktop-changes-open"] = log;
+      await panel(page).getByRole("button", { name: /app\/checkout\.tsx/ }).click();
+      await step("desktop-changes", page);
+      await step("desktop-uncommitted", page, () => panel(page).getByRole("radio", { name: "Uncommitted" }).click());
+      await step("desktop-files", page, () => panel(page).getByRole("tab", { name: /Files/ }).click());
+      await step("desktop-artifacts", page, () => panel(page).getByRole("tab", { name: /Artifacts/ }).click());
+      await step("desktop-project", page, () => panel(page).getByRole("button", { name: /^Project/ }).click());
+      await step("desktop-closed", page, () => page.keyboard.press("Meta+Alt+KeyB"));
+      await step("desktop-reopened", page, () => page.getByRole("button", { name: "Show session panel" }).click());
+      await step("desktop-switched", page, () => page.goto(bridge.url + `/pane/${encodeURIComponent(herd.blocked)}`));
+      await close();
+      for (const [name, paneId, scheme] of [["desktop-light", herd.working, "light"], ["desktop-shell", herd.shell, "dark"]] as const) {
+        const view = await open(DESKTOP, paneId, scheme);
+        steps[name] = log;
+        await shoot(view.page, name);
+        await view.close();
+      }
+    }
+    return { shots, requests: steps, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => {
+    size = seedDiffRepo(dir);
+    benchRepo(dir);
+    writeFileSync(prs, JSON.stringify([
+      { number: 42, title: "Checkout flow", url: "https://github.com/acme/shop/pull/42", headRefName: "e2e-demo", baseRefName: "main",
+        isDraft: false, reviewDecision: "REVIEW_REQUIRED", statusCheckRollup: [], ...size, updatedAt: new Date(CAPTURE_EPOCH).toISOString() },
+    ]));
+  });
+  // A pane with no pull request: GitHub lists none, and the shell is in no project.
+  writeFileSync(prs, "[]");
+  const bare = before ? undefined : await withBench(async (bridge, browser) => {
+    const context = await browser.newContext({ ...DESKTOP, colorScheme: "dark", timezoneId: "UTC", locale: "en-US" });
+    const page = await context.newPage();
+    await page.clock.install({ time: bridge.now() });
+    await page.goto(bridge.url + `/pane/${encodeURIComponent(bridge.herd!.shell)}`);
+    await page.getByRole("complementary", { name: "Session panel" }).getByText(/files? ·/).first().waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(800);
+    const path = join(outDir, "desktop-no-pr.png");
+    await page.screenshot({ path, animations: "disabled" });
+    await context.close();
+    return { shots: [path], unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => { seedDiffRepo(dir); benchRepo(dir); });
+  if (bare) Object.assign(result, { shots: [...result.shots, ...bare.shots], unexpectedWrites: [...result.unexpectedWrites, ...bare.unexpectedWrites] });
+  await writeFile(join(outDir, "inspector.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (result.unexpectedWrites.length) process.exit(1);
 }
@@ -1497,8 +1639,9 @@ else if (command === "baseline") await baseline();
 else if (command === "diffs") await diffs(values.before === true);
 else if (command === "artifacts") await artifacts();
 else if (command === "home") await home();
+else if (command === "inspector") await inspector(values.before === true);
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
