@@ -1,26 +1,12 @@
-import { createProject, mergeThread, openProject, OrgValidationError, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { createProject, listRoutines, mergeThread, openProject, OrgValidationError, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json } from "./http.ts";
 
 export const orgRoutes: Route[] = [
-  {
-    method: "GET",
-    path: "/api/org/start-options",
-    access: "read",
-    session: false,
-    async handle({ orgRun }, { req, url }) {
-      try {
-        const options = await startOptions(orgRun, url.searchParams.get("project") ?? "");
-        return json({ ok: true, ...options }, req.headers.get("accept-encoding"));
-      } catch (error) {
-        return json({
-          ok: false,
-          error: error instanceof Error ? error.message : "Could not read the start options.",
-        }, req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
-      }
-    },
-  },
+  orgRead("/api/org/start-options", "Could not read the start options.", startOptions),
+  // Read on demand (the Routines page, a chip being opened), never on a poll.
+  orgRead("/api/org/routines", "Could not read the routines.", listRoutines),
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
     const started = await startNode(orgRun, rt.socketPath, {
       project: body.project, title: body.title, parent: body.parent, task: body.task, role: body.role, profile: body.profile, template: body.template,
@@ -58,6 +44,26 @@ export const orgRoutes: Route[] = [
     return { response: { flags }, detail: { project: body.project, ...flags } };
   }),
 ];
+
+/** A GET that answers one Organizations read about `?project=`: 400 for a bad slug, 502 when the CLI fails. */
+function orgRead(path: string, failure: string, read: (orgRun: Services["orgRun"], project: string) => Promise<object>): Route {
+  return {
+    method: "GET",
+    path,
+    access: "read",
+    session: false,
+    async handle({ orgRun }, { req, url }) {
+      try {
+        return json({ ok: true, ...await read(orgRun, url.searchParams.get("project") ?? "") }, req.headers.get("accept-encoding"));
+      } catch (error) {
+        return json({
+          ok: false,
+          error: error instanceof Error ? error.message : failure,
+        }, req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
+      }
+    },
+  };
+}
 
 /**
  * A POST that runs one Organizations write for the person's tap, audits it, and re-reads the
