@@ -389,6 +389,12 @@ describe("Recents and Workspaces", () => {
     expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
   });
 
+  it("says which session waits for your reply, which Needs you leaves to the list", async () => {
+    const waiting: ProjectView = { ...hub, threads: hub.threads.map((thread) => thread.id === "t3" ? { ...thread, liveStatus: "idle", group: "waiting-on-you", selfWaiting: true } : thread) };
+    const { main } = await setup({ ...recentData, projects: [waiting], agents: recentData.agents.map((agent) => agent.paneId === "w2:p3" ? { ...agent, status: "idle" } : agent) });
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Landing,/ })).toHaveAccessibleName(/^Landing,\s*Waiting for your reply,\s*Hub,\s*20m ago$/);
+  });
+
   it("remembers on this device which list it shows", async () => {
     const first = await setup(recentData);
     await first.user.click(first.main.getByRole("tab", { name: "Workspaces" }));

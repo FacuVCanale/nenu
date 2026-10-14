@@ -169,6 +169,15 @@ describe("recent chats", () => {
     expect(by("coord")).not.toHaveProperty("diff");
   });
 
+  it("says a session's thread waits for your reply, as Organizations' own word puts it", () => {
+    const hub: ProjectView = {
+      ...project, source: "json",
+      threads: [{ id: "t1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "worker", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true }],
+    };
+    expect(recentChats(panes, [hub], new Set()).find((row) => row.agent.paneId === "worker")).toMatchObject({ ask: "reply" });
+    expect(recentChats(panes, [project], new Set()).find((row) => row.agent.paneId === "worker")).not.toHaveProperty("ask");
+  });
+
   it("lists shells by the same clock, as plain sessions", () => {
     const shell = agent("sh", "idle", { kind: "shell", agent: "shell", paneLabel: "Logs", lastActiveAt: NOW - 3 * MIN });
     expect(recentChats([...panes, shell], [project], new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
