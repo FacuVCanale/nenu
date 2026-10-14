@@ -48,9 +48,9 @@ function fakeTransitions() {
   return { motions, skipped: () => skipped };
 }
 
-function prefersReducedMotion(reduce: boolean) {
+function matchingMedia(feature: string) {
   window.matchMedia = ((query: string) => ({
-    matches: reduce && query.includes("prefers-reduced-motion: reduce"),
+    matches: query.includes(feature),
     media: query, onchange: null,
     addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
   })) as typeof window.matchMedia;
@@ -91,13 +91,21 @@ describe("page motion", () => {
   });
 
   it("never moves sideways under reduced motion: every change is a fade", async () => {
-    prefersReducedMotion(true);
+    matchingMedia("prefers-reduced-motion: reduce");
     const vt = fakeTransitions();
     const router = await open("/");
     await act(() => router.navigate("/pane/a"));
     await userEvent.click(screen.getByRole("link", { name: "Back to Home" }));
     await screen.findByText("Home");
     expect(vt.motions).toEqual(["fade", "fade"]);
+  });
+
+  it("fades every change on a desk, where the sidebar stays beside the page", async () => {
+    matchingMedia("min-width: 1024px");
+    const vt = fakeTransitions();
+    const router = await open("/");
+    await act(() => router.navigate("/pane/a"));
+    expect(vt.motions).toEqual(["fade"]);
   });
 
   it("starts no transition for a poll, a replace, a search change or the browser's Back", async () => {

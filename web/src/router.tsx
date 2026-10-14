@@ -10,18 +10,24 @@ import { NodeRoute } from "@/routes/node";
 import { ProjectRoute } from "@/routes/project";
 import { NotFoundRoute } from "@/routes/not-found";
 import { historyLoader, rootLoader, paneLoader, PANE_ROUTE_ID, ROOT_ROUTE_ID } from "@/lib/loaders";
+import { animateNavigations, armMotion, type MotionHandle } from "@/lib/motion";
+import { listenForOpen } from "@/lib/notification-open";
 
-// We don't use view transitions. React Router persists an "applied view transitions" map to
-// sessionStorage ("remix-router-transitions") and replays a phantom same-location transition on every
-// revalidation for any path it once saw a `viewTransition: true` navigation from. A device that ran an
-// older Nenu build (which did use them) can carry a stale entry that fires
-// document.startViewTransition on every poll. Clear it on boot — our code never repopulates it. The
-// `:root { view-transition-name: none }` in index.css is the belt to this: even a stray transition
-// then captures nothing, so there's no visible flicker regardless of this key's name.
+// We never use React Router's `viewTransition` flag (page motion is lib/motion.ts). React Router persists
+// an "applied view transitions" map to sessionStorage ("remix-router-transitions") and replays a phantom
+// same-location transition on every revalidation for any path it once saw a `viewTransition: true`
+// navigation from. A device that ran an older Nenu build (which did use them) can carry a stale entry
+// that fires document.startViewTransition on every poll. Clear it on boot — our code never repopulates
+// it. The `:root { view-transition-name: none }` in index.css is the belt to this: even a stray
+// transition then captures nothing, so there's no visible flicker regardless of this key's name.
 try {
   sessionStorage.removeItem("remix-router-transitions");
 } catch {
   // sessionStorage access can throw in locked-down / private contexts — ignore.
+}
+
+function depth(value: number): MotionHandle {
+  return { depth: value };
 }
 
 export const routes: RouteObject[] = [
@@ -35,16 +41,18 @@ export const routes: RouteObject[] = [
     errorElement: <RootError />,
     HydrateFallback: BootSplash,
     children: [
-      { index: true, element: <HomeRoute /> },
-      { path: "space/:spaceId", element: <SpaceRoute /> },
-      { path: "project/:projectSlug", element: <ProjectRoute /> },
-      { path: "project/:projectSlug/node/:nodeId", element: <NodeRoute /> },
-      { path: "settings", element: <SettingsRoute /> },
+      // `handle.depth` is each page's place in the hierarchy: a move deeper slides in (lib/motion.ts).
+      { index: true, handle: depth(0), element: <HomeRoute /> },
+      { path: "space/:spaceId", handle: depth(1), element: <SpaceRoute /> },
+      { path: "project/:projectSlug", handle: depth(1), element: <ProjectRoute /> },
+      { path: "project/:projectSlug/node/:nodeId", handle: depth(2), element: <NodeRoute /> },
+      { path: "settings", handle: depth(1), element: <SettingsRoute /> },
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
       // whenever it isn't the active route) — see the "last seen" note there.
-      { id: PANE_ROUTE_ID, path: "pane/:paneId", loader: paneLoader, element: <DetailRoute /> },
+      { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, element: <DetailRoute /> },
       {
         path: "pane/:paneId/history",
+        handle: depth(4),
         loader: historyLoader,
         element: <HistoryRoute />,
         // Opt OUT of the poll loop. revalidate() re-runs every active loader, and a transcript can be
@@ -62,3 +70,13 @@ export const routes: RouteObject[] = [
 // Created once at module scope so the idle-lock in App can unmount/remount RouterProvider without
 // losing the current location (the router instance retains it; loaders re-run fresh on remount).
 export const router = createBrowserRouter(routes);
+animateNavigations(router);
+
+// A tapped notification opens its page here, as a push, instead of reloading the app (sw.ts).
+if ("serviceWorker" in navigator) {
+  listenForOpen(navigator.serviceWorker, (path) => {
+    armMotion("push");
+    void router.navigate(path);
+  });
+  navigator.serviceWorker.startMessages();
+}

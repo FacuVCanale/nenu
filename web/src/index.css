@@ -401,13 +401,46 @@
   }
 }
 
-/* We don't use view transitions (removed). But React Router can still fire document.startViewTransition
-   on a revalidation for a device carrying a stale persisted transition map from an older build (see
-   router.tsx). Keep the whole document unnamed so any such stray transition captures nothing and swaps
-   instantly — no full-page crossfade flicker. This is a no-op-izing safety net, not a transition. */
+/* Outside a transition lib/motion.ts started, the document stays unnamed. React Router can still fire
+   document.startViewTransition on a revalidation for a device carrying a stale persisted transition map
+   from an older build (see router.tsx); such a stray transition then captures nothing and swaps
+   instantly — no full-page crossfade flicker. Our own transitions name the root (Page motion, below). */
 :root {
   view-transition-name: none;
 }
+
+/* ── Page motion ─────────────────────────────────────────────────────────────────────────────────
+   Drawn only while lib/motion.ts runs a transition it started, which sets html[data-motion] for its
+   length. The whole page is one picture: a push slides the next page in from the right over the one it
+   leaves, which drifts a quarter to the left; a pop slides the page out to the right over the one coming
+   back; a fade cross-fades. Nothing else is named, because WebKit draws no other part of the new page. */
+html[data-motion] { view-transition-name: root; }
+
+/* Taps during a transition land on the new page, which is already in its place underneath. */
+::view-transition { pointer-events: none; }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* A push and a pop lay one opaque page over the other, so they blend normally, not the fade's plus-lighter. */
+html:is([data-motion="push"], [data-motion="pop"])::view-transition-old(root),
+html:is([data-motion="push"], [data-motion="pop"])::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  animation-fill-mode: both;
+}
+html[data-motion="push"]::view-transition-old(root) { animation-name: motion-under-out; }
+html[data-motion="push"]::view-transition-new(root) { animation-name: motion-in; }
+html[data-motion="pop"]::view-transition-old(root) { animation-name: motion-out; z-index: 1; }
+html[data-motion="pop"]::view-transition-new(root) { animation-name: motion-under-in; }
+
+@keyframes motion-in { from { transform: translateX(100%); } }
+@keyframes motion-out { to { transform: translateX(100%); } }
+@keyframes motion-under-out { to { transform: translateX(-25%); } }
+@keyframes motion-under-in { from { transform: translateX(-25%); } }
 
 /* ── Nenu activity mark ──────────────────────────────────────────────────────────────────────────
    Transform and opacity only: compositor-friendly, no sprite repaint and no JS timer. */
