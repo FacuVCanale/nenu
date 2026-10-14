@@ -1,6 +1,6 @@
-// What a pull request changes, read with git from the folder a pane sits in.
+// What a pull request changes, or what a session changed, read with git from the folder a pane sits in.
 //
-// The client names a pane and a PR number and nothing else. The folder is the pane's own, from
+// The client names a pane and a PR number, or a scope, and nothing else. The folder is the pane's own, from
 // Herdr's snapshot; the branches are the ones GitHub reported for that PR in that folder's repo
 // (pull-requests.ts); every argument git gets is built here from those. git runs from the folder's
 // real path and only reports what lies under it (`--relative`). It writes nothing
@@ -56,22 +56,31 @@ export interface DiffFile {
   binary?: true;
   /** Absent when `omitted` says why the lines are not here. */
   hunks?: DiffHunk[];
-  omitted?: "binary" | "large" | "budget";
+  /** `untracked`: a new file git does not track yet, so it has no lines to diff against. */
+  omitted?: "binary" | "large" | "budget" | "untracked";
 }
+
+/** What a session's Changes compares: its branch against where it started, or only what is not committed. */
+export type DiffScope = "branch" | "uncommitted";
 
 export type PaneDiff =
   | {
     ok: true;
-    pr: number;
+    /** The pull request asked for; absent for a session's scope. */
+    pr?: number;
     base: string;
+    /** The branch checked out, or `HEAD` when detached. */
     head: string;
-    /** `worktree`: the pane is on the PR's branch, uncommitted edits included. `branch`: the PR's pushed branch. */
-    source: "worktree" | "branch";
+    /**
+     * `worktree`: the working tree against where the branch left `base`, uncommitted edits included.
+     * `branch`: the PR's pushed branch. `uncommitted`: the working tree against the last commit.
+     */
+    source: "worktree" | "branch" | "uncommitted";
     files: DiffFile[];
     totals: { files: number; additions: number; deletions: number };
     truncated?: { files?: true; bytes?: true };
   }
-  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed"; message: string };
+  | { ok: false; reason: keyof typeof MESSAGES; message: string };
 
 const MESSAGES = {
   "no-folder": "This pane's folder is not available, so there is no worktree to read.",
@@ -79,6 +88,8 @@ const MESSAGES = {
   "no-base": "The pull request's base branch is not in this repository.",
   "head-missing": "This pane is not on the pull request's branch, and that branch has not been fetched here.",
   failed: "git could not read this diff.",
+  "no-repo": "This pane's folder is not in a git repository.",
+  "no-default": "Nenu found no main or master branch, and no default branch of origin, to compare against.",
 } as const;
 
 const refuse = (reason: keyof typeof MESSAGES): PaneDiff => ({ ok: false, reason, message: MESSAGES[reason] });
@@ -204,14 +215,8 @@ export async function paneDiff(
   { run = defaultGitRun(), limits: overrides = {} }: { run?: GitRun; limits?: Partial<DiffLimits> } = {},
 ): Promise<PaneDiff> {
   const limits = { ...DIFF_LIMITS, ...overrides };
-  if (!cwd || !isAbsolute(cwd)) return refuse("no-folder");
-  let folder: string;
-  try {
-    folder = await realpath(cwd);
-    if (!(await stat(folder)).isDirectory()) return refuse("no-folder");
-  } catch {
-    return refuse("no-folder");
-  }
+  const folder = await paneFolder(cwd);
+  if (!folder) return refuse("no-folder");
   if (!target) return refuse("no-pr");
   const base = branchName(target.base);
   if (!base) return refuse("no-base");
@@ -233,18 +238,84 @@ export async function paneDiff(
   if (mergeBase.code !== 0 || !/^[0-9a-f]{40,64}$/.test(forkPoint)) return refuse("failed");
 
   // The working tree when the pane is on the branch, the pushed branch otherwise.
-  const range = source === "worktree" ? [forkPoint] : [forkPoint, headRef];
+  const read = await readRange(git, source === "worktree" ? [forkPoint] : [forkPoint, headRef], limits, false);
+  return read ? { ok: true, pr: target.number, base, head, source, ...read } : refuse("failed");
+}
+
+/**
+ * What the session in `cwd` changed, with or without a pull request: `branch` is the working tree
+ * against where the checked-out branch left its base, `uncommitted` the working tree against the
+ * last commit. The base is the one the branch's PR names (`base`, from GitHub through the bridge),
+ * else origin's default branch, else main or master. Both name the files git does not track yet.
+ */
+export async function sessionDiff(
+  cwd: string | undefined,
+  scope: DiffScope,
+  { base: prBase, run = defaultGitRun(), limits: overrides = {} }: { base?: string; run?: GitRun; limits?: Partial<DiffLimits> } = {},
+): Promise<PaneDiff> {
+  const limits = { ...DIFF_LIMITS, ...overrides };
+  const folder = await paneFolder(cwd);
+  if (!folder) return refuse("no-folder");
+  const git = (args: string[], maxBytes = 64 * 1024) => run(["git", ...args], { cwd: folder, timeoutMs: limits.timeoutMs, maxBytes });
+
+  const current = await git(["branch", "--show-current"]);
+  if (current.code !== 0) return refuse("no-repo");
+  const head = current.stdout.trim() || "HEAD";
+  if (scope === "uncommitted") {
+    const read = await readRange(git, ["HEAD"], limits, true);
+    return read ? { ok: true, base: head, head, source: "uncommitted", ...read } : refuse("failed");
+  }
+
+  const origin = await git(["symbolic-ref", "-q", "refs/remotes/origin/HEAD"]);
+  const originDefault = origin.code === 0 && origin.stdout.startsWith("refs/remotes/origin/")
+    ? branchName(origin.stdout.trim().slice("refs/remotes/origin/".length)) : undefined;
+  const names = [...new Set([branchName(prBase), originDefault, "main", "master"].filter((name): name is string => name !== undefined))];
+  const refs = await git(["for-each-ref", "--format=%(refname)", ...names.flatMap((name) => [`refs/remotes/origin/${name}`, `refs/heads/${name}`])]);
+  if (refs.code !== 0) return refuse("failed");
+  const present = new Set(refs.stdout.split("\n"));
+  const base = names.find((name) => present.has(`refs/remotes/origin/${name}`) || present.has(`refs/heads/${name}`));
+  if (!base) return refuse("no-default");
+  const baseRef = present.has(`refs/remotes/origin/${base}`) ? `refs/remotes/origin/${base}` : `refs/heads/${base}`;
+  const mergeBase = await git(["merge-base", baseRef, "HEAD"]);
+  const forkPoint = mergeBase.stdout.trim();
+  if (mergeBase.code !== 0 || !/^[0-9a-f]{40,64}$/.test(forkPoint)) return refuse("failed");
+  const read = await readRange(git, [forkPoint], limits, true);
+  return read ? { ok: true, base, head, source: "worktree", ...read } : refuse("failed");
+}
+
+/** The pane's folder as its real path, or undefined when it is not an absolute path to a directory. */
+async function paneFolder(cwd: string | undefined): Promise<string | undefined> {
+  if (!cwd || !isAbsolute(cwd)) return undefined;
+  try {
+    const folder = await realpath(cwd);
+    return (await stat(folder)).isDirectory() ? folder : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type Git = (args: string[], maxBytes?: number) => ReturnType<GitRun>;
+type RangeRead = Pick<Extract<PaneDiff, { ok: true }>, "files" | "totals" | "truncated">;
+
+/**
+ * One bounded diff of `range` (a commit against the working tree, or two commits), under the folder
+ * only. With `untracked`, the files git does not track yet follow, named without lines.
+ */
+async function readRange(git: Git, range: string[], limits: DiffLimits, untracked: boolean): Promise<RangeRead | undefined> {
   const diff = ["-c", "core.fsmonitor=false", "-c", "core.quotepath=off", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--relative", "--find-renames"];
-  const [numstat, patch] = await Promise.all([
+  const [numstat, patch, others] = await Promise.all([
     git([...diff, "--numstat", "-z", ...range, "--"], NUMSTAT_BYTES),
     git([...diff, ...range, "--"], limits.bytes),
+    untracked ? git(["-c", "core.fsmonitor=false", "ls-files", "--others", "--exclude-standard", "-z", "--"], NUMSTAT_BYTES) : undefined,
   ]);
-  if (numstat.code !== 0 || patch.code !== 0) return refuse("failed");
+  if (numstat.code !== 0 || patch.code !== 0 || (others && others.code !== 0)) return undefined;
 
   const stats = parseNumstat(numstat.stdout);
   const sections = parsePatch(patch.stdout);
   // The last section a cut read may have lost its end: it counts as not read.
   const complete = patch.truncated ? sections.length - 1 : sections.length;
+  // A cut list loses its last name, which may be partial.
+  const newFiles = others ? others.stdout.split("\0").slice(0, others.truncated ? -2 : -1).filter(Boolean) : [];
   const files = stats.slice(0, limits.files).map((entry, index): DiffFile => {
     const section = index < complete ? sections[index] : undefined;
     const status = section?.status ?? (entry.from ? "renamed" : "modified");
@@ -254,19 +325,16 @@ export async function paneDiff(
     if (section.lines > limits.fileLines) return { ...file, omitted: "large" };
     return { ...file, hunks: section.hunks };
   });
+  const room = Math.max(0, limits.files - files.length);
+  files.push(...newFiles.slice(0, room).map((path): DiffFile => ({ path, status: "added", additions: 0, deletions: 0, omitted: "untracked" })));
   const truncated = {
-    ...(stats.length > limits.files || numstat.truncated ? { files: true as const } : {}),
+    ...(stats.length + newFiles.length > limits.files || numstat.truncated || others?.truncated ? { files: true as const } : {}),
     ...(patch.truncated ? { bytes: true as const } : {}),
   };
   return {
-    ok: true,
-    pr: target.number,
-    base,
-    head,
-    source,
     files,
     totals: {
-      files: stats.length,
+      files: stats.length + newFiles.length,
       additions: stats.reduce((sum, entry) => sum + entry.additions, 0),
       deletions: stats.reduce((sum, entry) => sum + entry.deletions, 0),
     },
