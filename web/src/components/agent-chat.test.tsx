@@ -977,11 +977,10 @@ describe("mobile session startup", () => {
   it("waits for shell output before enabling launch", () => {
     const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell" };
     renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "" });
-    expect(screen.getByRole("button", { name: "Start Codex" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
     expect(screen.getByText("Preparing the terminal…")).toBeInTheDocument();
   });
-  it.each(["Codex", "Claude Code"])("starts %s from a shell without typing a command", async (label) => {
+  it.each(["Codex", "Claude Code"])("starts %s from a shell at the chosen level, without typing a command", async (label) => {
     const user = userEvent.setup();
     const calls: unknown[] = [];
     server.use(http.post("/api/pane/:id/start", async ({ request }) => {
@@ -990,8 +989,9 @@ describe("mobile session startup", () => {
     }));
     const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", hasSession: false };
     renderChat({ agent: shell, agents: [], shellPanes: [shell] });
+    await user.click(screen.getByRole("radio", { name: label }));
     await user.click(screen.getByRole("button", { name: `Start ${label}` }));
-    await waitFor(() => expect(calls).toEqual([{ agent: label === "Codex" ? "codex" : "claude" }]));
+    await waitFor(() => expect(calls).toEqual([{ agent: label === "Codex" ? "codex" : "claude", permission: "ask" }]));
   });
 });
 
