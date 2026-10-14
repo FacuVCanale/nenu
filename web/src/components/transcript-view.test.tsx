@@ -583,7 +583,7 @@ describe("TranscriptView — the work timeline", () => {
     ask,
     step("think", "09:05", [{ kind: "thinking", text: "The inset is counted twice.\nLook at the viewport hook." }]),
     step("grep", "09:06", [{ kind: "tool", name: "Grep", summary: "safe-area-inset-bottom", result: { text: "web/src/workbench.css:212" } }]),
-    step("edit", "09:06", [{ kind: "tool", name: "Edit", summary: "/home/fran/repo/web/src/index.css", result: { text: "updated" } }]),
+    step("edit", "09:06", [{ kind: "tool", name: "Edit", summary: "/home/demo/repo/web/src/index.css", result: { text: "updated" } }]),
     step("test", "09:07", [{ kind: "tool", name: "Bash", summary: "bun run test composer", result: { text: "FAIL composer.test.tsx", isError: true } }]),
     step("final", "09:09", [{ kind: "text", text: "Fixed." }], { phase: "final_answer", turn: { status: "completed", durationMs: 252_000 } }),
   ];

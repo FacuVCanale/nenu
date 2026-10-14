@@ -19,25 +19,25 @@ describe("dir-picker helpers", () => {
   });
 
   it("ranks prefix matches before substring matches, ignoring case", () => {
-    expect(matchDirs(["Awam", "web", "api", "nenu-web"], "W")).toEqual(["web", "Awam", "nenu-web"]);
+    expect(matchDirs(["Kiwi", "web", "api", "nenu-web"], "W")).toEqual(["web", "Kiwi", "nenu-web"]);
     expect(matchDirs(["a", "b"], "")).toEqual(["a", "b"]);
   });
 
   it("builds tappable steps for home-relative and absolute folders", () => {
     expect(crumbs("~")).toEqual([{ label: "~", query: "~/" }]);
-    expect(crumbs("~/code/awam")).toEqual([
+    expect(crumbs("~/code/kiwi")).toEqual([
       { label: "~", query: "~/" },
       { label: "code", query: "~/code/" },
-      { label: "awam", query: "~/code/awam/" },
+      { label: "kiwi", query: "~/code/kiwi/" },
     ]);
     expect(crumbs("/srv/data").map((c) => c.query)).toEqual(["/", "/srv/", "/srv/data/"]);
-    expect([baseName("~/code/awam/"), baseName("~"), baseName("/")]).toEqual(["awam", "~", "/"]);
+    expect([baseName("~/code/kiwi/"), baseName("~"), baseName("/")]).toEqual(["kiwi", "~", "/"]);
   });
 
   it("names a recent folder by its own name, and by its parent's too when another shares it", () => {
     const home = "/home/me";
-    expect(shortcutLabels([`${home}/code/awam`, "/srv/web", home, `${home}/.herdr/worktrees/awam`, "/awam"], home))
-      .toEqual(["code/awam", "web", "Home", "worktrees/awam", "awam"]);
+    expect(shortcutLabels([`${home}/code/kiwi`, "/srv/web", home, `${home}/.herdr/worktrees/kiwi`, "/kiwi"], home))
+      .toEqual(["code/kiwi", "web", "Home", "worktrees/kiwi", "kiwi"]);
     expect(shortcutLabels(["/srv/web"], "")).toEqual(["web"]);
   });
 });

@@ -141,7 +141,7 @@ describe("where a name in the conversation leads", () => {
     expect(mentionedFolders([
       text("Base directory for this skill: /home/op/.agents/skills/designboard\n\nSee https://example.com/docs/a.html"),
       text("The skill lives in `~/Developer/labs/designboard`. Key files: `assets/canvas.template.html`."),
-      text("Scratch at /private/tmp/s/scratchpad (e.g. file:///private/tmp/s/scratchpad/awam-scroll.html, /Users/.../x.html)."),
+      text("Scratch at /private/tmp/s/scratchpad (e.g. file:///private/tmp/s/scratchpad/acme-scroll.html, /Users/.../x.html)."),
     ], "/home/op")).toEqual(["/private/tmp/s/scratchpad", "/home/op/Developer/labs/designboard", "/home/op/.agents/skills/designboard"]);
   });
 });

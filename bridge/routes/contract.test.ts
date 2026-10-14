@@ -209,12 +209,12 @@ describe("opening a refused file through a confirmed link", () => {
   };
 
   test("grants a file outside the pane's folder and opens it once, sandboxed, for the same device", async () => {
-    const file = join(outside, "resultado-shopify.html");
+    const file = join(outside, "board-summary.html");
     await writeFile(file, "<script>document.title='ran'</script>");
     audited.length = 0;
     const { status, body } = await grant(file);
     expect(status).toBe(200);
-    expect(body).toMatchObject({ name: "resultado-shopify.html", type: "text/html", size: 37 });
+    expect(body).toMatchObject({ name: "board-summary.html", type: "text/html", size: 37 });
     expect(body.url).toMatch(/^\/api\/files\/open\?t=[A-Za-z0-9_-]{22}$/);
     // Another device cannot use it, and trying spends it.
     expect((await fetch(url + body.url, { headers: { "x-device": "tablet" } })).status).toBe(410);

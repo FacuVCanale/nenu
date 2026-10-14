@@ -11,8 +11,8 @@ const thread = (id: string, title: string, parentId: string, extra: Partial<Proj
   ({ id, title, parentId, role: "worker", status: "open", ...extra });
 
 const project: ProjectView = {
-  slug: "awam",
-  name: "AWAM",
+  slug: "acme",
+  name: "Acme",
   goal: "Ship the redesign",
   status: "active",
   nodeActions: true,
@@ -44,7 +44,7 @@ it("starts the project coordinator and refreshes, so the route can open its chat
   expect(coordinator.getByText("Not running")).toBeInTheDocument();
   await user.click(coordinator.getByRole("button", { name: "Start coordinator" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
-  expect(posted).toEqual({ project: "awam" });
+  expect(posted).toEqual({ project: "acme" });
   // Still here after the refresh (the agent waits on a dialog): Organizations' own line says where.
   expect(coordinator.getByRole("status")).toHaveTextContent(message);
 });

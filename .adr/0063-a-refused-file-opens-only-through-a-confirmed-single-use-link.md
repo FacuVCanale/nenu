@@ -14,7 +14,7 @@
 The preview refuses a file for three reasons: it is outside the agent's folder and was not
 delivered with SendUserFile, it is past a preview size cap (2 MB for text and HTML, 20 MB for images
 and PDFs), or its type has no viewer. The operator hit all three with real artifacts, for example a
-6.2 MB `resultado-shopify.html` in an Obsidian vault outside any pane's folder. The panel then
+6.2 MB `board-summary.html` in an Obsidian vault outside any pane's folder. The panel then
 offered only "Copy path", which is useless on a phone.
 
 Widening `/file` or `/html-preview` to any path would make every agent-influenced link in the

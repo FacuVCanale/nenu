@@ -126,7 +126,7 @@ describe("parseInline", () => {
 });
 
 describe("bare file URLs", () => {
-  const path = "/Users/fran/notes/report.html";
+  const path = "/Users/demo/notes/report.html";
 
   it("reads a file:// URL in prose as a link to the path it names, leaving trailing punctuation as text", () => {
     expect(parseInline(`Listo: file://${path}. Abrilo.`)).toEqual([
