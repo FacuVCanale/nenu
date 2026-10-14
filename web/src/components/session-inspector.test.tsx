@@ -114,8 +114,13 @@ it("leads Changes with the pull request: number, branches, checks, review and Gi
 it("folds with ⌘⌥B or its button, and a desk remembers it and the width", async () => {
   const { unmount } = render(<Desk pr={{ number: 42, title: "Checkout flow", diff: { additions: 44, deletions: 16 } }} />);
   await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
-  fireEvent.keyDown(window, { key: "∫", code: "KeyB", metaKey: true, altKey: true });
+  // Typing in a field, the shortcut folds the panel and leaves the cursor there.
+  const field = document.body.appendChild(document.createElement("textarea"));
+  field.focus();
+  fireEvent.keyDown(field, { key: "∫", code: "KeyB", metaKey: true, altKey: true });
   expect(screen.queryByRole("complementary", { name: "Session panel" })).not.toBeInTheDocument();
+  expect(field).toHaveFocus();
+  field.remove();
   const toggle = screen.getByRole("button", { name: "Show session panel" });
   expect(toggle).toHaveTextContent("+44 −16");
 

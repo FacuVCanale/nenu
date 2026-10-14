@@ -86,15 +86,16 @@ export function useSessionInspector(): SessionInspectorState {
     pressed.current = false;
   }, [stored.open]);
 
-  const latest = useRef({ desk, open: stored.open, setOpen });
-  latest.current = { desk, open: stored.open, setOpen };
+  // The shortcut leaves focus where it was: folding while typing keeps the cursor in the composer.
+  const latest = useRef({ desk, open: stored.open, update });
+  latest.current = { desk, open: stored.open, update };
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
       // `code`, not `key`: Option+B types "∫" on a Mac.
       if (event.defaultPrevented || event.shiftKey || !event.altKey || !(event.metaKey || event.ctrlKey) || event.code !== "KeyB") return;
       if (!latest.current.desk || isLocked()) return;
       event.preventDefault();
-      latest.current.setOpen(!latest.current.open);
+      latest.current.update({ open: !latest.current.open });
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
