@@ -1,9 +1,10 @@
 import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
@@ -1408,7 +1409,9 @@ async function artifacts(): Promise<void> {
  * Home over a neutral project (homeOrg) and two pull requests from GitHub, one on the working pane's
  * branch and one on a branch no pane is on: phone and desk, dark and light, then each list the
  * Recents / Workspaces control offers (when the build has it), then a phone's requests on Home over
- * `--seconds`, after a 5 s warm-up.
+ * `--seconds`, after a 5 s warm-up. Last, Claude's PermissionRequest hook reaches the bridge as an
+ * installed hook delivers it, so the blocked pane's command is known whole, and a desk answers Yes
+ * from Needs you: the key the fake terminal got, and the requests from the tap to that key.
  */
 async function home(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -1458,10 +1461,41 @@ async function home(): Promise<void> {
       await sleep(windowMs);
       const http = tally(phone.requests.filter((r) => r.at >= from).map((r) => r.url));
       await phone.close();
+
+      const herd = bridge.herd!;
+      const token = crypto.randomUUID();
+      await writeFile(join(bridge.dir, "state", CLAUDE_HOOK_TOKEN_FILE), token);
+      const hook = await fetch(bridge.url + CLAUDE_HOOK_PATH, {
+        method: "POST", headers: { "content-type": "application/json", [CLAUDE_HOOK_TOKEN_HEADER]: token },
+        // The snapshot keeps Claude's session id to the bridge; the demo journal is named after it.
+        body: JSON.stringify({ hook_event_name: "PermissionRequest", session_id: basename(herd.journals.get(herd.blocked)!, ".jsonl"),
+          tool_name: "Bash", tool_input: { command: "mkfifo fixture-fifo" } }),
+      });
+      if (hook.status !== 204) throw new Error(`the hook was refused: ${hook.status}`);
+      const { page, close } = await open(DESKTOP, "dark");
+      const requests: Array<{ url: string; at: number }> = [];
+      page.on("request", (req) => requests.push({ url: req.url(), at: Date.now() }));
+      const yes = page.getByRole("region", { name: /^Needs you/ }).getByRole("button", { name: "Yes", exact: true });
+      await yes.waitFor({ timeout: 15_000 });
+      await shoot(page, "home-desktop-answer");
+      const t0 = Date.now();
+      await yes.click();
+      while (bridge.fake!.answered.length === 0 && Date.now() - t0 < 15_000) await sleep(5);
+      const answer = bridge.fake!.answered[0];
+      if (!answer) throw new Error("the answer from Home never reached the fake terminal");
+      await page.getByText(/^Approved/).first().waitFor({ timeout: 15_000 });
+      await shoot(page, "home-desktop-answered");
+      await close();
+      const phoneAsk = await open(PHONE, "dark");
+      await shoot(phoneAsk.page, "home-phone-after-answer");
+      await phoneAsk.close();
+      // The one write this run drives: the dialog's key on the blocked pane.
+      const unexpectedWrites = bridge.fake!.writes().filter((c) => !(c.method === "pane.send_keys" && c.params.pane_id === herd.blocked));
       return {
         shots, windowSeconds: windowMs / 1000,
         homeRequestsPerMinute: Math.round(sum(http) * 60_000 / windowMs), byRoute: perMinute(http, windowMs),
-        unexpectedWrites: bridge.fake!.writes(),
+        answerFromHome: { pane: answer.paneId, key: answer.key, tapToKeyMs: answer.at - t0, byRouteToKey: tally(requests.filter((r) => r.at >= t0 && r.at <= answer.at).map((r) => r.url)) },
+        unexpectedWrites,
       };
     } finally {
       stopJournal();

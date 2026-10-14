@@ -64,6 +64,15 @@ export function lockReasonOf(s: { readOnly: boolean; error: boolean; authError: 
   return s.bridge === "connected" ? undefined : "herdr";
 }
 
+/** Why answers are paused, in the card's words; null when they are not. Home's row says the same. */
+export function useLockLine(lockReason: LockReason | undefined, readOnly = false): string | null {
+  // The banner's own reading of the same outage (one shared store), so the card and the banner agree.
+  const outage = lockReason === "offline" || lockReason === "herdr";
+  const bannerUp = useConnectionLost(outage);
+  if (lockReason) return outage && bannerUp ? PAUSED_UNDER_BANNER : LOCK_COPY[lockReason];
+  return readOnly ? "Answers are paused right now." : null;
+}
+
 export interface QuestionCardProps {
   interaction?: Interaction;
   /** Shown instead of a card once the dialog was answered and before the pane's next one. */
@@ -130,9 +139,7 @@ export function QuestionCard({
   const [answerList, setAnswerList] = useState<HTMLElement | null>(null);
   // Kept only so a resize renders the card again and the measure below runs.
   const [, setFrameWidth] = useState(0);
-  // The banner's own reading of the same outage (one shared store), so the card and the banner agree.
-  const outage = lockReason === "offline" || lockReason === "herdr";
-  const bannerUp = useConnectionLost(outage);
+  const lockLine = useLockLine(lockReason, readOnly);
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
   const noticeLine = useRef<HTMLParagraphElement>(null);
@@ -190,7 +197,6 @@ export function QuestionCard({
   }
 
   const typing = Boolean(i.typing);
-  const lockLine = lockReason ? (outage && bannerUp ? PAUSED_UNDER_BANNER : LOCK_COPY[lockReason]) : readOnly ? "Answers are paused right now." : null;
   const locked = lockLine !== null || typing || busy !== null;
   const staticList = lockReason === "read-only";
 
@@ -672,7 +678,7 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
  * Claude's own deadline for an unanswered request (its countdown row), counted down here so only this
  * line re-renders each second. It ticks when the whole second changes, as Claude's row does.
  */
-function AutoDeny({ at }: { at: number }) {
+export function AutoDeny({ at }: { at: number }) {
   const [now, setNow] = useState(Date.now);
   const left = Math.max(0, at - now);
   useEffect(() => {
