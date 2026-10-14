@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-14
+
+### Added
+- On a desk, each session has a panel with Changes (its branch or uncommitted work, with or without a pull request), Files and Artifacts, folded with ⌘⌥B; the project's Threads, PRs, Activity and Memory move behind ⋯ (ADR 0075). (4a788fdd, 22135014)
+- Home asks in one row per pane, with Yes/No on a desk when the whole command shows; the headline counts idle agents and a desk filters by project. (f0db177f)
+
+### Changed
+- Icons draw at Lucide stroke 1.5, with new glyphs for New, Settings, the coordinator and Type into terminal, and 16/23 px navigation sizes. (ca0a353f)
+
+### Fixed
+- A dialog answered from Home shows only its receipt until the snapshot catches up. (ef71b0fe)
+
 ## [1.4.0] - 2026-10-14
 
 ### Added
