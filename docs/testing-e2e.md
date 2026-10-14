@@ -27,6 +27,7 @@ revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
 | `bun scripts/e2e/run.ts stop` | Stop on the working Claude, phone and desk: captures, Escapes sent, a queued message held |
 | `bun scripts/e2e/run.ts baseline [--seconds 60] [--sends 5]` | Measures the baselines below |
 | `bun scripts/e2e/run.ts inspector [--before]` | A desk session's panel: each tab, folded, ⋯ Project, a session switch, light, a pane with no PR, and the reads each step made |
+| `bun scripts/e2e/run.ts surface [--seconds 60]` | Home, a session, a project, Settings, Search, the drawer and the collapsed rail with five projects, phone and desk, dark and light; then idle CPU, resident memory and DOM elements of one fresh WebKit per view (give it a private `PLAYWRIGHT_BROWSERS_PATH` so another bench's WebKit stays out of the count) |
 | `bun scripts/e2e/run.ts compare A.png B.png` | Share of differing pixels between two captures |
 
 Output goes outside the repo: `--out DIR`, else `$NENU_E2E_OUT/<stamp>`, else

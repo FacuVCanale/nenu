@@ -27,7 +27,7 @@ const DEFAULT: Theme = "system";
  *  halves, so the bar, the status-bar band and the header read as one surface. Not #ffffff for light:
  *  the page is a step off white on purpose (index.css), and a white bar above it shows the seam.
  *  design-system.test.ts holds this, index.html and index.css together. */
-export const META_COLOR: Record<ResolvedTheme, string> = { light: "#fcfcfc", dark: "#0a0a0a" };
+export const META_COLOR: Record<ResolvedTheme, string> = { light: "#f7f7f7", dark: "#161617" };
 
 /** Read the pin. BARE string, not JSON — public/theme-init.js does the same strict compare before
  *  first paint, and JSON.stringify would write `"dark"` with the quotes and silently break it. */

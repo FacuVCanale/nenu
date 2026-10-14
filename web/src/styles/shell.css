@@ -4,8 +4,8 @@
 .workbench-sidebar-rail { display: none; }
 
 @layer components {
-/* The collapsed rail: the sidebar's actions as icons, then two letters per project and loose workspace,
-   each on its own hue so a herd of client-*-portal workspaces stays tellable apart. */
+/* The collapsed rail: the sidebar's actions as icons, then each project's own glyph, then two letters per
+   loose workspace, each on its own hue so a herd of client-*-portal workspaces stays tellable apart. */
 .rail-attention { position: relative; }
 .rail-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--status-blocked); }
 .rail-divider { width: 24px; height: 1px; margin: 6px 0; flex-shrink: 0; background: var(--border); }

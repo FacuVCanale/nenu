@@ -59,49 +59,56 @@
   /* The lg radius; attachment-chips derives its inner corner from it. */
   --radius: 0.75rem;
   --font-sans: "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  /* Neutral workbench palette (adapted from T3 Code at 191a4ef, see THIRD_PARTY_NOTICES.md): a
-     near-white page with white cards in light, near-black with faint white overlays in dark. The
-     terminal mirror does not follow it; it stays in dark space and inverts in light (ADR 0002). */
-  /* Hex, not oklch(99.2% 0 0) (the same #fcfcfc on screen), so index.html's theme-color and boot
-     splash can carry the identical value; design-system.test.ts holds the three together. */
-  --background: light-dark(#fcfcfc, #0a0a0a);
-  --foreground: light-dark(#27272a, #f5f5f5);
-  --card: light-dark(#fff, #111111);
+  /* Grounds in three steps of grey, as the Cursor-style board's tokens sheet draws them: the sidebar
+     (--workbench-sidebar) below the page, raised surfaces (cards, the composer, bubbles) above it and
+     floating layers on top. Light is measured from Cursor (#f1f1f1, #f7f7f7, #fdfdfd); dark is
+     #0f0f10, #161617, #1e1e20. Fills and hovers are black or white overlays in both themes, so they
+     read on every step. The terminal mirror does not follow any of it; it stays in dark space and
+     inverts in light (ADR 0002). */
+  /* Hex, not oklch, so index.html's theme-color and boot splash can carry the identical value;
+     design-system.test.ts holds the three together. */
+  --background: light-dark(#f7f7f7, #161617);
+  /* The text ladder, measured on the page: 15.7, 6.9 and 4.9 to 1 in light; 15.5, 8.8 and 5.5 in dark.
+     Solid, never alpha: the muted tone mixed 72% with transparent once measured 3.16:1. */
+  --foreground: light-dark(#1d1d1f, #ededef);
+  --card: light-dark(#fdfdfd, #1e1e20);
   --card-foreground: var(--foreground);
-  --popover: light-dark(#fff, #191919);
+  --popover: light-dark(#fff, #232325);
   --popover-foreground: var(--foreground);
-  --primary: light-dark(oklch(0.488 0.217 264), oklch(0.588 0.217 264));
-  --primary-foreground: #fff;
-  --secondary: light-dark(#fafafa, rgb(255 255 255 / 4%));
+  /* Links and the primary fill. Dark lifts the blue to clear 4.5:1 on the lighter grounds (6.7:1 on
+     the page, 5.8:1 on a popover); the label on its fill goes dark, as --destructive-foreground's does. */
+  --primary: light-dark(oklch(0.488 0.217 264), oklch(0.7 0.15 262));
+  --primary-foreground: light-dark(#fff, #161617);
+  --secondary: light-dark(rgb(0 0 0 / 3%), rgb(255 255 255 / 4%));
   --secondary-foreground: var(--foreground);
-  --muted: light-dark(#f4f4f5, rgb(255 255 255 / 4%));
-  /* Small text uses this at full strength: #62626c clears 5.9:1 on the light page. */
-  --muted-foreground: light-dark(#62626c, #a3a3a3);
-  /* Tertiary text (section labels, shortcut hints, host meta, tab labels): solid, never alpha. The
-     muted tone mixed 72% with transparent measured 3.16:1 on the light page; this clears 5.1:1 on
-     the light page and 6.1:1 on the dark one, and 4.5:1 on a card and the sidebar in both. */
-  --subtle-foreground: light-dark(#6b6b75, #8f8f8f);
+  --muted: light-dark(rgb(0 0 0 / 4.5%), rgb(255 255 255 / 4%));
+  --muted-foreground: light-dark(#55555a, #b4b4b9);
+  /* Tertiary text (section labels, shortcut hints, host meta, tab labels): 4.9:1 on the light page
+     and 5.5:1 on the dark one, and 4.5:1 on every other ground in both. */
+  --subtle-foreground: light-dark(#6b6b70, #8e8e93);
   /* A disabled control: a quiet fill and a deliberately faint label (WCAG exempts disabled text),
      instead of opacity, which turned a disabled primary into the brightest slab on the screen. */
   --disabled: var(--muted);
-  --disabled-foreground: light-dark(#a1a1aa, #5c5c5c);
-  --accent: light-dark(#f4f4f5, rgb(255 255 255 / 6%));
+  --disabled-foreground: light-dark(#a3a3a8, #5e5e63);
+  --accent: light-dark(rgb(0 0 0 / 4%), rgb(255 255 255 / 6%));
   --accent-foreground: var(--foreground);
-  --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
+  /* Light is a step deeper than shadcn's red so error text keeps 4.5:1 on the grey sidebar. */
+  --destructive: light-dark(oklch(0.55 0.245 27.325), oklch(0.704 0.191 22.216));
   /* Text ON a destructive fill. Dark mode keeps the bright red that text-destructive needs on the
      near-black page (6.7:1), so the label on that fill goes dark: white on it measured 2.96:1, dark
      text 6.7:1. Light: white on the deeper red clears 4.5:1. */
   --destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.145 0 0));
-  --border: light-dark(#e4e4e7, rgb(255 255 255 / 8%));
+  /* Fine divisions: an overlay, so a line reads the same on the sidebar, the page and a card. */
+  --border: light-dark(rgb(0 0 0 / 7%), rgb(255 255 255 / 7.5%));
   --input: light-dark(#d4d4d8, rgb(255 255 255 / 12%));
   /* Focus follows the saturated primary so the ring is findable on an app whose buttons type into
      a live shell. */
   --ring: var(--primary);
 
   /* Workbench navigation surfaces. */
-  --workbench-sidebar: light-dark(#fafafa, #000);
-  --workbench-row-hover: light-dark(#f0f0f2, #191a1d);
-  --workbench-row-selected: light-dark(#ebebee, #212226);
+  --workbench-sidebar: light-dark(#f1f1f1, #0f0f10);
+  --workbench-row-hover: light-dark(rgb(0 0 0 / 4%), rgb(255 255 255 / 4.5%));
+  --workbench-row-selected: light-dark(rgb(0 0 0 / 6.5%), rgb(255 255 255 / 7.5%));
 
   /* Chrome: the header and the tab bar, one material over the page. The status-bar band above the
      header is the page itself, so the two read as one bar (the inset stays with .app-viewport). */
@@ -134,7 +141,21 @@
   --status-working: light-dark(oklch(0.46 0.12 72), oklch(0.82 0.15 82));
   --status-done: light-dark(oklch(0.45 0.14 152), oklch(0.74 0.16 152));
   --status-idle: light-dark(oklch(0.45 0.02 250), oklch(0.65 0.02 250));
-  --status-unknown: light-dark(oklch(0.43 0.02 250), oklch(0.6 0.02 250));
+  --status-unknown: light-dark(oklch(0.43 0.02 250), oklch(0.64 0.02 250));
+
+  /* Project marks (lib/project-glyph.ts): ten hues, each tuned per theme so a 16px glyph keeps 3:1 on
+     every ground it sits on (the sidebar, the page, a card, a popover; 3.07:1 at worst, amber on a
+     selected light row). A project draws one of them, picked from its slug. */
+  --glyph-red: light-dark(oklch(0.56 0.19 27), oklch(0.72 0.17 25));
+  --glyph-orange: light-dark(oklch(0.6 0.16 50), oklch(0.76 0.15 55));
+  --glyph-amber: light-dark(oklch(0.6 0.13 80), oklch(0.82 0.14 85));
+  --glyph-green: light-dark(oklch(0.55 0.14 150), oklch(0.75 0.15 150));
+  --glyph-teal: light-dark(oklch(0.55 0.1 190), oklch(0.76 0.11 190));
+  --glyph-blue: light-dark(oklch(0.55 0.18 255), oklch(0.73 0.14 255));
+  --glyph-indigo: light-dark(oklch(0.5 0.2 275), oklch(0.71 0.15 278));
+  --glyph-violet: light-dark(oklch(0.54 0.2 300), oklch(0.74 0.15 300));
+  --glyph-pink: light-dark(oklch(0.58 0.2 350), oklch(0.76 0.15 350));
+  --glyph-slate: light-dark(oklch(0.5 0.03 255), oklch(0.74 0.03 255));
 
   /* ── Terminal palette ─────────────────────────────────────────────────────────────────────────
      The 16 indexed ANSI slots, emitted by lib/ansi.ts as var(--ansi-N).

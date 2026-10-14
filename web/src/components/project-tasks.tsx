@@ -4,6 +4,7 @@ import { ChevronRight, XCircle } from "lucide-react";
 import { TaskRow } from "@/components/node-row";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
 import { ProjectCoordinator } from "@/components/project-coordinator";
+import { ProjectGlyph } from "@/components/project-glyph";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
@@ -127,7 +128,8 @@ export function ProjectTasks({ threads, coordinator, title, subtitle, ...tree }:
   const { project, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged } = tree;
   return (
     <div className="project-tasks">
-      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"} />
+      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"}
+        mark={title === undefined ? <ProjectGlyph slug={project.slug} size={20} className="mt-1" /> : undefined} />
       {coordinator
         ? <ul className="task-list mb-2"><CoordinatorRow thread={coordinator} panes={panes} currentPaneId={currentPaneId} onOpenPane={onOpenPane} onOpenNode={onOpenNode} /></ul>
         : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />}
@@ -210,11 +212,12 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   </>;
 }
 
-/** A task list's heading: the project or coordinator, a Paused badge, and its second line. */
-export function TasksHeader({ title, subtitle, paused = false }: { title: string; subtitle?: ReactNode; paused?: boolean }) {
+/** A task list's heading: the project's glyph (`mark`) when it lists the whole project, the project or coordinator, a Paused badge, and its second line. */
+export function TasksHeader({ title, subtitle, paused = false, mark }: { title: string; subtitle?: ReactNode; paused?: boolean; mark?: ReactNode }) {
   return (
     <header className="mb-4">
       <div className="flex items-start gap-2">
+        {mark}
         <h2 className="min-w-0 flex-1 break-words text-lg font-semibold tracking-tight">{title}</h2>
         {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Paused</span>}
       </div>

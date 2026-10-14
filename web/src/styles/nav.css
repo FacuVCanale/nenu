@@ -82,7 +82,6 @@
 .nav-kbd { margin-left: auto; color: var(--subtle-foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-caption); }
 .nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: auto; padding: 0 5px; border-radius: 9999px; background: color-mix(in oklch, var(--status-blocked) 22%, transparent); color: var(--status-blocked); font-size: var(--text-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
 .nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
-.nav-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: var(--radius-sm); background: var(--primary); color: var(--primary-foreground); font-size: var(--text-micro); font-weight: 700; }
 .nav-project-section > .nav-project > .nav-row { font-weight: 500; }
 .nav-host { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 4px -8px -8px; padding: 0 6px 0 14px; border-top: 1px solid var(--border); }
 .nav-host-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
