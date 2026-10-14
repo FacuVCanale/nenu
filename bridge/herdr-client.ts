@@ -202,7 +202,8 @@ const MAX_STALL_GRACES = 3;
  * ("timed out reading api request") at the outage. So a timer that fires late gives the request a short
  * grace instead. Only a timer that fires on time — the loop ran and Herdr stayed silent — times out.
  */
-export function requestTimeout(onTimeout: () => void, ms: number, now: () => number = () => performance.now()): () => void {
+function requestTimeout(onTimeout: () => void, ms: number): () => void {
+  const now = () => performance.now();
   let due = now() + ms;
   let graces = 0;
   let timer: ReturnType<typeof setTimeout>;

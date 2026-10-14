@@ -438,7 +438,7 @@ out here too since they're easy to miss in the block above.
 
 Nenu now polls `session.snapshot` (above) as the source of truth, and additionally holds a
 long-lived `events.subscribe` stream — global lifecycle events plus a per-agent-pane
-`pane.agent_status_changed` subscription, resubscribed whenever the agent-pane set changes —
+`pane.agent_status_changed` subscription, resubscribed whenever an agent pane appears —
 purely to **poke** the poller: an event triggers an immediate debounced re-poll, it never updates
 state by itself. `bridge/event-poker.ts` adds:
 
