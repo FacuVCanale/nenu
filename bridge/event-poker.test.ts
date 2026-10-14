@@ -159,6 +159,29 @@ describe("EventPoker — resubscribe on pane-set change", () => {
     expect(client.streams.length).toBe(2);
     poker.stop();
   });
+
+  test("a pane that goes away keeps the stream; only a new pane resubscribes", async () => {
+    const { client, poker } = makePoker();
+    poker.setAgentPanes(["w1:p1", "w1:p2"]);
+    poker.start();
+    await tick();
+    client.last.onUp();
+    expect(client.streams.length).toBe(1);
+
+    // Herdr 0.9.3 keeps a stream open when a pane it names closes (probed on a disposable server):
+    // the closed pane simply stops sending, so there is nothing to resubscribe for.
+    poker.setAgentPanes(["w1:p1"]);
+    await tick();
+    expect(client.streams.length).toBe(1);
+    expect(client.last.closed).toBe(false);
+
+    poker.setAgentPanes(["w1:p1", "w1:p3"]);
+    await tick();
+    expect(client.streams.length).toBe(2);
+    const scoped = client.last.subscriptions.filter((s) => s.type === "pane.agent_status_changed").map((s) => s.pane_id);
+    expect(scoped).toEqual(["w1:p1", "w1:p3"]); // the gone pane is left out of the new subscribe
+    poker.stop();
+  });
 });
 
 describe("EventPoker — stop()", () => {
@@ -190,25 +213,28 @@ describe("EventPoker — protocol gate", () => {
   const types = (s: FakeStream) => s.subscriptions.map((x) => x.type);
 
   test("buildSubscriptions adds the protocol-22 types only when asked", () => {
-    expect(buildSubscriptions([]).map((s) => s.type)).not.toContain("pane.updated");
+    expect(buildSubscriptions([]).map((s) => s.type)).not.toContain("workspace.moved");
     const ext = buildSubscriptions([], { extended: true }).map((s) => s.type);
-    for (const t of ["pane.updated", "workspace.metadata_updated", "workspace.moved", "workspace.reordered", "tab.moved"]) {
+    for (const t of ["workspace.metadata_updated", "workspace.moved", "workspace.reordered", "tab.moved"]) {
       expect(ext).toContain(t);
     }
+  });
+
+  test("pane.updated is never subscribed: whole pane records on a stream a slow reader loses", () => {
+    expect(buildSubscriptions(["w1:p1"]).map((s) => s.type)).not.toContain("pane.updated");
+    expect(buildSubscriptions(["w1:p1"], { extended: true }).map((s) => s.type)).not.toContain("pane.updated");
   });
 
   test("subscribes to the extended types on protocol 22, and only the base list on 21", async () => {
     const modern = makePoker({ protocol: 22 });
     modern.poker.start();
     await tick();
-    expect(types(modern.client.last)).toContain("pane.updated");
     expect(types(modern.client.last)).toContain("tab.moved");
     modern.poker.stop();
 
     const old = makePoker({ protocol: 21 });
     old.poker.start();
     await tick();
-    expect(types(old.client.last)).not.toContain("pane.updated");
     expect(types(old.client.last)).not.toContain("workspace.moved");
     old.poker.stop();
   });
@@ -369,34 +395,4 @@ describe("EventPoker — output watches", () => {
     poker.stop();
   });
 
-  test("pane.updated pokes on a metadata change, not on a title-only change", async () => {
-    const { client, poker, pokes } = makePoker({ debounceMs: 5 });
-    poker.start();
-    await tick();
-    client.last.onUp();
-    const record = { pane_id: "w1:p1", agent: "codex", terminal_title: "⠋ codex", agent_session: null, tokens: {} };
-    client.last.onEvent("pane_updated", { pane: record });
-    await sleep(15);
-    expect(pokes.length).toBe(1); // first record for the pane on this stream
-    for (const t of ["⠙ codex", "⠹ codex", "⠸ codex"]) {
-      client.last.onEvent("pane_updated", { pane: { ...record, terminal_title: t, revision: 9 } });
-    }
-    client.last.onEvent("pane_updated", { pane: { ...record, tokens: { org_heartbeat: "2" } } });
-    await sleep(15);
-    expect(pokes.length).toBe(1); // animated title and a non-allowlisted token: no re-poll
-    client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" } } });
-    await sleep(15);
-    expect(pokes.length).toBe(2);
-    client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" }, tokens: { thread: "t1" } } });
-    await sleep(15);
-    expect(pokes.length).toBe(3);
-    client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" }, tokens: { thread: "t1", role: "worker" } } });
-    await sleep(15);
-    expect(pokes.length).toBe(4);
-    // Herdr returns a pane's tokens in no fixed order (live-observed); the same tokens are no change.
-    client.last.onEvent("pane_updated", { pane: { ...record, agent_session: { kind: "id", value: "s-2" }, tokens: { role: "worker", thread: "t1" } } });
-    await sleep(15);
-    expect(pokes.length).toBe(4);
-    poker.stop();
-  });
 });
