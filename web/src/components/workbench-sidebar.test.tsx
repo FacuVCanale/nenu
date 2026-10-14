@@ -231,7 +231,8 @@ describe("the sidebar", () => {
   });
 
   it("says a thread that stopped to wait for your reply needs a reply, not a dialog", () => {
-    const waiting = { ...awam, threads: awam.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "idle" as const, group: "waiting-on-you", selfWaiting: true as const } : item) };
+    const [project] = herd.projects;
+    const waiting = { ...project!, threads: project!.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "idle" as const, group: "waiting-on-you", selfWaiting: true as const } : item) };
     open("/", { ...herd, projects: [waiting] });
     const head = screen.getByRole("link", { name: /^rediseño mobile/ });
     expect(head).toHaveAccessibleName("rediseño mobile, needs reply");
