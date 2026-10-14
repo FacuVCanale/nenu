@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-14
+
+**Read this if you send long messages to Claude Code from Nenu.** Before this release, a message whose last part after 1,022 bytes was shorter than Claude's paste threshold could arrive without its beginning, and Nenu still said "Sent" (measured on Claude Code 2.1.296 to 2.1.300).
+
+### Fixed
+- A Claude message longer than 800 characters is sent as one bracketed paste, so it arrives whole, and a message Claude logs incomplete is reported as incomplete instead of Sent (ADR 0076). (4b92a164)
+- The E2E bench refuses a Herdr that shares its config with the operator's, and `--herdr` starts an isolated one. (f6470435)
+
 ## [1.5.0] - 2026-10-14
 
 ### Added
