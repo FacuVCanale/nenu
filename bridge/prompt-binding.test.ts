@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { splitLines } from "../web/src/lib/blocks.ts";

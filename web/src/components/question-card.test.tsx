@@ -101,7 +101,7 @@ describe("QuestionCard", () => {
       expect(screen.getByText("Claude denies this on its own in 1:23 if nobody answers.")).toBeTruthy();
       act(() => { vi.advanceTimersByTime(1000); });
       expect(screen.getByText("Claude denies this on its own in 1:22 if nobody answers.")).toBeTruthy();
-      act(() => { vi.advanceTimersByTime(90_000); });
+      for (let second = 0; second < 90; second++) act(() => { vi.advanceTimersByTime(1000); });
       expect(screen.getByText("Claude is denying this now.")).toBeTruthy();
     } finally {
       vi.useRealTimers();

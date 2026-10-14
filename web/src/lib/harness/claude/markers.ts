@@ -261,3 +261,31 @@ export function withoutDialogClosingRule(lines: StyledLine[]): StyledLine[] {
   if (classifyFooter(texts[footer]!, texts) !== "select") return lines;
   return lines.slice(0, rule);
 }
+
+// Claude Code 2.1.299 in auto mode: a request its safety check cannot clear asks with a countdown row,
+// `⚠ Claude Code will automatically deny this request in 1:50, to avoid blocking progress on an
+// unattended session`, redrawn every second until Claude denies it (two minutes, measured in
+// PROBES_2026_10_NOTES.md). With reduced motion it reads `in about 50 seconds` instead.
+const AUTO_DENY = /(automatically deny this request in )(?:(\d+):(\d{2})|about (\d+) (second|minute)s?)\b/;
+
+/** The row with its countdown replaced by `…`: the clock is not part of what the dialog asks. */
+export function steadyCountdown(text: string): string {
+  return text.replace(AUTO_DENY, "$1…");
+}
+
+/** True for the countdown row itself, ticking or already steadied. */
+export function isAutoDenyRow(text: string): boolean {
+  return /automatically deny this request in /.test(text);
+}
+
+/** How long the countdown on `screen` (raw ANSI or plain text) says is left, or null when there is none. */
+export function autoDenyInMs(screen: string): number | null {
+  const plain = screen.replace(/\x1b\[[0-9;]*m/g, "").split("\n");
+  for (let i = plain.length - 1; i >= 0; i--) {
+    const m = AUTO_DENY.exec(plain[i]!);
+    if (!m) continue;
+    if (m[2] !== undefined) return (Number(m[2]) * 60 + Number(m[3])) * 1000;
+    return Number(m[4]) * (m[5] === "minute" ? 60_000 : 1000);
+  }
+  return null;
+}

@@ -663,6 +663,8 @@ export interface Interaction {
   detailComplete?: boolean;
   /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
   typing?: true;
+  /** When Claude denies the request on its own (epoch ms), from its countdown row; absent without one. */
+  autoDenyAt?: number;
 }
 
 /** POST /api/interactions/:paneId/answer. `text` only for a `freeText` option. */

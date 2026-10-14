@@ -246,6 +246,26 @@ Send from the phone composer to Claude, Stop shown 0.7 s later, two taps, one `a
 audited, Herdr idle 392 ms after the tap, no Rewind. Codex from the desk: Esc twice in the empty
 composer, one Escape audited, `done` 256 ms later, no transcript browser.
 
+## Auto-deny countdown (2026-10-14)
+
+Probed in a disposable Herdr 0.9.3 server with Claude Code **2.1.299** (`--model haiku --effort low
+--permission-mode auto --setting-sources project,local`). Captures:
+`harness/claude/fixtures/permission-auto-deny-{a,b}-v2299.txt`, one second apart.
+
+- MEASURED: in auto mode, a Bash call its safety check cannot clear (an `sh -c` script running `rm`
+  on a variable path) asks `Do you want to proceed?` with `1. Yes` / `2. No`, footer
+  `Esc to cancel · Tab to amend`, and a row under the command:
+  `⚠ Claude Code will automatically deny this request in 1:59, to avoid blocking progress on an
+  unattended session`. Herdr reports `blocked` throughout.
+- MEASURED: the row counts down once a second (`M:SS`) and the request is denied when it reaches zero:
+  shown at 1:59, Herdr `working` about 105 s after the first capture that showed it. The two-minute
+  window is the bundled default (`timeoutMs: 120000`, overridable by Anthropic's own flag); with
+  reduced motion the row reads `in about N seconds` and does not tick by itself (read from the bundle).
+- MEASURED before the fix: the row sat inside every dialog signature, so the bridge's card changed
+  identity 0.98 times a second and a tap six seconds after the card appeared came back 409
+  `interaction_changed` with nothing sent. The grammar now steadies the clock in the signature and the
+  card counts down from `autoDenyAt`, read once from the row.
+
 ## Not done
 
 - Claude `agent.prompt` on a blocked or working pane: skipped, documented behaviour only.
