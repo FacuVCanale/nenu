@@ -72,7 +72,8 @@ export function userCacheDir(): string {
   return process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
 }
 
-function browsersCache(): string {
+/** Where the browsers live: $PLAYWRIGHT_BROWSERS_PATH, else Playwright's cache. */
+export function browsersCache(): string {
   return process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(userCacheDir(), "ms-playwright");
 }
 

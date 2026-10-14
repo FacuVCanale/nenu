@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
-import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { appendJournal, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
@@ -1820,13 +1820,18 @@ async function terminal(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
-/** Every WebKit process Playwright runs (its browser cache is in the path), with RSS in KB and CPU time in ms. */
+/**
+ * Every WebKit process run from this bench's browser path, with RSS in KB and CPU time in ms. WebKit's
+ * helpers are XPC services whose parent is launchd, so the path is what ties them to a browser: give
+ * the bench a private copy (PLAYWRIGHT_BROWSERS_PATH) and another bench's WebKit stays out of the count.
+ */
 async function webkitProcesses(): Promise<Map<number, { rssKb: number; cpuMs: number }>> {
   const out = await new Response(Bun.spawn(["ps", "-A", "-o", "pid=,rss=,time=,command="]).stdout).text();
+  const path = join(browsersCache(), "webkit-");
   const procs = new Map<number, { rssKb: number; cpuMs: number }>();
   for (const line of out.split("\n")) {
     const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
-    if (!match || !/ms-playwright\/webkit/.test(match[4]!)) continue;
+    if (!match || !match[4]!.includes(path)) continue;
     const [clock, days] = match[3]!.includes("-") ? [match[3]!.split("-")[1]!, Number(match[3]!.split("-")[0])] : [match[3]!, 0];
     const seconds = clock.split(":").map(Number).reduce((acc, n) => acc * 60 + n, 0);
     procs.set(Number(match[1]), { rssKb: Number(match[2]), cpuMs: Math.round((days * 86400 + seconds) * 1000) });
