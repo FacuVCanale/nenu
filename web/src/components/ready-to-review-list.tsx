@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { Check, CircleDashed, GitPullRequest, X } from "lucide-react";
+import { GitPullRequest } from "lucide-react";
 
 import { DiffStat } from "@/components/diff-stat";
-import { BusyLabel, FoldedList, HomeHeading, isOpening } from "@/components/home-panels";
-import { buttonVariants } from "@/components/ui/button";
+import { FoldedList, HomeHeading, isOpening, OpeningSpinner } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
-import type { ReviewEntry } from "@/lib/home-stats";
+import { readyToMerge, type ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { nodePath, panePath } from "@/lib/nav";
@@ -78,80 +77,76 @@ export function useHomeActivity(agents: readonly AgentView[], session?: string):
   return byPane;
 }
 
-function Checks({ checks }: { checks: NonNullable<ReviewEntry["checks"]> }) {
-  // The phone keeps the icon and reads the words to a screen reader only: its row has no room for them.
-  const words = "max-sm:sr-only";
-  if (checks.failed) return <span className="flex shrink-0 items-center gap-1 text-footnote text-destructive"><X aria-hidden className="size-3.5" /><span className={words}>{checks.failed} failing</span></span>;
-  if (checks.pending) return <span className="flex shrink-0 items-center gap-1 text-footnote text-status-working"><CircleDashed aria-hidden className="size-3.5" /><span className={words}>checks running</span></span>;
-  if (!checks.passed) return null;
-  return <span className="flex shrink-0 items-center gap-1 text-footnote text-status-done"><Check aria-hidden className="size-3.5" /><span className={words}>checks</span></span>;
+/** What a pull request's checks say, in two or three words, and their colour; null when it has none. */
+function checksWord(checks: ReviewEntry["checks"]): { word: string; tone: string } | null {
+  if (!checks) return null;
+  if (checks.failed) return { word: `${checks.failed} ${checks.failed === 1 ? "check" : "checks"} failing`, tone: "text-destructive" };
+  if (checks.pending) return { word: "checks running", tone: "text-status-working" };
+  return checks.passed ? { word: "checks passed", tone: "text-status-done" } : null;
 }
 
-const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, string | undefined> = {
-  approved: "approved",
-  changes_requested: "changes requested",
-  review_required: undefined,
-  commented: undefined,
+const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, { word: string; tone?: string }> = {
+  approved: { word: "approved", tone: "text-status-done" },
+  changes_requested: { word: "changes requested", tone: "text-destructive" },
+  review_required: { word: "needs review" },
+  commented: { word: "commented" },
 };
 
-const rowClass = "grid min-h-14 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-0 px-1 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:rounded-lg sm:px-3.5";
-const actionClass = cn(buttonVariants({ variant: "secondary", size: "sm" }), "shrink-0");
+const rowClass = "relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5";
 
 /**
- * A pull request waiting for review. On a desk the line under the title reads "repo · #1342 · branch"
- * and the diff and checks sit in their own columns; on a phone it reads "#1342 · +212 −148", as the
- * narrow row has no room for both, and the number never gives way to the rest.
+ * A pull request as one row and one tap: its title, then its number and what its checks and review
+ * say in a few words, its size at the end. The tap opens its thread in Nenu, else its page on GitHub.
  */
 function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: string; opening: string | null }) {
-  const verdict = entry.review && REVIEW_WORDS[entry.review];
-  const label = `Review ${entry.title}`;
+  const checks = checksWord(entry.checks);
+  const review = entry.review && REVIEW_WORDS[entry.review];
+  const number = entry.number !== undefined && { word: `#${entry.number}`, tone: "font-mono" };
+  const said = [checks, review, entry.draft && { word: "draft" }].filter((fact): fact is { word: string; tone?: string } => !!fact);
+  const facts = number ? [number, ...said] : said;
+  const size = entry.diff && `+${entry.diff.additions} −${entry.diff.deletions}`;
+  const label = [entry.title, number && number.word, size, ...said.map((fact) => fact.word)].filter(Boolean).join(", ");
   const to = entry.open && ("paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session));
   const busy = !!to && isOpening(opening, to);
-  // The size opens the diff when a pane sits in the PR's repo to read it from.
-  const diffProps = entry.open && "paneId" in entry.open ? { paneId: entry.open.paneId, pr: entry.number, session, url: entry.url } : {};
+  const body = <>
+    <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0 justify-self-center", readyToMerge(entry) ? "text-status-done" : "text-muted-foreground")} />
+    <span className="col-start-2 truncate text-body sm:text-subhead">{entry.title}</span>
+    <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 truncate text-footnote text-muted-foreground">
+      <span className="shrink-0 max-sm:hidden">{entry.repo} ·</span>
+      {facts.map((fact, index) => <span key={fact.word} className={cn("shrink-0", fact.tone)}>{index > 0 && <span aria-hidden className="text-muted-foreground">· </span>}{fact.word}</span>)}
+    </span>
+    <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
+      {entry.diff && <DiffStat diff={entry.diff} className="text-caption" />}
+      {busy && <OpeningSpinner />}
+    </span>
+  </>;
   return (
-    <li className={rowClass}>
-      <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0", entry.draft ? "text-muted-foreground" : "text-status-done")} />
-      <span className="col-start-2 flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-body">{entry.title}</span>
-        {entry.draft && <span className="shrink-0 rounded-sm border border-border px-1 text-micro text-muted-foreground">Draft</span>}
-      </span>
-      <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
-        <span className="shrink-0 max-sm:hidden">{entry.repo}{entry.number !== undefined && " ·"}</span>
-        {entry.number !== undefined && <span className="shrink-0 font-mono">#{entry.number}</span>}
-        {verdict && <span className={cn("min-w-0 truncate sm:shrink-0", entry.review === "approved" ? "text-status-done" : "text-destructive")}>· {verdict}</span>}
-        {entry.branch && <span className="min-w-0 truncate font-mono max-sm:hidden">· {entry.branch}</span>}
-        {entry.mergeBlocker && <span className="min-w-0 truncate max-sm:hidden">· {entry.mergeBlocker}</span>}
-        {entry.diff && (
-          <span className="shrink-0 sm:hidden">
-            <span aria-hidden>· </span><DiffStat {...diffProps} diff={entry.diff} />
-          </span>
-        )}
-      </span>
-      {entry.diff && <DiffStat {...diffProps} diff={entry.diff} className="col-start-3 row-span-2 row-start-1 text-footnote max-sm:hidden" />}
-      <span className="col-start-3 row-span-2 row-start-1 sm:col-start-4">{entry.checks && <Checks checks={entry.checks} />}</span>
-      {to ? (
-        <Link to={to} aria-busy={busy || undefined}
-          className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}><BusyLabel busy={busy}>Review</BusyLabel></Link>
-      ) : entry.url ? (
-        <a href={entry.url} target="_blank" rel="noopener noreferrer" className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>Review</a>
-      ) : null}
+    <li>
+      {to ? <Link to={to} aria-label={label} aria-busy={busy || undefined} className={cn(rowClass, busy && "bg-[var(--workbench-row-hover)]")}>{body}</Link>
+        : entry.url ? <a href={entry.url} target="_blank" rel="noopener noreferrer" aria-label={label} className={rowClass}>{body}</a>
+        : <div aria-label={label} className={rowClass}>{body}</div>}
     </li>
   );
 }
 
-/** How many rows show before "Show all": enough to act on, short enough to keep Recent in reach. */
+/** How many rows show before "Show all": enough to act on, short enough to keep the sessions in reach. */
 export const REVIEW_ROWS = 5;
 
-/** Home's "Ready to review": the pull requests waiting on you, nothing else. */
+/** Which run a pull request sits in; ready to merge comes first. */
+const reviewGroup = (entry: ReviewEntry) => readyToMerge(entry) ? "Ready to merge" : "In review";
+
+/** Home's pull requests that no session's row carries: the ones ready to merge, then the rest. */
 export function ReadyToReviewList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
   if (!entries.length) return null;
+  const ordered = [...entries.filter(readyToMerge), ...entries.filter((entry) => !readyToMerge(entry))];
   return (
     <section aria-labelledby="home-review" className="flex flex-col gap-1.5">
-      <HomeHeading id="home-review" label="Ready to review" count={entries.length} />
-      <FoldedList items={entries} rows={REVIEW_ROWS}>
-        {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
-      </FoldedList>
+      <HomeHeading id="home-review" label="Pull requests" count={entries.length} />
+      <div className="sm:-mx-2.5">
+        <FoldedList items={ordered} rows={REVIEW_ROWS} group={reviewGroup}>
+          {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
+        </FoldedList>
+      </div>
     </section>
   );
 }

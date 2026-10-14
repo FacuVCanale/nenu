@@ -1,22 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { AlertCircle, ChevronDown, ChevronRight, FolderPlus, ListFilter, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, ListFilter, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
-import { buttonVariants } from "@/components/ui/button";
-import { BottomSheet } from "@/components/ui/sheet";
-import type { BusyChoice } from "@/hooks/use-message-queue";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
-import { panePath, workspacePath } from "@/lib/nav";
+import { panePath } from "@/lib/nav";
 import { ASK } from "@/lib/org-tree";
 import { projectForPane } from "@/lib/projects";
-import type { Herd } from "@/lib/spaces";
-import { STATUS_LABEL, type AgentStatus, type AgentView, type DeliveryMode, type ProjectView } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** How long a tap's navigation may run before its row says it is opening, so a fast read never flashes. */
@@ -58,25 +54,6 @@ export function BusyLabel({ busy, children }: { busy: boolean; children: ReactNo
   );
 }
 
-/**
- * Grows a block into the column and back out instead of landing in one frame and shoving what is
- * below: rows and opacity over 200ms, opacity alone under reduced motion. Closing keeps the last
- * content on screen until it has collapsed. Content present at mount is simply there.
- */
-export function Reveal({ children }: { children: ReactNode }) {
-  const open = children !== null && children !== undefined && children !== false;
-  const [last, setLast] = useState<ReactNode>(children);
-  if (open && last !== children) setLast(children);
-  return (
-    <div aria-hidden={!open || undefined} inert={!open}
-      onTransitionEnd={(event) => { if (!open && event.target === event.currentTarget) setLast(null); }}
-      className={cn("grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-opacity motion-reduce:duration-100",
-        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
-      <div className="min-h-0 overflow-hidden">{open ? children : last}</div>
-    </div>
-  );
-}
-
 /** A Home section's heading: its name, how many, and an optional note at the far end. */
 export function HomeHeading({ id, label, count, note }: { id: string; label: string; count?: number; note?: ReactNode }) {
   return (
@@ -88,14 +65,27 @@ export function HomeHeading({ id, label, count, note }: { id: string; label: str
   );
 }
 
-/** A Home list: its first `rows` items, and the rest behind "Show all". */
-export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; rows: number; children: (item: T) => ReactNode }) {
+/**
+ * A Home list: its first `rows` items, and the rest behind "Show all". With `group`, items already
+ * ordered by group show under each group's name.
+ */
+export function FoldedList<T>({ items, rows, group, children }: { items: readonly T[]; rows: number; group?: (item: T) => string; children: (item: T) => ReactNode }) {
   const [all, setAll] = useState(false);
   const shown = all ? items : items.slice(0, rows);
+  const runs: Array<{ label?: string; items: T[] }> = [];
+  for (const item of shown) {
+    const label = group?.(item);
+    const last = runs.at(-1);
+    if (last && last.label === label) last.items.push(item);
+    else runs.push({ label, items: [item] });
+  }
   return <>
-    <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{shown.map(children)}</ul>
+    {runs.map((run) => <Fragment key={run.label ?? ""}>
+      {run.label && <h3 className="px-1 pt-2 text-caption font-medium text-muted-foreground first:pt-0 sm:px-2.5">{run.label}</h3>}
+      <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{run.items.map(children)}</ul>
+    </Fragment>)}
     {items.length > shown.length && (
-      <button type="button" onClick={() => setAll(true)} className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-3.5">
+      <button type="button" onClick={() => setAll(true)} className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
         Show all {items.length}
       </button>
     )}
@@ -177,16 +167,62 @@ function rememberList(list: SessionList): void {
   }
 }
 
+/** How a workspace reads at a glance: the most pressing state among its sessions, in their own words. */
+const WORKSPACE_STATES = [ASK.reply.label, STATUS_LABEL.blocked, STATUS_LABEL.working, "Ready to review", STATUS_LABEL.done, STATUS_LABEL.idle, "Shell"]
+  .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+
+function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: string } {
+  const states = chats.map(stateOf);
+  const word = WORKSPACE_STATES.find((candidate) => states.some((state) => state.word === candidate));
+  // A thread waiting for your reply needs you as much as a dialog does, and both say it in red.
+  if (word === WORKSPACE_STATES[0] || word === WORKSPACE_STATES[1]) return { word: WORKSPACE_STATES[1]!, tone: "text-status-blocked" };
+  return states.find((state) => state.word === word) ?? { word: "Empty" };
+}
+
+/**
+ * A Herdr workspace as one row: its name, how it is and how many sessions it holds. A tap opens it in
+ * place on its sessions, each the row Recents draws; its tabs are what tells those rows apart, never
+ * rows of their own.
+ */
+function WorkspaceRow({ group, now, open, onToggle, children }: {
+  group: WorkspaceChats;
+  now: number;
+  open: boolean;
+  onToggle: () => void;
+  children: (chat: RecentChat) => ReactNode;
+}) {
+  const state = workspaceState(group.chats);
+  const count = `${group.chats.length} ${group.chats.length === 1 ? "session" : "sessions"}`;
+  const at = Math.max(0, ...group.chats.map((chat) => chat.at));
+  const listId = `home-workspace-${group.workspaceId}`;
+  return (
+    <li className="flex flex-col">
+      <button type="button" aria-expanded={open} aria-controls={listId} aria-label={`${group.name}, ${state.word}, ${count}`} onClick={onToggle}
+        className="grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5">
+        <LayoutGrid aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
+        <span className="col-start-2 truncate text-body sm:text-subhead">{group.name}</span>
+        <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
+          <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
+        </span>
+        <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
+          {at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
+          <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
+        </span>
+      </button>
+      {open && <ul id={listId} className="flex flex-col pl-4 max-sm:divide-y max-sm:divide-border">{group.chats.map(children)}</ul>}
+    </li>
+  );
+}
+
 /**
  * Home's one list of sessions under a control that reorders it: Recents, everything that moved last
- * first (what Needs you shows stays out), or Workspaces, every session under its Herdr workspace,
- * whose name opens the pane every way into it opens (ADR 0065). A desk narrows both to one project.
- * Both read the snapshot Home already has; the list is remembered on this device, the project is not.
+ * first (what Needs you shows stays out), or Workspaces, one row per Herdr workspace that opens in
+ * place on its sessions. A desk narrows both to one project. Both read the snapshot Home already has;
+ * the list is remembered on this device, the project is not.
  */
-export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, herd, projects, session, now, opening }: {
+export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, projects, session, now, opening }: {
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
-  herd: Herd;
   projects: readonly ProjectView[];
   session?: string;
   now: number;
@@ -195,6 +231,8 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [list, setList] = useState<SessionList>(readList);
   // A desk narrows both lists to one project's sessions; "" is every project.
   const [only, setOnly] = useState("");
+  // The workspaces opened in place; none until a tap opens one.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   if (!everyRecent.length && !everyWorkspace.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
   const kept = (chat: RecentChat) => !project || projectForPane([project], chat.agent.paneId) !== undefined;
@@ -227,21 +265,11 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
           ? recent.length
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
-          : <ul className="flex flex-col">
-            {workspaces.map((group) => {
-              const to = workspacePath(group.workspaceId, herd, session);
-              return (
-                <li key={group.workspaceId} className="flex flex-col pt-2 first:pt-0">
-                  <h3 className="text-footnote font-medium text-muted-foreground">
-                    <Link to={to} aria-busy={isOpening(opening, to) || undefined}
-                      className="inline-flex min-h-9 items-center gap-1 px-1 hover:text-foreground coarse:min-h-11 sm:px-2.5">
-                      {group.name}<ChevronRight aria-hidden className="size-3.5" />
-                    </Link>
-                  </h3>
-                  <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{group.chats.map((chat) => row(chat, group.name))}</ul>
-                </li>
-              );
-            })}
+          : <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
+            {workspaces.map((group) => <WorkspaceRow key={group.workspaceId} group={group} now={now} open={opened.has(group.workspaceId)}
+              onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}>
+              {(chat) => row(chat, group.name)}
+            </WorkspaceRow>)}
           </ul>}
       </div>
     </section>
@@ -286,58 +314,6 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now, opening
       )}
       <span className="text-footnote text-muted-foreground tabular-nums">{workflow.doneCount} of {workflow.agentCount} agents done</span>
     </Link>
-  );
-}
-
-const SHEET_ROW = "flex min-h-14 w-full flex-col items-start justify-center gap-0.5 px-4 py-1.5 text-left transition-colors hover:bg-accent active:bg-muted";
-
-/**
- * The send-time choice for a busy coordinator, as an action sheet: asked at every send and never
- * remembered (ADR 0056). Each row says what the coordinator's CLI does with it, in the composer's words.
- */
-export function BusySendSheet({ open, name, choice, onPick, onCancel }: {
-  open: boolean;
-  /** Who is working, as a sentence subject ("Hub's coordinator"). */
-  name: string;
-  /** What the coordinator's CLI does with each answer; only a CLI with both measured is asked. */
-  choice: BusyChoice;
-  onPick: (mode: DeliveryMode) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <BottomSheet open={open} onClose={onCancel} title={`${name} is working`} className="sm:mx-auto sm:my-auto sm:max-w-sm sm:rounded-2xl sm:border sm:pb-4">
-      <p className="pb-3 text-footnote text-muted-foreground">When should it read this?</p>
-      <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-        <button type="button" className={SHEET_ROW} onClick={() => onPick(choice.now)}>
-          <span className="text-body font-medium">Send now</span>
-          <span className="text-footnote text-pretty text-muted-foreground">{choice.nowHint}</span>
-        </button>
-        <button type="button" className={SHEET_ROW} onClick={() => onPick("afterTurn")}>
-          <span className="text-body font-medium">Send after this turn</span>
-          <span className="text-footnote text-pretty text-muted-foreground">{choice.laterHint}</span>
-        </button>
-      </div>
-      <button type="button" onClick={onCancel}
-        className="mt-2 flex min-h-14 w-full items-center justify-center rounded-xl border border-border bg-card text-body font-medium transition-colors hover:bg-accent active:bg-muted">
-        Cancel
-      </button>
-    </BottomSheet>
-  );
-}
-
-/** Why a send from Home did not go, and the one way on: the coordinator's own chat. */
-export function SendNotice({ title, detail, to }: { title: string; detail: string; to: string }) {
-  return (
-    <div role="alert" className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
-      <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-3">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-subhead font-medium text-pretty">{title}</p>
-          <p className="text-footnote text-pretty text-muted-foreground">{detail}</p>
-        </div>
-        <Link to={to} className={buttonVariants({ variant: "secondary" })}>Open coordinator</Link>
-      </div>
-    </div>
   );
 }
 

@@ -4,19 +4,16 @@ import { PanelLeft, Search, SquarePen } from "lucide-react";
 
 import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
 import { SidebarRail } from "@/components/sidebar-rail";
-import { needsYou, WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
+import { WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
 import { BottomSheet, SideSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { isCatchingUp, isLocked } from "@/lib/idle";
+import { needsYouCount } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath } from "@/lib/nav";
 import { liveCoordinator } from "@/lib/projects";
 import { canCreate } from "@/lib/types";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
-
-/** What the phone's tab bar opened its navigation sheet for; null while it is closed. */
-type Sheet = "browse" | "needs-you" | "search" | null;
-const SHEET_TITLE = { browse: "Navigation", "needs-you": "Needs you", search: "Search" } as const;
 
 /** ⌘ on Apple keyboards. Elsewhere Ctrl, except in a text field, where Ctrl+K and Ctrl+N edit text. */
 function isShortcut(event: KeyboardEvent): boolean {
@@ -64,14 +61,15 @@ function useSidebarCollapse() {
 // Routing, session selection and pane lifecycle remain owned by Nenu.
 export function WorkbenchShell({ data, children }: { data: HomeData; children: ReactNode }) {
   const { collapsed, choose: setCollapsed, setDocked } = useSidebarCollapse();
-  const [sheet, setSheet] = useState<Sheet>(null);
+  // The phone's Search sheet, which the tab bar opens.
+  const [searchSheet, setSearchSheet] = useState(false);
   // The drawer the header's Nenu mark opens; its Search bumps `drawerSearch`.
   const [drawer, setDrawer] = useState(false);
   const [drawerSearch, setDrawerSearch] = useState(0);
   const [request, setRequest] = useState<SidebarRequest>();
   const closeDrawer = () => { setDrawer(false); setDrawerSearch(0); };
-  const newChat = canCreate(data) ? () => { setSheet(null); closeDrawer(); openNewDialog(); } : undefined;
-  const attention = needsYou(data).length;
+  const newChat = canCreate(data) ? () => { setSearchSheet(false); closeDrawer(); openNewDialog(); } : undefined;
+  const attention = needsYouCount(data);
   const sidebarId = useId();
   const expandButton = useRef<HTMLButtonElement>(null);
   const collapseButton = useRef<HTMLButtonElement>(null);
@@ -91,17 +89,16 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   const [drawerLocation, setDrawerLocation] = useState(location.key);
   if (drawerLocation !== location.key) {
     setDrawerLocation(location.key);
-    if (sheet) setSheet(null);
+    if (searchSheet) setSearchSheet(false);
     if (drawer) closeDrawer();
   }
 
-  function reveal(target: SidebarRequest["target"]) {
+  function search() {
     if (isDesktop()) {
       setCollapsed(false);
-      setRequest((last) => ({ target, seq: (last?.seq ?? 0) + 1 }));
-    } else setSheet(target);
+      setRequest((last) => ({ target: "search", seq: (last?.seq ?? 0) + 1 }));
+    } else setSearchSheet(true);
   }
-  const search = () => reveal("search");
 
   // ⌘K searches and ⌘N starts something new.
   const latest = useRef({ search, newChat });
@@ -129,7 +126,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   const opensPane = projectSlug !== undefined && nodeId === undefined
     && liveCoordinator(data.projects?.find((project) => project.slug === projectSlug), data.agents) !== undefined;
   const tabBar = paneId === undefined && !opensPane;
-  const active: TabBarTab = sheet ?? (location.pathname === "/" ? "home" : null);
+  const active: TabBarTab = searchSheet ? "search" : location.pathname === "/" ? "home" : null;
 
   return (
     <div className="workbench-shell" data-sidebar-collapsed={collapsed}>
@@ -147,19 +144,17 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
       </aside>
 
       {collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
-        onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} onNeedsYou={() => reveal("needs-you")} />}
+        onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} />}
 
       <div className="workbench-main">
         <WorkbenchNavigationContext value={{ open: drawer, onOpen: () => setDrawer(true), onNewChat: newChat, onDock: setDocked }}>
           {children}
         </WorkbenchNavigationContext>
-        {tabBar && <BottomTabBar active={active} homeTo={homePath(data.session)} attention={attention} onNew={newChat}
-          onNeedsYou={() => setSheet("needs-you")} onBrowse={() => setSheet("browse")} onSearch={() => setSheet("search")} />}
+        {tabBar && <BottomTabBar active={active} homeTo={homePath(data.session)} attention={attention} onNew={newChat} onSearch={() => setSearchSheet(true)} />}
       </div>
 
-      <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet ? SHEET_TITLE[sheet] : undefined}>
-        <WorkbenchSidebar key={sheet} data={data} onNewChat={newChat} variant="sheet"
-          request={sheet === "search" || sheet === "needs-you" ? { target: sheet, seq: 1 } : undefined} />
+      <BottomSheet open={searchSheet} onClose={() => setSearchSheet(false)} title="Search">
+        {searchSheet && <WorkbenchSidebar data={data} onNewChat={newChat} variant="sheet" request={{ target: "search", seq: 1 }} />}
       </BottomSheet>
 
       <SideSheet open={drawer} onClose={closeDrawer} title="Navigation"
