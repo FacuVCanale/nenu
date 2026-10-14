@@ -1633,6 +1633,41 @@ async function inspector(before: boolean): Promise<void> {
 async function motion(before: boolean): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const windowMs = Number(values.seconds) * 1000;
+  // The tab's CPU while quiet is the browser's: the Playwright browser this run launched (a descendant of
+  // this process) and its helpers (web content, GPU, network), which launchd parents, so they are told
+  // from another bench's by starting within seconds of ours. Only processes alive at both ends count.
+  const ps = async () => {
+    const out = await new Response(Bun.spawn(["ps", "-axo", "pid=,ppid=,lstart=,comm="]).stdout).text();
+    return out.split("\n").map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(\w{3} \w{3}\s+\d+ [\d:]+ \d{4}) (.*)$/)).filter((m) => m !== null)
+      .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), started: Date.parse(m[3]!), command: m[4]! }));
+  };
+  const ourBrowser = async () => {
+    const all = await ps();
+    const mine = new Set([process.pid]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const proc of all) if (!mine.has(proc.pid) && mine.has(proc.ppid)) { mine.add(proc.pid); grew = true; }
+    }
+    const main = all.find((proc) => mine.has(proc.pid) && proc.command.includes("ms-playwright/") && /\/(Playwright|Chromium|chrome)$/.test(proc.command));
+    if (!main) return [];
+    const dir = main.command.match(/ms-playwright\/[^/]+/)![0];
+    return all.filter((proc) => proc.pid === main.pid
+      || (proc.ppid === 1 && proc.command.includes(dir) && proc.started >= main.started - 1000 && proc.started <= main.started + 10_000));
+  };
+  const quietCpu = async (page: Page, seconds: number) => {
+    const ours = await ourBrowser();
+    const start = await Promise.all(ours.map((proc) => cpuMs(proc.pid)));
+    const calls0 = await page.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
+    await sleep(seconds * 1000);
+    const calls1 = await page.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
+    const alive = new Set((await ps()).map((proc) => proc.pid));
+    const end = await Promise.all(ours.map((proc) => alive.has(proc.pid) ? cpuMs(proc.pid) : Promise.resolve(Number.NaN)));
+    const cpu = end.reduce((acc, ms, i) => Number.isNaN(ms) ? acc : acc + ms - start[i]!, 0);
+    return {
+      seconds, transitions: calls1 - calls0, browserCpuMs: cpu, browserCpuPercent: Math.round((cpu / (seconds * 1000)) * 1000) / 10,
+      processes: ours.map((proc, i) => `${proc.command.split("/").pop()} ${Number.isNaN(end[i]!) ? "gone" : end[i]! - start[i]!}ms`),
+    };
+  };
   const result = await withBench(async (bridge, browser) => {
     const herd = bridge.herd!;
     const stopJournal = tickJournal(herd.journals.get(herd.working)!, bridge.now);
@@ -1794,12 +1829,15 @@ async function motion(before: boolean): Promise<void> {
       await p.evaluate(() => history.forward(), null);
       await reach(p, isPane(paneHref(herd.working)));
       await p.waitForTimeout(1000);
-      const calls0 = await p.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
       const requests: string[] = [];
       p.on("request", (req) => requests.push(req.url()));
-      await sleep(windowMs);
-      const calls1 = await p.evaluate(() => (window as unknown as { __motion: { calls: number } }).__motion.calls, null);
-      out.quiet = { seconds: windowMs / 1000, page: paneHref(herd.working), transitions: calls1 - calls0, requests: tally(requests) };
+      const pane = await quietCpu(p, windowMs / 1000);
+      out.quiet = { page: paneHref(herd.working), ...pane, requests: tally(requests) };
+      // And Home, quiet, reached by the back control.
+      await back(p).click();
+      await reach(p, isHome);
+      await p.waitForTimeout(2000);
+      out.quietHome = { page: "/", ...await quietCpu(p, windowMs / 1000) };
       await phone.close();
 
       // 4. Reduced motion: the same open, which must not move sideways.
