@@ -14,15 +14,15 @@ describe("chat file references", () => {
 
   it("reads a file:// link by its target and never offers its label as a second, relative file", () => {
     // The shape that 404'd on the phone: the label resolved against the pane's folder.
-    const target = "/Users/fran/Obsidian/acme/Research/artifacts/board-20261009/resultado-shopify.html";
-    expect(filePathsInText(`El tablero: [resultado-shopify.html](file://${target}). Faltan capturas.`)).toEqual([target]);
+    const target = "/Users/demo/Obsidian/acme/Research/artifacts/board-20261009/board-summary.html";
+    expect(filePathsInText(`El tablero: [board-summary.html](file://${target}). Faltan capturas.`)).toEqual([target]);
     expect(filePathsInText("[`guide.md`](docs/guide.md)")).toEqual(["docs/guide.md"]);
     // A remote link keeps its label as a mention, as before.
     expect(filePathsInText("[docs/a.md](https://example.com/a)")).toEqual(["docs/a.md"]);
   });
 
   it("reads a bare file:// URL in prose as the absolute path it names", () => {
-    const target = "/Users/fran/.herdr-projects/awam/library/t-0093/micucula-pedidos-20261013.html";
+    const target = "/Users/demo/.herdr-projects/acme/library/t-0093/wholesale-orders-20261013.html";
     expect(filePathsInText(`Ya está abierto desde las 17:50:\nfile://${target}\n\nQué tiene:`)).toEqual([target]);
   });
 

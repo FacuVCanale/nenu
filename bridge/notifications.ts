@@ -33,7 +33,7 @@ export interface NotifyClock<H> {
 
 /** One agent's notification. */
 export interface AgentNotice {
-  /** Who and what: "t-0093 Mi Cúcula pedidos finished", "api needs you". */
+  /** Who and what: "t-0093 Wholesale orders finished", "api needs you". */
   title: string;
   /** What it answered (first line) and where it runs. */
   body: string;

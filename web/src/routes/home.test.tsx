@@ -485,7 +485,7 @@ it("keeps workflows still running in the one column, each opening its chat", asy
 
 it("lists the pull requests agents opened outside Organizations and reviews them in the agent or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
-    repo: "frizynn/comercio-saas", number, title: `PR ${number}`, url: `https://github.com/frizynn/comercio-saas/pull/${number}`,
+    repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
     branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
   });
   const { user, router, main } = await setup({ ...data, pullRequests: [
@@ -500,7 +500,7 @@ it("lists the pull requests agents opened outside Organizations and reviews them
   expect(review.getByText("#1698")).toBeInTheDocument();
   expect(review.getByText("1 failing")).toBeInTheDocument();
   expect(review.getByText("Draft")).toBeInTheDocument();
-  expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("href", "https://github.com/frizynn/comercio-saas/pull/1696");
+  expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("target", "_blank");
   await user.click(review.getByRole("link", { name: "Review Abandoned carts" }));
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
