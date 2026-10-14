@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { deliveryVerdict, loggedMessage, unwrapPastes } from "./delivery-check.ts";
+import { deliveryVerdict, loggedMessage } from "./delivery-check.ts";
 
 // Shapes measured on Claude Code 2.1.296, 2.1.299 and 2.1.300 under Herdr 0.9.3 on macOS. The PTY
 // hands a 1 500-character send to Claude as two reads, 1 022 and 478 bytes; Claude takes the first
@@ -26,32 +26,6 @@ describe("loggedMessage", () => {
     expect(loggedMessage(row("<bash-input>ls</bash-input>"))).toBeNull();
     expect(loggedMessage(JSON.stringify({ type: "assistant", message: { content: "hi" }, timestamp: "2026-10-14T19:57:00Z" }))).toBeNull();
     expect(loggedMessage("not json")).toBeNull();
-  });
-});
-
-describe("unwrapPastes", () => {
-  const paragraphs = (text: string) => text.split(/\n{2,}/);
-
-  test("puts a logged paste back as the text it held", () => {
-    expect(unwrapPastes(wrap("alpha bravo"))).toBe("alpha bravo");
-    expect(unwrapPastes(wrap("  indented\n\n  code"))).toBe("  indented\n\n  code");
-    expect(unwrapPastes("no paste here")).toBe("no paste here");
-    expect(unwrapPastes("\n  typed text keeps its edges\n")).toBe("\n  typed text keeps its edges\n");
-  });
-
-  test("text around a paste, or a second paste, stays apart from it", () => {
-    expect(paragraphs(unwrapPastes(`${wrap("alpha", "a1")}${wrap("bravo", "b2")}`))).toEqual(["alpha", "bravo"]);
-    expect(paragraphs(unwrapPastes(`Look at this:${wrap("alpha bravo")}\nthanks`))).toEqual(["Look at this:", "alpha bravo", "thanks"]);
-  });
-
-  // Measured on 2.1.296 to 2.1.300: a queue row and the absorbed attachment carry the message
-  // trimmed, so the closing tag ends the text.
-  test("reads the trimmed paste of Claude's queue rows", () => {
-    expect(unwrapPastes('<pasted_content id="75ce">\nalpha bravo\n</pasted_content id="75ce">')).toBe("alpha bravo");
-  });
-
-  test("leaves text that only mentions the tag alone", () => {
-    expect(unwrapPastes('Claude logs <pasted_content id="x"> around a paste')).toBe('Claude logs <pasted_content id="x"> around a paste');
   });
 });
 

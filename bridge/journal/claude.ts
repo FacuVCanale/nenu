@@ -135,8 +135,25 @@ export function classifyUserText(raw: string, marks: RowMarks = {}): ClassifiedT
 
 const note = (label: string | null, text = ""): ClassifiedText => ({ role: "note", part: contextPart(label, text) });
 
+/**
+ * Claude logs a paste between `<pasted_content id="…">` and `</pasted_content id="…">` lines: with
+ * blank lines around them in a typed row, trimmed in its queue rows and the absorbed attachment
+ * (measured on 2.1.296 to 2.1.300).
+ */
+const PASTE = /<pasted_content id="([^"]*)">\n([\s\S]*?)\n<\/pasted_content id="\1">/g;
+
+/**
+ * A message as the operator wrote it: each paste back to the text it held. The blank lines Claude
+ * puts around a paste keep it apart from text beside it, and go at the message's edges.
+ */
+export function unwrapPastes(text: string): string {
+  const unwrapped = text.replace(PASTE, (_all, _id: string, inner: string) => inner);
+  return unwrapped === text ? text : unwrapped.replace(/^\n+|\n+$/g, "");
+}
+
 /** The operator's own row: a slash command or `!` shell line reads as what they typed. */
-function spoken(text: string): ClassifiedText | null {
+function spoken(raw: string): ClassifiedText | null {
+  const text = unwrapPastes(raw);
   // Claude Code writes a slash command's tags in either order (both seen across 2.1.280–2.1.295).
   if (isEnvelope("command-name", text) || isEnvelope("command-message", text)) {
     const name = inner("command-name", text) ?? "";
@@ -186,6 +203,8 @@ type Usage = Omit<SessionTelemetry, "fileTruncated">;
 const QUEUE_OPERATIONS = new Set(["enqueue", "dequeue", "remove", "popAll"]);
 const str = (value: unknown, max = 200): string | undefined =>
   typeof value === "string" && value !== "" && value.length <= max ? value : undefined;
+/** A message in Claude's queue rows, as the operator wrote it, so a queued row can find it. */
+const queuedText = (value: unknown) => str(typeof value === "string" ? unwrapPastes(value) : undefined, MAX_TEXT_CHARS);
 
 /** A base64 image block (`{type:"image", source:{type:"base64", media_type, data}}`), or null. */
 function base64Image(block: unknown): { mediaType?: string; data: string } | null {
@@ -308,7 +327,7 @@ export class ClaudeParser implements JournalParser {
     if (row.type === "queue-operation") {
       const kind = row.operation;
       if (typeof kind !== "string" || !QUEUE_OPERATIONS.has(kind)) return true;
-      const content = str(row.content, MAX_TEXT_CHARS);
+      const content = queuedText(row.content);
       const reason = str(row.reason), commandUuid = str(row.commandUuid), deliveryId = str(row.deliveryId);
       this.note({
         kind: kind as NativeQueueEvent["kind"], ts,
@@ -375,7 +394,7 @@ export class ClaudeParser implements JournalParser {
           if (index !== null) parts.push({ kind: "image", index, ...(image.mediaType ? { mediaType: image.mediaType } : {}) });
         } else if (b.type === "text" && typeof b.text === "string") {
           if (b.text.trim() !== "" && (said === undefined || said?.role === "user"))
-            parts.push({ kind: "text", ...clamp(stripAnsi(b.text), MAX_TEXT_CHARS) });
+            parts.push({ kind: "text", ...clamp(stripAnsi(said ? unwrapPastes(b.text) : b.text), MAX_TEXT_CHARS) });
         } else if (b.type === "thinking" && typeof b.thinking === "string") {
           if (b.thinking.trim() !== "")
             parts.push({ kind: "thinking", ...clamp(stripAnsi(b.thinking), MAX_TEXT_CHARS) });
@@ -478,7 +497,7 @@ export class ClaudeParser implements JournalParser {
     if (attachment === null || typeof attachment !== "object") return;
     const a = attachment as Record<string, unknown>;
     if (a.type !== "queued_command") return;
-    const prompt = str(a.prompt, MAX_TEXT_CHARS);
+    const prompt = queuedText(a.prompt);
     const commandUuid = str(a.source_uuid), deliveryId = str(a.delivery_id);
     this.note({
       kind: "queued_command", ts, ...(prompt ? { content: prompt } : {}),
