@@ -36,7 +36,7 @@ function journalRow(type: "user" | "assistant", text: string, parentUuid: string
   return { uuid, line: JSON.stringify({ type, uuid, parentUuid, timestamp: new Date(at).toISOString(), message }) + "\n" };
 }
 
-async function writeJournal(file: string, turns: Array<["user" | "assistant", string]>, at: number): Promise<string | null> {
+function journalLines(turns: Array<["user" | "assistant", string]>, at: number): { body: string; last: string | null } {
   let parent: string | null = null;
   let body = "";
   for (const [type, text] of turns) {
@@ -44,8 +44,18 @@ async function writeJournal(file: string, turns: Array<["user" | "assistant", st
     body += row.line;
     parent = row.uuid;
   }
+  return { body, last: parent };
+}
+
+async function writeJournal(file: string, turns: Array<["user" | "assistant", string]>, at: number): Promise<string | null> {
+  const { body, last } = journalLines(turns, at);
   await writeFile(file, body);
-  return parent;
+  return last;
+}
+
+/** Add turns to a seeded journal, as the agent would while working. */
+export async function appendJournal(file: string, turns: Array<["user" | "assistant", string]>, at: number): Promise<void> {
+  await appendFile(file, journalLines(turns, at).body);
 }
 
 /** `shift` moves journal timestamps onto the bench clock (bridge.ts `epoch`). */
