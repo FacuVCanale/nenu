@@ -119,6 +119,7 @@ const EXPECTED: Record<string, string> = {
   "plan-approval-v2296.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   // web/src/lib/harness/codex/fixtures
   "approval-exec-v0160.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
+  "hooks-review-v0162.txt": "permission: Review hooks=persistent | Trust all and continue=persistent | Continue without trusting (hooks won't run)=deny",
   "ask-notes-open-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-notes-row-pointed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-notes-typed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
@@ -537,6 +538,21 @@ describe("Interactions.refresh", () => {
     expect(await interactions.refresh("s", pane.io, [working])).toEqual([]);
     interactions.noteOutputMatched("s", "p");
     expect((await interactions.refresh("s", pane.io, [working]))[0]?.kind).toBe("permission");
+  });
+
+  test("a pane Herdr cannot classify is read, so a dialog its manifest misses still gets a card", async () => {
+    const interactions = new Interactions(recorder().live, { sleep: noSleep });
+    const pane = scriptedPane(fixture("hooks-review-v0162.txt", join(ROOT, "web/src/lib/harness/codex/fixtures")));
+    const [card] = await interactions.refresh("s", pane.io, [blocked("p", "codex", "unknown")]);
+    expect(card?.question).toBe("Hooks need review");
+    // The stakes are on the card before any button: how many hooks, and that they leave the sandbox.
+    expect(card?.context).toBe("3 hooks are new or changed.\nHooks can run outside the sandbox after you trust them.");
+    const answer = (optionIndex: number, confirm?: true) =>
+      interactions.answer("s", pane.io, blocked("p", "codex", "unknown"), { signature: card!.signature, optionIndex, ...(confirm ? { confirm } : {}) });
+    expect((await answer(1)).outcome).toMatchObject({ code: "confirm_required" });
+    expect(pane.log.keys).toEqual([]);
+    expect((await answer(1, true)).keys).toEqual(["Down", "Enter"]);
+    expect((await answer(2)).keys).toEqual(["Down", "Down", "Enter"]);
   });
 
   test("the CLI's own `waiting` makes a pane Herdr still calls working eligible (ADR 0067)", async () => {
