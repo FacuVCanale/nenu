@@ -333,7 +333,7 @@ it("says a session is ready to review on its own row, with its pull request and 
   expect(headline()).toBe("1 thread needs you");
   expect(subline()).toBe("1 to review · 1 working");
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
-  expect(row).toHaveAccessibleName(/, Ready to review, Hub, PR #1342, \+212 −148$/);
+  expect(row).toHaveAccessibleName(/,\s*Ready to review,\s*Hub,\s*PR #1342,\s*\+212 −148$/);
   expect(main.queryByRole("region", { name: /^Ready to review/ })).not.toBeInTheDocument();
   await user.click(row);
   expect(router.state.location.pathname).toBe("/pane/w2%3Ap2");
@@ -383,7 +383,7 @@ describe("Recents and Workspaces", () => {
       "/pane/w2%3Ap2?s=work", "/pane/c1?s=work", "/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work",
     ]);
     // Under its workspace's name a row leaves that name out.
-    expect(groups.getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/^Earlier thread, Idle, docs, 3h ago$/);
+    expect(groups.getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/^Earlier thread,\s*Idle,\s*docs,\s*3h ago$/);
     // The workspace's own link is the one every way in uses (ADR 0065): here, the pane asking for you.
     await user.click(groups.getByRole("link", { name: "Nenu" }));
     expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
@@ -553,7 +553,7 @@ it("lists the pull requests agents opened outside Organizations and reviews them
   expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("href", "https://github.com/frizynn/comercio-saas/pull/1696");
   expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("target", "_blank");
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ });
-  expect(row).toHaveAccessibleName(/, PR #1698, \+3752 −154$/);
+  expect(row).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
   await user.click(row);
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
 });
@@ -591,7 +591,7 @@ describe("an outage", () => {
     await update({ ...data, error: true });
     expect(headline()).toBe("1 thread needs you");
     expect(main.queryByText(/Can't reach|Last synced|Showing the last herd/)).not.toBeInTheDocument();
-    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
   });
 
   // Known gap, pinned so it turns red the day it is fixed: a failed snapshot read makes canCreate
@@ -626,7 +626,7 @@ describe("an outage", () => {
     expect(await needs.findByText("Answers are paused.")).toBeVisible();
     expect(needs.queryByText(/Herdr/)).not.toBeInTheDocument();
     expect(needs.getByRole("button", { name: "Yes" })).toBeDisabled();
-    expect(within(main.getByRole("region", { name: /^Recent/ })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
   });
 
@@ -723,6 +723,6 @@ it("keeps existing threads navigable while answering and creating are read-only"
   expect(needs.queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
   expect(within(needs.getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
   expect(needs.getByRole("button", { name: /open thread/i })).toBeEnabled();
-  const recent = within(main.getByRole("region", { name: /^Recent/ }));
+  const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
   expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
 });
