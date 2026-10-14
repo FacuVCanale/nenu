@@ -6,7 +6,6 @@ import { PrBar } from "@/components/pr-bar";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
-import { ThreadCards } from "@/components/thread-cards";
 import { PrList, ThreadsPanel, prLists } from "@/components/threads-panel";
 import type { HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
@@ -19,7 +18,6 @@ export interface ProjectChatSlots {
   title: string;
   headerAction?: ReactNode;
   overlay?: ReactNode;
-  conversationFooter?: ReactNode;
   strip?: ReactNode;
   composerTop?: ReactNode;
   /** The desk's session panel beside the chat, absent while a thread is docked there instead. */
@@ -52,8 +50,8 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
 
 /**
  * A pane that belongs to a project renders inside this frame. A desk keeps the session panel beside
- * the chat, with the project's own panel behind its ⋯, or docks a thread there (`?thread=`), and lists
- * a coordinator's threads as cards under the chat only while the panel is put away. A phone switches the coordinator between Chat,
+ * the chat, with the project's own panel behind its ⋯, or docks a thread there (`?thread=`); the
+ * sidebar lists the threads, so the chat carries none of them. A phone switches the coordinator between Chat,
  * Threads and PRs in place, keeping the chat mounted so its draft and scroll survive; a thread shows
  * its siblings as chips, a header button to the project's threads, and its pull request above the
  * composer.
@@ -139,20 +137,12 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     </div></div>
   ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
 
-  // The cards list the threads only where nothing else does: a phone's tabs list them, and so does the
-  // panel until it is put away.
-  const cards = scope.coordinating && desk && !panelShown ? (
-    <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
-      onOpen={(target) => { if (target.paneId) setDocked(target.paneId); else openNode(target.id); }} />
-  ) : undefined;
-
   return (
     <div className="project-frame">
       {children({
         title: thread?.title ?? project.name,
         headerAction,
         overlay,
-        conversationFooter: cards,
         // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.
         strip: phoneTabs ?? chips ?? (desk ? null : undefined),
         composerTop: thread?.pr && !scope.coordinating

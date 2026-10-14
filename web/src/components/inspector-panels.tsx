@@ -96,7 +96,7 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
 
 /**
  * The Terminal tab is two empty places the chat draws into while the tab is on screen: the pane's
- * mirror, then Keys and Type into terminal (agent-chat.tsx and composer.tsx own all three).
+ * mirror, then Type into terminal (agent-chat.tsx and composer.tsx own both).
  */
 function Terminal({ publish }: { publish: (slots: TerminalSlots | null) => void }) {
   const mirror = useRef<HTMLDivElement>(null);
