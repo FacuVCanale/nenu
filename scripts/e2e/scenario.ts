@@ -208,3 +208,41 @@ export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" 
     }],
   };
 }
+
+/**
+ * A project coordinator's chat as an operator's phone showed it on 2026-10-14: a working Claude
+ * coordinator over five open top-level threads (three ready for review with a pull request, one of
+ * them mergeable; one working on its own PR; one waiting on you in the blocked demo pane) and a
+ * resolved thread whose PR merged. `at` is the bench clock's now.
+ */
+export function projectChatSeed(herd: Pick<DemoHerd, "working" | "blocked">, at: number): OrgSeed {
+  const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
+  const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0]!, tab_id: tabId, pane_id: paneId });
+  const pr = (number: number, extra: Record<string, unknown> = {}) => ({
+    url: `https://github.com/awam/comercio/pull/${number}`, state: "OPEN", review: "REVIEW_REQUIRED", checks: { passed: 6, pending: 0, failed: 0 },
+    additions: 120, deletions: 30, failing: [], comment_count: 0, draft: false, mergeable: "MERGEABLE", merge_blocker: "review required", ...extra,
+  });
+  const node = (id: number, title: string, group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
+    id: `t-${String(id).padStart(4, "0")}`, title, parent_id: "root", role: "worker", status: group === "resolved" ? "resolved" : "open", group,
+    group_label: group, note: "", branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes),
+    report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null, ...extra,
+  });
+  return {
+    profiles: ["claude", "codex"],
+    projects: [{
+      slug: "awam",
+      name: "AWAM Comercio SaaS",
+      goal: "Coordinar iniciativas de AWAM que requieran varios threads o PRs",
+      status: "active",
+      coordinator: bound(herd.working, "w1:t1"),
+      threads: [
+        node(1, "Hotfix login", "resolved", 600, { pr: pr(1700, { state: "MERGED" }) }),
+        node(2, "Pedidos de la tienda", "ready-for-review", 8, { branch: "awam-t-0002", pr: pr(1352, { review: "APPROVED", merge_blocker: null }) }),
+        node(3, "Pedidos mayoristas", "working", 2, { branch: "awam-t-0003", pr: pr(1351, { checks: { passed: 3, pending: 3, failed: 0 }, merge_blocker: "checks pending" }) }),
+        node(4, "Release de pedidos", "ready-for-review", 30, { branch: "awam-t-0004", pr: pr(1345) }),
+        node(5, "Bugs del asistente", "ready-for-review", 5, { branch: "awam-t-0005", pr: pr(1350) }),
+        node(6, "Panel depósito", "waiting-on-you", 4, bound(herd.blocked, "w2:t1")),
+      ],
+    }],
+  };
+}
