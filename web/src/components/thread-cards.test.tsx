@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
@@ -21,4 +21,25 @@ it("shows the coordinator's open work in the tree's order and leaves the resolve
   render(<ThreadCards project={project} panes={[]} readOnly={false} onOpen={vi.fn()} onChanged={vi.fn()} />);
   const cards = screen.getAllByRole("article").map((card) => card.getAttribute("aria-label"));
   expect(cards).toEqual(["Mobile", "Depot", "Hotfix"]);
+});
+
+it("says why each thread needs you: a question to answer on screen, or a reply the agent waits for in its chat", () => {
+  const project: ProjectView = {
+    slug: "demo", name: "Demo", status: "active",
+    threads: [
+      node("t-1", "Checkout copy", "root", { paneId: "copy", liveStatus: "idle", group: "waiting-on-you", note: "idle", selfWaiting: true }),
+      node("t-2", "Payments", "root", { paneId: "pay", liveStatus: "blocked", group: "waiting-on-you", note: "blocked" }),
+    ],
+  };
+  const onOpen = vi.fn();
+  render(<ThreadCards project={project} panes={[]} readOnly={false} onOpen={onOpen} onChanged={vi.fn()} />);
+  const copy = within(screen.getByRole("article", { name: "Checkout copy" }));
+  expect(copy.getByText("Waiting for your reply")).toBeInTheDocument();
+  expect(copy.queryByText("Asked you a question")).not.toBeInTheDocument();
+  expect(copy.queryByRole("button", { name: "Answer" })).not.toBeInTheDocument();
+  copy.getByRole("button", { name: "Reply" }).click();
+  expect(onOpen).toHaveBeenCalledWith(project.threads[0]);
+  const payments = within(screen.getByRole("article", { name: "Payments" }));
+  expect(payments.getByText("Asked you a question")).toBeInTheDocument();
+  expect(payments.getByRole("button", { name: "Answer" })).toBeInTheDocument();
 });
