@@ -1,13 +1,14 @@
-import { useArtifactMetadata } from "@/hooks/use-artifact-metadata";
+import { ArtifactsPanel } from "./artifacts-panel";
 import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
+import { FileText, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
 import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { SEGMENT_TRACK, segmentClass } from "@/components/dock-tile";
-import { fetchHistory, paneFileUrl } from "@/lib/api";
-import { chatFileReferences, fileExtension, artifactKind, type ChatFileKind } from "@/lib/chat-files";
+import type { ActivityArtifact } from "@/lib/activity";
+import { fetchHistory } from "@/lib/api";
+import { chatFileReferences, fileExtension } from "@/lib/chat-files";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -45,12 +46,15 @@ export function ChatFilesBrowser({
   paneId,
   session,
   history,
+  published,
   open: openProp,
   onOpenChange,
 }: {
   paneId: string;
   session?: string;
   history: PaneHistoryResponse | null;
+  /** The session's claude.ai pages (Activity), listed first under Artifacts. */
+  published?: ActivityArtifact[];
   /** Controlled from a menu item: no trigger of its own is rendered. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -62,11 +66,10 @@ export function ChatFilesBrowser({
     if (!controlled) setOwnOpen(next);
     onOpenChange?.(next);
   };
-  const [filter, setFilter] = useState<ChatFileKind | "artifacts" | "project">("project");
+  const [filter, setFilter] = useState<"artifacts" | "project" | "file">("project");
   const [query, setQuery] = useState("");
   const [extension, setExtension] = useState("all");
   const [sort, setSort] = useState("recent");
-  const [artifactType, setArtifactType] = useState("all");
   const [runKey, setRunKey] = useState(0);
   const [scan, setScan] = useState<ScanState>(EMPTY_SCAN);
   const seed = useRef<PaneHistoryResponse | null>(history);
@@ -162,7 +165,9 @@ export function ChatFilesBrowser({
         update({ entries, total, fileTruncated, batchPaused, pagingBoundary, loading: false, error: false });
       } catch {
         accumulated.current = entries;
-        if (page?.available) cursor.current = page;
+        // The loop moves the cursor with every page it adds; only a scan stopped before its first
+        // older page resumes from the page it started on.
+        if (page?.available) cursor.current ??= page;
         knownTotal.current = total;
         knownFileTruncated.current = fileTruncated;
         if (!controller.signal.aborted) update({ entries, total, fileTruncated, batchPaused, pagingBoundary, loading: false, error: true });
@@ -185,18 +190,9 @@ export function ChatFilesBrowser({
   const references = useMemo(() => chatFileReferences(scan.entries), [scan.entries]);
 
   const files = references.filter(reference => reference.kind === "file");
-  const candidates = references.filter(reference => /\.html?$/i.test(reference.path))
-    .sort((a, b) => b.lastSeen.order - a.lastSeen.order).map(reference => reference.path);
-  const metadata = useArtifactMetadata(paneId, session, candidates, open && filter === "artifacts" && !scan.loading);
-  const boards = new Map(metadata.found.flatMap(item => item.state === "preview" && item.designboard ? [[item.path, item.designboard]] : []));
-  const category = filter === "photo" ? references.filter(r => r.kind !== "file")
-    : filter === "artifacts" ? references.filter(r => {
-      const kind = artifactKind(r, boards.has(r.path));
-      return kind !== null && (artifactType === "all" || kind === artifactType);
-    }) : files;
-  const extensions = [...new Set(category.map(fileExtension))].sort();
-  const shown = category.filter(r => (extension === "all" || fileExtension(r) === extension)
-    && `${r.path} ${boards.get(r.path) ?? ""}`.toLowerCase().includes(query.toLowerCase()))
+  const extensions = [...new Set(files.map(fileExtension))].sort();
+  const shown = files.filter(r => (extension === "all" || fileExtension(r) === extension)
+    && r.path.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => (sort === "extension" ? fileExtension(a).localeCompare(fileExtension(b))
       : sort === "name" ? a.name.localeCompare(b.name) : 0) || b.lastSeen.order - a.lastSeen.order);
   /** Every open starts from the history on screen now, on the project tab, with no filters. */
@@ -207,13 +203,13 @@ export function ChatFilesBrowser({
     knownTotal.current = 0;
     knownFileTruncated.current = false;
     setScan(EMPTY_SCAN);
-    setFilter("project"); setQuery(""); setExtension("all"); setArtifactType("all");
+    setFilter("project"); setQuery(""); setExtension("all");
   }
   const openedFromMenu = controlled && openProp;
   useLayoutEffect(() => {
     if (openedFromMenu) begin();
   }, [openedFromMenu]);
-  // Project opens first and has no search; picking a list that has one puts the cursor there on a
+  // Project opens first and has no search; picking Files, the list that has one, puts the cursor there on a
   // desk, as the sheet does for Commands. A touch screen keeps its keyboard down until a tap.
   const searchRef = useRef<HTMLInputElement>(null);
   const searchNext = useRef(false);
@@ -224,7 +220,7 @@ export function ChatFilesBrowser({
   function changeFilter(next: typeof filter) {
     setFilter(next);
     setExtension("all");
-    searchNext.current = next !== "project" && finePointer();
+    searchNext.current = next === "file" && finePointer();
   }
 
   return (
@@ -246,26 +242,18 @@ export function ChatFilesBrowser({
           <FilterButton active={filter === "file"} onClick={() => changeFilter("file")}>
             Files{!scan.loading ? ` · ${files.length}` : ""}
           </FilterButton>
-          <FilterButton active={filter === "photo"} onClick={() => changeFilter("photo")}>Media</FilterButton>
         </div>
 
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
-        <div className="mb-3 flex flex-wrap gap-2">
+        {filter === "file" && <div className="mb-3 flex flex-wrap gap-2">
           <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
-          {filter === "artifacts" && <select aria-label="Artifact type" value={artifactType} onChange={event => { setArtifactType(event.target.value); setExtension("all"); }} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
-            <option value="all">All types</option><option value="designboard">Designboards</option><option value="document">Documents</option><option value="media">Media</option>
-          </select>}
           <select aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
             <option value="all">Any format</option>{extensions.map(ext => <option key={ext} value={ext}>.{ext}</option>)}
           </select>
           <select aria-label="Sort files" value={sort} onChange={event => setSort(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
             <option value="recent">Recent first</option><option value="extension">Extension</option><option value="name">Name</option>
           </select>
-        </div>
-        {filter === "artifacts" && <p className="mb-3 text-xs text-muted-foreground">Designboards and documents shared by the agent. Source files stay in Files and Project.</p>}
-        {filter === "artifacts" && metadata.loading && <p role="status" className="mb-2 text-xs text-muted-foreground">Checking designboards…</p>}
-        {filter === "artifacts" && metadata.error && <p role="status" className="mb-2 text-xs text-muted-foreground">Some designboards could not be checked.<button className="min-h-11 px-2 underline" onClick={metadata.retry}>Retry</button></p>}
-        {filter === "artifacts" && metadata.more && <button className="min-h-11 text-xs underline" onClick={metadata.loadMore}>Check older HTML files</button>}
+        </div>}
         {scan.loading && (
           <div role="status" className="mb-3 flex min-h-11 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-muted-foreground">
             <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
@@ -282,24 +270,8 @@ export function ChatFilesBrowser({
           </div>
         )}
 
-        {shown.length > 0 ? filter === "photo" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {shown.map((reference) => (
-              <button key={reference.path} type="button" onClick={() => openReference(reference.path)}
-                className="group min-h-11 overflow-hidden rounded-xl border bg-muted/30 text-left transition-colors hover:border-primary/40 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring">
-                <div className="relative aspect-square overflow-hidden bg-muted">
-                  <Image aria-hidden="true" className="absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-1/2 text-muted-foreground/50" />
-                  {reference.kind === "video" ? <span className="relative flex h-full items-center justify-center text-sm">Video</span> : <img src={paneFileUrl(paneId, reference.path, session)} alt="" loading="lazy"
-                    className="relative size-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
-                </div>
-                <div className="px-2.5 py-2">
-                  <p className="truncate text-sm font-medium">{reference.name}</p>
-                  <p className="truncate font-mono text-caption text-muted-foreground">{reference.path}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : (
+        {filter === "artifacts" ? <ArtifactsPanel paneId={paneId} session={session} references={references} published={published} ready={!scan.loading} onOpen={openReference} />
+        : shown.length > 0 ? (
           <ul className="divide-y rounded-xl border">
             {shown.map((reference) => (
               <li key={reference.path}>
@@ -307,22 +279,22 @@ export function ChatFilesBrowser({
                   className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText aria-hidden="true" className="size-4" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{boards.get(reference.path) ?? reference.name}</span>
+                    <span className="block truncate text-sm font-medium">{reference.name}</span>
                     <span className="block truncate font-mono text-caption text-muted-foreground">{reference.path}</span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-muted-foreground">
-                    <span className="block">{boards.has(reference.path) ? "Designboard" : fileExtension(reference).toUpperCase()}</span>
+                    <span className="block">{fileExtension(reference).toUpperCase()}</span>
                     {reference.lastSeen.timestamp && <time className="block" dateTime={reference.lastSeen.timestamp}>{new Date(reference.lastSeen.timestamp).toLocaleDateString([], { month: "short", day: "numeric" })}</time>}
                   </span>
                 </button>
               </li>
             ))}
           </ul>
-        ) : !scan.loading && !(filter === "artifacts" && metadata.loading) && (
+        ) : !scan.loading && (
           <div className="rounded-xl border border-dashed px-5 py-10 text-center">
-            {filter === "photo" ? <Image aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" /> : <FileText aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" />}
-            <p className="text-sm font-medium">{query || extension !== "all" || artifactType !== "all" ? "No matching files" : `No ${filter === "photo" ? "media" : filter === "artifacts" ? "artifacts" : "files"} in this conversation`}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Browse Project for the working directory, or Files for all conversation references.</p>
+            <FileText aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" />
+            <p className="text-sm font-medium">{query || extension !== "all" ? "No matching files" : "No files in this conversation"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Browse Project for the working directory.</p>
           </div>
         )}
 
@@ -341,10 +313,9 @@ export function ChatFilesBrowser({
   );
 }
 
-// Four names share a phone's width, so a segment takes the footnote step (an iOS segmented control's
+// Three names share a phone's width, so a segment takes the footnote step (an iOS segmented control's
 // size) and a 2px inset: every name, a three-digit Files count included, fits from 320px at the
-// default text size. A four-digit count at 320px, or larger browser text, ends in an ellipsis inside
-// its own segment.
+// default text size. Larger browser text ends a name in an ellipsis inside its own segment.
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" aria-pressed={active} onClick={onClick} className={cn(segmentClass(active), "px-0.5 text-footnote")}>

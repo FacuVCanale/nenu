@@ -148,8 +148,10 @@ describe("Artifacts", () => {
     entry("one", "![After](shots/after.png) and [Notes](docs/notes.pdf). I also read /srv/vault/one.png and /srv/vault/two.png."),
   ]);
   const published = [{ id: "a1", url: "https://claude.ai/artifact/a1", title: "Review notes" }];
-  beforeEach(() => fetchArtifactMetadata.mockImplementation(async (_pane: string, paths: string[]) => paths.map(path =>
-    path.startsWith("/srv/") ? { path, state: "outside" } : { path, state: "preview" })));
+  beforeEach(() => {
+    fetchArtifactMetadata.mockImplementation(async (_pane: string, paths: string[]) => paths.map(path =>
+      path.startsWith("/srv/") ? { path, state: "outside" } : { path, state: "preview" }));
+  });
 
   async function openArtifacts() {
     render(<ChatFilesBrowser paneId="w1:p1" history={conversation} published={published} />);

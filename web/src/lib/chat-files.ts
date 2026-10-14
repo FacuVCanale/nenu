@@ -1,3 +1,4 @@
+import type { ArtifactMetadata } from "./api";
 import { localFilePath } from "./file-links";
 import { parseMarkdown, type MdBlock, type MdSpan } from "./markdown";
 import type { TranscriptEntry, TranscriptPart } from "./types";
@@ -162,4 +163,38 @@ export function artifactKind(file: ChatFileReference, designboard: boolean): Art
   if (designboard) return "designboard";
   if (!file.delivered || !/\.(pdf|md|markdown|csv|tsv|png|jpe?g|gif|webp|svg|mp4|m4v|mov|webm)$/i.test(file.path)) return null;
   return file.kind === "file" ? "document" : "media";
+}
+
+/** Whether the Artifacts list needs the bridge's answer (`inspect`) before it can place a name. */
+export function artifactCandidate(file: ChatFileReference): boolean {
+  return /\.html?$/i.test(file.path) || (file.kind === "photo" && (file.firstSeen.role !== "user" || file.delivered));
+}
+
+export interface ArtifactSections {
+  /** Designboards, documents and videos the agent delivered, newest first. */
+  delivered: ChatFileReference[];
+  /** Images the agent delivered or wrote that Nenu can serve, with the path it serves them by. */
+  images: Array<ChatFileReference & { src: string }>;
+  /** Images the agent named beyond the pane's folder: no preview, only the confirmed Open (ADR 0063). */
+  outside: ChatFileReference[];
+}
+
+/**
+ * What the agent made and handed over, placed by what the bridge said about each name. An image gets
+ * a thumbnail only when the bridge can serve it; one beyond the folder waits behind the confirmed
+ * Open. An image only named inside the folder is not an artifact (Project lists it), and the
+ * operator's own images never are.
+ */
+export function artifactSections(references: ChatFileReference[], found: ReadonlyMap<string, ArtifactMetadata>): ArtifactSections {
+  const sections: ArtifactSections = { delivered: [], images: [], outside: [] };
+  for (const file of [...references].sort((a, b) => b.lastSeen.order - a.lastSeen.order)) {
+    const known = found.get(file.path);
+    if (file.kind !== "photo") {
+      if (artifactKind(file, known?.state === "preview" && Boolean(known.designboard))) sections.delivered.push(file);
+    } else if (artifactCandidate(file)) {
+      if (known?.state === "outside") sections.outside.push(file);
+      else if (known?.state === "preview" && (file.delivered || file.edited)) sections.images.push({ ...file, src: known.resolved ?? file.path });
+    }
+  }
+  return sections;
 }
