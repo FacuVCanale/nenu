@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { PanelLeft, Search, SquarePen } from "lucide-react";
+import { PanelLeft, Search, SquarePen } from "@/components/ui/icon";
 
 import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
 import { SidebarRail } from "@/components/sidebar-rail";

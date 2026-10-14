@@ -1,8 +1,5 @@
 import { useState, type ReactNode } from "react";
-import {
-  Activity, ArrowLeft, BookText, Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitMerge, GitPullRequest,
-  GitPullRequestClosed, GitPullRequestDraft, MessageSquare, MessageSquareWarning, type LucideIcon,
-} from "lucide-react";
+import { Activity, ArrowLeft, BookText, Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ChatCircle, ChatCircleText, type IconComponent } from "@/components/ui/icon";
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
@@ -25,7 +22,7 @@ const PR_STATUS = {
   approved: { icon: CircleCheck, tone: "text-status-done" },
   review: { icon: Eye, tone: "text-primary" },
   passed: { icon: Check, tone: "text-status-done" },
-  changes: { icon: MessageSquareWarning, tone: "text-status-blocked" },
+  changes: { icon: ChatCircleText, tone: "text-status-blocked" },
   failing: { icon: CircleX, tone: "text-status-blocked" },
   running: { icon: CircleDashed, tone: "text-status-working" },
   open: { icon: GitPullRequest, tone: "text-muted-foreground" },
@@ -33,7 +30,7 @@ const PR_STATUS = {
   merged: { icon: GitMerge, tone: "text-violet-400" },
   closed: { icon: GitPullRequestClosed, tone: "text-muted-foreground" },
   unread: { icon: GitPullRequest, tone: "text-muted-foreground" },
-} satisfies Record<string, { icon: LucideIcon; tone: string }>;
+} satisfies Record<string, { icon: IconComponent; tone: string }>;
 type PrStatus = keyof typeof PR_STATUS;
 const OPEN_ORDER = Object.keys(PR_STATUS) as PrStatus[];
 
@@ -148,8 +145,8 @@ export function PaneActivity({ paneId, session, className }: { paneId: string; s
   );
 }
 
-const TABS: Array<[PanelTab, string, typeof MessageSquare]> = [
-  ["threads", "Threads", MessageSquare],
+const TABS: Array<[PanelTab, string, typeof ChatCircle]> = [
+  ["threads", "Threads", ChatCircle],
   ["prs", "PRs", GitPullRequest],
   ["activity", "Activity", Activity],
   ["memory", "Memory", BookText],

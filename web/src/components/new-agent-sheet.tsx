@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ChevronRight, Folder, TriangleAlert } from "lucide-react";
+import { ChevronRight, Folder, TriangleAlert } from "@/components/ui/icon";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
 import type { NewPreset } from "@/components/new-dialog";

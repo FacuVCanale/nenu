@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/ui/icon";
 import { useRevalidator } from "react-router";
 
 import { Field, Segmented, inputField, openNewDialog, selectField, textField, useOnScreen } from "@/components/new-agent-sheet";

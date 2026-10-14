@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Bot, ChevronDown, ChevronRight, Radio, Terminal, Workflow, X } from "lucide-react";
+import { Sparkle, ChevronDown, ChevronRight, Radio, Terminal, Workflow, X } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
@@ -9,7 +9,7 @@ import {
   agentElapsed,
   allAgents,
   formatClock,
-  formatDuration,
+  formatElapsed,
   workflowElapsed,
   type ActivityArtifact,
   type ActivityTask,
@@ -54,13 +54,13 @@ function Dot({ state, className }: { state: ProcessState; className?: string }) 
 }
 
 function KindIcon({ item }: { item: ProcessItem }) {
-  const Icon = item.kind === "workflow" ? Workflow : item.kind === "subagent" ? Bot : item.task.kind === "monitor" ? Radio : Terminal;
+  const Icon = item.kind === "workflow" ? Workflow : item.kind === "subagent" ? Sparkle : item.task.kind === "monitor" ? Radio : Terminal;
   const tone = item.state === "waiting" ? "text-status-blocked" : item.state === "running" ? "text-status-working" : item.state === "failed" ? "text-destructive" : "text-muted-foreground";
   return <Icon aria-hidden="true" className={cn("size-4 shrink-0", tone)} />;
 }
 
 function taskSummary(task: ActivityTask, now: number): string {
-  if (task.status === "running") return task.at !== undefined ? `output ${formatDuration(now - task.at)} ago` : "running";
+  if (task.status === "running") return task.at !== undefined ? `output ${formatElapsed(now - task.at)} ago` : "running";
   if (task.status === "unknown") return task.at !== undefined ? `no news since ${formatClock(task.at)}` : "no news";
   return task.exitCode !== undefined ? `exit ${task.exitCode}` : task.event || task.status;
 }
@@ -69,7 +69,7 @@ function taskSummary(task: ActivityTask, now: number): string {
 function rowSummary(item: ProcessItem, now: number): ReactNode {
   if (item.kind === "workflow") {
     const wf = item.workflow;
-    return <Meta className="text-[11.5px]" items={[`${wf.doneCount}/${wf.agentCount}`, formatDuration(workflowElapsed(wf, now))]} />;
+    return <Meta className="text-[11.5px]" items={[`${wf.doneCount}/${wf.agentCount}`, workflowElapsed(wf, now)]} />;
   }
   if (item.kind === "task") return <Meta className="text-[11.5px]" items={[taskSummary(item.task, now)]} />;
   return <Meta className="text-[11.5px]" items={[STATE_LABEL[item.state], item.at !== undefined ? formatClock(item.at) : ""]} />;
@@ -102,7 +102,7 @@ function ProcessRow({ item, now, onDetail, onOpenSubagent }: {
               <StateDot state={agent.state} />
               <span className="whitespace-nowrap font-medium">{agent.label}</span>
               <span className="min-w-0 flex-1 truncate text-muted-foreground">{agent.lastTool ?? ""}</span>
-              <span className="whitespace-nowrap tabular-nums text-muted-foreground">{formatDuration(agentElapsed(agent, now))}</span>
+              <span className="whitespace-nowrap tabular-nums text-muted-foreground">{agentElapsed(agent, now)}</span>
             </div>
           ))}
           <DetailButton name={name} onClick={() => onDetail({ kind: "workflow", runId: item.workflow.runId, agentId: null })} />
@@ -255,7 +255,7 @@ export function ProcessesChip({ processes, published = 0, desktop, open, onOpenC
   return <>
     {label && <button ref={trigger} type="button" aria-label={aria} aria-haspopup="dialog" aria-expanded={open} onClick={() => onOpenChange(!open)}
       className={cn("composer-quiet hit-area gap-1.5 tabular-nums", waiting && "text-status-blocked")}>
-      {live && <Dot state={waiting ? "waiting" : "running"} className={cn("size-2", !waiting && "motion-safe:animate-pulse")} />}
+      {live && <Dot state={waiting ? "waiting" : "running"} className="size-2" />}
       <span className="truncate">Background · {label}</span>
     </button>}
     {desktop

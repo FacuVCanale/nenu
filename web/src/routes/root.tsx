@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { isRouteErrorResponse, Outlet, useLoaderData, useLocation, useParams, useRouteError, useRouteLoaderData } from "react-router";
-import { Check, Copy, RotateCw, WifiOff } from "lucide-react";
+import { Check, Copy, RotateCw, WifiOff } from "@/components/ui/icon";
 
 import { usePolling } from "@/hooks/use-polling";
 import { useLiveEvents } from "@/hooks/use-live-events";
@@ -165,7 +165,7 @@ const noop = () => {};
 
 /** A placeholder bar. Still under reduced motion; the caption beside it is the live signal. */
 function Bone({ className, width }: { className?: string; width?: string }) {
-  return <span className={cn("block rounded-md bg-muted motion-safe:animate-pulse", className)} style={width ? { width } : undefined} />;
+  return <span className={cn("block rounded-md bg-muted", className)} style={width ? { width } : undefined} />;
 }
 
 // Last-resort recovery screen for a render-phase error or a loader throw. A 404 is not a crash: it

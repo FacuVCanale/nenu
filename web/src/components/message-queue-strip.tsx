@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Pencil, Send, Trash2, X, Zap } from "lucide-react";
+import { Check, Pencil, Send, Trash2, X, Zap } from "@/components/ui/icon";
 import type { QueueMessage } from "@/lib/api";
 import { queueRowStatus, type DeliveredRow } from "@/hooks/use-message-queue";
 import { serializeMessage, splitMessageImages } from "@/lib/message-images";

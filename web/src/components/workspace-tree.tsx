@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { Link } from "react-router";
-import { ChevronRight, LayoutGrid } from "lucide-react";
+import { ChevronRight, LayoutGrid } from "@/components/ui/icon";
 
 import { OpeningMark, PaneMark, RowBody } from "@/components/nav-rows";
 import { StatusDot } from "@/components/status-badge";

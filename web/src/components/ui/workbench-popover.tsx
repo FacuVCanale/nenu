@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
 export type WorkbenchDismissReason = "outside" | "escape" | "close";

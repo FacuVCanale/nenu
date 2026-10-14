@@ -680,10 +680,10 @@ describe("QuestionCard", () => {
       expect(document.querySelector("[data-question-card]")).toHaveAttribute("aria-busy", "true");
     });
 
-    it("spins only where the tap landed while its thread opens", async () => {
+    it("marks only where the tap landed while its thread opens", async () => {
       const menu: Interaction = { ...base, kind: "menu", family: "claude", question: "Rewind", options: [{ index: 0, label: "Continue", role: "neutral" }] };
       const card = (opening: boolean) => <QuestionCard compact title="panel depo" interaction={menu} onAnswer={ok} onOpen={() => {}} opening={opening} />;
-      const spins = (el: HTMLElement) => el.querySelector(".animate-spin") !== null;
+      const spins = (el: HTMLElement) => el.querySelector(".icon-pending") !== null;
       const user = userEvent.setup();
       const { rerender } = render(card(false));
       const header = () => screen.getByRole("button", { name: /panel depo.*open thread/i });

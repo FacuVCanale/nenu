@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { ChevronRight, ExternalLink, Pending } from "@/components/ui/icon";
 
 import { errorMessage } from "@/components/node-start";
 import { BottomSheet } from "@/components/ui/sheet";
@@ -75,7 +75,7 @@ export function DiffBody({ read, footer, empty }: { read: DiffRead; footer?: Rea
   const diff = read.state === "read" ? read.diff : undefined;
   return <>
     {read.state === "loading" && <p role="status" className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
-      <Loader2 aria-hidden className="size-4 animate-spin" />Reading the diff…
+      <Pending aria-hidden className="size-4" />Reading the diff…
     </p>}
     {read.state === "failed" && <div className="px-4"><p role="alert" className="text-sm">{read.message}</p>{footer}</div>}
     {diff && !diff.ok && <div className="px-4"><p className="text-sm">{diff.message}</p>{footer}</div>}

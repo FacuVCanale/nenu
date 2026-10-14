@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Pending, X } from "@/components/ui/icon";
 
 import { shortName, useFitted } from "@/lib/fit-text";
 import {
@@ -333,7 +333,7 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
     {error && <div className="image-viewer-error">{error}</div>}
     {/* Waits 300ms before it shows, so a picture from the cache never flashes it. */}
     {!error && current && !loaded.has(current.src) && <div role="status" aria-label="Loading image" className="image-viewer-loading">
-      <Loader2 className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+      <Pending className="size-6" aria-hidden="true" />
     </div>}
     <header className="image-viewer-bar image-viewer-top">
       <button type="button" className="preview-done" onClick={onClose}><ChevronLeft className="size-6" aria-hidden="true" />Done</button>

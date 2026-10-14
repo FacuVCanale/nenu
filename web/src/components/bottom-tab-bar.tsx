@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { CirclePlus, House, Search } from "lucide-react";
+import { CirclePlus, House, Search } from "@/components/ui/icon";
 
 import { needYou } from "@/lib/home-stats";
 

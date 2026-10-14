@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal } from "react-dom";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, PanelTop, ScrollText, Search, TerminalSquare } from "lucide-react";
+import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { agentName } from "@/hooks/use-message-queue";
 import { StartAgent } from "@/components/start-agent";
@@ -938,7 +938,7 @@ export function AgentChat({
     ...(hasConversation ? [{ id: "history", label: "Conversation history", icon: ScrollText,
       run: () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) }] : []),
     ...(conversationCapable ? [{ id: "files", label: "Artifacts and files", icon: Paperclip, run: () => setFilesOpen(true) }] : []),
-    ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal view", icon: TerminalSquare, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
+    ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal view", icon: SquareTerminal, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
     ...composerControls.filter((control) => control.group === "View"),
   ];
   // Renaming and closing the pane and its tab, which otherwise hide behind a long-press on a chip.
@@ -1019,7 +1019,7 @@ export function AgentChat({
         <span className="truncate">Herdr isn't responding</span>
       </> : <>
         {isShell
-          ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" />
+          ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
           : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
         <span className="min-w-0 truncate">{place?.place}</span>
         {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
@@ -1061,7 +1061,7 @@ export function AgentChat({
                     title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                     className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
                   >
-                    {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
+                    {prefs.rawTerminal ? <ChatCircleText aria-hidden="true" className="size-4" /> : <SquareTerminal aria-hidden="true" className="size-4" />}
                   </button>
                 )}
                 {actionsMenu}
@@ -1226,7 +1226,7 @@ export function AgentChat({
                     className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60 coarse:min-h-11"
                   >
                     {loadingOlder ? (
-                      <Loader2 className="size-3.5 animate-spin" />
+                      <Pending className="size-3.5" />
                     ) : (
                       <ArrowUpToLine className="size-3.5" />
                     )}
@@ -1251,7 +1251,7 @@ export function AgentChat({
               </>
             ) : pending ? (
               <div role="status" aria-label="Reading the terminal" className="flex items-center justify-center gap-2 py-16 text-footnote text-muted-foreground">
-                <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />Reading the terminal…
+                <Pending aria-hidden="true" className="size-4" />Reading the terminal…
               </div>
             ) : (
               <div className="py-16 text-center text-sm text-muted-foreground">(no recent output)</div>
@@ -1428,7 +1428,7 @@ function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={onShow} className={cn(PRIMARY_ACTION, "w-auto flex-1")}>
-              <TerminalSquare aria-hidden className="size-4" />Show terminal
+              <SquareTerminal aria-hidden className="size-4" />Show terminal
             </button>
             <button type="button" onClick={onKeys} className={cn(NEUTRAL_ACTION, "w-auto")}>
               <Keyboard aria-hidden className="size-4" />Keys

@@ -1,5 +1,5 @@
 import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
+import { ArrowUp, Pending, ChatCircle } from "@/components/ui/icon";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { thirdScrollTop } from "@/components/find-bar";
@@ -121,7 +121,7 @@ function TranscriptSkeleton() {
     </div>
   );
   return (
-    <div role="status" data-slot="transcript-skeleton" className="flex flex-col gap-6 animate-pulse motion-reduce:animate-none">
+    <div role="status" data-slot="transcript-skeleton" className="flex flex-col gap-6">
       <span className="sr-only">Loading conversation…</span>
       {lines(["92%", "64%"])}
       <div data-skeleton-turn className="flex justify-end"><div className="h-16 w-3/5 rounded-xl rounded-br-md bg-muted" /></div>
@@ -474,7 +474,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
                 {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
-                  {loadingOlder ? <Loader2 aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" /> : <ArrowUp aria-hidden="true" className="size-3" />}
+                  {loadingOlder ? <Pending aria-hidden="true" className="size-3" /> : <ArrowUp aria-hidden="true" className="size-3" />}
                   {loadingOlder ? "Loading older messages…" : olderError ? "Retry older messages" : "Load older messages"}
                 </button>}
                 {olderError && <p role="status">Couldn't load older messages. Your conversation is still live.</p>}
@@ -492,9 +492,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {footer}
             </> : linkable ? <>
               {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
-                <MessageSquare aria-hidden="true" className="size-4 shrink-0" />No conversation linked
+                <ChatCircle aria-hidden="true" className="size-4 shrink-0" />No conversation linked
               </p> : <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
-                <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" />
+                <ChatCircle aria-hidden="true" className="mb-3 size-7 text-muted-foreground" />
                 <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
                 <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
@@ -502,7 +502,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               </section>}
               {footer}
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
-              <MessageSquare className="size-5" />
+              <ChatCircle className="size-5" />
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && recovery && <div className="w-full max-w-sm">{recovery}</div>}
               {!error && activityStatus === "working" && <WorkActivityLabel />}

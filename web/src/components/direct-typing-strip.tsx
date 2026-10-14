@@ -1,4 +1,4 @@
-import { Keyboard } from "lucide-react";
+import { Keyboard } from "@/components/ui/icon";
 
 // The armed indicator for direct typing, in the same in-flow slot as the "You sent:" strip.
 //

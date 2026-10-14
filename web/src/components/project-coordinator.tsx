@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Play, RefreshCw } from "lucide-react";
+import { Play, RefreshCw } from "@/components/ui/icon";
 
 import { FIELD, errorMessage, useStartOptions } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";

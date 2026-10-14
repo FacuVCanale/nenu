@@ -209,7 +209,7 @@ describe("the sidebar", () => {
   it("marks the project's coordinator with the workflow glyph", () => {
     open();
     const coordinator = within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: /^Coordinator/ });
-    expect(coordinator.querySelector("svg.lucide")).toHaveClass("lucide-workflow");
+    expect(coordinator.querySelector("svg.icon")).toHaveClass("icon-workflow");
   });
 
   it("marks each project with its own glyph, never its initial, in the tree, the drawer and Search", async () => {

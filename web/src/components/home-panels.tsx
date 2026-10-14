@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, ListFilter, Loader2, Sparkles, Workflow, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, ListFilter, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
-import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
+import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
@@ -41,7 +41,7 @@ export const isOpening = (opening: string | null, to: string) => opening !== nul
 
 /** The 16px spinner an opening row shows in place of its trailing mark (static under reduced motion). */
 export function OpeningSpinner({ className }: { className?: string }) {
-  return <Loader2 aria-hidden className={cn("size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none", className)} />;
+  return <Pending aria-hidden className={cn("size-4 shrink-0 text-muted-foreground", className)} />;
 }
 
 /** A button's label that a spinner covers while its action runs, so the button keeps its width. */
@@ -287,7 +287,7 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now, opening
 }) {
   const agents = allAgents(workflow);
   const running = agents.filter((a) => a.state === "running").slice(0, 3);
-  const elapsed = formatDuration(workflowElapsed(workflow, now));
+  const elapsed = workflowElapsed(workflow, now);
   const to = panePath(paneId, session);
   const busy = isOpening(opening, to);
   return (
@@ -307,7 +307,7 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now, opening
             <span key={a.id} className="flex items-center gap-2 text-footnote">
               <StateDot state="running" />
               <span className="min-w-0 flex-1 truncate">{a.label}</span>
-              <span className="shrink-0 text-muted-foreground tabular-nums">{formatDuration(agentElapsed(a, now))}</span>
+              <span className="shrink-0 text-muted-foreground tabular-nums">{agentElapsed(a, now)}</span>
             </span>
           ))}
         </span>
@@ -318,7 +318,7 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now, opening
 }
 
 /** One way to start, as a 64px row: what it starts and the one line that tells it apart. */
-function StarterRow({ icon: Icon, title, hint, disabled, onClick }: { icon: LucideIcon; title: string; hint: string; disabled: boolean; onClick: () => void }) {
+function StarterRow({ icon: Icon, title, hint, disabled, onClick }: { icon: IconComponent; title: string; hint: string; disabled: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled}
       className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent active:bg-muted disabled:pointer-events-none disabled:text-disabled-foreground">
@@ -341,7 +341,7 @@ export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean
     <section aria-label="Get started" className="flex flex-col gap-2">
       <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         <StarterRow icon={FolderPlus} title="Start an agent in a folder" hint="Pick the agent, then the folder." disabled={disabled} onClick={onFolder} />
-        <StarterRow icon={Sparkles} title="Start a project or a quick chat" hint="Many threads, or one question." disabled={disabled} onClick={onMore} />
+        <StarterRow icon={Sparkle} title="Start a project or a quick chat" hint="Many threads, or one question." disabled={disabled} onClick={onMore} />
       </div>
       <p className="text-footnote text-muted-foreground">Agents you start in Herdr show up here too.</p>
     </section>

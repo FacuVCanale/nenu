@@ -19,13 +19,17 @@ function visibility(value: boolean) {
 }
 
 describe("WorkActivityLabel", () => {
-  it("updates only the elapsed text without causing React commits for the surrounding transcript", () => {
+  it("updates only the elapsed text, once a minute, without causing React commits for the surrounding transcript", () => {
     const committed = vi.fn();
     render(<Profiler id="transcript" onRender={committed}><WorkActivityLabel startedAt={startedAt} /></Profiler>);
-    expect(screen.getByText("Working for 5s")).toBeVisible();
+    expect(screen.getByText("Working for <1m")).toBeVisible();
     const initialCommits = committed.mock.calls.length;
-    act(() => { vi.advanceTimersByTime(3000); });
-    expect(screen.getByText("Working for 8s")).toBeVisible();
+    act(() => { vi.advanceTimersByTime(54_000); });
+    expect(screen.getByText("Working for <1m")).toBeVisible();
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByText("Working for 1m")).toBeVisible();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(screen.getByText("Working for 2m")).toBeVisible();
     expect(committed).toHaveBeenCalledTimes(initialCommits);
   });
 
@@ -34,14 +38,14 @@ describe("WorkActivityLabel", () => {
     expect(vi.getTimerCount()).toBe(1);
     visibility(true);
     expect(vi.getTimerCount()).toBe(0);
-    act(() => { vi.advanceTimersByTime(10_000); });
-    expect(screen.getByText("Working for 5s")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(120_000); });
+    expect(screen.getByText("Working for <1m")).toBeInTheDocument();
     visibility(false);
-    expect(screen.getByText("Working for 15s")).toBeInTheDocument();
+    expect(screen.getByText("Working for 2m")).toBeInTheDocument();
     visibility(false);
     expect(vi.getTimerCount()).toBe(1);
-    act(() => { vi.advanceTimersByTime(1000); });
-    expect(screen.getByText("Working for 16s")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(55_000); });
+    expect(screen.getByText("Working for 3m")).toBeInTheDocument();
   });
 
   it("does not start a timer in a hidden tab", () => {
@@ -56,10 +60,10 @@ describe("WorkActivityLabel", () => {
     render(<WorkActivityLabel startedAt={startedAt} />);
     act(() => setLocked(true));
     expect(vi.getTimerCount()).toBe(0);
-    act(() => { vi.advanceTimersByTime(5000); });
-    expect(screen.getByText("Working for 5s")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(screen.getByText("Working for <1m")).toBeInTheDocument();
     act(() => setLocked(false));
-    expect(screen.getByText("Working for 10s")).toBeInTheDocument();
+    expect(screen.getByText("Working for 1m")).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(1);
   });
 
@@ -82,20 +86,21 @@ describe("WorkActivityLabel", () => {
 
   it("replaces the old interval when the next activity starts", () => {
     const { rerender } = render(<WorkActivityLabel startedAt={startedAt} />);
-    rerender(<WorkActivityLabel startedAt="2026-09-08T12:00:04Z" />);
-    expect(screen.getByText("Working for 1s")).toBeInTheDocument();
+    rerender(<WorkActivityLabel startedAt="2026-09-08T11:58:10Z" />);
+    expect(screen.getByText("Working for 1m")).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(1);
-    act(() => { vi.advanceTimersByTime(1000); });
-    expect(screen.getByText("Working for 2s")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(screen.getByText("Working for 2m")).toBeInTheDocument();
   });
 
-  // A pulse on the words was the only live signal, and reduced motion took it away. The glyph
-  // spins, and under reduced motion it is a steady dot: the state never rests on motion alone.
-  it("marks the live state with a glyph beside the words, and does not pulse the words", () => {
+  // A pulse on the words was the only live signal, and reduced motion took it away; a spinner then
+  // cost CPU for the whole turn. The mark is a steady dot in the working colour, for everyone.
+  it("marks the live state with a still dot beside the words, with nothing that moves", () => {
     const { container } = render(<WorkActivityLabel startedAt={startedAt} />);
     const glyph = container.querySelector("[data-live-glyph]");
     expect(glyph).toHaveAttribute("aria-hidden", "true");
-    expect(glyph?.querySelector("svg")).not.toBeNull();
-    expect(container.querySelector(".animate-pulse, .motion-safe\\:animate-pulse")).toBeNull();
+    expect(glyph).toHaveClass("text-status-working");
+    expect(glyph?.querySelector("svg")).toBeNull();
+    expect(container.querySelector("[class*='animate-']")).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { Pending } from "@/components/ui/icon";
 
 import { ListRow, ListSection } from "@/components/ui/list-group";
 import { Switch, switchSlot } from "@/components/ui/switch";
@@ -50,7 +50,7 @@ export function NotifyPrefsControl({ thisDevice, children }: { thisDevice?: Devi
                 aria-label={row.label}
               />
             ) : (
-              !loadFailed && <Loader2 aria-hidden="true" className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />
+              !loadFailed && <Pending aria-hidden="true" className="size-4 text-muted-foreground" />
             )}
           </div>
         </ListRow>

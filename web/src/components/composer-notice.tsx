@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from "react";
-import { X, type LucideIcon } from "lucide-react";
+import { X, type IconComponent } from "@/components/ui/icon";
 
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ export function ComposerNotice({
   dismissLabel = "Dismiss",
   tone = "info",
 }: {
-  icon: LucideIcon;
+  icon: IconComponent;
   title: string;
   children: ReactNode;
   actions?: ReactNode;

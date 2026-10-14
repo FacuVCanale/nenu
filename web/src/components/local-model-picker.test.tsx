@@ -94,7 +94,7 @@ it("marks the chosen row once, with a trailing check, and the others not at all"
   const a = screen.getByRole("radio", { name: "Model A" });
   const b = screen.getByRole("radio", { name: "Model B" });
   expect(marks(a)).toHaveLength(1);
-  expect(marks(a)[0]).toHaveClass("lucide-check");
+  expect(marks(a)[0]).toHaveClass("icon-check");
   expect(marks(b)).toHaveLength(0);
 
   await userEvent.click(b);

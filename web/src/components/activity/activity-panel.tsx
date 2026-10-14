@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Activity, Check, ChevronDown, ChevronRight, Radio, Terminal, Workflow } from "lucide-react";
+import { Activity, Check, ChevronDown, ChevronRight, Radio, Terminal, Workflow } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import {
   agentElapsed,
@@ -7,6 +7,7 @@ import {
   formatClock,
   formatCount,
   formatDuration,
+  formatElapsed,
   phaseDone,
   phaseRunning,
   workflowElapsed,
@@ -61,7 +62,7 @@ function PhaseBlock({ phase, workflow, now, onOpenWorkflow }: { phase: ActivityP
           <StateDot state={agent.state} />
           <span className="whitespace-nowrap text-[12.5px]">{agent.label}</span>
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{agent.state === "running" ? agent.lastTool : agent.resultPreview}</span>
-          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">{formatDuration(agentElapsed(agent, now))}</span>
+          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">{agentElapsed(agent, now)}</span>
         </button>
       ))}
     </div>
@@ -81,7 +82,7 @@ function RunningWorkflow({ workflow, now, initiallyOpen, onOpenWorkflow }: { wor
           <Workflow aria-hidden="true" className="size-4 shrink-0 text-status-working" />
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{workflow.name}</span>
           {!open && <AgentBar states={states} className="h-1 w-14 shrink-0" />}
-          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">{formatDuration(workflowElapsed(workflow, now))}</span>
+          <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">{workflowElapsed(workflow, now)}</span>
         </button>
       </div>
       {open && (
@@ -113,7 +114,7 @@ function FinishedWorkflowRow({ workflow, onOpen }: { workflow: ActivityWorkflow;
 }
 
 function taskResult(task: ActivityTask, now: number): ReactNode {
-  if (task.status === "running") return task.at !== undefined ? `running · output ${formatDuration(now - task.at)} ago` : "running";
+  if (task.status === "running") return task.at !== undefined ? `running · output ${formatElapsed(now - task.at)} ago` : "running";
   if (task.status === "unknown") return task.at !== undefined ? `no news since ${formatClock(task.at)}` : "no news";
   const exit = task.exitCode !== undefined ? `exit ${task.exitCode}` : task.event || task.status;
   return task.status === "failed" ? <span className="text-destructive">failed · {exit}</span> : exit;

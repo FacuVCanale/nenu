@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLoaderData, useParams, useRouteLoaderData } from "react-router";
-import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, ScrollText, Search, X } from "lucide-react";
+import { ArrowUpToLine, ChevronDown, ChevronUp, Pending, ScrollText, Search, X } from "@/components/ui/icon";
 
 import { AppHeader } from "@/components/app-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -286,7 +286,7 @@ export function HistoryRoute() {
               {!allRendered || hasMore ? (
                 <div className="mb-4 flex flex-col items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={growUpward} disabled={loading} aria-busy={loading || undefined} className="text-muted-foreground">
-                    {loading ? <Loader2 aria-hidden="true" className="animate-spin" /> : <ArrowUpToLine aria-hidden="true" />}
+                    {loading ? <Pending aria-hidden="true" /> : <ArrowUpToLine aria-hidden="true" />}
                     {loading ? "Loading…" : "Load older"}
                   </Button>
                   <p className="text-footnote text-subtle-foreground tabular-nums">

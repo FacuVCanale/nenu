@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronsUpDown, Loader2 } from "lucide-react";
+import { ChevronsUpDown, Pending } from "@/components/ui/icon";
 import { useRevalidator } from "react-router";
 
 import { listRowClass, listRowPressable } from "@/components/ui/list-group";
@@ -95,7 +95,7 @@ export function SnoozeControl({ snoozedUntil }: { snoozedUntil: number | null })
         {value}
       </span>
       {busy ? (
-        <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
+        <Pending aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       ) : (
         <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-subtle-foreground" />
       )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Pending } from "@/components/ui/icon";
 
 import type { MenuModel, StyledLine } from "@/lib/blocks";
 import {
@@ -70,7 +70,7 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
   }
 
   const spinner = (
-    <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Sending" />
+    <Pending className="size-4 shrink-0 text-muted-foreground" aria-label="Sending" />
   );
 
   // The arrows are the large primary's neutral sibling, side by side: same height and radius.
@@ -149,7 +149,7 @@ function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {
                 aria-busy={sending === id || undefined}
                 onClick={() => press(id, { keys: action.keys, nav: false })}
               >
-                {sending === id ? <Loader2 className="size-4 shrink-0 animate-spin" aria-label="Sending" /> : null}
+                {sending === id ? <Pending className="size-4 shrink-0" aria-label="Sending" /> : null}
                 {action.label}
               </Button>
             );

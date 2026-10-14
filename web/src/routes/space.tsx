@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Navigate, useNavigate, useParams, useRouteLoaderData } from "react-router";
-import { MessageSquare, Plus } from "lucide-react";
+import { ChatCircle, Plus } from "@/components/ui/icon";
 
 import { AppHeader, SettingsGear } from "@/components/app-header";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
@@ -51,7 +51,7 @@ export function SpaceRoute() {
       <ReadOnlyBanner device={data.device} />
       {workspace && (
         <div className="flex flex-1 flex-col border-t border-border/40">
-          <EmptyState icon={MessageSquare} title="Nothing runs in this workspace yet" className="my-auto" action={canCreate(data) && (
+          <EmptyState icon={ChatCircle} title="Nothing runs in this workspace yet" className="my-auto" action={canCreate(data) && (
             <Button type="button" onClick={() => openNewAgent({ kind: "tab", workspaceId: workspace.workspaceId })}>
               <Plus aria-hidden className="size-4" />Start an agent or a shell
             </Button>

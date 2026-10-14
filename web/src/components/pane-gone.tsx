@@ -1,4 +1,4 @@
-import { MessageSquareX, SearchX } from "lucide-react";
+import { ChatCircleSlash, SearchX } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -26,7 +26,7 @@ export function PaneGone({ closed, unsure, next, onOpen, onHome }: {
       ? ["Nenu can't find this pane yet", "It isn't in the last update from Herdr. Nenu looks again once it reconnects."]
       : ["That pane no longer exists", "This link points to a pane Herdr no longer has."];
   return (
-    <EmptyState icon={closed ? MessageSquareX : SearchX} title={title} className="my-auto" action={
+    <EmptyState icon={closed ? ChatCircleSlash : SearchX} title={title} className="my-auto" action={
       // Two ways on stack on a phone at one width, whatever the pane is called; a desk has room for a row.
       <div className={cn("flex flex-wrap items-center justify-center gap-2", next && "max-sm:w-[min(20rem,80vw)] max-sm:flex-col max-sm:flex-nowrap max-sm:items-stretch")}>
         {next && <Button type="button" size="lg" onClick={() => onOpen(next.paneId)} className="sm:max-w-[min(20rem,80vw)]">

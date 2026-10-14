@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { FileUp } from "lucide-react";
+import { FileUp } from "@/components/ui/icon";
 
 /**
  * Files dragged over `zone` (the chat, on a desk): returns where to draw the overlay while they are

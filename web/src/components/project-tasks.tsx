@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronRight, XCircle } from "lucide-react";
+import { ChevronRight, CircleX } from "@/components/ui/icon";
 
 import { TaskRow } from "@/components/node-row";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
@@ -186,7 +186,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
       <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes)} age={threadAge(thread, now)} current={onScreen(node)}
         onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} opens={thread.paneId ? "chat" : "details"}
         fold={resolved && node.children.length > 0 ? { open, onToggle: toggle } : undefined}
-        actions={resolved || readOnly ? undefined : [{ label: "Close", name: `Close ${thread.title}`, icon: XCircle, run: () => setClosing(node),
+        actions={resolved || readOnly ? undefined : [{ label: "Close", name: `Close ${thread.title}`, icon: CircleX, run: () => setClosing(node),
           menuLabel: thread.role === "coordinator" ? "Close coordinator…" : "Close thread…" }]}>
         {open && node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>}
       </TaskRow>
