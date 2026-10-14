@@ -125,9 +125,10 @@ it("answers a dialog in place from Needs you", async () => {
   );
   const { user, main } = await setup();
   const needs = within(await main.findByRole("region", { name: /^Needs you/ }));
-  expect(await needs.findByText("Do you want to proceed?")).toBeInTheDocument();
-  expect(needs.getByText(/Review changes · Nenu/)).toBeInTheDocument();
-  expect(headline()).toBe("1 thread needs you");
+  // One row: who asks, where, and what it would run, so the lists under it stay in the first screen.
+  expect(await needs.findByRole("link", { name: "Review changes, Nenu, Run bun run test?" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
+  expect(headline()).toBe("1 needs you");
+  expect(subline()).toBe("1 idle");
   await user.click(needs.getByRole("button", { name: "Yes" }));
   expect(answers).toEqual([{ pane: "w1:p2", body: { signature: "sig-1", optionIndex: 0 } }]);
   expect(await needs.findByText("Approved · bun run test")).toBeInTheDocument();
@@ -330,7 +331,7 @@ describe("a project's coordinator", () => {
 
 it("says a session is ready to review on its own row, with its pull request and size, instead of in a second list", async () => {
   const { user, router, main } = await setup(projectData);
-  expect(headline()).toBe("1 thread needs you");
+  expect(headline()).toBe("1 needs you");
   expect(subline()).toBe("1 to review · 1 working");
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
   expect(row).toHaveAccessibleName(/,\s*Ready to review,\s*Hub,\s*PR #1342,\s*\+212 −148$/);
@@ -389,10 +390,38 @@ describe("Recents and Workspaces", () => {
     expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
   });
 
-  it("says which session waits for your reply, which Needs you leaves to the list", async () => {
+  it("asks for your reply in Needs you, with Reply, and counts it in the headline", async () => {
     const waiting: ProjectView = { ...hub, threads: hub.threads.map((thread) => thread.id === "t3" ? { ...thread, liveStatus: "idle", group: "waiting-on-you", selfWaiting: true } : thread) };
-    const { main } = await setup({ ...recentData, projects: [waiting], agents: recentData.agents.map((agent) => agent.paneId === "w2:p3" ? { ...agent, status: "idle" } : agent) });
-    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Landing,/ })).toHaveAccessibleName(/^Landing,\s*Waiting for your reply,\s*Hub,\s*20m ago$/);
+    const { user, router, main } = await setup({ ...recentData, projects: [waiting], agents: recentData.agents.map((agent) => agent.paneId === "w2:p3" ? { ...agent, status: "idle" } : agent) });
+    const needs = within(main.getByRole("region", { name: /^Needs you/ }));
+    expect(needs.getByRole("link", { name: /^Landing, Hub, Waiting for your reply$/ })).toBeInTheDocument();
+    expect(headline()).toBe("2 need you");
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).queryByRole("link", { name: /^Landing,/ })).not.toBeInTheDocument();
+    await user.click(needs.getByRole("link", { name: "Reply" }));
+    expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
+  });
+
+  it("narrows the list to one project on a desk, from the snapshot it already has", async () => {
+    let reads = 0;
+    server.use(http.get("/api/snapshot", () => { reads++; return HttpResponse.json({}); }));
+    const { user, main } = await setup(recentData);
+    const filter = main.getByRole("combobox", { name: "Project" });
+    // A phone's Home shows every project: the filter is the desk's.
+    expect(filter.closest("label")).toHaveClass("max-sm:hidden");
+    expect(within(filter).getAllByRole("option").map((option) => option.textContent)).toEqual(["All projects", "Hub"]);
+    await user.selectOptions(filter, "hub");
+    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href")))
+      .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work"]);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    expect(within(main.getByRole("tabpanel", { name: "Workspaces" })).getAllByRole("link", { name: /^(Nenu|hub)$/ }).map((link) => link.textContent)).toEqual(["hub"]);
+    await user.selectOptions(filter, "");
+    expect(within(main.getByRole("tabpanel", { name: "Workspaces" })).getAllByRole("link", { name: /^(Nenu|hub)$/ })).toHaveLength(2);
+    expect(reads).toBe(0);
+  });
+
+  it("offers no project filter where there are no projects", async () => {
+    const { main } = await setup(data);
+    expect(main.queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
   });
 
   it("remembers on this device which list it shows", async () => {
@@ -550,7 +579,7 @@ it("lists the pull requests agents opened outside Organizations and reviews them
     pr(1698, { title: "Abandoned carts", paneIds: ["w1:p1"], checks: { passed: 2, failed: 1, pending: 0 }, diff: { additions: 3752, deletions: 154 } }),
     pr(1696, { title: "Publish products", review: "approved", checks: { passed: 4, failed: 0, pending: 0 } }),
   ] });
-  expect(headline()).toBe("1 thread needs you");
+  expect(headline()).toBe("1 needs you");
   expect(subline()).toBe("3 to review");
   // A PR on a session's branch rides on that session's row; the rest have no row, so they keep this list.
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
@@ -595,7 +624,7 @@ describe("an outage", () => {
   it("stays quiet through a brief failure: the same headline and lists", async () => {
     const { update, main } = await setup();
     await update({ ...data, error: true });
-    expect(headline()).toBe("1 thread needs you");
+    expect(headline()).toBe("1 needs you");
     expect(main.queryByText(/Can't reach|Last synced|Showing the last herd/)).not.toBeInTheDocument();
     expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread/ })).toBeInTheDocument();
   });
@@ -626,7 +655,7 @@ describe("an outage", () => {
     await needs.findByRole("button", { name: "Yes" });
     sustained();
     await update({ ...data, bridge: "disconnected" });
-    expect(headline()).toBe("1 thread needs you");
+    expect(headline()).toBe("1 needs you");
     expect(main.queryByText(/Can.t reach|Last synced|Showing the last herd|Nenu keeps trying/)).not.toBeInTheDocument();
     // The herd stays to look at and open; what it cannot vouch for is paused.
     expect(await needs.findByText("Answers are paused.")).toBeVisible();
@@ -639,14 +668,14 @@ describe("an outage", () => {
   it("keeps its work headline when Nenu stops answering, without dating the herd a second time", async () => {
     sustained();
     const { main } = await setup({ ...data, error: true, lastSeenAt: Date.now() - 3 * 60_000 });
-    expect(headline()).toBe("1 thread needs you");
+    expect(headline()).toBe("1 needs you");
     expect(screen.queryByText(/Can.t reach|Last synced/)).not.toBeInTheDocument();
     expect(main.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Reconnect to start an agent");
   });
 
   it("keeps its work headline when access is refused, and its composer asks to sign in", async () => {
     await setup({ ...data, error: true, authError: true });
-    expect(headline()).toBe("1 thread needs you");
+    expect(headline()).toBe("1 needs you");
     expect(screen.queryByText(/Access refused/)).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Task for a new agent" })).toHaveAttribute("placeholder", "Sign in again to start an agent");
   });
@@ -655,7 +684,7 @@ describe("an outage", () => {
   // banner dates it, once, as it does an outage.
   it("dates the herd it keeps under a refusal, once, in the banner", async () => {
     await underBanner({ ...data, error: true, authError: true, lastSeenAt: Date.now() - 3 * 60_000 });
-    expect(headline()).toBe("1 thread needs you");
+    expect(headline()).toBe("1 needs you");
     expect(screen.getAllByText(/Last synced/)).toHaveLength(1);
     expect(screen.getByRole("alert")).toHaveTextContent(/Last synced \d/);
   });
@@ -678,7 +707,7 @@ describe("an outage", () => {
   it("tells each Needs you card the real reason answers are paused", async () => {
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
     const { update, main } = await setup();
-    await main.findByText("Do you want to proceed?");
+    await main.findByText("bun run test");
     await update({ ...data, bridge: "disconnected" });
     expect(await main.findByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
     await update({ ...data, error: true });
@@ -724,11 +753,10 @@ it("keeps existing threads navigable while answering and creating are read-only"
   const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
   expect(main.getByRole("button", { name: "Start" })).toBeDisabled();
   const needs = within(main.getByRole("region", { name: /^Needs you/ }));
-  // The card says why, and lists what the agent offers with nothing to press.
+  // The row says why, with nothing to press; the thread stays one tap away.
   expect(await needs.findByText("Read-only on this device. Answer from an authorised one.")).toBeVisible();
   expect(needs.queryByRole("button", { name: "Yes" })).not.toBeInTheDocument();
-  expect(within(needs.getByRole("list", { name: "Options" })).getByText("Yes")).toBeVisible();
-  expect(needs.getByRole("button", { name: /open thread/i })).toBeEnabled();
+  expect(needs.getByRole("link", { name: "Answer" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
   const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
   expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
 });
