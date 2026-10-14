@@ -18,7 +18,7 @@ Nenu said "Sent". Measured in a disposable Herdr 0.9.3 on macOS, one byte-level 
 - Claude drops the first read. It takes a read of more than 800 characters as a paste, and when the
   rest of the message arrives as a second read it often keeps only that. Sent with plain
   `pane.send_text`, 1 025 characters logged only the last 3 in 3 of 3 sends on 2.1.300; 1 500
-  characters logged only the last 478 in 2 of 3 on 2.1.300, 3 of 3 on 2.1.299 and 2 of 2 on 2.1.296.
+  characters logged only the last 478 in 3 of 4 on 2.1.300, 3 of 3 on 2.1.299 and 2 of 2 on 2.1.296.
   2 000 and 4 000 characters, whose second read is a paste of its own, arrived whole. It is not new
   in 2.1.300.
 - Framed as ONE bracketed paste (`ESC[200~ … ESC[201~` inside the same `pane.send_text`, as Codex
