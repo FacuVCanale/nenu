@@ -2,9 +2,9 @@ import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-mes
 import { useStopTurn } from "@/hooks/use-stop-turn";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
+import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Loader2, Paperclip, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -42,9 +42,10 @@ import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
 import { ComposerNotice } from "@/components/composer-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
+import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { WorkActivityLabel } from "@/components/work-activity-label";
-import { readyPaths, useComposerAttachments } from "@/hooks/use-composer-attachments";
+import { MAX_ATTACHMENTS, readyPaths, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
 import {
   addLocalSend,
@@ -76,7 +77,7 @@ export interface ComposerHandle {
  * pane header's ⋯ menu, so the header keeps the view and the composer keeps the message.
  */
 export interface ComposerControl {
-  id: "photo" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
+  id: "attach" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
   group: (typeof MESSAGE_GROUPS)[number] | "View";
   label: string;
   icon: LucideIcon;
@@ -93,6 +94,8 @@ interface ComposerProps {
   paneId: string;
   /** The session the pane lives in (undefined = primary) — scopes every write to the right Herdr. */
   session?: string;
+  /** Where files dropped on a desk attach: the whole chat. Without it, the composer itself. */
+  dropZoneRef?: RefObject<HTMLElement | null>;
   /** The pane's agent name — drives the slash-command palette and the reply-vs-shell placeholder. */
   agent: string | undefined | null;
   /** True for a bare shell pane (tweaks the placeholder copy). */
@@ -278,16 +281,27 @@ interface SendFailure {
   retry: { text: string; isDraft: boolean } | null;
 }
 
-/** One line for the mirror view's "You sent" strip: the prose, and how many images went with it. */
+const counted = (n: number, noun: string) => (n ? `${n} ${noun}${n === 1 ? "" : "s"}` : "");
+
+/** One line for the mirror view's "You sent" strip: the prose, and how many images and files went with it. */
 function sentPreview(message: string): string {
-  const { text, images } = splitMessageImages(message);
+  const { text: rest, images } = splitMessageImages(message);
+  const { text, uploads: files } = splitDraftUploads(rest);
   const prose = text.length > 60 ? `${text.slice(0, 57)}…` : text;
-  const count = images.length ? `${images.length} image${images.length === 1 ? "" : "s"}` : "";
-  return [prose, count].filter(Boolean).join(" · ");
+  return [prose, counted(images.length, "image"), counted(files.length, "file")].filter(Boolean).join(" · ");
+}
+
+/** Why some of a pick, a paste or a drop stayed out of the draft; null when nothing did. */
+function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
+  const notes: string[] = [];
+  if (tooLarge.length === 1) notes.push(`${tooLarge[0]} is over 25 MB, the limit for one file.`);
+  else if (tooLarge.length > 1) notes.push(`${tooLarge.length} files are over 25 MB, the limit for one file.`);
+  if (overLimit) notes.push(`${counted(overLimit, "file")} skipped: up to ${MAX_ATTACHMENTS} per message.`);
+  return notes.length ? notes.join(" ") : null;
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -953,14 +967,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     else void send(retry.text, false);
   }
 
-  /** Never send a message without an image the operator attached to it. */
+  /** Never send a message without a file the operator attached to it. */
   function attachmentsSettled(): boolean {
     if (attachments.uploading) {
-      setStatus("Wait for the image to finish uploading.", "info");
+      setStatus("Wait for the file to finish uploading.", "info");
       return false;
     }
     if (attachments.failed) {
-      setStatus("An image didn't upload. Tap it to retry, or remove it.", "error");
+      setStatus("A file didn't upload. Tap it to retry, or remove it.", "error");
       return false;
     }
     return true;
@@ -1091,32 +1105,33 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     focusInputEnd();
   }
 
-  // Attach images: picker (multi-select), clipboard paste and drag-and-drop all land here. Each one
-  // uploads straight away and shows as a chip; the paths join the text only when the message is sent.
+  // Attach files of any kind: picker (multi-select), clipboard paste and drag-and-drop all land here.
+  // Each one uploads straight away and shows as a chip; the paths join the text only when the message
+  // is sent.
   function attachFiles(files: Iterable<File>) {
     if (locked || direct.active) return;
     setFailure(null); // the draft changed, so the refusal no longer describes it
-    const skipped = attachments.add(files);
-    if (skipped > 0) setStatus(`${skipped} file${skipped === 1 ? "" : "s"} skipped. Only images, up to 10 per message.`, "info");
+    const note = refusalNote(attachments.add(files));
+    if (note) setStatus(note, "info");
     focusInputEnd();
   }
 
-  function onPickImage(e: ChangeEvent<HTMLInputElement>) {
+  function onPickFiles(e: ChangeEvent<HTMLInputElement>) {
     const files = [...(e.target.files ?? [])];
     e.target.value = ""; // allow re-picking the same file
     attachFiles(files);
   }
 
-  // Paste an image straight from the clipboard (e.g. a screenshot) the same way the picker does.
-  // Only intercepts when the clipboard actually carries an image file — a plain text paste (the
+  // Paste a file straight from the clipboard (a screenshot, a file copied on a desk) the same way the
+  // picker does. Only intercepts when the clipboard actually carries a file — a plain text paste (the
   // common case) falls through untouched.
-  function onPasteImage(e: ClipboardEvent<HTMLTextAreaElement>) {
+  function onPasteFiles(e: ClipboardEvent<HTMLTextAreaElement>) {
     if (locked || direct.active) return;
     const items = e.clipboardData.items;
     const files: File[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const file = item.kind === "file" && item.type.startsWith("image/") ? item.getAsFile() : null;
+      const file = item.kind === "file" ? item.getAsFile() : null;
       if (file) files.push(file);
     }
     if (!files.length) return;
@@ -1127,7 +1142,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The secondary controls, published to the header menu. Their handlers read the latest render
   // through a ref, so the list is re-published only when something a menu row shows has changed.
   const toggleDock = (dock: Exclude<ComposerDrawer, null>) => requestDrawer(drawer === dock ? null : dock);
-  const controlActions = useRef({ toggleDock, type: () => {}, photo: () => {} });
+  const controlActions = useRef({ toggleDock, type: () => {}, attach: () => {} });
   controlActions.current = {
     toggleDock,
     type: () => {
@@ -1141,13 +1156,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       direct.activate();
     },
     // Synchronous inside the row's click, so the browser still counts it as the user's gesture.
-    photo: () => fileRef.current?.click(),
+    attach: () => fileRef.current?.click(),
   };
   const dockControl = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
     disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
   });
   const controls: ComposerControl[] = [
-    { id: "photo", group: "Attach", label: "Photo", icon: ImagePlus, disabled: locked || direct.active, run: () => controlActions.current.photo() },
+    { id: "attach", group: "Attach", label: "Files and photos", icon: Paperclip, disabled: locked || direct.active, run: () => controlActions.current.attach() },
     { id: "quick", group: "Replies", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
     ...(commands.length > 0 ? [{ id: "commands", group: "Replies", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") } as const] : []),
     { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dockControl("keys", locked) },
@@ -1188,27 +1203,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (returnFocus) plusRef.current?.focus({ preventScroll: true });
   }
 
-  const [dragging, setDragging] = useState(false);
-  const dropHandlers = locked || direct.active ? {} : {
-    onDragOver: (e: DragEvent) => {
-      if (!e.dataTransfer.types.includes("Files")) return;
-      e.preventDefault();
-      setDragging(true);
-    },
-    onDragLeave: (e: DragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
-    },
-    onDrop: (e: DragEvent) => {
-      if (!e.dataTransfer.files.length) return;
-      e.preventDefault();
-      setDragging(false);
-      attachFiles(e.dataTransfer.files);
-    },
-  };
+  // Files dragged over the chat (or, without one, over the composer) attach as if picked.
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const dropOver = useFileDrop(dropZoneRef ?? surfaceRef, !(locked || direct.active), attachFiles);
 
   return (
     <>
-      <div {...dropHandlers} className={cn("composer-surface", dragging && "composer-dragging")}>
+      {dropOver && <FileDropOverlay rect={dropOver} />}
+      <div ref={surfaceRef} className="composer-surface">
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {delivering && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
@@ -1228,8 +1230,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         )}
 
         {/* File input stays mounted here, outside the + menu, so the picker callback survives the
-            menu closing. The menu's Photo row fires it inside its own tap. */}
-        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickImage} />
+            menu closing. The menu's Files and photos row fires it inside its own tap. No `accept`:
+            any file goes, and a phone's picker then offers files, the photo library and the camera. */}
+        <input ref={fileRef} type="file" multiple hidden onChange={onPickFiles} />
         {/* Keys / Quick / Display / Usage dock — one in-flow site above the input, so the panel
             grows over the conversation, not the draft. Whichever of the mutually exclusive drawers is
             active renders here via the shared ComposerDock chrome. Keys mounts the NavTray (unmounts on
@@ -1432,7 +1435,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       }
                     }
               }
-              onPaste={onPasteImage}
+              onPaste={onPasteFiles}
               placeholder={
                 gone
                   ? "Pane is gone"

@@ -1751,16 +1751,16 @@ describe("Composer — attaching any file", () => {
     fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files } });
 
   it("uploads a PDF, an archive and source as chips named by the file", async () => {
-    const uploaded: string[] = [];
-    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, async ({ request }) => {
-      const file = (await request.formData()).get("file") as File;
-      uploaded.push(file.name);
-      return HttpResponse.json({ ok: true, path: `/st/uploads/w1_p1-mv8g-0a1b2c3d-${file.name}` });
-    }));
+    let uploads = 0;
+    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: `/st/uploads/w1_p1-mv8g-0a1b2c3d-${++uploads}.bin` })));
     renderComposer();
     pick(new File(["%PDF"], "spec.pdf", { type: "application/pdf" }), new File(["PK"], "bundle.zip"), new File(["x"], "cart.ts"));
     for (const name of ["spec.pdf", "bundle.zip", "cart.ts"]) expect(await screen.findByRole("button", { name: `Remove ${name}` })).toBeInTheDocument();
-    await waitFor(() => expect(uploaded).toEqual(["spec.pdf", "bundle.zip", "cart.ts"]));
+    await waitFor(() => expect(uploads).toBe(3));
+    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
+    const list = screen.getByRole("list", { name: "Attached files" });
+    expect(list).toHaveTextContent("spec.pdfPDF · 4 B");
+    expect(list.querySelectorAll("img")).toHaveLength(0);
   });
 
   it("refuses a file over 25 MB before uploading it, and says why", async () => {
@@ -2317,7 +2317,7 @@ describe("Composer — images and the pending bubble", () => {
     fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
     });
-    await screen.findByRole("button", { name: "Remove Image 1" });
+    await screen.findByRole("button", { name: "Remove shot.png" });
     await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
     await userEvent.type(box, text);
     return box;
@@ -2335,7 +2335,7 @@ describe("Composer — images and the pending bubble", () => {
 
     await waitFor(() => expect(sends.map((send) => send.text)).toEqual([`see the edge ${UPLOAD}`]));
     expect(box).toHaveValue("");
-    expect(screen.queryByRole("button", { name: "Remove Image 1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).not.toBeInTheDocument();
     const scope = localSendScope("w1:p1", undefined);
     expect(listLocalSends(scope)).toEqual([expect.objectContaining({ text: `see the edge ${UPLOAD}`, state: "sending" })]);
 

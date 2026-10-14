@@ -44,7 +44,7 @@ describe("useComposerAttachments", () => {
     expect(upload).toHaveBeenCalledTimes(2);
   });
 
-  it("takes any kind of file, and refuses one over 25 MB or past the count limit", () => {
+  it("takes any kind of file, and refuses one over 25 MB or past the count limit", async () => {
     const upload = vi.fn(() => new Promise<UploadResponse>(() => {}));
     const create = vi.spyOn(URL, "createObjectURL");
     const { result } = setup(upload);
@@ -56,13 +56,14 @@ describe("useComposerAttachments", () => {
     expect(result.current.items[0]).toEqual(expect.objectContaining({ name: "spec.pdf", size: 4, image: false, url: undefined }));
     // Only an image gets a local preview; a PDF or an archive is never read into the page.
     expect(create).toHaveBeenCalledTimes(MAX_ATTACHMENTS - 1);
-    expect(upload).toHaveBeenCalledTimes(MAX_ATTACHMENTS);
     create.mockRestore();
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(MAX_ATTACHMENTS));
   });
 
   it("restores a saved non-image upload by its name, without asking for a preview", () => {
     const { result } = setup(() => new Promise(() => {}), ["/st/uploads/w1_p1-mv8g-0a1b2c3d-spec.pdf"]);
-    expect(result.current.items).toEqual([expect.objectContaining({ status: "ready", image: false, name: "spec.pdf", url: undefined })]);
+    expect(result.current.items).toEqual([expect.objectContaining({ status: "ready", image: false, name: "spec.pdf" })]);
+    expect(result.current.items[0]!.url).toBeUndefined();
   });
 
   it("revokes the preview of an image removed before it was uploaded", () => {
