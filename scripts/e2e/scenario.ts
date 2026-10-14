@@ -361,3 +361,35 @@ export function diffOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
     : thread);
   return seed;
 }
+
+/**
+ * A neutral store project for Home's list: a coordinator thread on the idle pane running a worker on
+ * the working pane (PR on `e2e-demo`, sized as `size` says), a worker on the blocked pane, a worker
+ * ready for review with no pane, and an idle worker of the project's own.
+ */
+export function homeOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at: number, size: { additions: number; deletions: number }): OrgSeed {
+  const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
+  const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0]!, tab_id: tabId, pane_id: paneId });
+  const pr = (number: number, extra: Record<string, unknown> = {}) => ({
+    url: `https://github.com/acme/shop/pull/${number}`, state: "OPEN", review: "REVIEW_REQUIRED", checks: { passed: 6, pending: 0, failed: 0 },
+    additions: 64, deletions: 12, failing: [], comment_count: 0, draft: false, mergeable: "MERGEABLE", merge_blocker: null, ...extra,
+  });
+  const node = (id: string, title: string, parent: string, role: "worker" | "coordinator", group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
+    id, title, parent_id: parent, role, status: group === "resolved" ? "resolved" : "open", group, group_label: group, note: "", branch: "",
+    workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes), report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null, ...extra,
+  });
+  return {
+    profiles: ["claude", "codex"],
+    projects: [{
+      slug: "acme-shop", name: "Acme Shop", goal: "Storefront, checkout and the admin panel", status: "active",
+      threads: [
+        node("t-0001", "Search index", "root", "worker", "resolved", 3000),
+        node("t-0010", "Checkout redesign", "root", "coordinator", "working", 1, bound(herd.idle, "w1:t2")),
+        node("t-0011", "Payments webhook", "t-0010", "worker", "waiting-on-you", 4, bound(herd.blocked, "w2:t1")),
+        node("t-0012", "Checkout flow", "t-0010", "worker", "working", 0, { ...bound(herd.working, "w1:t1"), branch: "e2e-demo", pr: pr(42, size) }),
+        node("t-0013", "Cart badge", "t-0010", "worker", "ready-for-review", 12, { pr: pr(41, { review: "APPROVED" }) }),
+        node("t-0014", "Login hotfix", "root", "worker", "idle", 35),
+      ],
+    }],
+  };
+}

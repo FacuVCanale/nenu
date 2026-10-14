@@ -5,7 +5,7 @@ import { ArrowUp, Check, ChevronDown, Loader2, MessagesSquare, Wifi } from "luci
 import { ColumnPage } from "@/components/column-page";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { BusySendSheet, HomeHeading, HomeStarters, RecentChats, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
+import { BusySendSheet, HomeHeading, HomeSessions, HomeStarters, Reveal, RunningWorkCard, SendNotice, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf, type LockReason } from "@/components/question-card";
@@ -16,7 +16,7 @@ import { busyChoiceFor } from "@/hooks/use-message-queue";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue, isDefiniteRefusal } from "@/lib/api";
 import { isConnecting } from "@/lib/connection";
-import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, unboundReviews, workspaceChats } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -26,10 +26,11 @@ import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence, a composer that reaches a
-// coordinator or starts a thread, what needs you (answered in place), the chats that moved last, what
-// is ready to review and the workflows still running. Projects and workspaces live in the sidebar
-// (Browse on a phone), so Home never repeats them. Figures come from the snapshot, the bridge's
-// detected dialogs and the Claude sessions' background work; nothing here is stored history.
+// coordinator or starts a thread, what needs you (answered in place), then one list of every session
+// that reads as Recents or by Workspace, each row carrying its pull request; below it only the pull
+// requests no session carries and the workflows still running. Projects live in the sidebar (Browse
+// on a phone). Figures come from the snapshot, the bridge's detected dialogs and the Claude sessions'
+// background work; nothing here is stored history.
 //
 // When the link fails, the connection banner (root.tsx) is the one place that names the problem and
 // dates the herd. Home keeps saying what the work is: a brief failure changes nothing on screen (the
@@ -61,13 +62,14 @@ export function HomeRoute() {
   }
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
+  const panes = [...data.agents, ...data.shellPanes];
   const needs = needsYouItems(data.agents, interactions.interactions);
   const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
-  // A pane Needs you holds (asking, or just answered) stays out of Recent.
-  const recent = recentChats(data.agents, data.projects, new Set([...needs, ...receipts].map((item) => item.paneId)));
   // "Nothing needs you" only from a live herd whose dialogs were read; anything older cannot vouch for it.
   const calm = live && interactions.loaded && !interactions.stale && data.agents.length > 0 && !needs.length && !receipts.length;
   const reviews = reviewQueue(data.projects, data.pullRequests);
+  // A pane Needs you holds (asking, or just answered) stays out of Recents.
+  const recent = recentChats(panes, data.projects, new Set([...needs, ...receipts].map((item) => item.paneId)), reviews);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
   const { title, detail } = homeHeadline(counts, data.agents.length);
@@ -97,8 +99,8 @@ export function HomeRoute() {
           ? <p className="flex items-center gap-2 text-footnote text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
           : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
             interactions={interactions} lockReason={lock} opening={opening} />}
-        <RecentChats chats={recent} session={data.session} now={now} opening={opening} />
-        <ReadyToReviewList entries={reviews} session={data.session} opening={opening} />
+        <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} herd={data} session={data.session} now={now} opening={opening} />
+        <ReadyToReviewList entries={unboundReviews(reviews, panes)} session={data.session} opening={opening} />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
             <HomeHeading id="home-running" label="Running in background" count={running.length} />
