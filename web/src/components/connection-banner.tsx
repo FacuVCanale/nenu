@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRevalidator } from "react-router";
-import {
-  Loader2,
-  LogIn,
-  RefreshCw,
-  RotateCw,
-  TriangleAlert,
-  WifiOff,
-} from "lucide-react";
+import { Pending, LogIn, RefreshCw, RotateCw, TriangleAlert, WifiOff } from "@/components/ui/icon";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -114,7 +107,7 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
         <LastSynced at={lastSeenAt} />
       </p>
       <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
-        {retrying ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <RotateCw aria-hidden="true" className="size-4" />}
+        {retrying ? <Pending aria-hidden="true" className="size-4" /> : <RotateCw aria-hidden="true" className="size-4" />}
         Retry
       </Button>
     </div>

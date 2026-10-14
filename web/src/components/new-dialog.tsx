@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
-import { AppWindow, ChevronRight, Folder, FolderGit2, FolderPlus, MessageCircle, Sparkles, X, type LucideIcon } from "lucide-react";
+import { AppWindow, ChevronRight, Folder, FolderGit2, FolderPlus, ChatCircle, Sparkle, X, type IconComponent } from "@/components/ui/icon";
 import { useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import {
@@ -91,7 +91,7 @@ export function projectCommand(name: string, goal: string, repo: string): string
   return ["herdr-organizations", "new", ...flags, "--json", "--", shellWord(name.trim() || "…")].join(" ");
 }
 
-type KindRow = { id: NewKind; label: string; hint: string; icon: LucideIcon };
+type KindRow = { id: NewKind; label: string; hint: string; icon: IconComponent };
 
 const canStart = (project: ProjectView) => startableRoles(project).length > 0;
 
@@ -163,11 +163,11 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   const start: KindRow[] = [
     ...(workspace ? [{ id: "tab" as const, label: `Here in ${workspaceName(workspace)}`, hint: "Runs in this workspace, in a new tab", icon: AppWindow }] : []),
     { id: "workspace", label: "In a new folder", hint: "Pick a folder for a new workspace", icon: FolderPlus },
-    { id: "chat", label: "Quick question", hint: "No folder, nothing to clean up", icon: Sparkles },
+    { id: "chat", label: "Quick question", hint: "No folder, nothing to clean up", icon: Sparkle },
   ];
   const organize: KindRow[] = [
     { id: "project", label: "Project", hint: "Agents working toward one goal", icon: Folder },
-    ...(current && projects.some(canStart) ? [{ id: "thread" as const, label: "Thread", hint: `One task in ${current.name}`, icon: MessageCircle }] : []),
+    ...(current && projects.some(canStart) ? [{ id: "thread" as const, label: "Thread", hint: `One task in ${current.name}`, icon: ChatCircle }] : []),
   ];
   const agentPane = { data, readOnly, message: preset.message, browsing, onBrowsing: setBrowsing, onDone: onClose };
 

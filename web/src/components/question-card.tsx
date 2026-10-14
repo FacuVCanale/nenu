@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
-import { AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight, Keyboard, Loader2, MessageSquareText, RefreshCw, TerminalSquare } from "lucide-react";
+import { CircleAlert, TriangleAlert, Check, ChevronLeft, ChevronRight, Keyboard, Pending, ChatCircleText, RefreshCw, SquareTerminal } from "@/components/ui/icon";
 
 import { MarkdownText } from "@/components/markdown-text";
 import {
@@ -288,7 +288,7 @@ export function QuestionCard({
   const replyRow = (option: InteractionOption) => (
     <button key={option.index} type="button" disabled={locked} aria-expanded={false} aria-controls={textId}
       onClick={() => write({ to: "reply", option })} className={optionRow()}>
-      {!compact && <MessageSquareText aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+      {!compact && <ChatCircleText aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
       <span className="min-w-0 flex-1 break-words text-body font-medium text-muted-foreground">{replyLabel(option)}</span>
     </button>
   );
@@ -298,7 +298,7 @@ export function QuestionCard({
     onOpen?.();
   };
   const primaryOpening = opening && openedByPrimary;
-  const openingSpinner = <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />;
+  const openingSpinner = <Pending aria-hidden className="size-4 shrink-0" />;
   // Home's one way into the thread from the card, as its one large primary.
   const toThread = onOpen && (
     <Button type="button" size="block" aria-busy={primaryOpening || undefined} onClick={openFrom(true)}>
@@ -325,7 +325,7 @@ export function QuestionCard({
   const noticeView = notice && (
     <div className="flex flex-col gap-2">
       <p ref={noticeLine} role="status" className={cn("flex items-start gap-2 text-body", notice.tone === "error" ? "text-destructive" : "text-status-working")}>
-        {notice.tone === "error" ? <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" /> : <RefreshCw aria-hidden className="mt-0.5 size-4 shrink-0" />}
+        {notice.tone === "error" ? <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" /> : <RefreshCw aria-hidden className="mt-0.5 size-4 shrink-0" />}
         <span className="min-w-0">{notice.text}</span>
       </p>
       {/* The card's own row already leads to the terminal (or the thread): one way there, not two. */}
@@ -384,7 +384,7 @@ export function QuestionCard({
           </div>
           {onOpen && (
             <Button type="button" size="block" aria-busy={(compact && primaryOpening) || undefined} onClick={openFrom(true)}>
-              {compact ? primaryOpening && openingSpinner : <TerminalSquare aria-hidden className="size-4 shrink-0" />}{openLabelFor}
+              {compact ? primaryOpening && openingSpinner : <SquareTerminal aria-hidden className="size-4 shrink-0" />}{openLabelFor}
             </Button>
           )}
         </div>
@@ -412,7 +412,7 @@ export function QuestionCard({
               data-role={option.role} data-quiet={quiet(option) || undefined} data-failed={failed === option.index || undefined}
               disabled={rowProps(option).disabled} aria-busy={busy === option.index || undefined} onClick={() => press(option)}
               className={cn(failed === option.index && FAILED)}>
-              {busy === option.index && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin" />}
+              {busy === option.index && <Pending aria-label="Sending" className="size-4 shrink-0" />}
               {/* One flex item: the button's gap would otherwise split "Submit" from its count. */}
               <span>{decisionLabel(option) ?? option.label}</span>
             </Button>
@@ -434,7 +434,7 @@ export function QuestionCard({
               className="min-h-16 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-body outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             {reply && (
               <Button type="submit" size="block" disabled={locked || !draft.trim()} aria-busy={busy === reply.index || undefined}>
-                {busy === reply.index && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin" />}Send
+                {busy === reply.index && <Pending aria-hidden className="size-4 shrink-0" />}Send
               </Button>
             )}
             <div className="-mx-2 flex items-center gap-2">
@@ -458,7 +458,7 @@ export function QuestionCard({
           <SecondaryActions>
             {!staticList && escapes.map((option) => (
               <button key={option.index} type="button" data-role={option.role} disabled={rowProps(option).disabled} onClick={() => press(option)} className={SECONDARY}>
-                {busy === option.index && <Loader2 aria-label="Sending" className="size-4 animate-spin" />}{option.label}
+                {busy === option.index && <Pending aria-label="Sending" className="size-4" />}{option.label}
               </button>
             ))}
             {answerable && notable && !writing && <NoteButton locked={locked} textId={textId} className={SECONDARY} onClick={() => write({ to: "note" })} />}
@@ -474,7 +474,7 @@ export function QuestionCard({
             ))}
             {!compact && onOpen && (
               <button type="button" onClick={onOpen} className={cn(SECONDARY, "sm:ml-auto")}>
-                <TerminalSquare aria-hidden className="size-4 shrink-0" />Terminal
+                <SquareTerminal aria-hidden className="size-4 shrink-0" />Terminal
               </button>
             )}
           </SecondaryActions>
@@ -514,7 +514,7 @@ function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?:
       {who}
       <span className="sr-only">, open thread</span>
       {opening
-        ? <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
+        ? <Pending aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         : <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
     </button>
   );
@@ -668,7 +668,7 @@ function ReviewAnswers({ answers, incomplete }: { answers: InteractionAnswer[]; 
     )}
     {incomplete && (
       <p className="flex items-center gap-2 text-body text-status-working">
-        <AlertTriangle aria-hidden className="size-4 shrink-0" />Some questions have no answer
+        <TriangleAlert aria-hidden className="size-4 shrink-0" />Some questions have no answer
       </p>
     )}
   </>;
@@ -689,7 +689,7 @@ export function AutoDeny({ at }: { at: number }) {
   const s = Math.floor(left / 1000);
   return (
     <p className="flex items-center gap-2 text-footnote text-status-working">
-      <AlertTriangle aria-hidden className="size-4 shrink-0" />
+      <TriangleAlert aria-hidden className="size-4 shrink-0" />
       {left > 0 ? `Claude denies this on its own in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} if nobody answers.` : "Claude is denying this now."}
     </p>
   );
@@ -760,7 +760,7 @@ function ChoiceRow({ option, toggle, armed, busy, failed, disabled, onPress, cla
           </span>
         )}
       </span>
-      {busy && <Loader2 aria-label="Sending" className="size-4 shrink-0 animate-spin text-muted-foreground" />}
+      {busy && <Pending aria-label="Sending" className="size-4 shrink-0 text-muted-foreground" />}
     </button>
   );
 }

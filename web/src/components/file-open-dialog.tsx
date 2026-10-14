@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Pending } from "@/components/ui/icon";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -84,7 +84,7 @@ export function FileOpenButton({ paneId, session, path, label, className, childr
               </a>
             : grant.state === "refused"
               ? <Button type="button" size="lg" onClick={ask}>Try again</Button>
-              : <Button type="button" size="lg" disabled><Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />Open</Button>}
+              : <Button type="button" size="lg" disabled><Pending className="size-4" aria-hidden="true" />Open</Button>}
         </div>
       </Dialog>
     </div>

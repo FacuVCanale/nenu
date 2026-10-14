@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, Check, Clock, Loader2, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { CircleAlert, Check, Clock, Pending, Ellipsis, type IconComponent } from "@/components/ui/icon";
 
 import { ActionGroups } from "@/components/conversation-actions";
 import { MarkdownText } from "@/components/markdown-text";
@@ -15,7 +15,7 @@ export type QueuedTone = ReturnType<typeof queueRowStatus>["tone"];
 export interface QueuedAction {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   run: () => void;
   disabled?: boolean;
   /** An accessible name that says more than the visible label (it must still contain it). */
@@ -27,9 +27,9 @@ export interface QueuedAction {
 // Inline, so the mark flows with the words of the status line it leads.
 const MARK = "mr-0.5 inline-block size-3.5 align-[-2px]";
 const TONE_ICON: Record<Exclude<QueuedTone, "waiting">, ReactNode> = {
-  busy: <Loader2 aria-hidden="true" className={cn(MARK, "animate-spin motion-reduce:animate-none")} />,
+  busy: <Pending aria-hidden="true" className={MARK} />,
   done: <Check aria-hidden="true" className={MARK} />,
-  problem: <AlertCircle aria-hidden="true" className={MARK} />,
+  problem: <CircleAlert aria-hidden="true" className={MARK} />,
 };
 
 /**
@@ -147,7 +147,7 @@ export function QueuedMessage({
                 onClick={() => setOpen(!open)}
                 className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
               >
-                <MoreHorizontal aria-hidden="true" className="size-5" />
+                <Ellipsis aria-hidden="true" className="size-5" />
               </button>
             )}
           </div>

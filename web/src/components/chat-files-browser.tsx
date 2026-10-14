@@ -1,7 +1,7 @@
 import { ArtifactsPanel } from "./artifacts-panel";
 import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FileText, Loader2, Paperclip, RefreshCw } from "lucide-react";
+import { FileText, Pending, Paperclip, RefreshCw } from "@/components/ui/icon";
 
 import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -269,7 +269,7 @@ export function ChatFilesBrowser({
         </div>}
         {scan.loading && (
           <div role="status" className="mb-3 flex min-h-11 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-muted-foreground">
-            <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+            <Pending aria-hidden="true" className="size-4" />
             Scanning the full conversation…
           </div>
         )}

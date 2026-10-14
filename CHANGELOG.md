@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-15
+
+### Changed
+- Every icon is Hugeicons Stroke Rounded from one facade, with Phosphor's sparkle for agents and chat circle for messages; lucide-react is gone. (eb6b26ac)
+- Nothing animates on its own: Working shows a still dot, the top bar and loading skeletons are still, and running times count in minutes; CPU with Working on screen drops from 1.85 s to 0.17 s per minute (measured). (eb6b26ac)
+
 ## [1.7.0] - 2026-10-15
 
 ### Added

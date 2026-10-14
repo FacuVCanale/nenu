@@ -126,7 +126,7 @@ describe("PaneActionsSheet — rename", () => {
 
   // While the write is out, Save used to sit disabled at the same colour with nothing moving: on a
   // slow link that reads as a tap that never took.
-  it("shows a spinner on Save while the rename is in flight, keeping its name", async () => {
+  it("shows the pending mark on Save while the rename is in flight, keeping its name", async () => {
     const user = userEvent.setup();
     let release = () => {};
     server.use(
@@ -140,7 +140,7 @@ describe("PaneActionsSheet — rename", () => {
 
     const save = screen.getByRole("button", { name: "Save" });
     await waitFor(() => expect(save).toHaveAttribute("aria-busy", "true"));
-    expect(save.querySelector(".animate-spin")).not.toBeNull();
+    expect(save.querySelector(".icon-pending")).not.toBeNull();
     release();
     await waitFor(() => expect(props.onRenamed).toHaveBeenCalledTimes(1));
   });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { GitPullRequest } from "lucide-react";
+import { GitPullRequest } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
 import { FoldedList, HomeHeading, isOpening, OpeningSpinner } from "@/components/home-panels";

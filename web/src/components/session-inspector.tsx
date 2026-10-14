@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps, type RefObject } from "react";
-import { PanelRightOpen } from "lucide-react";
+import { PanelRightOpen } from "@/components/ui/icon";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { isLocked } from "@/lib/idle";

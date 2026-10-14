@@ -1,4 +1,4 @@
-import { KeyRound } from "lucide-react";
+import { KeyRound } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
 import { ComposerNotice } from "@/components/composer-notice";

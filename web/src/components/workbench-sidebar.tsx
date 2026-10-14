@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "lucide-react";
+import { ChevronRight, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
 
 import { NodeDot } from "@/components/node-row";
 import { ProjectGlyph } from "@/components/project-glyph";

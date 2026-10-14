@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Check, Copy, Loader2 } from "lucide-react";
+import { ArrowUpRight, Check, Copy, Pending } from "@/components/ui/icon";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -85,7 +85,7 @@ export function UpdateCheckControl() {
         )}
         {status.action?.kind === "reload" && (
           <Button disabled={reload === "busy"} aria-busy={reload === "busy" || undefined} onClick={reloadInterface}>
-            {reload === "busy" && <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
+            {reload === "busy" && <Pending aria-hidden="true" />}
             Reload interface
           </Button>
         )}
@@ -131,7 +131,7 @@ function Badge({ status }: { status: UpdateStatus }) {
       )}
     >
       {/* The colour rides a dot, so the words keep full contrast on the tint in both themes. */}
-      {status.working && <Loader2 aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />}
+      {status.working && <Pending aria-hidden="true" className="size-3" />}
       {status.tone !== "neutral" && (
         <span aria-hidden="true" className={cn("size-1.5 rounded-full", status.tone === "error" ? "bg-destructive" : "bg-primary")} />
       )}

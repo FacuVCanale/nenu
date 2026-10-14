@@ -1,5 +1,5 @@
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
-import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, MessageCircleQuestion, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
+import { Sparkle, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, ChatCircleDots, Search, SquareTerminal, Wrench, type IconComponent } from "@/components/ui/icon";
 import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
@@ -70,9 +70,9 @@ export function useToolImages() {
   return (part: ToolPart, owner?: string) => toolImages(part, owner, viewer, url);
 }
 
-const STEP_ICONS: Record<StepKind | "thinking", LucideIcon> = {
-  terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Bot, plan: ListTodo, tool: Wrench,
-  question: MessageCircleQuestion, thinking: Brain,
+const STEP_ICONS: Record<StepKind | "thinking", IconComponent> = {
+  terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Sparkle, plan: ListTodo, tool: Wrench,
+  question: ChatCircleDots, thinking: Sparkle,
 };
 
 /**

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, MessageSquareShare } from "lucide-react";
+import { ChevronLeft, ChatCircleDots } from "@/components/ui/icon";
 import { fetchSubagentHistory, isApiErrorStatus } from "@/lib/api";
 import { isLocked, useLocked } from "@/lib/idle";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
@@ -220,7 +220,7 @@ export function SubagentConversation({
             aria-label={`Write to ${child.name} through Main`}
             className="flex min-h-11 items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
           >
-            <MessageSquareShare aria-hidden className="size-4 shrink-0" />
+            <ChatCircleDots aria-hidden className="size-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate">Write to it through Main…</span>
           </button>
         )}

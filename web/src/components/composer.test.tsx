@@ -669,7 +669,7 @@ describe("Composer — typing into the terminal", () => {
   // The row arms typing into the terminal's input, so it shows a text cursor, not a shell prompt.
   it("marks the row with a text cursor", () => {
     renderComposer();
-    expect(control(/^type into terminal$/i).querySelector("svg")).toHaveClass("lucide-text-cursor-input");
+    expect(control(/^type into terminal$/i).querySelector("svg")).toHaveClass("icon-text-cursor-input");
   });
 
   it("focuses the textarea synchronously so the activation gesture opens the phone keyboard", () => {

@@ -1,5 +1,5 @@
 import { Link, useLocation, useRouteLoaderData } from "react-router";
-import { Unlink } from "lucide-react";
+import { Unlink } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
 import { buttonVariants } from "@/components/ui/button";

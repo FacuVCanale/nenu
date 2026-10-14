@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { BookOpen, Terminal } from "lucide-react";
+import { BookOpen, Terminal } from "@/components/ui/icon";
 import type { SkillOption } from "@/lib/skill-completion";
 
 interface SkillPickerProps {

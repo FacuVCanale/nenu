@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import { Check, Copy, MessageSquare, Workflow, X } from "lucide-react";
+import { Check, Copy, ChatCircle, Workflow, X } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -7,7 +7,6 @@ import {
   allAgents,
   formatClock,
   formatCount,
-  formatDuration,
   phaseDone,
   phaseRunning,
   workflowElapsed,
@@ -57,7 +56,7 @@ export function WorkflowAgentList({ workflow, now, selectedAgentId, onSelectAgen
                   {doing && <span className="truncate text-xs text-muted-foreground">{doing}</span>}
                 </span>
                 <span className={cn("shrink-0 text-xs tabular-nums", agent.state === "running" ? "text-status-working" : "text-muted-foreground")}>
-                  {formatDuration(agentElapsed(agent, now))}
+                  {agentElapsed(agent, now)}
                 </span>
               </button>
             );
@@ -137,7 +136,7 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
           <span className="flex-1" />
           {onClose && <Button variant="ghost" size="icon" aria-label="Close agent" onClick={onClose}><X aria-hidden="true" /></Button>}
         </div>
-        <Meta items={[agent.phase, formatDuration(agentElapsed(agent, now)), agent.toolCalls !== undefined ? `${agent.toolCalls} tool calls` : "", agent.tokens !== undefined ? `${formatCount(agent.tokens)} tokens` : "", agent.model ?? ""]} />
+        <Meta items={[agent.phase, agentElapsed(agent, now), agent.toolCalls !== undefined ? `${agent.toolCalls} tool calls` : "", agent.tokens !== undefined ? `${formatCount(agent.tokens)} tokens` : "", agent.model ?? ""]} />
       </div>
       <div className="px-[18px] py-4">
         {result !== undefined ? <AgentResult value={result} />
@@ -146,7 +145,7 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
       </div>
       {(result !== undefined || onOpenTranscript) && (
         <div className="flex gap-2 border-t border-border px-[18px] py-3">
-          {onOpenTranscript && <Button variant="outline" size="sm" className="min-h-11 lg:min-h-8" onClick={() => onOpenTranscript(agent.id)}><MessageSquare aria-hidden="true" />Open transcript</Button>}
+          {onOpenTranscript && <Button variant="outline" size="sm" className="min-h-11 lg:min-h-8" onClick={() => onOpenTranscript(agent.id)}><ChatCircle aria-hidden="true" />Open transcript</Button>}
           {result !== undefined && <Button variant="outline" size="sm" className="min-h-11 lg:min-h-8" onClick={copy}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy result"}</Button>}
         </div>
       )}
@@ -191,7 +190,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
           </div>
           <div className="flex gap-6">
             <Stat value={`${workflow.doneCount}/${workflow.agentCount}`} label="agents done" />
-            <Stat value={formatDuration(workflowElapsed(workflow, now)) || "–"} label={workflow.status === "running" ? "elapsed" : "took"} />
+            <Stat value={workflowElapsed(workflow, now) || "–"} label={workflow.status === "running" ? "elapsed" : "took"} />
             {workflow.totalToolCalls !== undefined && <Stat value={String(workflow.totalToolCalls)} label="tool calls" />}
             {workflow.totalTokens !== undefined && <Stat value={formatCount(workflow.totalTokens)} label="tokens" />}
           </div>

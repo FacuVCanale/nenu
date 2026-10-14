@@ -1,6 +1,6 @@
 import { AgentIcon } from "@/components/agent-icon";
 import { useId, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Pending } from "@/components/ui/icon";
 import type { MenuModel } from "@/lib/blocks";
 import { modelRowKeys, type NativeModelMenu as ParsedModelMenu } from "@/lib/native-model-menu";
 import type { MenuBlockAction } from "./menu-block";
@@ -77,7 +77,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
               </span>
               {row.description && <span id={`${id}-description-${index}`} className="mt-1 block text-xs leading-snug text-muted-foreground">{row.description}</span>}
             </span>
-            {sending === `row-${index}` ? <Loader2 aria-label="Updating selection" className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /> : row.selected && <Check aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />}
+            {sending === `row-${index}` ? <Pending aria-label="Updating selection" className="size-3.5 shrink-0" /> : row.selected && <Check aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />}
           </button>
         ))}
       </div>
@@ -94,7 +94,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-3">
         {[...menu.actions.filter((action) => action.cancel), ...menu.actions.filter((action) => !action.cancel)].map((action, index) => (
           <button key={index} type="button" disabled={locked} onClick={() => void press(`action-${index}`, { keys: action.keys, nav: false })} className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium disabled:opacity-50 ${action.cancel ? "mr-auto text-muted-foreground hover:bg-accent" : "border border-border bg-secondary text-foreground hover:bg-accent"}`}>
-            {sending === `action-${index}` && <Loader2 aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />}{action.label}
+            {sending === `action-${index}` && <Pending aria-hidden="true" className="size-3" />}{action.label}
           </button>
         ))}
       </div>

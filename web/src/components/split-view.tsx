@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { Maximize2, MessageSquare, TerminalSquare, X } from "lucide-react";
+import { Maximize2, ChatCircle, SquareTerminal, X } from "@/components/ui/icon";
 
 import { AgentChat, type DockedHeaderView } from "@/components/agent-chat";
 import { PrBar } from "@/components/pr-bar";
@@ -159,7 +159,7 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
       <span className="shrink-0 text-sm font-semibold">{thread.title}</span>
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{subtitle}</span>
       {canToggle && <div role="group" aria-label="View" className="flex shrink-0 rounded-lg bg-muted/50 p-0.5">
-        {([[false, "Chat", MessageSquare], [true, "Terminal", TerminalSquare]] as const).map(([value, label, Icon]) => (
+        {([[false, "Chat", ChatCircle], [true, "Terminal", SquareTerminal]] as const).map(([value, label, Icon]) => (
           <button key={label} type="button" aria-pressed={terminal === value} onClick={() => setTerminal(value)}
             className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs", terminal === value ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}>
             <Icon aria-hidden className="size-3.5" />{label}

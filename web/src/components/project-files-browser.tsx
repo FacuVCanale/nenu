@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  ChevronRight,
-  FileText,
-  Folder,
-  FolderOpen,
-  RefreshCw,
-} from "lucide-react";
+import { ChevronRight, FileText, Folder, FolderOpen, RefreshCw } from "@/components/ui/icon";
 import { fetchProjectFiles, type ProjectFilesPage } from "@/lib/api";
 
 type Props = {

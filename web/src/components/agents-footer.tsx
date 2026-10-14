@@ -14,7 +14,7 @@
 // the state.
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/ui/icon";
 import type { StyledLine } from "@/lib/blocks";
 import { MIRROR_INVERT, MIRROR_SPACE, styleFor } from "@/components/mirror-space";
 import { cn } from "@/lib/utils";

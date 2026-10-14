@@ -7,7 +7,7 @@ import { ChatMedia } from "./chat-media";
 import { MediaViewerContext } from "./file-preview-provider";
 import { ImageStrip, JournalImages, type StripImage } from "./message-images";
 import { useContext, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "@/components/ui/icon";
 
 import { CopyButton, QUIET_ACTION } from "@/components/copy-button";
 import { MarkdownText } from "@/components/markdown-text";

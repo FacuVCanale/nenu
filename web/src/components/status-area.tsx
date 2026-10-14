@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronRight, Info, X } from "lucide-react";
+import { CircleAlert, TriangleAlert, CircleCheck, ChevronRight, Info, X } from "@/components/ui/icon";
 
 import { cn } from "@/lib/utils";
 import { clearStatus, pauseStatus, resumeStatus, useStatus, type StatusMessage, type StatusTone } from "@/lib/status";
@@ -12,7 +12,7 @@ const TONE: Record<StatusTone, string> = {
   warn: "text-status-working",
   error: "text-status-blocked",
 };
-const ICONS = { info: Info, success: CheckCircle2, warn: AlertTriangle, error: AlertCircle } as const;
+const ICONS = { info: Info, success: CircleCheck, warn: TriangleAlert, error: CircleAlert } as const;
 
 /** A dismissed toast stays drawn this long while it fades and drifts 8px back up. */
 export const TOAST_EXIT_MS = 150;

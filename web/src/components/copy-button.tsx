@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy } from "@/components/ui/icon";
 
 const CONFIRM_MS = 2000;
 const COPY_LABEL = { idle: "Copy", copied: "Copied", failed: "Failed" } as const;

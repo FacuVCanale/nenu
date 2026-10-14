@@ -1,5 +1,5 @@
 import { useContext, type ReactNode } from "react";
-import { ChevronLeft, Settings2 } from "lucide-react";
+import { ChevronLeft, Settings2 } from "@/components/ui/icon";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
@@ -92,7 +92,6 @@ export function AppHeader({
               onHome={navigation?.onOpen}
               label={navigation ? "Open navigation" : undefined}
               expanded={navigation?.open}
-              trouble={lost}
               lost={lost}
               className="workbench-chat-menu lg:hidden"
             />

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft, X } from "@/components/ui/icon";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";

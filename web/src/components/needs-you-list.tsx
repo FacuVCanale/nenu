@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { AlertCircle, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { CircleAlert, ChevronRight, Pending, RefreshCw } from "@/components/ui/icon";
 
 import { isOpening, OpeningSpinner } from "@/components/home-panels";
 import { AutoDeny, QuestionCard, useLockLine, type LockReason } from "@/components/question-card";
@@ -178,7 +178,7 @@ function AskRow({ interaction: i, who, to, opening, lockLine, readOnly, refused,
         {i.autoDenyAt !== undefined && <AutoDeny at={i.autoDenyAt} />}
         {notice && (
           <p role="status" className={cn("flex items-start gap-2 text-footnote", notice.tone === "error" ? "text-destructive" : "text-status-working")}>
-            {notice.tone === "error" ? <AlertCircle aria-hidden className="mt-px size-3.5 shrink-0" /> : <RefreshCw aria-hidden className="mt-px size-3.5 shrink-0" />}
+            {notice.tone === "error" ? <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" /> : <RefreshCw aria-hidden className="mt-px size-3.5 shrink-0" />}
             <span className="min-w-0">{notice.text}</span>
           </p>
         )}
@@ -191,7 +191,7 @@ function AskRow({ interaction: i, who, to, opening, lockLine, readOnly, refused,
               {[...quick].sort((a, b) => Number(b.role === "deny") - Number(a.role === "deny")).map((option) => (
                 <Button key={option.index} type="button" size="sm" variant={option.role === "primary" ? "default" : "outline"} title={option.description}
                   disabled={busy !== null || lockLine !== null} aria-busy={busy === option.index || undefined} onClick={() => void press(option)}>
-                  {busy === option.index && <Loader2 aria-hidden className="size-3.5 animate-spin motion-reduce:animate-none" />}{option.label}
+                  {busy === option.index && <Pending aria-hidden className="size-3.5" />}{option.label}
                 </Button>
               ))}
             </span>

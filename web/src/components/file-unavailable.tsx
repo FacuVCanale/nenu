@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy } from "@/components/ui/icon";
 
 import type { PaneRoot } from "@/lib/file-links";
 import { FileOpenButton } from "./file-open-dialog";

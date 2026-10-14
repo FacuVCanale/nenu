@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Pending } from "@/components/ui/icon";
 import { useRouteLoaderData } from "react-router";
 
 import { AppHeader } from "@/components/app-header";
@@ -78,7 +78,7 @@ export function SettingsRoute() {
               {state ? (
                 <Switch checked={on} disabled={toggleDisabled} onCheckedChange={toggle} aria-label="Push notifications" />
               ) : (
-                <Loader2 className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />
+                <Pending className="size-4 text-muted-foreground" />
               )}
             </div>
           </ListRow>

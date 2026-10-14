@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { File as FileIcon, FileArchive, FileCode, FileImage, FileText, Loader2, RotateCw, X, type LucideIcon } from "lucide-react";
+import { File as FileIcon, FileArchive, FileCode, FileImage, FileText, Pending, RotateCw, X, type IconComponent } from "@/components/ui/icon";
 
 import type { Attachment } from "@/hooks/use-composer-attachments";
 import { imageLabel } from "@/lib/message-images";
@@ -13,7 +13,7 @@ function extension(name: string): string | null {
   return /\.([A-Za-z0-9]{1,10})$/.exec(name)?.[1]!.toLowerCase() ?? null;
 }
 
-function fileIcon(item: Attachment, ext: string | null): LucideIcon {
+function fileIcon(item: Attachment, ext: string | null): IconComponent {
   if (item.image) return FileImage;
   if (ext && ARCHIVE.test(ext)) return FileArchive;
   if (ext && CODE.test(ext)) return FileCode;
@@ -90,7 +90,7 @@ function AttachmentChip({
         )}
         {item.status === "uploading" && (
           <span className="absolute inset-0 grid place-items-center bg-background/70">
-            <Loader2 aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" />
+            <Pending aria-hidden="true" className="size-3.5" />
           </span>
         )}
         {failed && (

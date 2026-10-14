@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent } from "react";
-import { Moon, MonitorSmartphone, Sun } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Moon, MonitorSmartphone, Sun } from "@/components/ui/icon";
+import type { IconComponent } from "@/components/ui/icon";
 
 import { useTheme } from "@/hooks/use-theme";
 import type { Theme } from "@/hooks/use-theme";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 // implies you are meant to keep reaching for it, and this is a set-once preference — System already
 // follows the phone, which is the situational flip (outdoors, in bed) happening on its own.
 
-const OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: LucideIcon }> = [
+const OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: IconComponent }> = [
   { value: "system", label: "System", icon: MonitorSmartphone },
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },

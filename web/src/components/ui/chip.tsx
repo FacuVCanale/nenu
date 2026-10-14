@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/ui/icon";
 
 import { useLongPress } from "@/hooks/use-long-press";
 import { StatusDot } from "@/components/status-badge";
