@@ -1,5 +1,5 @@
-import { useRef, useState, type ComponentProps, type MutableRefObject } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState, type ComponentProps } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
@@ -7,9 +7,10 @@ import { server } from "@/test/setup";
 import { clearStatus, useStatus } from "@/lib/status";
 import { Composer } from "./composer";
 
-// On a desk the session panel's Terminal tab holds Keys and the "Type into terminal" switch, and the
-// + menu keeps the message-side rows only. The composer still owns both: the tab is a place it draws
-// into while the tab is on screen (agent-chat.tsx hands it over as `sessionPanel`).
+// On a desk the session panel's Terminal tab holds the "Type into terminal" switch under the mirror,
+// and the desk's own keyboard is the keys; the + menu keeps the message-side rows only. The composer
+// still owns the switch: the tab is a place it draws into while the tab is on screen (agent-chat.tsx
+// hands it over as `sessionPanel`).
 
 beforeAll(() => {
   if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
@@ -39,8 +40,6 @@ const base: ComponentProps<typeof Composer> = {
   usageControls: <span>usage</span>,
 };
 
-let leaving: MutableRefObject<(() => boolean) | null>;
-
 /** A desk: the composer beside a stand-in for the panel's Terminal tab, which the buttons put away. */
 function Desk(props: Partial<ComponentProps<typeof Composer>>) {
   const [shown, setShown] = useState(true);
@@ -48,14 +47,13 @@ function Desk(props: Partial<ComponentProps<typeof Composer>>) {
   const [gone, setGone] = useState(false);
   const [mirror, setMirror] = useState<HTMLElement | null>(null);
   const [controls, setControls] = useState<HTMLElement | null>(null);
-  leaving = useRef<(() => boolean) | null>(null);
   return <>
     <button type="button" onClick={() => setShown((on) => !on)}>toggle tab</button>
     <button type="button" onClick={() => setPaneId("w1:p2")}>other pane</button>
     <button type="button" onClick={() => setGone(true)}>lock it</button>
     {shown && <section aria-label="Terminal tab"><div ref={setMirror} /><div ref={setControls} /></section>}
     <Composer {...base} {...props} paneId={paneId} gone={gone}
-      sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal: () => setShown(true), leaving }} />
+      sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal: () => setShown(true) }} />
     <Status />
   </>;
 }
@@ -68,6 +66,15 @@ function renderDesk(props: Partial<ComponentProps<typeof Composer>> = {}) {
 function renderPhone() {
   const router = createMemoryRouter([{ path: "/", element: <Composer {...base} /> }]);
   render(<RouterProvider router={router} />);
+}
+
+function recordKeys(): string[][] {
+  const sent: string[][] = [];
+  server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+    sent.push(((await request.json()) as { keys: string[] }).keys);
+    return HttpResponse.json({ ok: true });
+  }));
+  return sent;
 }
 
 const tab = () => within(screen.getByRole("region", { name: "Terminal tab" }));
@@ -83,11 +90,13 @@ function menuRows(): string[] {
 }
 
 describe("Composer on a desk — the session panel's Terminal tab", () => {
-  it("keeps the + menu to Files and photos, Commands and Context; Keys and Type sit in the tab", () => {
+  it("keeps the + menu to Files and photos, Commands and Context; the tab holds the switch and no keys", () => {
     renderDesk();
     expect(menuRows()).toEqual(["Files and photos", "Commands", "Context and usage"]);
-    expect(tab().getByRole("button", { name: "Esc" })).toBeInTheDocument();
     expect(typeSwitch()).toHaveAttribute("aria-checked", "false");
+    expect(tab().queryByRole("region", { name: "Keys" })).not.toBeInTheDocument();
+    expect(tab().queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
+    expect(tab().queryByText(/Quick replies/)).not.toBeInTheDocument();
   });
 
   it("leaves the phone's + menu as it was", () => {
@@ -95,15 +104,41 @@ describe("Composer on a desk — the session panel's Terminal tab", () => {
     expect(menuRows()).toEqual(["Files and photos", "Quick replies", "Commands", "Keys", "Type into terminal", "Context and usage"]);
   });
 
-  it("presses a key from the tab straight into the pane", async () => {
-    const sent: string[][] = [];
-    server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
-      sent.push(((await request.json()) as { keys: string[] }).keys);
-      return HttpResponse.json({ ok: true });
-    }));
+  // What the tray's keys did, the desk's keyboard does once the switch is armed.
+  it("sends the desk's keyboard to the pane while armed: Esc, Ctrl chords, arrows, Tab, Shift+Tab, Enter, Backspace, F-keys", async () => {
+    const sent = recordKeys();
     renderDesk();
-    fireEvent.click(tab().getByRole("button", { name: "Esc" }));
-    await waitFor(() => expect(sent).toEqual([["Escape"]]));
+    fireEvent.click(typeSwitch());
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    const presses: Array<[Parameters<typeof fireEvent.keyDown>[1], string]> = [
+      [{ key: "Escape" }, "Escape"],
+      [{ key: "c", ctrlKey: true }, "ctrl+c"],
+      [{ key: "d", ctrlKey: true }, "ctrl+d"],
+      [{ key: "R", ctrlKey: true, shiftKey: true }, "ctrl+shift+r"],
+      [{ key: "ArrowUp" }, "Up"],
+      [{ key: "ArrowDown" }, "Down"],
+      [{ key: "ArrowLeft", altKey: true }, "alt+Left"],
+      [{ key: "ArrowRight" }, "Right"],
+      [{ key: "Tab" }, "Tab"],
+      [{ key: "Tab", shiftKey: true }, "shift+Tab"],
+      [{ key: "Enter" }, "Enter"],
+      [{ key: "Backspace" }, "Backspace"],
+      [{ key: "F5" }, "F5"],
+      [{ key: "F12" }, "F12"],
+    ];
+    for (const [press] of presses) expect(fireEvent.keyDown(field, press)).toBe(false);
+    await waitFor(() => expect(sent.flat()).toEqual(presses.map(([, wire]) => wire)));
+  });
+
+  it("leaves Command, and Ctrl+V outside Apple keyboards, to the browser: a paste still reaches the pane as text", async () => {
+    const sent = recordKeys();
+    renderDesk();
+    fireEvent.click(typeSwitch());
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    expect(fireEvent.keyDown(field, { key: "c", metaKey: true })).toBe(true);
+    expect(fireEvent.keyDown(field, { key: "v", ctrlKey: true })).toBe(true);
+    fireEvent.change(field, { target: { value: "ls" } });
+    await waitFor(() => expect(sent.flat()).toEqual(["l", "s"]));
   });
 
   it("arms Type into terminal from the switch, focused in the composer, and the switch disarms it", () => {
@@ -169,21 +204,5 @@ describe("Composer on a desk — the session panel's Terminal tab", () => {
     expect(typeSwitch()).toHaveAttribute("aria-checked", "false");
     expect(armed()).toBe(false);
     expect(Object.keys(localStorage).join(" ")).not.toMatch(/type|direct|armed/i);
-  });
-
-  // ADR 0005: leaving the Keys discards a staged queue, so the way out takes a second tap. In the tab
-  // the way out is the panel's (another tab, ⋯, folding it), which asks `leaving` first.
-  it("asks a second time before the tab leaves with keys staged", () => {
-    renderDesk();
-    expect(leaving.current?.()).toBe(true);
-    fireEvent.click(tab().getByRole("button", { name: "Ctrl" }));
-    fireEvent.click(tab().getByRole("button", { name: /^Tab$/ }));
-    let first: boolean | undefined;
-    act(() => { first = leaving.current?.(); });
-    expect(first).toBe(false);
-    expect(screen.getByTestId("status")).toHaveTextContent("Tap again to discard 1 queued key");
-    let second: boolean | undefined;
-    act(() => { second = leaving.current?.(); });
-    expect(second).toBe(true);
   });
 });
