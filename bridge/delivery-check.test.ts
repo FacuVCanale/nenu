@@ -30,11 +30,28 @@ describe("loggedMessage", () => {
 });
 
 describe("unwrapPastes", () => {
+  const paragraphs = (text: string) => text.split(/\n{2,}/);
+
   test("puts a logged paste back as the text it held", () => {
     expect(unwrapPastes(wrap("alpha bravo"))).toBe("alpha bravo");
-    expect(unwrapPastes(`${wrap("alpha", "a1")}${wrap("bravo", "b2")}`)).toBe("alphabravo");
-    expect(unwrapPastes(`${wrap("alpha bravo charlie")}\nK.`)).toBe("alpha bravo charlie\nK.");
+    expect(unwrapPastes(wrap("  indented\n\n  code"))).toBe("  indented\n\n  code");
     expect(unwrapPastes("no paste here")).toBe("no paste here");
+    expect(unwrapPastes("\n  typed text keeps its edges\n")).toBe("\n  typed text keeps its edges\n");
+  });
+
+  test("text around a paste, or a second paste, stays apart from it", () => {
+    expect(paragraphs(unwrapPastes(`${wrap("alpha", "a1")}${wrap("bravo", "b2")}`))).toEqual(["alpha", "bravo"]);
+    expect(paragraphs(unwrapPastes(`Look at this:${wrap("alpha bravo")}\nthanks`))).toEqual(["Look at this:", "alpha bravo", "thanks"]);
+  });
+
+  // Measured on 2.1.296 to 2.1.300: a queue row and the absorbed attachment carry the message
+  // trimmed, so the closing tag ends the text.
+  test("reads the trimmed paste of Claude's queue rows", () => {
+    expect(unwrapPastes('<pasted_content id="75ce">\nalpha bravo\n</pasted_content id="75ce">')).toBe("alpha bravo");
+  });
+
+  test("leaves text that only mentions the tag alone", () => {
+    expect(unwrapPastes('Claude logs <pasted_content id="x"> around a paste')).toBe('Claude logs <pasted_content id="x"> around a paste');
   });
 });
 

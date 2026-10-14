@@ -41,6 +41,35 @@ describe("Claude structured rows", () => {
     expect(pendingQuestion).toBeUndefined();
   });
 
+  // Captured 2026-10-14 in a disposable Herdr 0.9.3 with Claude Code 2.1.300: three 1 500-character
+  // messages Nenu sent as one bracketed paste each (A typed, C queued for after the turn, D sent into
+  // Claude's own queue and absorbed mid-turn). Claude logged every one between `<pasted_content>` tags.
+  test("a pasted message reads as the text it held, whole and without Claude's paste tags (2.1.300)", async () => {
+    const parser = new ClaudeParser();
+    feedText(await Bun.file(join(FIXTURES, "journal-long-paste-v2300.jsonl")).text(), (l, o, b) => parser.line(l, o, b));
+    const said = parser.entries().filter((e) => e.role === "user").map((e) => (e.parts[0]?.kind === "text" ? e.parts[0].text : ""));
+    const pasted = said.filter((text) => text.includes("-HEAD-MARK"));
+    expect(pasted.map((text) => text.match(/([A-Z])-HEAD-MARK/)?.[1])).toEqual(["A", "C", "D"]);
+    for (const text of pasted) {
+      expect(text).not.toContain("pasted_content");
+      expect(text).toMatch(/^Reply only OK\. [A-Z]-HEAD-MARK alpha0 bravo1 /);
+      expect(text).toMatch(/ [A-Z]-TAIL-MARK reply only OK\.$/);
+      expect(text).toHaveLength(1500);
+    }
+    // Claude's own queue rows name the message as the operator wrote it, so a queued row can find it.
+    const { queue } = parser.facts();
+    expect(queue.filter((q) => q.kind === "enqueue" || q.kind === "remove" || q.kind === "queued_command").map((q) => q.content)).toEqual([pasted[2], pasted[2], pasted[2]]);
+  });
+
+  // 30 such rows in one machine's logs (2.1.280 to 2.1.299): a message with an image is a list of
+  // blocks, and its text block carries the paste tags the same way.
+  test("a paste beside an attached image reads without the tags too", () => {
+    const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } };
+    const text = { type: "text", text: '[Image #1] Look at this:\n\n<pasted_content id="5bb7">\nline one\nline two\n</pasted_content id="5bb7">\n' };
+    const [entry] = parse([{ type: "user", uuid: "u", timestamp: "t", origin: { kind: "human" }, message: { role: "user", content: [image, text] } }]).entries();
+    expect(entry!.parts).toEqual([{ kind: "image", index: 0, mediaType: "image/png" }, { kind: "text", text: "[Image #1] Look at this:\n\nline one\nline two" }]);
+  });
+
   test("custom-title names the session, the newest one winning", () => {
     const parser = parse([
       { type: "custom-title", customTitle: "first", sessionId: "s" },
