@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-14
+
+### Fixed
+- A thread that finished and said it waits for you, with no dialog on screen, reads "Waiting for your reply" with a Reply button instead of "Asked you a question"; the sidebar says "needs reply". A real dialog still reads as before. (027c0b3c)
+
 ## [1.3.1] - 2026-10-14
 
 ### Fixed
