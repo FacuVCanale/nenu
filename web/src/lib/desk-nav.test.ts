@@ -22,7 +22,7 @@ const acme: ProjectView = {
 };
 
 describe("the desk's chats", () => {
-  const agents = [pane("coord", { lastActiveAt: now }), pane("flow", { lastActiveAt: now - 2 * MIN }), pane("loose", { workspaceId: "w2", lastSeenAt: now - 3 * MIN })];
+  const agents = [pane("coord", { lastActiveAt: now }), pane("flow", { lastActiveAt: now - 2 * MIN }), pane("loose", { workspaceId: "w2", paneLabel: "loose", lastSeenAt: now - 3 * MIN })];
 
   it("lists every open thread and every chat outside a project, never the project's own coordinator or a resolved thread", () => {
     expect(deskChats({ agents, projects: [acme] }).map((chat) => chat.title)).toEqual(["Checkout flow", "Cart badge", "loose"]);

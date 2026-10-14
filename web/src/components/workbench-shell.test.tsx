@@ -65,14 +65,14 @@ const projectData: HomeData = {
   }],
 };
 
-it("lists projects with their coordinator status, and the loose chat under Workspaces", () => {
+it("lists projects flat with their state, marks the one whose coordinator is open, and the loose chat under Chats", () => {
   const { sidebar } = setup(projectData, "/pane/w%3A1%3Ap9?s=work");
   const link = sidebar.getByRole("link", { name: /^Nenu Project/ });
   expect(link).toHaveAttribute("href", "/project/nenu?s=work");
-  expect(link).toHaveAccessibleName("Nenu Project, coordinator needs you, 1 open task");
-  // The open pane is the project's coordinator, so its row inside the project is the current one.
-  expect(sidebar.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("aria-current", "page");
-  expect(within(sidebar.getByRole("region", { name: "Workspaces" })).getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
+  expect(link).toHaveAccessibleName(/^Nenu Project, needs you\b/);
+  // The open pane is the project's coordinator, which the project's own row opens.
+  expect(link).toHaveAttribute("aria-current", "page");
+  expect(within(sidebar.getByRole("region", { name: "Chats" })).getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
 });
 
 it("searches projects by thread metadata and chats by name, then closes on Escape", async () => {
@@ -106,7 +106,7 @@ it("filters without disturbing a mounted composer draft", async () => {
 
 it("disables New on a read-only device, in the sidebar and the tab bar", () => {
   const { sidebar } = setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
-  expect(sidebar.getByRole("button", { name: "New" })).toBeDisabled();
+  expect(sidebar.getByRole("button", { name: "New chat" })).toBeDisabled();
   expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "New" })).toBeDisabled();
 });
 
@@ -161,12 +161,12 @@ it("draws New as a pen and Settings as sliders in the sidebar, the rail and the 
   window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
   onTestFinished(() => { window.matchMedia = matchMedia; });
   const { sidebar, user, unmount } = setup();
-  expect(glyph(sidebar.getByRole("button", { name: "New" }))).toHaveClass("icon-square-pen");
+  expect(glyph(sidebar.getByRole("button", { name: "New chat" }))).toHaveClass("icon-square-pen");
   expect(glyph(sidebar.getByRole("link", { name: "Settings" }))).toHaveClass("icon-settings-2");
   for (const icon of screen.getByRole("navigation", { name: "Primary" }).querySelectorAll("svg")) expect(icon).toHaveAttribute("width", "23");
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = screen.getByRole("navigation", { name: "Collapsed sidebar" });
-  expect(glyph(within(rail).getByRole("button", { name: "New" }))).toHaveClass("icon-square-pen");
+  expect(glyph(within(rail).getByRole("button", { name: "New chat" }))).toHaveClass("icon-square-pen");
   expect(glyph(within(rail).getByRole("link", { name: "Settings" }))).toHaveClass("icon-settings-2");
   for (const button of rail.querySelectorAll(".workbench-icon-button")) expect(button.querySelector("svg")).toHaveAttribute("width", "16");
   unmount();
@@ -215,6 +215,8 @@ it("opens a workspace on the same pane from the sidebar, search and the collapse
   window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
   onTestFinished(() => { window.matchMedia = matchMedia; });
   const { sidebar, user, router } = setup(ops);
+  // The desk's workspace tree is Search's, under the box until something is typed.
+  await user.click(sidebar.getByRole("button", { name: /^Search/ }));
   const workspaces = () => within(sidebar.getByRole("region", { name: "Workspaces" }));
   expect(workspaces().getByRole("link", { name: /^ops/ })).toHaveAttribute("href", opsPane);
 

@@ -70,7 +70,7 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
 }
 
 /**
- * One row of Needs you: the blocked dot, who and where, one line of what it waits on, and its actions
+ * One row of Needs you on a quiet card: a small red dot is the only red, then who and where, one line of what it waits on, and its actions
  * at the end. The whole row opens the thread; the actions sit above that link.
  */
 function Row({ who, to, opening, line, lineRef, label = line, below, actions }: {
@@ -86,8 +86,8 @@ function Row({ who, to, opening, line, lineRef, label = line, below, actions }: 
   actions: ReactNode;
 }) {
   return (
-    <div className="relative flex min-w-0 items-center gap-3 rounded-xl border border-status-blocked/35 bg-status-blocked/5 py-2.5 pr-3 pl-3.5 transition-colors hover:bg-status-blocked/10">
-      <StatusDot status="blocked" surface="bg-card" className="size-2" />
+    <div className="relative flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-card py-2.5 pr-3 pl-3.5">
+      <StatusDot status="blocked" surface="bg-card" className="size-1.5" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link to={to} aria-busy={opening || undefined} aria-label={[who.name, who.where, typeof label === "string" ? label : null].filter(Boolean).join(", ")}
           className="flex min-w-0 flex-col rounded-md after:absolute after:inset-0 after:rounded-xl">

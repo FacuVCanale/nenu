@@ -1,7 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
+import { ChevronRight, Clock, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
 
+import { DeskLists } from "@/components/desk-nav";
+import { openNewDialog } from "@/components/new-agent-sheet";
 import { NodeDot } from "@/components/node-row";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { SessionSwitcher } from "@/components/session-switcher";
@@ -20,7 +22,7 @@ import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { needsYouCount, needYou } from "@/lib/home-stats";
 import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, nodePath, panePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
+import { homePath, nodePath, panePath, projectPath, routinesPath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { chatRecency, isOpenThread, projectForPane } from "@/lib/projects";
@@ -32,8 +34,9 @@ export interface SidebarRequest {
 }
 
 /**
- * Where the navigation is drawn. The desk's sidebar leads with New, Search and Home, which counts
- * what needs you. A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
+ * Where the navigation is drawn. The desk's sidebar is Cursor's: New chat, Search, Home (which counts
+ * what needs you) and Routines, then its projects as flat rows and its chats by when they last moved;
+ * the tree of projects and workspaces is its Search's, under the box until something is typed. A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
  * something is typed, every project and workspace folded, the sessions and the host. Its drawer
  * (Home's or a chat's Nenu mark) leaves New and Search to its header and leads with what needs you
  * and the chats that moved last.
@@ -57,6 +60,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   const [picked, setPicked] = useState<string>();
   const [answered, setAnswered] = useState<{ query: string; order: Map<string, number> }>();
   const searchBox = useRef<HTMLInputElement>(null);
+  const navigation = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   // Where the tree was scrolled, so leaving a search lands back on the same rows.
   const treeScroll = useRef(0);
@@ -83,6 +87,17 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   useLayoutEffect(() => {
     if (browsing && scroller.current) scroller.current.scrollTop = treeScroll.current;
   }, [browsing]);
+
+  // The desk browses its tree under an empty box, so a press inside the list (a fold, a link) keeps it;
+  // a press anywhere else gives the bar back. A phone's sheet closes an empty box when it loses focus.
+  useEffect(() => {
+    if (phone || !searching || !browsing) return;
+    const onDown = (event: PointerEvent) => {
+      if (!navigation.current?.contains(event.target as Node)) closeSearch();
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [phone, searching, browsing]);
 
   function closeSearch() {
     setQuery("");
@@ -119,10 +134,11 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   }
 
   return (
-    <nav className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}>
+    <nav ref={navigation} className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}
+      onKeyDown={(event) => { if (event.key === "Escape" && searching && !phone) closeSearch(); }}>
       {(!phone || searching) && <div className="nav-top">
         {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
-          <SquarePen aria-hidden size={16} /><span className="nav-row-text">New</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
+          <SquarePen aria-hidden size={16} /><span className="nav-row-text">New chat</span><kbd className="nav-kbd" aria-hidden>⌘N</kbd>
         </button>}
         {searching ? (
           <label className="nav-row nav-search">
@@ -131,7 +147,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
               aria-controls={hits.length ? listId : undefined} aria-autocomplete="list"
               aria-activedescendant={hits.length ? optionId(listId, selected) : undefined}
               onChange={(event) => { setQuery(event.target.value); setPicked(undefined); }}
-              onBlur={() => { if (!query.trim()) closeSearch(); }}
+              onBlur={phone ? () => { if (!query.trim()) closeSearch(); } : undefined}
               onKeyDown={onSearchKey} />
           </label>
         ) : !phone && (
@@ -142,18 +158,28 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}
           aria-label={attention > 0 ? `Home, ${needYou(attention)}` : undefined}>
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
-          {attention > 0 && <span className="nav-badge" aria-hidden>{attention}</span>}
+          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" className="size-1.5" />{attention}</span>}
+        </Link>}
+        {!phone && <Link className="nav-row" to={routinesPath(data.session)} aria-current={pathname === "/routines" ? "page" : undefined}>
+          <Clock aria-hidden size={16} /><span className="nav-row-text">Routines</span>
         </Link>}
       </div>}
 
-      <div ref={scroller} className="nav-scroll" onScroll={(event) => { if (browsing) treeScroll.current = event.currentTarget.scrollTop; }}>
+      {/* A link followed from the desk's tree ends its search once the page is on screen, as a result does. */}
+      <div ref={scroller} className="nav-scroll" onScroll={(event) => { if (browsing) treeScroll.current = event.currentTarget.scrollTop; }}
+        onClickCapture={(event) => { if (searching && !phone && (event.target as Element).closest("a[href]")) picking.current = true; }}>
         {query.trim()
           ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
               onOpen={() => { picking.current = true; }} />
-          : <>
-            {variant === "drawer" && <DrawerSections data={data} />}
-            <SidebarTree data={data} folded={phone} onNewChat={phone ? onNewChat : undefined} />
-          </>}
+          : phone
+            ? <>
+              {variant === "drawer" && <DrawerSections data={data} />}
+              <SidebarTree data={data} folded onNewChat={onNewChat} />
+            </>
+            : searching ? <div className="nav-enter"><SidebarTree data={data} /></div>
+            : (data.projects?.length || data.agents.length)
+              ? <DeskLists data={data} onNewProject={onNewChat && (() => openNewDialog({ kind: "project" }))} />
+              : <Empty phone={false} />}
       </div>
 
       {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}

@@ -395,3 +395,33 @@ export function homeOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
     }],
   };
 }
+
+/**
+ * homeOrg's Acme Shop beside four neighbour projects, each with an open thread that last moved at a
+ * different age (the sidebar's periods) and a resolved one, and Acme Shop with a scheduled and a pull
+ * request routine. Every project then draws its own mark, its own age and its own date group.
+ */
+export function deskOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at: number, size: { additions: number; deletions: number }): OrgSeed {
+  const seed = homeOrg(herd, at, size);
+  const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
+  const node = (id: string, title: string, group: string, minutes: number) => ({
+    id, title, parent_id: "root", role: "worker", status: group === "resolved" ? "resolved" : "open", group, group_label: group, note: "", branch: "",
+    workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes), report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null,
+  });
+  const HOUR = 60;
+  const DAY = 24 * HOUR;
+  const neighbour = (slug: string, name: string, goal: string, threads: ReturnType<typeof node>[]) => ({ slug, name, goal, status: "active" as const, threads });
+  seed.projects[0]!.routines = [
+    { name: "nightly-dependency-check", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, command: "", command_status: "none",
+      prompt: "", last_run: ago(20 * HOUR), next_run: new Date(at + 4 * 3_600_000).toISOString(), skipped_unhandled: 0, skipped_no_coordinator: 0 },
+    { name: "pr-follow-up", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, command: "", command_status: "none",
+      prompt: "", last_run: "", next_run: "", skipped_unhandled: 0, skipped_no_coordinator: 0 },
+  ];
+  seed.projects.push(
+    neighbour("docs-site", "Docs site", "Guides and the API reference", [node("t-0101", "API reference pages", "ready-for-review", 2 * HOUR), node("t-0102", "Old guides", "resolved", 9 * DAY)]),
+    neighbour("mobile-app", "Mobile app", "The iOS and Android clients", [node("t-0201", "Push permission prompt", "idle", DAY + 3 * HOUR)]),
+    neighbour("billing-api", "Billing API", "Invoices, plans and webhooks", [node("t-0301", "Invoice export", "idle", 12 * DAY)]),
+    neighbour("data-pipeline", "Data pipeline", "Nightly exports and the warehouse", [node("t-0401", "Warehouse backfill", "idle", 45 * DAY)]),
+  );
+  return seed;
+}

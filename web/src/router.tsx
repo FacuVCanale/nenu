@@ -6,6 +6,7 @@ import { SpaceRoute } from "@/routes/space";
 import { DetailRoute } from "@/routes/detail";
 import { HistoryRoute } from "@/routes/history";
 import { SettingsRoute } from "@/routes/settings";
+import { RoutinesRoute } from "@/routes/routines";
 import { NodeRoute } from "@/routes/node";
 import { ProjectRoute } from "@/routes/project";
 import { NotFoundRoute } from "@/routes/not-found";
@@ -47,6 +48,7 @@ export const routes: RouteObject[] = [
       { path: "project/:projectSlug", handle: depth(1), element: <ProjectRoute /> },
       { path: "project/:projectSlug/node/:nodeId", handle: depth(2), element: <NodeRoute /> },
       { path: "settings", handle: depth(1), element: <SettingsRoute /> },
+      { path: "routines", handle: depth(1), element: <RoutinesRoute /> },
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
       // whenever it isn't the active route) — see the "last seen" note there.
       { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, element: <DetailRoute /> },

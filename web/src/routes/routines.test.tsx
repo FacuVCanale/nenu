@@ -19,7 +19,7 @@ function serve(lists: Record<string, unknown>) {
   const asked: string[] = [];
   server.use(http.get("/api/org/routines", ({ request }) => {
     const url = new URL(request.url);
-    asked.push(`${url.searchParams.get("project")}@${url.searchParams.get("s")}`);
+    asked.push(`${url.searchParams.get("project")}@${url.searchParams.get("session")}`);
     const list = lists[url.searchParams.get("project") ?? ""];
     return list === "fail" ? HttpResponse.json({ ok: false, error: "herdr-organizations failed (1): no project" }, { status: 502 }) : HttpResponse.json({ ok: true, ...list as object });
   }));
@@ -54,7 +54,7 @@ it("lists each project's routines once, read only: what runs, when, and whether 
     "weekly-reportevery 7doff",
   ]);
   expect(within(await screen.findByRole("region", { name: "Docs site" })).getByText("No routines")).toBeInTheDocument();
-  expect(screen.queryByRole("button")).toBeNull();
+  expect(within(screen.getByRole("main")).queryByRole("button")).toBeNull();
   expect(asked.sort()).toEqual(["docs@work", "shop@work"]);
 });
 
