@@ -1,4 +1,4 @@
-import { imageLabel, isUploadPath, messageMatchKey, serializeMessage, splitDraftUploads, splitMessageImages } from "./message-images";
+import { imageLabel, isUploadPath, uploadName, messageMatchKey, serializeMessage, splitDraftUploads, splitMessageImages } from "./message-images";
 
 const UP = "/home/you/.local/state/collie/uploads";
 const a = `${UP}/w1-p1-mabc123-1234abcd.png`;
@@ -27,6 +27,16 @@ describe("message images", () => {
     expect(isUploadPath(a)).toBe(true);
     expect(isUploadPath(typed)).toBe(false);
     expect(splitDraftUploads(`compare ${typed} ${a}`)).toEqual({ text: `compare ${typed}`, uploads: [a] });
+  });
+
+  it("lifts every kind of upload out of a stored draft, and names a file upload by what it was called", () => {
+    const pdf = `${UP}/w1_p1-mv8g-0a1b2c3d-spec.pdf`;
+    const zip = `${UP}/w1_p1-mv8g-0a1b2c3e-bundle.tar.gz`;
+    const bare = `${UP}/w1_p1-mv8g-0a1b2c3f-Makefile`;
+    for (const path of [pdf, zip, bare]) expect(isUploadPath(path)).toBe(true);
+    expect(isUploadPath("/home/you/project/uploads/notes.pdf")).toBe(false);
+    expect(splitDraftUploads(`read these ${pdf} ${a} ${zip} ${bare}`)).toEqual({ text: "read these", uploads: [pdf, a, zip, bare] });
+    expect([pdf, zip, bare, a].map(uploadName)).toEqual(["spec.pdf", "bundle.tar.gz", "Makefile", null]);
   });
 
   it("matches a journal turn whether the harness kept the paths or swapped in [Image #N] tokens", () => {

@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { MAX_ATTACHMENTS, useComposerAttachments } from "./use-composer-attachments";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, useComposerAttachments } from "./use-composer-attachments";
 import { localImageUrl } from "@/lib/local-sends";
 import type { UploadResponse } from "@/lib/types";
 
@@ -44,12 +44,25 @@ describe("useComposerAttachments", () => {
     expect(upload).toHaveBeenCalledTimes(2);
   });
 
-  it("refuses non-images and anything past the limit", () => {
-    const { result } = setup(() => new Promise(() => {}));
-    let skipped = 0;
-    act(() => { skipped = result.current.add([new File(["x"], "notes.txt", { type: "text/plain" }), ...Array.from({ length: MAX_ATTACHMENTS + 1 }, (_, i) => png(`${i}.png`))]); });
-    expect(skipped).toBe(2);
+  it("takes any kind of file, and refuses one over 25 MB or past the count limit", () => {
+    const upload = vi.fn(() => new Promise<UploadResponse>(() => {}));
+    const create = vi.spyOn(URL, "createObjectURL");
+    const { result } = setup(upload);
+    const big = new File([new Uint8Array(MAX_ATTACHMENT_BYTES + 1)], "too-big.bin");
+    let refused: ReturnType<typeof result.current.add> | undefined;
+    act(() => { refused = result.current.add([new File(["%PDF"], "spec.pdf", { type: "application/pdf" }), big, ...Array.from({ length: MAX_ATTACHMENTS }, (_, i) => png(`${i}.png`))]); });
+    expect(refused).toEqual({ tooLarge: ["too-big.bin"], overLimit: 1 });
     expect(result.current.items).toHaveLength(MAX_ATTACHMENTS);
+    expect(result.current.items[0]).toEqual(expect.objectContaining({ name: "spec.pdf", size: 4, image: false, url: undefined }));
+    // Only an image gets a local preview; a PDF or an archive is never read into the page.
+    expect(create).toHaveBeenCalledTimes(MAX_ATTACHMENTS - 1);
+    expect(upload).toHaveBeenCalledTimes(MAX_ATTACHMENTS);
+    create.mockRestore();
+  });
+
+  it("restores a saved non-image upload by its name, without asking for a preview", () => {
+    const { result } = setup(() => new Promise(() => {}), ["/st/uploads/w1_p1-mv8g-0a1b2c3d-spec.pdf"]);
+    expect(result.current.items).toEqual([expect.objectContaining({ status: "ready", image: false, name: "spec.pdf", url: undefined })]);
   });
 
   it("revokes the preview of an image removed before it was uploaded", () => {
