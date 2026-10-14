@@ -110,8 +110,13 @@ function processEnvironment(pid: number): Record<string, string> | null {
 
 /** Throws unless every process serving `socketPath` is an isolated Herdr (see assertIsolatedHerdrEnv). */
 export function assertIsolatedHerdr(socketPath: string): void {
-  const lsof = Bun.spawnSync(["lsof", "-t", "--", socketPath]);
-  const pids = lsof.stdout.toString().split(/\s+/).filter(Boolean).map(Number).filter((pid) => pid !== process.pid);
+  let found = "";
+  try {
+    found = Bun.spawnSync(["lsof", "-t", "--", socketPath]).stdout.toString();
+  } catch {
+    // No lsof: nothing can say which server this is, so the check below refuses.
+  }
+  const pids = found.split(/\s+/).filter(Boolean).map(Number).filter((pid) => pid !== process.pid);
   const envs = pids.map(processEnvironment);
   if (envs.length === 0 || envs.includes(null)) {
     throw new Error(`refusing Herdr socket ${socketPath}: can't tell which config the server behind it uses (no process found, or its environment is unreadable)`);
@@ -119,14 +124,18 @@ export function assertIsolatedHerdr(socketPath: string): void {
   for (const env of envs) assertIsolatedHerdrEnv(env!);
 }
 
+const AGENT_HOMES = new Set(["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "GROK_HOME"]);
+
 /**
  * The environment of the Herdr server `--herdr` starts: the bench's temporary HOME and XDG dirs, its
  * own socket, nothing inherited from the live Herdr (inside a pane HERDR_* name the live server) or
- * from Nenu, and the operator's PATH without the bridge's stubs, so its panes run the real CLIs.
+ * from Nenu, no agent home of the operator's (each defaults under HOME; Claude's must not be set at
+ * all, or its keychain entry is a different one), and the operator's PATH without the bridge's
+ * stubs, so its panes run the real CLIs.
  */
 export function disposableHerdrEnv(opts: { home: string; socketPath: string }, base: Env = process.env): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base)) if (v !== undefined && !/^(COLLIE|HERDR)_/.test(k)) env[k] = v;
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && !/^(COLLIE|HERDR)_/.test(k) && !AGENT_HOMES.has(k)) env[k] = v;
   return Object.assign(env, {
     HOME: opts.home,
     XDG_CONFIG_HOME: join(opts.home, ".config"),
