@@ -1,10 +1,11 @@
+import { writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { demoOrg, diffOrg, growDiffRepo, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
@@ -12,6 +13,7 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts smoke    [--port 8797] [--out DIR]   Home screenshots, phone + desktop
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
 //   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
+//   bun scripts/e2e/run.ts threads  [--port 8797] [--out DIR] [--seconds 60]  A coordinator's chat: tabs, panel, DOM and React renders
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
@@ -30,6 +32,7 @@ const { values, positionals } = parseArgs({
     out: { type: "string" },
     seconds: { type: "string", default: "60" },
     sends: { type: "string", default: "5" },
+    before: { type: "boolean", default: false },
   },
 });
 
@@ -70,8 +73,8 @@ const perMinute = (o: Record<string, number>, ms: number) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round((v * 60_000 / ms) * 10) / 10]));
 const pct = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
 
-async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number, org?: (herd: DemoHerd, now: number) => OrgSeed): Promise<T> {
-  const bridge = await startTestBridge({ port, fake: true, epoch, org });
+async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number, org?: (herd: DemoHerd, now: number) => OrgSeed, repo?: (dir: string) => void): Promise<T> {
+  const bridge = await startTestBridge({ port, fake: true, epoch, org, repo });
   let browser: Browser | null = null;
   try {
     browser = await launchWebkit();
@@ -311,6 +314,113 @@ async function org(): Promise<void> {
   await writeFile(join(outDir, "org.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (flowError) process.exit(1);
+}
+
+/**
+ * Counts React commits and the components each one rendered, through the hook React DevTools uses
+ * (a production build calls it too). A component counts when it mounted or performed work; a
+ * subtree React bailed out of keeps its old children and is not walked.
+ */
+function countRenders(): void {
+  const stats = { commits: 0, renders: 0 };
+  const components = new Set([0, 1, 11, 14, 15]); // function, class, forwardRef, memo, simple memo
+  type Fiber = { tag: number; flags: number; alternate: Fiber | null; child: Fiber | null; sibling: Fiber | null };
+  const walk = (first: Fiber | null) => {
+    for (let fiber = first; fiber; fiber = fiber.sibling) {
+      const before = fiber.alternate;
+      if (components.has(fiber.tag) && (before === null || (fiber.flags & 1) !== 0)) stats.renders++;
+      if (fiber.child && before?.child !== fiber.child) walk(fiber.child);
+    }
+  };
+  Object.assign(window, {
+    __nenuRenders: stats,
+    __REACT_DEVTOOLS_GLOBAL_HOOK__: {
+      supportsFiber: true, renderers: new Map(), inject: () => 1, checkDCE: () => {}, setStrictMode: () => {},
+      onCommitFiberUnmount: () => {}, onPostCommitFiberRoot: () => {},
+      onCommitFiberRoot: (_id: number, root: { current: Fiber }) => { stats.commits++; walk(root.current.child); },
+    },
+  });
+}
+
+/**
+ * A project coordinator's chat (scenario.ts `projectChatSeed`): the phone's Chat, Threads and PRs
+ * tabs at 390x844 and the desk at 1440x900 beside the project panel and without it, captured on the
+ * pinned clock. Then the phone's Chat tab measured on the real clock, twice: DOM elements, and the
+ * React commits and component renders over `--seconds` of polling.
+ */
+async function threads(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const windowMs = Number(values.seconds) * 1000;
+  const result = await withBench(async (bridge, browser) => {
+    const coordinator = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
+    const open = async (device: typeof PHONE | typeof DESKTOP, opts: { pinned: boolean; counted?: boolean }) => {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      if (opts.counted) await page.addInitScript(countRenders, null);
+      if (opts.pinned) await page.clock.install({ time: bridge.now() });
+      const requests: string[] = [];
+      page.on("request", (req) => requests.push(req.url()));
+      await page.goto(bridge.url + coordinator);
+      await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(2000);
+      return { page, requests, close: () => context.close() };
+    };
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    const cards = (page: Page) => page.locator('section[aria-label="Threads"] article').count();
+
+    const seen: Record<string, unknown> = {};
+    {
+      const { page, close } = await open(PHONE, { pinned: true });
+      seen.phoneChatCards = await cards(page);
+      await shoot(page, "phone-chat");
+      for (const tab of ["Threads", "PRs"] as const) {
+        await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
+        await page.locator(".project-overlay").waitFor({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        seen[`phone${tab}Rows`] = await page.locator(".project-overlay .task-main").count();
+        await shoot(page, `phone-${tab.toLowerCase()}`);
+      }
+      await close();
+    }
+    {
+      const { page, close } = await open(DESKTOP, { pinned: true });
+      seen.desktopPanelCards = await cards(page);
+      await shoot(page, "desktop-panel");
+      await page.getByRole("button", { name: "Hide project panel" }).click();
+      await page.waitForTimeout(500);
+      seen.desktopNoPanelCards = await cards(page);
+      await shoot(page, "desktop-no-panel");
+      await close();
+    }
+
+    const runs = [];
+    for (let run = 1; run <= 2; run++) {
+      const { page, requests, close } = await open(PHONE, { pinned: false, counted: true });
+      const dom = await page.evaluate(() => ({
+        document: document.getElementsByTagName("*").length,
+        thread: document.querySelector(".chat-thread")?.getElementsByTagName("*").length ?? 0,
+      }), null);
+      const from = requests.length;
+      await page.evaluate(() => Object.assign((window as unknown as { __nenuRenders: object }).__nenuRenders, { commits: 0, renders: 0 }), null);
+      await page.waitForTimeout(windowMs);
+      const react = await page.evaluate(() => ({ ...(window as unknown as { __nenuRenders: { commits: number; renders: number } }).__nenuRenders }), null);
+      const byRoute = tally(requests.slice(from));
+      const polls = byRoute.snapshot ?? 0;
+      runs.push({ run, cards: await cards(page), dom, seconds: windowMs / 1000, ...react, byRoute,
+        rendersPerCommit: react.commits ? Math.round(react.renders / react.commits) : 0,
+        rendersPerSnapshot: polls ? Math.round(react.renders / polls) : null });
+      await close();
+    }
+    return { shots, seen, runs, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => projectChatSeed(herd, now));
+  await writeFile(join(outDir, "threads.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
 }
 
 /**
@@ -1042,10 +1152,95 @@ async function compare(a: string, b: string): Promise<void> {
   }
 }
 
+/**
+ * A pull request's diff (scenario.ts `seedDiffRepo`): the working pane is a thread on PR #1342 whose
+ * folder is the PR's worktree. Its size in the PR bar (phone) and in the PRs tab (desk) opens the
+ * viewer, dark and light; then a commit past every limit (`growDiffRepo`) shows the cuts announced.
+ * With `--before` it only captures the bar and the tab, for a build that has no viewer.
+ */
+async function diffs(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const requests: string[] = [];
+  const prs = join(outDir, "gh-prs.json");
+  process.env.NENU_E2E_GH_PRS = prs;
+  let size = { additions: 0, deletions: 0 };
+  const result = await withBench(async (bridge, browser) => {
+    const open = async (device: typeof PHONE | typeof DESKTOP, path: string, ready: string, colorScheme: "dark" | "light" = "dark") => {
+      const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      page.on("request", (request) => { if (request.url().includes("/diff")) requests.push(new URL(request.url()).pathname + new URL(request.url()).search); });
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + path);
+      await page.locator(ready).first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1200);
+      return { page, close: () => context.close() };
+    };
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    const viewer = async (page: Page, name: string, file?: string, from: Page | Locator = page) => {
+      await from.getByRole("button", { name: /^View changes/ }).first().click();
+      const dialog = page.getByRole("dialog", { name: "PR #1342 changes" });
+      await dialog.getByText(/^\d+ files?$/).waitFor({ timeout: 15_000 });
+      if (file) await dialog.getByRole("button", { name: new RegExp(file) }).click();
+      await page.waitForTimeout(400);
+      await shoot(page, name);
+      return dialog;
+    };
+    const chat = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
+    const bar = 'text="#1342"';
+
+    for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      const { page, close } = await open(device, chat, bar);
+      await shoot(page, `bar-${name}`);
+      if (!before) await viewer(page, `viewer-${name}`, "app/checkout\\.tsx");
+      await close();
+    }
+    {
+      const { page, close } = await open(DESKTOP, chat, bar);
+      await page.getByRole("tab", { name: "PRs" }).click();
+      await page.waitForTimeout(400);
+      await shoot(page, "prs-tab-desktop");
+      if (!before) await viewer(page, "viewer-from-prs-tab-desktop", "app/cart\\.ts", page.getByRole("tabpanel", { name: "PRs" }));
+      await close();
+    }
+    if (!before) {
+      const { page, close } = await open(PHONE, chat, bar, "light");
+      await viewer(page, "viewer-phone-light", "app/checkout\\.tsx");
+      await close();
+      growDiffRepo(bridge.dir);
+      for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+        const { page, close } = await open(device, chat, bar);
+        const dialog = await viewer(page, `truncated-${name}`);
+        // Down to where the 1 MB cut fell: the first file past it keeps only its counts.
+        await dialog.getByText("Past the size limit").first().waitFor();
+        await page.evaluate(() => Array.from(document.querySelectorAll("span")).find((span) => span.textContent?.endsWith("Past the size limit"))?.closest("li")?.previousElementSibling?.scrollIntoView({ block: "start" }), null);
+        await page.waitForTimeout(300);
+        await shoot(page, `truncated-cut-${name}`);
+        await close();
+      }
+    }
+    return { shots, diffRequests: requests, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => diffOrg(herd, now, size), (dir) => {
+    size = seedDiffRepo(dir);
+    writeFileSync(prs, JSON.stringify([{
+      number: 1342, title: "Landing a 390 px", url: "https://github.com/awam/comercio/pull/1342", headRefName: "e2e-demo", baseRefName: "main",
+      isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [], ...size, updatedAt: new Date(CAPTURE_EPOCH).toISOString(),
+    }]));
+  });
+  await writeFile(join(outDir, "diffs.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
+else if (command === "threads") await threads();
 else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "layout") await layout();
@@ -1053,8 +1248,9 @@ else if (command === "stop") await stop();
 else if (command === "processes") await processes();
 else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
+else if (command === "diffs") await diffs(values.before === true);
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|workspace|layout|stop|processes|stop-state|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

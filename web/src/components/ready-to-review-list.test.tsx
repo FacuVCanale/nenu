@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
 import { fakeLiveStream } from "@/test/live-stream";
@@ -7,7 +8,8 @@ import { resetLiveEvents } from "@/lib/live-events";
 import fixture from "@/components/activity/activity.fixture.json";
 import { fixtureAgents } from "@/test/handlers";
 import type { AgentView } from "@/lib/types";
-import { useHomeActivity } from "./ready-to-review-list";
+import type { ReviewEntry } from "@/lib/home-stats";
+import { ReadyToReviewList, useHomeActivity } from "./ready-to-review-list";
 
 afterEach(() => resetLiveEvents());
 
@@ -31,4 +33,14 @@ test("an unchanged re-read keeps Home's activity map; a changed one replaces it"
   act(() => live.send({ topic: "activity", paneId: "w1:p1" }));
   await waitFor(() => expect(result.current).not.toBe(first));
   live.stop();
+});
+
+test("a review row's size opens the diff when the PR has a pane", () => {
+  const entries: ReviewEntry[] = [
+    { key: "a/b#7", title: "Fix", repo: "b", number: 7, draft: false, updatedAt: 0, diff: { additions: 5, deletions: 1 }, open: { paneId: "w1:p1" } },
+    { key: "a/b#8", title: "Other", repo: "b", number: 8, draft: false, updatedAt: 0, diff: { additions: 9, deletions: 2 }, url: "https://github.com/a/b/pull/8" },
+  ];
+  render(<MemoryRouter><ReadyToReviewList entries={entries} opening={null} /></MemoryRouter>);
+  expect(screen.getAllByRole("button", { name: "View changes: 5 added, 1 removed" }).length).toBeGreaterThan(0);
+  expect(screen.queryByRole("button", { name: "View changes: 9 added, 2 removed" })).not.toBeInTheDocument();
 });

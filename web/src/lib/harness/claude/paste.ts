@@ -34,6 +34,8 @@
 //     a wrap can fall mid-token (`…+3 li` / `nes]`). Every match here therefore runs on a
 //     whitespace-STRIPPED normalisation — never on the space-joined raw, which would miss the wrap.
 
+import { draftCarriesSend } from "../../guarded-reply";
+
 /** The token as it appears AFTER all whitespace is stripped — the only form we ever match against. */
 const PLACEHOLDER = /\[Pastedtext#\d+(?:\+(\d+)lines)?\]/g;
 
@@ -175,4 +177,62 @@ function countNewlines(s: string): number {
   let n = 0;
   for (const ch of s) if (ch === "\n") n++;
   return n;
+}
+
+// ── Images in a paste ─────────────────────────────────────────────────────────────────────────────
+//
+// A message with images is prose plus absolute image paths (lib/message-images.ts serializeMessage).
+// When Claude takes it as ONE paste — a bracketed paste, or a single read of more than 800 characters
+// — its paste handler (2.1.299, read in the binary and live-probed 2026-10-14) does this:
+//
+//   * splits the text at every space that starts an absolute path and at every newline, and drops
+//     the parts that are only whitespace;
+//   * attaches each part that names an image file and draws it as `[Image #N]`, the first bare and
+//     the rest after a space, `#N` continuing a counter it shares with paste tokens;
+//   * inserts the other parts joined by "\n" right after the tokens, through its ordinary text paste,
+//     which may collapse them into `[Pasted text #N +M lines]` like any other paste.
+//
+// So the box shows `[Image #1] [Image #2]<prose>` (draft-images-editor-hint-v2299) or
+// `[Image #6][Pasted text #7 +18 lines]` (draft-image-paste-collapsed-v2299), never the paths. The
+// tokens name no file, so what is checked is the count: exactly one per image path we sent, all of
+// them ahead of the prose, then the prose Claude made of ours in full.
+
+/** The part of Claude's split that starts an absolute path (`/…`, `C:\…`). */
+const PATH_START = / (?=\/|[A-Za-z]:\\)/;
+/** The files Claude attaches: its own extension list, not Nenu's upload rule. */
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
+const IMAGE_TOKENS = /^\[Image\s+#\d+\](?:\s*\[Image\s+#\d+\])*/;
+const IMAGE_TOKEN = /\[Image\s+#\d+\]/g;
+const QUOTED = /^(["'])(.*)\1$/;
+
+/** What Claude's paste handler makes of `sent`: how many images it attaches, and the prose it inserts. */
+function imagePaste(sent: string): { images: number; prose: string } {
+  const parts = sent
+    .split(PATH_START)
+    .flatMap((part) => part.split("\n"))
+    .filter((part) => part.trim());
+  const isImage = (part: string) => IMAGE_FILE.test(part.trim().replace(QUOTED, "$2"));
+  return { images: parts.filter(isImage).length, prose: parts.filter((part) => !isImage(part)).join("\n") };
+}
+
+/**
+ * Whether `draft` is `sent` after Claude attached its images: one `[Image #N]` per image path, ahead
+ * of everything else, then the rest of the message — literal and complete (the box shows its top, so
+ * nothing of it is windowed away), or a paste token consistent with it (pasteCarriesSend). A draft
+ * with a token more or less, a prose that differs or stops short, or tokens for a message that had
+ * no image is refused.
+ */
+function imagePasteCarriesSend(sent: string, draft: string): boolean {
+  const { images, prose } = imagePaste(sent);
+  const head = IMAGE_TOKENS.exec(draft.trim());
+  if (images === 0 || head === null || head[0].match(IMAGE_TOKEN)!.length !== images) return false;
+  const rest = draft.trim().slice(head[0].length).trim();
+  if (prose === "") return rest === "";
+  if (pasteCarriesSend(prose, rest)) return true;
+  return draftCarriesSend(prose, rest) && stripWhitespace(rest) === stripWhitespace(prose);
+}
+
+/** The Claude adapter's supplemental send evidence: a paste token, or attached images. */
+export function claudeDraftCarriesSend(sent: string, draft: string): boolean {
+  return pasteCarriesSend(sent, draft) || imagePasteCarriesSend(sent, draft);
 }

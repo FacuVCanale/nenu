@@ -215,6 +215,16 @@ export class PullRequestRegistry {
     return [...this.repos].flatMap(([repo, prs]) => prs.map((pr) => ({ ...pr, paneIds: onBranch.get(`${repo}\0${pr.branch}`) ?? [] })));
   }
 
+  /**
+   * Open PR `number` of the repo `cwd` sits in, and the branch `cwd` has checked out, as the last
+   * refresh read them. Runs nothing: a folder or PR not read yet is undefined.
+   */
+  locate(cwd: string, number: number): { pr: RepoPr; checkedOut: string } | undefined {
+    const info = this.cwds.get(cwd);
+    const pr = info ? this.repos.get(info.repo)?.find((candidate) => candidate.number === number) : undefined;
+    return info && pr ? { pr, checkedOut: info.branch } : undefined;
+  }
+
   /** One refresh at a time; a call while one runs joins it. */
   refresh(): Promise<void> {
     this.inFlight ??= this.read().finally(() => {

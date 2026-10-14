@@ -6,6 +6,7 @@ import {
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
+import { DiffStat } from "@/components/diff-stat";
 import { ProjectTasks, canMerge, threadAge } from "@/components/project-tasks";
 import { MergeDialog } from "@/components/thread-cards";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,8 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
     const { status, label } = prStatus(thread);
     const { icon: Icon, tone } = PR_STATUS[status];
     const age = threadAge(thread, now);
+    // An open PR with a live pane opens its diff; a past one keeps its size as text in the row.
+    const diffPane = past ? undefined : thread.paneId;
     return (
       <li key={thread.id} className="task-row">
         <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>
@@ -97,10 +100,9 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
             <span className={cn("block break-words text-sm font-medium", past && "text-muted-foreground")}>{thread.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{pr.number !== undefined ? `PR #${pr.number}` : "PR"} · {label}</span>
           </span>
-          {pr.diff ? <span className="shrink-0 font-mono text-xs tabular-nums">
-            <span className="text-status-done">+{pr.diff.additions}</span> <span className="text-status-blocked">−{pr.diff.deletions}</span>
-          </span> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}
+          {pr.diff ? !diffPane && <DiffStat diff={pr.diff} className="text-xs" /> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}
         </button>
+        {pr.diff && diffPane && <DiffStat diff={pr.diff} paneId={diffPane} pr={pr.number} session={session} url={pr.url} className="mr-1 mt-[9px] self-start px-1.5 text-xs" />}
         {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
         {!past && !readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
           onClick={() => setMerging(thread)}>Merge</Button>}

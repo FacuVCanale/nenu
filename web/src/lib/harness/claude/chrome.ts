@@ -443,8 +443,9 @@ function locateInputBox(lines: StyledLine[], texts: string[], end: number): Inpu
 
   // 4. No modal on screen.
   for (let j = b + 1; j < end; j++) {
-    if (classifyFooter(texts[j]!, texts) !== null) return null;
-    if (tail !== "autocomplete" && tailNamesAMenu(texts[j]!)) return null;
+    const row = tail === "statusline" && j < statusEnd ? withoutEditorHint(texts[j]!) : texts[j]!;
+    if (classifyFooter(row, texts) !== null) return null;
+    if (tail !== "autocomplete" && tailNamesAMenu(row)) return null;
     if (tail === "unknown" && tailLooksModal(texts[j]!)) return null;
   }
   if (dialogOnScreen(lines)) return null;
@@ -538,6 +539,21 @@ const BACKGROUND_AGENTS_HINT = /^↓ to manage$/i;
 /** A hint under a live box that names one of Claude's own keys, never a modal's. */
 function isOwnKeyHint(segment: string): boolean {
   return RUNNING_TURN_HINT.test(segment) || BACKGROUND_AGENTS_HINT.test(segment);
+}
+
+// Claude 2.1.299 shows "ctrl+g to edit in <editor>" for five seconds once a draft wraps, as a field of
+// the statusline row under the box (draft-images-editor-hint-v2299). It names the box's own key, and
+// refusing it refused every send long enough to wrap. The plan dialog's footer says the same words
+// beside its plan file, so only a field that is the hint and nothing else is Claude's own.
+const EDITOR_HINT = /^ctrl\+g to edit in [^·/]+$/i;
+
+/** A statusline row without Claude's own editor hint, which would read as the plan dialog's footer. */
+function withoutEditorHint(row: string): string {
+  return row
+    .trim()
+    .split(/\s{2,}/)
+    .filter((field) => !EDITOR_HINT.test(field))
+    .join("  ");
 }
 
 /**

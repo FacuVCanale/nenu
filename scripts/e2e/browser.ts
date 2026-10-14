@@ -14,6 +14,7 @@ export interface Locator {
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
   press(key: string, opts?: { timeout?: number }): Promise<void>;
   isVisible(): Promise<boolean>;
+  count(): Promise<number>;
   selectOption(value: string): Promise<unknown>;
   waitFor(opts?: { state?: "visible" | "attached"; timeout?: number }): Promise<void>;
   first(): Locator;

@@ -68,29 +68,32 @@ function setup(path: string, data: HomeData) {
 /** The titles of a list's own items, not of the ones nested inside them. */
 const titlesOf = (list: HTMLElement) => [...list.children].map((item) => item.querySelector(".task-main .font-medium")?.textContent);
 
-it("opens a project on its coordinator's chat with thread cards, and switches Chat, Threads and PRs on a phone", async () => {
+it("opens a project on its coordinator's chat, and switches Chat, Threads and PRs on a phone", async () => {
   const { router, user } = setup("/project/hub", home([pane("coord"), pane("worker"), pane("docs")]));
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:coord");
   expect(router.state.location.pathname).toBe("/pane/coord");
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "coordinator");
-
-  // Cards under the conversation: Merge only where Organizations says nothing blocks it, named as the PR list names it.
-  const cards = within(screen.getByRole("region", { name: "Threads" }));
-  expect(within(cards.getByRole("article", { name: "Docs" })).getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
-  expect(within(cards.getByRole("article", { name: "Build" })).queryByRole("button", { name: /^Merge/ })).not.toBeInTheDocument();
+  // The tabs list the threads, so the conversation carries no cards of them as well.
+  expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
 
   const tabs = within(screen.getByRole("tablist", { name: "Project" }));
   await user.click(tabs.getByRole("tab", { name: /Threads/ }));
   expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
   expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Docs", "Build"]);
+  // Merge only where Organizations says nothing blocks it.
   await user.click(tabs.getByRole("tab", { name: /PRs/ }));
   expect(screen.getByRole("button", { name: /^Docs/ })).toHaveTextContent("PR #9 · Ready to merge");
+  expect(screen.getByRole("button", { name: /^Build/ })).toHaveTextContent("PR #12 · Checks running 1/2");
+  expect(screen.getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
+  expect(screen.queryByRole("button", { name: "Merge Build" })).not.toBeInTheDocument();
   await user.click(tabs.getByRole("tab", { name: "Chat" }));
   expect(screen.getByTestId("conversation")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
 
-  // A thread shows its siblings as chips and its PR above the composer.
-  await user.click(within(screen.getByRole("article", { name: "Build" })).getByRole("button", { name: /Build/ }));
+  // A thread opens from the Threads tab; it shows its siblings as chips and its PR above the composer.
+  await user.click(tabs.getByRole("tab", { name: /Threads/ }));
+  await user.click(within(screen.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Build/ }));
   expect(router.state.location.pathname).toBe("/pane/worker");
   // The coordinator's conversation is still mounted until the route re-renders; wait for the swap.
   await waitFor(() => expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker"));
@@ -113,11 +116,12 @@ it("counts on a phone's PRs tab only the pull requests still open, never a resol
   expect(await screen.findByRole("tab", { name: /^PRs/ })).toHaveTextContent(/^PRs2$/);
 });
 
-it("merges a thread's PR from its card only after confirming", async () => {
+it("merges a thread's PR from a phone's PRs tab only after confirming", async () => {
   let posted: unknown;
   server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
   const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-  await user.click(await screen.findByRole("button", { name: "Merge Docs" }));
+  await user.click(await screen.findByRole("tab", { name: /^PRs/ }));
+  await user.click(screen.getByRole("button", { name: "Merge Docs" }));
   expect(posted).toBeUndefined();
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));

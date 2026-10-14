@@ -214,6 +214,40 @@ export interface ThreadPullRequest {
   mergeable?: string;
 }
 
+/** One hunk of a file's diff; each line keeps its marker (" ", "+", "-" or "\\"). Mirrors bridge/pane-diff.ts. */
+export interface DiffHunk {
+  header: string;
+  oldStart: number;
+  newStart: number;
+  lines: string[];
+}
+
+/** A changed file; without `hunks`, `omitted` says why its lines are not here. Mirrors bridge/pane-diff.ts. */
+export interface DiffFile {
+  path: string;
+  from?: string;
+  status: "added" | "deleted" | "renamed" | "modified";
+  additions: number;
+  deletions: number;
+  binary?: true;
+  hunks?: DiffHunk[];
+  omitted?: "binary" | "large" | "budget";
+}
+
+/** What a pull request changes, read from a pane's folder (`/api/pane/:id/diff`). Mirrors bridge/pane-diff.ts. */
+export type PaneDiff =
+  | {
+    ok: true;
+    pr: number;
+    base: string;
+    head: string;
+    source: "worktree" | "branch";
+    files: DiffFile[];
+    totals: { files: number; additions: number; deletions: number };
+    truncated?: { files?: true; bytes?: true };
+  }
+  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed"; message: string };
+
 /**
  * An open pull request of the person's, read with `gh` in a repo an agent works in
  * (bridge/pull-requests.ts). `paneIds` are the panes whose folder is on its branch. Mirrors

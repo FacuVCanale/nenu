@@ -29,7 +29,7 @@ import {
   readClaudeTurn,
 } from "./chrome";
 import { withoutDialogClosingRule } from "./markers";
-import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
+import { claudeDraftCarriesSend, isPastePlaceholderOnly } from "./paste";
 
 /**
  * Claude's block pipeline: detect a tail dialog (preview / wizard / prompt-select), replacing it with
@@ -166,10 +166,11 @@ export const claudeAdapter: HarnessAdapter = {
   // absence is exactly the condition under which typing lands in a modal instead (#34's shape).
   composerReady: hasInputBox,
   // Long sends never appear in the box as themselves — Claude collapses them into `[Pasted text #N
-  // +M lines]` — so the reply guard's literal match can't verify them and the send stalls. These two
-  // read that token: as send evidence when it's consistent with what we typed (.adr/0010), and as
-  // "this isn't the user's text" for the stranded-draft preview's Take over.
-  draftCarriesSend: pasteCarriesSend,
+  // +M lines]`, and attaches the image paths of a pasted message as `[Image #N]` — so the reply
+  // guard's literal match can't verify them and the send stalls. These two read those tokens: as send
+  // evidence when they're consistent with what we typed (.adr/0010), and as "this isn't the user's
+  // text" for the stranded-draft preview's Take over.
+  draftCarriesSend: claudeDraftCarriesSend,
   draftIsOpaque: isPastePlaceholderOnly,
   // Measured on 2.1.296: Escape stops a tool call or streamed text and the pane goes idle in ~300 ms.
   interrupt: { keys: ["Escape"], read: (text) => readClaudeTurn(splitLines(parseAnsi(text))) },
