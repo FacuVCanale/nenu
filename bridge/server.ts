@@ -39,7 +39,7 @@ export const SERVER_IDLE_TIMEOUT_S = 120;
 // Hard cap the runtime enforces on ANY request body (Bun.serve maxRequestBodySize). Bigger than the
 // upload cap + overhead so the handler's own 413 fires first for honest clients; this cuts off a
 // chunked or lying client that never sends an accurate Content-Length.
-const MAX_REQUEST_BODY_BYTES = 12 * 1024 * 1024; // 12 MB
+export const MAX_REQUEST_BODY_BYTES = 12 * 1024 * 1024; // 12 MB
 
 /** Enough of a journal's tail to reach the row that started its last turn. */
 const ALERT_JOURNAL_ENTRIES = 40;

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import { isChatUploadPath } from "./chat-upload-preview.ts";
+import { MAX_REQUEST_BODY_BYTES } from "./server.ts";
 import { filesToPrune, imageExtFromBytes, MAX_UPLOAD_BYTES, saveUpload, sweepUploads, type UploadFs } from "./uploads.ts";
 
 // filesToPrune is the pure decision; sweepUploads is exercised with a fake fs so the stat/unlink
@@ -190,5 +191,11 @@ describe("saveUpload", () => {
     expect(result).toEqual({ ok: false, error: "File too large (max 25 MB)." });
     expect(await readdir(dir).catch(() => [])).toEqual([]);
     expect((await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES)], "edge.zip"))).ok).toBe(true);
+  });
+});
+
+describe("the runtime's body cap", () => {
+  test("lets a whole 25 MB upload and its multipart wrapping reach the route", () => {
+    expect(MAX_REQUEST_BODY_BYTES).toBeGreaterThan(MAX_UPLOAD_BYTES + 64 * 1024);
   });
 });
