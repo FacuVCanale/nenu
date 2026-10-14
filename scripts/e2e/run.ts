@@ -1402,6 +1402,9 @@ async function artifacts(): Promise<void> {
   } finally {
     await rm(vault, { recursive: true, force: true });
   }
+}
+
+/**
  * Home over a neutral project (homeOrg) and two pull requests from GitHub, one on the working pane's
  * branch and one on a branch no pane is on: phone and desk, dark and light, then each list the
  * Recents / Workspaces control offers (when the build has it), then a phone's requests on Home over
@@ -1493,12 +1496,9 @@ else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
 else if (command === "diffs") await diffs(values.before === true);
 else if (command === "artifacts") await artifacts();
-else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
-else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts [--before] [--port 8797] [--out DIR] | compare A.png B.png");
 else if (command === "home") await home();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|home [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
