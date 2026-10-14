@@ -178,8 +178,9 @@ export function replyOutcomeFrom(outcome: SendOutcome, noEchoPrompt: () => strin
  * act on the earlier try: its text may be in the input box, and the same id submits it there instead
  * of typing a second copy. A failure before anything was typed, or one where the bridge already saw
  * the box without the text (stage `preflight`), gets a fresh id, so the retry sweeps whatever is
- * stranded on the input line and types again.
+ * stranded on the input line and types again. So does a message the CLI logged incomplete: it was
+ * submitted, nothing of it waits in the box, and sending it again is a new message.
  */
 export function retryKeepsRequestId(outcome: SendOutcome): boolean {
-  return !outcome.ok && outcome.textDelivered && outcome.stage !== "preflight";
+  return !outcome.ok && outcome.textDelivered && outcome.stage !== "preflight" && outcome.code !== "incomplete";
 }

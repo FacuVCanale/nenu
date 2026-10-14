@@ -8,7 +8,9 @@ import {
 } from "../prompt-binding.ts";
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest, TurnState } from "../types.ts";
-import { guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import { claudeLogReader } from "../delivery-check.ts";
+import { guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import { adapterFor as journalFor } from "../journal/registry.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
 import type { AgentStates } from "../agent-state.ts";
@@ -49,8 +51,8 @@ export const replyPaneActions: Record<string, PaneAction> = {
   send: {
     level: "write",
     marksSeen: true,
-    handle: async ({ cfg, audit, input, awaiting }, { req, rt, paneId, device }) =>
-      noteSent(await sendPane(rt, cfg, input, paneId, req, audit, device), () => awaiting.sent(rt.name, paneId)),
+    handle: async ({ cfg, audit, input, awaiting, agentStates, journals }, { req, rt, paneId, device }) =>
+      noteSent(await sendPane(rt, cfg, input, paneId, req, audit, device, () => claudeLog(agentStates, journals, rt.name, paneId)), () => awaiting.sent(rt.name, paneId)),
   },
   reply: {
     level: "write",
@@ -306,6 +308,13 @@ async function boxCarries(herdr: HerdrClient, cfg: Config, paneId: string, txt: 
 
 // ── POST /api/pane/:id/send ───────────────────────────────────────────────────────────────────────
 
+/** A look at the log of the Claude session the pane runs, when its session file maps one (ADR 0076). */
+function claudeLog(agentStates: Pick<AgentStates, "claudeSessionId">, journals: Services["journals"], session: string, paneId: string): GuardedSendDeps["received"] {
+  const sessionId = agentStates.claudeSessionId(session, paneId);
+  const source = journals ? journalFor(journals, "claude")?.source : undefined;
+  return sessionId && source ? claudeLogReader(() => source.resolve({ kind: "id", value: sessionId })) : undefined;
+}
+
 type SendRun = GuardedSendResult & { elapsedMs: number };
 const sendLedger = new WriteLedger<SendRun>((run) => run.outcome.ok);
 
@@ -340,6 +349,7 @@ export async function sendPane(
   req: Request,
   audit: AuditLog,
   device: string | null,
+  log?: () => GuardedSendDeps["received"],
 ): Promise<Response> {
   let request: SendRequest | string;
   try {
@@ -355,9 +365,10 @@ export async function sendPane(
   const result = await sendLedger.run(key, fingerprint, async (prior) => {
     const started = Date.now();
     const delivered = prior !== null && !prior.outcome.ok && prior.outcome.textDelivered;
+    const received = log?.();
     const locked = await input.run(rt.name, paneId, () =>
       guardedSend(
-        { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker) },
+        { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker), ...(received ? { received } : {}) },
         send,
         prior ? { typeAttempted: prior.trace.typeAttempted, textDelivered: delivered } : undefined,
       ),
