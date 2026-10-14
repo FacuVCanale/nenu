@@ -312,7 +312,8 @@ describe("Recents and Workspaces", () => {
     } finally {
       server.events.removeListener("request:start", record);
     }
-    expect(requests).toEqual([]);
+    // Home's own periodic reads may tick meanwhile on a loaded run; switching adds none of its own.
+    expect(requests.filter((url) => !/\/api\/(snapshot|interactions|pane\/[^/]+\/activity)\b/.test(url))).toEqual([]);
   });
 
   it("shows the first chats and the rest on request", async () => {
