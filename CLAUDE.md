@@ -201,6 +201,10 @@ the unit name; the Herdr action runs from anywhere.
   threshold collapses in the input box to `[Pasted text #N +M lines]`; the guard accepts that token as
   send evidence only when it is consistent with the message just typed. Don't try to dodge the
   threshold by chunking sends ([ADR 0010](./.adr/0010-long-sends-are-verified-via-the-paste-placeholder.md)).
+  Past that threshold the send goes as ONE bracketed paste, because the PTY splits it and Claude can
+  drop the first piece; after Enter, Claude's own log decides whether it arrived whole, and a log
+  holding less is answered as incomplete, never "Sent"
+  ([ADR 0075](./.adr/0075-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md)).
 - **A password prompt is recognised so Nenu can SAY what it is, never so it can send** — no
   automatic Enter, no relaxed verification, no secret channel; the remedy offered is the operator's
   own tap on "Type" ([ADR 0017](./.adr/0017-recognising-a-password-prompt-changes-what-collie-says.md)).
