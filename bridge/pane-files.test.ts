@@ -197,6 +197,25 @@ describe("pane project files", () => {
     expect(Buffer.concat(chunks)).toEqual(png);
   });
 
+  test("never serves Nenu's own state, uploads included, even from a folder that holds it", async () => {
+    // A pane opened in the home folder holds the state dir; an upload the operator attached is
+    // read by the agent, never served back by Nenu, whether named by path or delivered.
+    const state = join(root, ".local", "nenu-state");
+    await mkdir(join(state, "uploads"), { recursive: true });
+    await writeFile(join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-notes.txt"), "uploaded");
+    await writeFile(join(state, "audit.log"), "audit");
+    await symlink(join(state, "uploads"), join(root, "linked-uploads"));
+    const delivered = async () => [join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-notes.txt")];
+    for (const path of [".local/nenu-state/uploads/w1_p1-mv8g-0a1b2c3d-notes.txt", ".local/nenu-state/audit.log",
+      "linked-uploads/w1_p1-mv8g-0a1b2c3d-notes.txt", join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-notes.txt"), "w1_p1-mv8g-0a1b2c3d-notes.txt"]) {
+      const response = await paneFileResponse(root, path, { delivered, stateDir: state });
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toContain("uploaded");
+    }
+    await writeFile(join(root, "readme.md"), "fine");
+    expect((await paneFileResponse(root, "readme.md", { stateDir: state })).status).toBe(200);
+  });
+
   test("rejects missing panes, directories, filesystem root and malformed input", async () => {
     expect((await paneFileResponse(undefined, "file.md")).status).toBe(404);
     expect((await paneFileResponse("/", "etc/hosts")).status).toBe(404);

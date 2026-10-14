@@ -8,10 +8,26 @@ describe("AttachmentChips", () => {
   // workbench.css rule composer-workbench.test.tsx pins). The bench measures the 44x44 on the chip.
   it("gives Remove the app's one 44px touch reach and removes that image", async () => {
     const onRemove = vi.fn();
-    render(<AttachmentChips items={[{ id: "a", url: "blob:a", status: "ready" }]} onRemove={onRemove} onRetry={vi.fn()} />);
+    render(<AttachmentChips items={[{ id: "a", url: "blob:a", status: "ready", image: true }]} onRemove={onRemove} onRetry={vi.fn()} />);
     const remove = screen.getByRole("button", { name: "Remove Image 1" });
     expect(remove).toHaveClass("hit-area");
     await userEvent.click(remove);
     expect(onRemove).toHaveBeenCalledExactlyOnceWith("a");
+  });
+
+  it("names a file by what it is called, with its kind and size; only an image shows a thumbnail", () => {
+    render(<AttachmentChips onRemove={vi.fn()} onRetry={vi.fn()} items={[
+      { id: "a", status: "ready", image: false, name: "brand-guide.pdf", size: 2.4 * 1024 * 1024 },
+      { id: "b", status: "ready", image: false, name: "orders-export.csv", size: 18 * 1024 },
+      { id: "c", status: "ready", image: true, name: "IMG_2041.jpg", size: 1.1 * 1024 * 1024, url: "blob:c" },
+      { id: "d", status: "ready", image: false, name: "Makefile" },
+    ]} />);
+    const list = screen.getByRole("list", { name: "Attached files" });
+    expect(list).toHaveTextContent("brand-guide.pdfPDF · 2.4 MB");
+    expect(list).toHaveTextContent("orders-export.csvCSV · 18 KB");
+    expect(list).toHaveTextContent("IMG_2041.jpgPhoto · 1.1 MB");
+    expect(list).toHaveTextContent("MakefileFile");
+    expect(list.querySelectorAll("img")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Remove brand-guide.pdf" })).toBeInTheDocument();
   });
 });

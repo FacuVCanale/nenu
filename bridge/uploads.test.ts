@@ -1,6 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 
-import { filesToPrune, imageExtFromBytes, sweepUploads, type UploadFs } from "./uploads.ts";
+import { isChatUploadPath } from "./chat-upload-preview.ts";
+import { MAX_REQUEST_BODY_BYTES } from "./server.ts";
+import { filesToPrune, imageExtFromBytes, MAX_UPLOAD_BYTES, saveUpload, sweepUploads, type UploadFs } from "./uploads.ts";
 
 // filesToPrune is the pure decision; sweepUploads is exercised with a fake fs so the stat/unlink
 // orchestration (and its best-effort error handling) is covered without touching disk.
@@ -115,5 +120,82 @@ describe("sweepUploads", () => {
     const removed = await sweepUploads("/uploads", TTL, now, fs);
     expect(removed).toEqual(["b.png"]);
     expect(unlinked).toEqual(["b.png"]);
+  });
+});
+
+describe("saveUpload", () => {
+  const PNG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d);
+  // `<state>/uploads`, as the bridge lays it out.
+  let dir: string;
+  beforeEach(async () => { dir = join(await mkdtemp(join(tmpdir(), "nenu-state-")), "uploads"); });
+  afterEach(async () => { await rm(dirname(dir), { recursive: true, force: true }); });
+
+  const save = async (name: string, body: BlobPart = "hello") => {
+    const result = await saveUpload(dir, "w1:p2", new File([body], name));
+    if (!result.ok) throw new Error(result.error);
+    return result.path;
+  };
+
+  test("takes any kind of file and keeps its extension, so the agent can open it", async () => {
+    for (const [name, ext] of [["spec.pdf", ".pdf"], ["bundle.zip", ".zip"], ["cart.ts", ".ts"], ["c.tar.gz", ".tar.gz"]] as const) {
+      const path = await save(name, `body of ${name}`);
+      expect(dirname(path)).toBe(dir);
+      expect(path.endsWith(ext)).toBe(true);
+      expect(await readFile(path, "utf8")).toBe(`body of ${name}`);
+    }
+  });
+
+  test("an image is named by its bytes, in the shape the chat preview accepts", async () => {
+    const path = await save("IMG_2041.HEIC", PNG);
+    expect(basename(path)).toMatch(/^w1_p2-[a-z0-9]+-[a-f0-9]{8}\.png$/);
+    expect(isChatUploadPath(dirname(dir), path)).toBe(true);
+  });
+
+  test("a file named like an image that is not one never keeps an image extension", async () => {
+    for (const name of ["fake.png", "deadbeef.jpg", "x.webp"]) {
+      const path = await save(name, "<!doctype html><script>alert(1)</script>");
+      expect(path).not.toMatch(/\.(?:png|jpe?g|gif|webp)$/i);
+      expect(isChatUploadPath(dirname(dir), path)).toBe(false);
+      expect(basename(path)).toEndWith(".bin");
+    }
+  });
+
+  test("odd client names become a generated, flat, portable name", async () => {
+    const cases: Record<string, string> = {
+      "my report (final).pdf": "-my_report_final.pdf",
+      "../x.ts": "-x.ts",
+      "CON": "-CON",
+      "résumé ü.txt": "-resume_u.txt",
+      "..": "-file",
+      "": "-file",
+      "a/b\\c.tar.gz": "-c.tar.gz",
+      ".env": "-file.env",
+      "...hidden..name...md": "-hidden.name.md",
+      [`${"x".repeat(300)}.pdf`]: `-${"x".repeat(64)}.pdf`,
+    };
+    for (const [name, suffix] of Object.entries(cases)) {
+      const path = await save(name);
+      const saved = basename(path);
+      expect(dirname(path)).toBe(dir);
+      expect(saved).toMatch(/^w1_p2-[a-z0-9]+-[a-f0-9]{8}-/);
+      expect(saved.endsWith(suffix)).toBe(true);
+      expect(saved).toMatch(/^[A-Za-z0-9._-]+$/);
+      expect(saved).not.toContain("..");
+      expect(saved.length).toBeLessThanOrEqual(120);
+    }
+  });
+
+  test("refuses a file over 25 MB and writes nothing", async () => {
+    expect(MAX_UPLOAD_BYTES).toBe(25 * 1024 * 1024);
+    const result = await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "big.zip"));
+    expect(result).toEqual({ ok: false, error: "File too large (max 25 MB)." });
+    expect(await readdir(dir).catch(() => [])).toEqual([]);
+    expect((await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES)], "edge.zip"))).ok).toBe(true);
+  });
+});
+
+describe("the runtime's body cap", () => {
+  test("lets a whole 25 MB upload and its multipart wrapping reach the route", () => {
+    expect(MAX_REQUEST_BODY_BYTES).toBeGreaterThan(MAX_UPLOAD_BYTES + 64 * 1024);
   });
 });

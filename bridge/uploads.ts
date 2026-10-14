@@ -1,7 +1,8 @@
-import { readdir, stat, unlink } from "node:fs/promises";
+import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import type { UploadResponse } from "./types.ts";
 
-// Uploaded images (server.ts uploadPane → `<stateDir>/uploads/`) are referenced by path in a
+// Uploaded files (routes/files.ts → saveUpload → `<stateDir>/uploads/`) are referenced by path in a
 // message and then never needed again, so nothing deletes them. This sweep prunes anything older
 // than the TTL. The decision — which names are stale — is a pure, tested function; the runner that
 // stats the dir and unlinks takes an injectable fs surface so it too can be exercised without disk.
@@ -51,6 +52,47 @@ export function imageExtFromBytes(head: Uint8Array): string | null {
     if (rows.length > 0 && rows.every((r) => matchesAt(head, r.at, r.bytes))) return ext;
   }
   return null;
+}
+
+/** One attached file, at most. The composer refuses a bigger one before it uploads (ADR 0074). */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const TOO_LARGE = "File too large (max 25 MB).";
+
+/** The extensions Claude Code attaches as images by name: only bytes that are an image may carry one. */
+const IMAGE_NAME = /^(?:png|jpe?g|gif|webp)$/;
+
+/**
+ * The client's file name as a flat, portable tail for the generated name: its last path segment,
+ * accents folded, every other character outside `[A-Za-z0-9._-]` as `_`, no dot runs and no
+ * leading or trailing separator. The extension survives, lower-cased, so the agent can open it.
+ */
+function clientTail(name: string): string {
+  const base = name.split(/[\\/]/).pop()!.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  const dot = /\.([A-Za-z0-9]{1,10})$/.exec(base);
+  const clean = (part: string) => part.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/\.{2,}/g, ".").replace(/^[._-]+|[._-]+$/g, "");
+  const stem = clean(dot ? base.slice(0, dot.index) : base).slice(0, 64).replace(/[._-]+$/, "") || "file";
+  const ext = dot?.[1]!.toLowerCase();
+  if (!ext) return stem;
+  // A file named like an image that is not one would be attached as an image by Claude.
+  return IMAGE_NAME.test(ext) ? `${stem}.${ext}.bin` : `${stem}.${ext}`;
+}
+
+/**
+ * Save one attached file under a name Nenu makes up, and return its path. Any kind is accepted;
+ * the bytes are never read past the image sniff. An image is named by what its bytes are, in the
+ * shape the chat preview accepts (chat-upload-preview.ts); anything else keeps its sanitized name
+ * after the generated part, so no client name can choose a path, a dot segment or a device name.
+ */
+export async function saveUpload(dir: string, paneId: string, file: File): Promise<UploadResponse> {
+  if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: TOO_LARGE };
+  const ext = imageExtFromBytes(new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer()));
+  // 0700 — uploads (and the state dir they live under) may hold sensitive files; keep them
+  // owner-only. recursive:true applies the mode to any intermediate dirs it creates too.
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const generated = `${paneId.replace(/[^A-Za-z0-9_-]/g, "_")}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+  const path = join(dir, ext ? `${generated}.${ext}` : `${generated}-${clientTail(file.name ?? "")}`);
+  await Bun.write(path, file);
+  return { ok: true, path };
 }
 
 /** Names whose mtime is older than `ttlMs` before `now`. Pure — the whole decision, unit-tested. */

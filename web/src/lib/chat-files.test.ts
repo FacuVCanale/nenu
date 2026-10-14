@@ -1,4 +1,5 @@
-import { chatFileReferences, filePathsInText, artifactKind, markdownImagePaths } from "./chat-files";
+import type { ArtifactMetadata } from "./api";
+import { artifactSections, chatFileReferences, filePathsInText, artifactKind, markdownImagePaths } from "./chat-files";
 import type { TranscriptEntry } from "./types";
 
 describe("chat file references", () => {
@@ -84,5 +85,40 @@ describe("journal media in file references", () => {
     const [report] = chatFileReferences(entries);
     expect(report).toMatchObject({ path: "/tmp/out/report.html", delivered: true });
     expect(markdownImagePaths("![a](x.png) and [b](y.png)")).toEqual(["x.png"]);
+  });
+});
+
+describe("artifactSections", () => {
+  const said = (uuid: string, role: "user" | "assistant", text: string) => ({ uuid, ts: "2026-10-14T14:00:00Z", role, parts: [{ kind: "text" as const, text }] });
+  const refs = chatFileReferences([
+    said("u", "user", "Use /srv/uploads/mine.png"),
+    said("a", "assistant", [
+      "![After](shots/after.png) [notes](docs/notes.pdf) [board](design/board.html)",
+      "I read /srv/vault/one.png and /srv/vault/two.png, and `shots/named.png` is in the folder.",
+      "[gone](shots/gone.png)",
+    ].join(" ")),
+  ]);
+  const found = new Map<string, ArtifactMetadata>([
+    ["shots/after.png", { path: "shots/after.png", state: "preview" }],
+    ["/srv/vault/one.png", { path: "/srv/vault/one.png", state: "outside" }],
+    ["/srv/vault/two.png", { path: "/srv/vault/two.png", state: "outside" }],
+    ["/srv/uploads/mine.png", { path: "/srv/uploads/mine.png", state: "outside" }],
+    ["shots/named.png", { path: "shots/named.png", state: "preview" }],
+    ["shots/gone.png", { path: "shots/gone.png", state: "missing" }],
+    ["design/board.html", { path: "design/board.html", state: "preview", designboard: "Checkout" }],
+  ]);
+
+  it("shows an image only when the agent delivered it and the bridge can serve it", () => {
+    const { images } = artifactSections(refs, found);
+    expect(images.map(r => r.path)).toEqual(["shots/after.png"]);
+  });
+
+  it("gathers the images the agent named beyond the pane's folder, never the operator's own", () => {
+    expect(artifactSections(refs, found).outside.map(r => r.path)).toEqual(["/srv/vault/one.png", "/srv/vault/two.png"]);
+  });
+
+  it("lists delivered documents and designboards, and nothing it has not checked yet", () => {
+    expect(artifactSections(refs, found).delivered.map(r => r.path).sort()).toEqual(["design/board.html", "docs/notes.pdf"]);
+    expect(artifactSections(refs, new Map())).toMatchObject({ images: [], outside: [] });
   });
 });
