@@ -36,8 +36,9 @@ Chromium draws both. The whole page as one picture (`root`) draws in both.
 
 ## Consequences
 
-- One frame more from tap to the new page in the DOM (measured 5 to 19 ms going back, 32 to 36 ms
-  opening a pane on the bench, medians): the capture.
+- One frame more from tap to the new page in the DOM, the capture: on the bench, medians of 8, going
+  back took 5 to 7 ms before and 18 to 20 ms after, opening a pane 23 to 32 ms before and 36 to 44 ms
+  after.
 - The header slides with the page instead of staying put as on iOS. Revisit if WebKit draws named
   groups in a same-document transition, verified on a real iPhone.
 - Browser Back and the iOS edge swipe stay unanimated by Nenu, so they never fight the browser's
