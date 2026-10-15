@@ -1,17 +1,15 @@
-import { useState, type ReactNode } from "react";
-import { Activity, ArrowLeft, BookText, Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ChatCircle, ChatCircleText, type IconComponent } from "@/components/ui/icon";
+import { useState } from "react";
+import { ArrowLeft, Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ChatCircle, ChatCircleText, type IconComponent } from "@/components/ui/icon";
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
 import { DiffStat } from "@/components/diff-stat";
 import { MergeDialog } from "@/components/merge-dialog";
-import { ProjectTasks, canMerge, threadAge } from "@/components/project-tasks";
+import { canMerge, threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
-import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
+import type { ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-export type PanelTab = "threads" | "prs" | "activity" | "memory";
 
 /**
  * What a pull request waits on, what needs you first: the order of the open list. Words come only
@@ -68,7 +66,7 @@ export function prLists(threads: readonly ProjectThreadView[]): { open: ProjectT
 }
 
 /** The pull requests of a set of threads; one Organizations can merge offers Merge, which asks first. */
-export function PrList({ project, threads, session, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }: {
+export function PrList({ project, threads, session, readOnly, onOpenPane, onOpenNode, onChanged, onOpenPr, grouped = false, now = Date.now() }: {
   project: ProjectView;
   threads: readonly ProjectThreadView[];
   session?: string;
@@ -76,40 +74,53 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
   onOpenPane: (paneId: string) => void;
   onOpenNode: (id: string) => void;
   onChanged: () => void;
+  /** Given, a row opens its pull request (the desk's panel shows the diff) and its thread is a second action. */
+  onOpenPr?: (thread: ProjectThreadView) => void;
+  /** Split the open ones into Ready to merge and In flight. */
+  grouped?: boolean;
   now?: number;
 }) {
   const [merging, setMerging] = useState<ProjectThreadView | null>(null);
   const [historyShown, setHistoryShown] = useState(false);
   const { open, history } = prLists(threads);
   if (open.length === 0 && history.length === 0) return <p className="py-3 text-sm text-muted-foreground">No pull requests yet.</p>;
+  const openThread = (thread: ProjectThreadView) => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id);
   const row = (thread: ProjectThreadView, past: boolean) => {
     const pr = thread.pr!;
     const { status, label } = prStatus(thread);
     const { icon: Icon, tone } = PR_STATUS[status];
     const age = threadAge(thread, now);
-    // An open PR with a live pane opens its diff; a past one keeps its size as text in the row.
-    const diffPane = past ? undefined : thread.paneId;
+    // An open PR with a live pane opens its diff from its size, unless the whole row already does.
+    const diffPane = past || onOpenPr ? undefined : thread.paneId;
     return (
       <li key={thread.id} className="task-row">
-        <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>
+        <button type="button" className="task-main" onClick={() => onOpenPr ? onOpenPr(thread) : openThread(thread)}>
           <span data-pr-status={status} className="mt-0.5 flex shrink-0"><Icon aria-hidden className={cn("size-3.5", tone)} /></span>
           <span className="min-w-0 flex-1">
-            <span className={cn("block break-words text-sm font-medium", past && "text-muted-foreground")}>{thread.title}</span>
+            <span data-task-title className={cn("block break-words text-sm font-medium", past && "text-muted-foreground")}>{thread.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{pr.number !== undefined ? `PR #${pr.number}` : "PR"} · {label}</span>
           </span>
           {pr.diff ? !diffPane && <DiffStat diff={pr.diff} className="text-xs" /> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}
         </button>
         {pr.diff && diffPane && <DiffStat diff={pr.diff} paneId={diffPane} pr={pr.number} session={session} url={pr.url} className="mr-1 mt-[9px] self-start px-1.5 text-xs" />}
+        {onOpenPr && <button type="button" aria-label={`Open thread: ${thread.title}`} title="Open thread" onClick={() => openThread(thread)} className="task-fold">
+          <ChatCircle aria-hidden className="size-3.5" />
+        </button>}
         {/* Outline: a list of ready PRs would otherwise stack ink buttons; the dialog's Merge is the primary. */}
         {!past && !readOnly && canMerge(project, thread) && <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`Merge ${thread.title}`}
           onClick={() => setMerging(thread)}>Merge</Button>}
       </li>
     );
   };
+  const ready = grouped ? open.filter((thread) => prStatus(thread).status === "ready") : [];
+  const section = (name: string, list: ProjectThreadView[]) => list.length > 0 && <section aria-label={name} className="mb-3">
+    <h3 className="panel-group-heading">{name}<span className="tabular-nums">{list.length}</span></h3>
+    <ul className="task-list">{list.map((thread) => row(thread, false))}</ul>
+  </section>;
   return <>
-    {open.length > 0
-      ? <ul className="task-list mb-2" aria-label="Open pull requests">{open.map((thread) => row(thread, false))}</ul>
-      : <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No thread has an open pull request.</p>}
+    {open.length === 0 ? <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No thread has an open pull request.</p>
+      : grouped ? <>{section("Ready to merge", ready)}{section("In flight", open.filter((thread) => !ready.includes(thread)))}</>
+      : <ul className="task-list mb-2" aria-label="Open pull requests">{open.map((thread) => row(thread, false))}</ul>}
     {history.length > 0 && <>
       <button type="button" className="task-history-toggle" aria-expanded={historyShown} onClick={() => setHistoryShown(!historyShown)}>
         <ChevronRight aria-hidden className="size-3.5" />History · {history.length}
@@ -142,81 +153,5 @@ export function PaneActivity({ paneId, session, className }: { paneId: string; s
     <ActivityPanel className={className} data={activity.data} stale={activity.stale} now={now} onRetry={activity.refresh}
       onOpenWorkflow={(runId, agentId) => setDetail({ kind: "workflow", runId, agentId: agentId ?? null })}
       onOpenTask={(taskId) => setDetail({ kind: "task", taskId, title: activity.data?.available ? activity.data.tasks.find((t) => t.id === taskId)?.title ?? "Output" : "Output" })} />
-  );
-}
-
-const TABS: Array<[PanelTab, string, typeof ChatCircle]> = [
-  ["threads", "Threads", ChatCircle],
-  ["prs", "PRs", GitPullRequest],
-  ["activity", "Activity", Activity],
-  ["memory", "Memory", BookText],
-];
-
-/**
- * The project's side panel beside a coordinator or thread: its organization, their pull requests,
- * the coordinator session's background activity, and what every thread shares.
- */
-export function ThreadsPanel({ project, threads, coordinator, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, action }: {
-  project: ProjectView;
-  threads: ProjectThreadView[];
-  /** The coordinator under the project that runs them; the project's own when omitted. */
-  coordinator?: ProjectThreadView;
-  title: string;
-  subtitle?: ReactNode;
-  /** The Claude pane whose activity the Activity tab shows. */
-  activityPaneId?: string;
-  panes: readonly AgentView[];
-  session?: string;
-  currentPaneId?: string;
-  readOnly: boolean;
-  onOpenPane: (paneId: string) => void;
-  onOpenNode: (id: string) => void;
-  onChanged: () => void;
-  action?: ReactNode;
-}) {
-  const [tab, setTab] = useState<PanelTab>("threads");
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div role="tablist" aria-label="Project panel" className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-3">
-        {TABS.map(([key, label, Icon]) => (
-          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className="panel-tab">
-            <Icon aria-hidden className="size-3.5" />{label}
-          </button>
-        ))}
-        <span className="flex-1" />
-        {action}
-      </div>
-      <div role="tabpanel" aria-label={TABS.find(([key]) => key === tab)![1]} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
-        {tab === "threads" && <ProjectTasks project={project} threads={threads} coordinator={coordinator} title={title} subtitle={subtitle} panes={panes} session={session}
-          currentPaneId={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} />}
-        {tab === "prs" && <PrList project={project} threads={threads} session={session} readOnly={readOnly} onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} />}
-        {tab === "activity" && (activityPaneId
-          ? <PaneActivity paneId={activityPaneId} session={session} />
-          : <p className="text-sm text-muted-foreground">The coordinator is not running, so there is no activity to show.</p>)}
-        {tab === "memory" && <ProjectMemory project={project} threads={threads} />}
-      </div>
-    </div>
-  );
-}
-
-/** What Organizations hands every thread: the project's goal, and where the threads work. */
-function ProjectMemory({ project, threads }: { project: ProjectView; threads: readonly ProjectThreadView[] }) {
-  const branches = threads.filter((thread) => thread.branch && thread.status !== "resolved");
-  return (
-    <div className="flex flex-col gap-4 text-sm">
-      <section className="rounded-xl border border-border p-3.5">
-        <h3 className="text-[13px] font-medium">Shared with every thread</h3>
-        <p className="mt-1.5 leading-relaxed text-muted-foreground">{project.goal || "This project has no goal written down yet."}</p>
-      </section>
-      {branches.length > 0 && <section>
-        <h3 className="mb-1.5 text-[13px] font-medium">Branches</h3>
-        <ul className="flex flex-col gap-1">
-          {branches.map((thread) => <li key={thread.id} className="flex items-baseline gap-2">
-            <span className="shrink-0">{thread.title}</span>
-            <span className="truncate font-mono text-xs text-muted-foreground">{thread.branch}</span>
-          </li>)}
-        </ul>
-      </section>}
-    </div>
   );
 }

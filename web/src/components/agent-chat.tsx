@@ -133,6 +133,8 @@ interface AgentChatProps {
   title?: string;
   /** A control at the head of the header's right cluster (a project's Tasks toggle). */
   headerAction?: ReactNode;
+  /** The header's last control, right of the menu: a desk's way back to a folded session panel. */
+  headerTrail?: ReactNode;
   /** Replaces the conversation body while set; the chat stays mounted underneath. */
   overlay?: ReactNode;
   /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
@@ -201,6 +203,7 @@ export function AgentChat({
   project,
   title: titleOverride,
   headerAction,
+  headerTrail,
   overlay,
   strip,
   composerTop,
@@ -1062,8 +1065,9 @@ export function AgentChat({
                   </button>
                 )}
                 {actionsMenu}
+                {headerTrail}
               </>
-            ) : headerAction
+            ) : <>{headerAction}{headerTrail}</>
           }
         >
           {/* The screen's heading: the pane's name over its place. A project's title opens the

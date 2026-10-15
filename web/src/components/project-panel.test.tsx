@@ -46,7 +46,7 @@ const diff: PaneDiff = {
 let reads: string[] = [];
 let sent: Array<{ pane: string; text: string }> = [];
 let taskList: OrgTask[] | null = tasks;
-let context: unknown = null;
+let context: Record<string, unknown> = {};
 
 beforeEach(() => {
   reads = [];

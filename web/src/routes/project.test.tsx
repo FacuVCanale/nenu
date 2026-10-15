@@ -13,11 +13,11 @@ import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
-interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
+interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; headerTrail?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, project, title, headerAction, overlay, strip, conversationFooter, composerTop, docked }: StubProps) => (
+  AgentChat: ({ paneId, project, title, headerAction, headerTrail, overlay, strip, conversationFooter, composerTop, docked }: StubProps) => (
     <div data-testid={docked ? "docked" : "chat"} data-role={project?.role}>
-      {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>}
+      {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}{headerTrail}</header>}
       {strip === undefined ? <nav aria-label="Workspace tabs" /> : strip}
       {overlay ?? <div data-testid="conversation">{`conversation:${paneId}`}{conversationFooter}</div>}
       {composerTop}

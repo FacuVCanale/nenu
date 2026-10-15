@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { browsersCache, DESKTOP, launchWebkit, userCacheDir, type Browser, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { homeOrg, seedDiffRepo, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
@@ -95,6 +95,8 @@ async function bench<T>(legacy: boolean, fn: (bridge: TestBridge, browser: Brows
 // Every read but the app-wide polls, so a view that loads unseen shows up beside the chat's own reads.
 const POLLS = /^\/api\/(snapshot|events|version|update)|\/(queue|subagents|interactions|history|skills|models|activity)$/;
 
+let motion: unknown = null;
+
 async function capture(bridge: TestBridge, browser: Browser, legacy: boolean) {
   const herd = bridge.herd!;
   const shots: string[] = [];
@@ -138,6 +140,45 @@ async function capture(bridge: TestBridge, browser: Browser, legacy: boolean) {
     }
     await context.close();
   }
+  // The fold and the reopen, with motion allowed: what animates, on which properties, for how long.
+  if (!before && !legacy) {
+    const context = await browser.newContext({ ...DESKTOP, reducedMotion: "no-preference", timezoneId: "UTC", locale: "en-US" });
+    const page = await context.newPage();
+    await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.codex)}`);
+    await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(800);
+    const running = () => page.evaluate(() => document.getAnimations().map((animation) => {
+      const effect = animation.effect as KeyframeEffect | null;
+      return { properties: [...new Set((effect?.getKeyframes() ?? []).flatMap((frame) => Object.keys(frame).filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key))))],
+        duration: effect?.getTiming().duration, iterations: effect?.getTiming().iterations };
+    }), null);
+    const quiet = await running();
+    await page.getByRole("button", { name: "Hide session panel" }).click();
+    const fold = await running();
+    await page.waitForTimeout(400);
+    await page.getByRole("button", { name: "Show session panel" }).click();
+    const open = await running();
+    await page.waitForTimeout(400);
+    const tab = await (async () => { await page.getByRole("tab", { name: /^Agents/ }).click(); return running(); })();
+    motion = { quiet, fold, open, tab, after: await (async () => { await page.waitForTimeout(400); return running(); })() };
+    await context.close();
+  }
+  // A phone keeps its own project views (Chat, Threads, PRs): the desk's panel must not reach it.
+  if (!legacy) {
+    const context = await browser.newContext({ ...PHONE, timezoneId: "UTC", locale: "en-US" });
+    const page = await context.newPage();
+    await page.clock.install({ time: bridge.now() });
+    await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.codex)}`);
+    await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+    for (const view of ["Threads", "PRs"]) {
+      await page.getByRole("tab", { name: new RegExp(`^${view}`) }).click();
+      await page.waitForTimeout(900);
+      const path = join(outDir, `phone-${view.toLowerCase()}-dark.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    }
+    await context.close();
+  }
   return { shots, requests };
 }
 
@@ -160,7 +201,7 @@ async function webkitProcesses(): Promise<Map<number, { rssKb: number; cpuMs: nu
 async function idle(bridge: TestBridge) {
   const windowMs = Number(values.seconds) * 1000;
   const runs = [];
-  for (let run = 1; run <= 2; run++) {
+  for (let run = 1; run <= 3; run++) {
     const known = new Set((await webkitProcesses()).keys());
     const own = await launchWebkit();
     try {
@@ -200,7 +241,7 @@ const legacy = before ? undefined : await bench(true, async (bridge, browser) =>
   orgCalls: (await bridge.orgCalls()).map((argv) => argv.join(" ")),
   unexpectedWrites: bridge.fake!.writes(),
 }));
-const summary = { before, ...result, legacy };
+const summary = { before, ...result, motion, legacy };
 await writeFile(join(outDir, "project-panel.json"), JSON.stringify(summary, null, 2));
 console.log(JSON.stringify({ ...summary, shots: undefined, legacy: legacy && { ...legacy, shots: undefined } }, null, 2));
 if (result.unexpectedWrites.length || legacy?.unexpectedWrites.length) process.exit(1);

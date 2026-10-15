@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
 import { ListChecks, ChatCircle } from "@/components/ui/icon";
 
@@ -6,17 +6,22 @@ import { PrBar } from "@/components/pr-bar";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
-import { PrList, ThreadsPanel, prLists } from "@/components/threads-panel";
+import { PrList, prLists } from "@/components/threads-panel";
 import type { HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
+// The Project tab is a desk's alone: a phone never loads it.
+const ProjectPanel = lazy(() => import("./project-panel").then((module) => ({ default: module.ProjectPanel })));
+
 /** What a project gives the chat it wraps. */
 export interface ProjectChatSlots {
   title: string;
   headerAction?: ReactNode;
+  /** The header's last control, right of every other: the desk's way back to a folded panel. */
+  headerTrail?: ReactNode;
   overlay?: ReactNode;
   strip?: ReactNode;
   composerTop?: ReactNode;
@@ -50,7 +55,7 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
 
 /**
  * A pane that belongs to a project renders inside this frame. A desk keeps the session panel beside
- * the chat, with the project's own panel behind its ⋯, or docks a thread there (`?thread=`); the
+ * the chat, with the project as its first tab, or docks a thread there (`?thread=`); the
  * sidebar lists the threads, so the chat carries none of them. A phone switches the coordinator between Chat,
  * Threads and PRs in place, keeping the chat mounted so its draft and scroll survive; a thread shows
  * its siblings as chips, a header button to the project's threads, and its pull request above the
@@ -101,7 +106,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const phoneWorker = !desk && !scope.coordinating;
   const tasksShown = phoneWorker && view === "threads";
   const pr = sessionPr(data, paneId, thread);
-  const headerAction = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : phoneWorker ? (
+  const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
+  const headerAction = phoneWorker ? (
     <button type="button" className="project-toggle" aria-label={tasksShown ? "Back to chat" : `Threads, ${openCount} open`}
       onClick={() => setView(tasksShown ? "chat" : "threads")}>
       {tasksShown ? <><ChatCircle aria-hidden className="size-3.5" />Chat</> : <>
@@ -142,6 +148,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
       {children({
         title: thread?.title ?? project.name,
         headerAction,
+        headerTrail,
         overlay,
         // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.
         strip: phoneTabs ?? chips ?? (desk ? null : undefined),
@@ -159,10 +166,11 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
       )}
       {panelShown && (
         <SessionInspector inspector={inspector} paneId={paneId} session={data.session} artifacts={data.agents.some((pane) => pane.paneId === paneId)} pr={pr}
-          project={<ThreadsPanel project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle}
+          project={<Suspense fallback={null}><ProjectPanel project={project} threads={scope.threads} coordinator={scope.coordinator}
             activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
+            section={inspector.section} onSection={inspector.setSection}
             onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }}
-            onOpenNode={openNode} onChanged={refresh} />} />
+            onOpenNode={openNode} onChanged={refresh} /></Suspense>} />
       )}
     </div>
   );
