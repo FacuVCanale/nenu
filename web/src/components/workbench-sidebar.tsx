@@ -2,7 +2,6 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { ChevronRight, Clock, House, Laptop, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
 
-import { machineName } from "@/components/composer-chips";
 import { DeskLists } from "@/components/desk-nav";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NodeDot } from "@/components/node-row";
@@ -372,14 +371,16 @@ function useRevealProject(currentProject: string | undefined, setExpanded: (slug
  */
 function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
   const connected = data.bridge === "connected" && !data.error;
-  const host = machineName();
+  const { hostname } = window.location;
+  const host = /^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local";
   const agents = data.agents.length;
   const meta = !connected ? "Not connected"
     : !desk && `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}`;
-  const dot = <span className={cn("size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />;
   return (
     <div className="nav-host">
-      {desk ? <span className="nav-lead">{connected ? <Laptop aria-hidden size={16} /> : dot}</span> : dot}
+      {desk && connected
+        ? <Laptop aria-hidden size={16} className="nav-host-mark" />
+        : <span className={cn("nav-host-dot size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />}
       <span className="nav-host-text">
         <span className="nav-host-name">{desk ? host : `herdr · ${host}`}</span>
         {meta && <span className="nav-host-meta">{meta}</span>}
