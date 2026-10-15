@@ -168,6 +168,33 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(live).toHaveLength(1);
   });
 
+  test("a thread's one PR action is the first Nenu knows of the PR's actions, or of the thread's own without a PR", async () => {
+    const pr = (number: number, actions?: string[]) => ({
+      url: `https://github.com/acme/demo/pull/${number}`, state: "OPEN", review: "", checks: { passed: 1, pending: 0, failed: 0 }, additions: 1, deletions: 1,
+      failing: [], comment_count: 0, draft: false, mergeable: "MERGEABLE", merge_blocker: null, ...(actions ? { actions } : {}),
+    });
+    const registry = registryFor(fixture(), { run: overviewRun([
+      overviewThread({ id: "t-0001", pr: pr(1, ["resolve-conflicts", "fix-ci", "address-comments"]) }),
+      // A value from a newer Organizations is skipped, not shown.
+      overviewThread({ id: "t-0002", pr: pr(2, ["rebase-later", "merge"]) }),
+      overviewThread({ id: "t-0003", actions: ["create-pr"] }),
+      // A PR that calls for nothing offers nothing, whatever the thread's own list says.
+      overviewThread({ id: "t-0004", pr: pr(4, []), actions: ["create-pr"] }),
+      // An Organizations that predates actions: no field, so the client keeps today's Merge.
+      overviewThread({ id: "t-0005", pr: pr(5) }),
+      overviewThread({ id: "t-0006", actions: ["merge", 7] }),
+      // Organizations orders them; Nenu never reorders, so Merge leads only where Organizations puts it.
+      overviewThread({ id: "t-0007", pr: pr(7, ["merge", "address-comments"]) }),
+      overviewThread({ id: "t-0008", pr: pr(8, ["address-comments", "merge"]) }),
+    ]) });
+    await registry.refresh();
+    const threads = registry.list("default", true, [])[0]!.threads;
+    expect(threads.map((thread) => [thread.id, thread.prAction ?? null])).toEqual([
+      ["t-0001", "resolve-conflicts"], ["t-0002", "merge"], ["t-0003", "create-pr"], ["t-0004", null], ["t-0005", null], ["t-0006", null], ["t-0007", "merge"], ["t-0008", "address-comments"],
+    ]);
+    expect(threads[4]).not.toHaveProperty("prAction");
+  });
+
   test("an agent's own Waiting for you report reaches the client as selfWaiting, from --json and from the files", async () => {
     const root = fixture();
     writeFileSync(join(root, "demo", "threads", "t-0002.toml"), `id = "t-0002"\ntitle = "Copy"\nstatus = "open"\nlast_group = "waiting-on-you"\nactivity = "Waiting for you"\n`);

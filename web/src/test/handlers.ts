@@ -185,6 +185,14 @@ export const handlers = [
     const body = await request.json() as { id: string; autoFixCi?: boolean; autoMerge?: boolean };
     return HttpResponse.json({ ok: true, flags: { id: body.id, autoFixCi: body.autoFixCi ?? false, autoMerge: body.autoMerge ?? false } });
   }),
+  http.post("/api/org/thread/pr-action", async ({ request }) => {
+    const body = await request.json() as { id: string; action: string };
+    return HttpResponse.json({ ok: true, asked: { id: body.id, action: body.action, pr: "https://github.com/acme/app/pull/7", sent: true, reason: "" } });
+  }),
+  http.post("/api/org/thread/pr-create", async ({ request }) => {
+    const body = await request.json() as { id: string };
+    return HttpResponse.json({ ok: true, created: { id: body.id, pr: "https://github.com/acme/app/pull/8" } });
+  }),
   http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/close$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/rename$/, () => HttpResponse.json({ ok: true })),

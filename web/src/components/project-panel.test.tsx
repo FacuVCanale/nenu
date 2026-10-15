@@ -297,6 +297,19 @@ it("PRs groups ready to merge and in flight; a PR opens its diff in the panel, i
   expect(onOpenPane).toHaveBeenCalledTimes(2);
 });
 
+it("PRs offers each PR's one button beside its row, and a pushed branch waits in flight with Create PR", () => {
+  const withActions = [
+    ...threads.map((item) => item.id === "t-0012" ? { ...item, prAction: "fix-ci" as const } : item.id === "t-0013" ? { ...item, prAction: "merge" as const } : item),
+    thread("t-0014", "Login hotfix", { group: "idle", branch: "acme-t-0014", prAction: "create-pr" }),
+  ];
+  render(<Panel initial="prs" view={{ ...project, threads: withActions }} />);
+  expect(titles(group("Ready to merge"))).toEqual(["Cart badge"]);
+  expect(titles(group("In flight"))).toEqual(["Checkout flow", "Login hotfix"]);
+  expect(screen.getByRole("button", { name: "Merge Cart badge" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Fix CI Checkout flow" })).toHaveTextContent(/^Fix CI$/);
+  expect(screen.getByRole("button", { name: "Create PR Login hotfix" })).toHaveTextContent(/^Create PR$/);
+});
+
 it("Context shows what every thread receives, its repos, routines and agents", async () => {
   context = {
     ok: true,

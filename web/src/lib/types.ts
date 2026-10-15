@@ -200,7 +200,13 @@ export interface ProjectThreadView {
   /** The PR automation flags. Present only when Organizations has PR actions. */
   autoFixCi?: boolean;
   autoMerge?: boolean;
+  /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
+  prAction?: PrAction;
 }
+
+/** Mirror PrAsk and PrAction in bridge/types.ts. */
+export type PrAsk = "resolve-conflicts" | "fix-ci" | "address-comments";
+export type PrAction = PrAsk | "merge" | "create-pr";
 
 /** Mirrors ThreadPullRequest in bridge/types.ts. */
 export interface ThreadPullRequest {
