@@ -33,6 +33,7 @@ function panelSeed(herd: DemoHerd, now: number, size: { additions: number; delet
   const seed = homeOrg(herd, now, size);
   const project = seed.projects[0]!;
   project.coordinator = { workspace_id: "w2", tab_id: "w2:t1", pane_id: herd.codex };
+  project.threads = project.threads.map((thread) => thread.id === "t-0012" ? { ...thread, auto_merge: true } : thread);
   if (legacy) return seed;
   const agent = (profile: string) => ({ kind: "agent", profile, machine: "", name: "" });
   const none = { kind: "unassigned", profile: "", machine: "", name: "" };
