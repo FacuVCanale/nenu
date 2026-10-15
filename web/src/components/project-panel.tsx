@@ -235,6 +235,7 @@ function NoteGroups<State extends string>({ panel, source, groups, tone, notes, 
   children?: ReactNode;
 }) {
   const { project, panes, session, readOnly, onOpenPane, onOpenNode } = panel;
+  const status = source === "status";
   const [doneShown, setDoneShown] = useState(false);
   const [asking, setAsking] = useState<Note<State> | null>(null);
   const [asked, setAsked] = useState<ReadonlySet<string>>(new Set());
@@ -249,29 +250,25 @@ function NoteGroups<State extends string>({ panel, source, groups, tone, notes, 
     const pending = asked.has(note.title) && note.state !== "done";
     const meta = pending ? "Asked the coordinator" : [note.detail, note.owner].filter(Boolean).join(" · ");
     // From `project status` every row keeps the circle's and the icon's place, so the names line up.
-    const body = <>
-      {Icon ? <Icon aria-hidden className={cn("mt-0.5 size-3.5 shrink-0", tone[note.state])} /> : source === "status" && <span aria-hidden className="size-3.5 shrink-0" />}
-      {source === "status" ? <span className="min-w-0 flex-1 text-sm">
-        <span data-task-title className="font-medium">{note.title}</span>{meta && <> <span className="text-muted-foreground">{meta}</span></>}
-      </span> : <span className="min-w-0 flex-1">
-        <span className="block text-sm"><span data-task-title className="font-medium">{note.title}</span>
-          {pr?.number !== undefined && <span className="ml-1 tabular-nums text-primary">#{pr.number}</span>}</span>
-        <span className="note-meta">
-          {note.detail && <span className="min-w-0 truncate">{note.detail}</span>}
-          {pending ? <span>Asked the coordinator</span> : note.owner && <span>{note.owner}</span>}
-        </span>
-      </span>}
-    </>;
+    const circle = note.task && note.state !== "done"
+      ? <button type="button" className="note-check" aria-label={`Mark done: ${note.title}`} title={why ?? "Ask the coordinator to mark it done"}
+        disabled={Boolean(why) || pending} onClick={() => setAsking(note)}>{pending && <Check aria-hidden className="size-3" />}</button>
+      : status && <span aria-hidden className={cn("note-check cursor-default text-muted-foreground", !note.task && "invisible")}>{note.task && <Check className="size-3" />}</span>;
+    const icon = Icon ? <Icon aria-hidden className={cn("mt-0.5 size-3.5 shrink-0", tone[note.state])} /> : status && <span aria-hidden className="size-3.5 shrink-0" />;
+    const text = status ? <span className="min-w-0 flex-1 text-sm">
+      <span data-task-title className="font-medium">{note.title}</span>{meta && <> <span className="text-muted-foreground">{meta}</span></>}
+    </span> : <span className="min-w-0 flex-1">
+      <span className="block text-sm"><span data-task-title className="font-medium">{note.title}</span>
+        {pr?.number !== undefined && <span className="ml-1 tabular-nums text-primary">#{pr.number}</span>}</span>
+      <span className="note-meta">
+        {note.detail && <span className="min-w-0 truncate">{note.detail}</span>}
+        {pending ? <span>Asked the coordinator</span> : note.owner && <span>{note.owner}</span>}
+      </span>
+    </span>;
     return (
       <li key={note.key} className="task-row">
-        {note.task && note.state !== "done" && <button type="button" className="note-check" aria-label={`Mark done: ${note.title}`} title={why ?? "Ask the coordinator to mark it done"}
-          disabled={Boolean(why) || pending} onClick={() => setAsking(note)}>
-          {pending && <Check aria-hidden className="size-3" />}
-        </button>}
-        {source === "status" && (!note.task || note.state === "done") && <span aria-hidden className={cn("note-check cursor-default text-muted-foreground", !note.task && "invisible")}>
-          {note.task && <Check className="size-3" />}
-        </span>}
-        {open ? <button type="button" className="task-main" onClick={open}>{body}</button> : <div className="task-main">{body}</div>}
+        {circle}
+        {open ? <button type="button" className="task-main" onClick={open}>{icon}{text}</button> : <div className="task-main">{icon}{text}</div>}
       </li>
     );
   };
