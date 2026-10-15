@@ -100,7 +100,8 @@ afterEach(() => {
 });
 
 function StatusLine() {
-  return <p data-testid="status">{useStatus()?.text ?? ""}</p>;
+  const status = useStatus();
+  return <p data-testid="status">{status ? [status.text, status.description].filter(Boolean).join(" / ") : ""}</p>;
 }
 
 function renderActions(threads: ProjectThreadView[], { readOnly = false, onOpenPr, onOpenNode = vi.fn(), onChanged = vi.fn() }: {
@@ -181,7 +182,7 @@ it("shows Organizations' refusal word for word and offers the button again", asy
   renderActions([failing()]);
   const button = screen.getByRole("button", { name: "Fix CI Failing" });
   await userEvent.click(button);
-  expect(await screen.findByTestId("status")).toHaveTextContent(reason);
+  expect(await screen.findByTestId("status")).toHaveTextContent(`${reason} / Fix CI · Failing`);
   expect(button).toHaveTextContent(/^Fix CI$/);
   expect(button).toBeEnabled();
 });

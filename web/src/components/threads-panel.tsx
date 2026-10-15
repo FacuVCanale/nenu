@@ -144,7 +144,8 @@ const ANSWER_MS = 3000;
 
 /**
  * A PR's one button. Merge opens its confirmation; the others run at once, and the button says
- * Asking…, then Asked or Already asked for a moment. A refusal is Organizations' own words.
+ * Asking…, then Asked or Already asked for a moment. A refusal is Organizations' own words, under
+ * which button of which thread it answers.
  */
 function PrActionButton({ project, thread, action, session, onMerge, onChanged }: {
   project: ProjectView;
@@ -154,6 +155,7 @@ function PrActionButton({ project, thread, action, session, onMerge, onChanged }
   onMerge: (thread: ProjectThreadView) => void;
   onChanged: () => void;
 }) {
+  const label = PR_ACTION_LABEL[action];
   const [answer, setAnswer] = useState<{ text: string; detail?: string } | "busy" | null>(null);
   useEffect(() => {
     if (answer === null || answer === "busy") return;
@@ -175,12 +177,11 @@ function PrActionButton({ project, thread, action, session, onMerge, onChanged }
       }
       onChanged();
     } catch (failure) {
-      setStatus(errorMessage(failure), "error");
+      setStatus(errorMessage(failure), "error", undefined, { description: `${label} · ${thread.title}` });
       setAnswer(null);
     }
   }
 
-  const label = PR_ACTION_LABEL[action];
   // Outline: a list of PRs would otherwise stack ink buttons; Merge's dialog holds the primary.
   return (
     <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`${label} ${thread.title}`}
