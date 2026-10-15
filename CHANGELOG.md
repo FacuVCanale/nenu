@@ -8,6 +8,23 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-15
+
+**The desk looks like Cursor's agents window.** Notes, Context and Routines read the coordinator's task list, the project's memory and its routines from Herdr Organizations' new JSON (its PR #25); with an older Organizations they say so and show what they can.
+
+### Added
+- On a desk, the session panel opens on Project: Notes from the coordinator's task list, Agents, PRs that open their diff in place, and Context with the project's memory and instructions; the panel slides when opened or folded and its toggle sits at the far right (ADR 0081). (c58aec09, fe7336b3, c72548a7)
+- A row of chips above the composer (Needs you, Working, PRs, Routines), each with its panel, replaces the PR bar and the Background chip; the branch and the machine sit under the box. (17dfd095)
+- A Routines page and `/api/org/routines`, read on demand. (483d4de8, 8b58b75b)
+
+### Changed
+- The desk's sidebar is Cursor's: New chat, Search, Home and Routines, a flat Projects list with glyph, state and age, chats by date; the tree lives in Search (ADR 0080). Needs you is a small dot, never a red fill. (eef80087)
+- On a desk, a chat that finished or asks you is a +1 on its row instead of a toast; toasts that remain have a close button. (2ad950bb)
+- The conversation reads like Cursor's: Worked with its duration, pull request links with their icon, a quiet bubble and Copy beside its time; running work flows in the chat and folds into Worked when it ends. (ca6bcbef, 6463a3f7)
+
+### Fixed
+- Unchanged prose skips its render on every poll. (791a18ad)
+
 ## [1.7.2] - 2026-10-15
 
 ### Changed
