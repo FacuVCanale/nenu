@@ -46,6 +46,8 @@ import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
 import { ComposerNotice } from "@/components/composer-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
+import { DiffCommentChips } from "@/components/diff-comment-chips";
+import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffComments, withDiffComments } from "@/lib/diff-comments";
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -387,11 +389,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     },
     initialPaths: restoredDraft.uploads,
   });
-  const hasDraft = input.trim() !== "" || attachments.paths.length > 0;
+  // Comments made on a diff for this pane (lib/diff-comments.ts): chips over the box, first in Send's message.
+  const diffComments = useDiffComments(paneId, session);
+  const hasDraft = input.trim() !== "" || attachments.paths.length > 0 || diffComments.length > 0;
 
   /** The composer's content as the wire text — what Send would put on the line right now. */
   function draftMessage(): string {
     return serializeMessage(inputValueRef.current, readyPaths(attachments.current())).trim();
+  }
+
+  /** What Send sends: the diff comments waiting for this pane, then the draft. */
+  function outgoing(): string {
+    return withDiffComments(diffCommentsFor(paneId, session), draftMessage());
+  }
+
+  /** The diff comments in `message` when it is this composer's outgoing message. */
+  function carriedBy(message: string) {
+    return diffCommentsCarried(message, diffCommentsFor(paneId, session));
   }
 
   function clearComposer() {
@@ -402,7 +416,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   /** Put a message back into the composer — after a failed send, or to edit a queued one. Anything
    *  already typed is kept: the message's prose goes on a new line and its images join the chips. */
   function restoreIntoComposer(message: string) {
-    const { text, uploads } = splitDraftUploads(message);
+    // Comments still waiting as chips are not put back a second time, as text.
+    const comments = withDiffComments(diffCommentsFor(paneId, session), "");
+    const { text, uploads } = splitDraftUploads(comments && message.startsWith(comments) ? message.slice(comments.length).trim() : message);
     updateInput((prev) => (prev.trim() && text ? `${prev.trimEnd()}\n${text}` : prev.trim() ? prev : text));
     attachments.append(uploads);
   }
@@ -428,7 +444,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const accepted = queue.accepted;
     if (accepted) {
       // Also fires for a save the queue retried on its own after a failure put the draft back.
-      if (draftMessage() === accepted.text.trim()) clearComposer();
+      const text = accepted.text.trim();
+      if (outgoing() === text) {
+        forgetDiffComments(paneId, session, carriedBy(text));
+        clearComposer();
+      }
       const echo =
         listLocalSends(sendScope).find((item) => item.queueId === accepted.id) ??
         listLocalSends(sendScope).find((item) => !item.queueId && item.text === accepted.text && item.state !== "sent");
@@ -480,23 +500,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, [queue.page, sendScope]);
   /** Begin an optimistic send. In the conversation view the message moves straight to its pending
    *  bubble, so the composer clears now; the terminal view has no bubble, so its draft stays put
-   *  until the send is verified. */
+   *  until the send is verified. The diff comments outgoing() put first stay as chips until the
+   *  message has gone. */
   function beginSend(message: string, isDraft: boolean, echo: boolean) {
     const taken = isDraft && nativeWorkbench ? draftMessage() : null;
+    const comments = isDraft ? carriedBy(message) : [];
     if (taken !== null) clearComposer();
     const id = echo ? addLocalSend(sendScope, message) : null;
     if (id) updateLocalSend(sendScope, id, { agent: agent ?? undefined });
-    return { taken, id };
+    return { taken, id, comments };
   }
   /** A send that did not go through: the message goes back into an empty composer; if the operator
    *  has already started something new, it stays on its bubble as "Not sent" instead of clobbering it.
    *  Text that may already be in the terminal (`delivered`) stays on its bubble, pointing at Terminal:
-   *  putting it back under Send would invite the resend that duplicates it. */
-  function failSend(started: { taken: string | null; id: string | null }, error: string, secret = false, delivered = false) {
+   *  putting it back under Send would invite the resend that duplicates it, and so would its diff
+   *  comments left as chips. */
+  function failSend(started: ReturnType<typeof beginSend>, error: string, secret = false, delivered = false) {
     const composerEmpty = draftMessage() === "" && attachments.current().length === 0;
     const restored = started.taken !== null && composerEmpty && (!delivered || !started.id);
     if (restored) restoreIntoComposer(started.taken!);
     if (!started.id) return;
+    if (delivered) forgetDiffComments(paneId, session, started.comments);
     // A password prompt's text must not linger on screen; a restored draft is already back in the box.
     if (secret || restored) removeLocalSend(sendScope, started.id);
     else updateLocalSend(sendScope, started.id, { state: "failed", error: error || "Not sent", textDelivered: delivered || undefined });
@@ -509,7 +533,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const rowId = await queue.add(t, mode);
     if (rowId) {
       if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued", queueId: rowId, deliveryMode: mode });
-      if (draftMessage() === t) clearComposer();
+      if (outgoing() === t) clearComposer();
+      forgetDiffComments(paneId, session, started.comments);
     } else failSend(started, "Couldn't queue this message");
     return rowId !== null;
   }
@@ -522,7 +547,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setBusyPick(null);
     if (!pick) return;
     // A draft keeps what was typed while the choice was open; a quick reply sends what was tapped.
-    void enqueueDraft(pick.isDraft ? draftMessage() : pick.text, pick.isDraft, mode);
+    void enqueueDraft(pick.isDraft ? outgoing() : pick.text, pick.isDraft, mode);
   }
   // "Read it now" backgrounds Claude's running command, so it takes a second tap.
   const readNowConfirm = usePendingConfirm(8_000);
@@ -863,7 +888,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setDelivering(false);
         // A draft send cleared the composer when it started; a retry from a bubble clears the same
         // message if it had been put back.
-        if (draftMessage() === t) clearComposer();
+        if (outgoing() === t) clearComposer();
+        forgetDiffComments(paneId, session, started.comments);
         // An agent without an adapter has no input box Nenu can read back: Enter went out unverified.
         const unverified = !adapter;
         if (started.id) updateLocalSend(sendScope, started.id, { state: "sent", unverified: unverified || undefined });
@@ -956,7 +982,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   /** Say a refused send above the box. Try again is offered only while resending cannot type a
    *  second copy, and only when the message is still where the operator left it. */
   function refused(error: string, delivered: boolean, text: string, isDraft: boolean, overridable = false) {
-    const inPlace = !isDraft || draftMessage() === text;
+    const inPlace = !isDraft || outgoing() === text;
     setFailure({
       error,
       delivered,
@@ -1000,7 +1026,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return;
     }
     sendConfirm.reset();
-    void send(draftMessage(), true);
+    void send(outgoing(), true);
   }
 
   function onSendClick() {
@@ -1010,7 +1036,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (forceConfirm.pending === "force") {
       if (!attachmentsSettled()) return;
       forceConfirm.reset();
-      void send(draftMessage(), true, true);
+      void send(outgoing(), true, true);
       return;
     }
     sendDraft();
@@ -1399,6 +1425,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <StopControl stop={stop} disabled={locked} />
           </div>
         )}</Fold>
+        <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
             it (Send or its confirm pill; Stop has the row above). Quiet controls live in the row
