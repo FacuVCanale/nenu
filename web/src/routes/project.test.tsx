@@ -131,7 +131,8 @@ it("merges a thread's PR from a phone's PRs tab only after confirming", async ()
 async function projectPanel(user: ReturnType<typeof userEvent.setup>) {
   const panel = within(await screen.findByRole("complementary", { name: "Session panel" }));
   await user.click(panel.getByRole("tab", { name: "Project" }));
-  await user.click(panel.getByRole("tab", { name: /^Agents/ }));
+  // The Project tab is a lazy chunk: under load it lands a beat after the tab is picked.
+  await user.click(await panel.findByRole("tab", { name: /^Agents/ }));
   return panel;
 }
 
