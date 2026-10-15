@@ -13,7 +13,10 @@ import { homeOrg, seedDiffRepo, type DemoHerd, type OrgSeed } from "./scenario.t
 // Then, on the real clock, a fresh WebKit left alone on the panel for --seconds: CPU, memory and DOM.
 // `--before` drives the panel as it was, behind ⋯ (Threads, PRs, Activity, Memory).
 //
-//   bun scripts/e2e/project-panel.ts [--before] [--port 8797] [--out DIR] [--seconds 60]
+//   bun scripts/e2e/project-panel.ts [--before] [--idle-only] [--port 8797] [--out DIR] [--seconds 60]
+//
+// The idle count takes every WebKit process that appears while it runs: give the bench a private copy
+// of the browser (PLAYWRIGHT_BROWSERS_PATH) when another bench may be running.
 
 const { values } = parseArgs({
   options: {
@@ -21,6 +24,7 @@ const { values } = parseArgs({
     out: { type: "string" },
     seconds: { type: "string", default: "60" },
     before: { type: "boolean", default: false },
+    "idle-only": { type: "boolean", default: false },
   },
 });
 const port = Number(values.port);
@@ -233,11 +237,11 @@ async function idle(bridge: TestBridge) {
 
 await mkdir(outDir, { recursive: true });
 const result = await bench(false, async (bridge, browser) => {
-  const views = await capture(bridge, browser, false);
+  const views = values["idle-only"] ? { shots: [], requests: {} } : await capture(bridge, browser, false);
   const rest = await idle(bridge);
   return { ...views, idle: rest, orgCalls: (await bridge.orgCalls()).map((argv) => argv.join(" ")), unexpectedWrites: bridge.fake!.writes() };
 });
-const legacy = before ? undefined : await bench(true, async (bridge, browser) => ({
+const legacy = before || values["idle-only"] ? undefined : await bench(true, async (bridge, browser) => ({
   ...(await capture(bridge, browser, true)),
   orgCalls: (await bridge.orgCalls()).map((argv) => argv.join(" ")),
   unexpectedWrites: bridge.fake!.writes(),
