@@ -135,8 +135,6 @@ interface AgentChatProps {
   headerAction?: ReactNode;
   /** Replaces the conversation body while set; the chat stays mounted underneath. */
   overlay?: ReactNode;
-  /** Rendered under the newest turn of the conversation (a coordinator's thread cards). */
-  conversationFooter?: ReactNode;
   /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
   strip?: ReactNode;
   /** A band right above the composer (a thread's pull request). */
@@ -204,7 +202,6 @@ export function AgentChat({
   title: titleOverride,
   headerAction,
   overlay,
-  conversationFooter,
   strip,
   composerTop,
   docked,
@@ -439,7 +436,8 @@ export function AgentChat({
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   const cardReadOnly = readOnly || gone || connecting;
   const refused = interaction && interactions.refusalFor(interaction);
-  // Keys for a dialog the conversation can't draw: on a desk, the panel's Terminal tab holds them.
+  // Keys for a dialog the conversation can't draw: on a desk, the panel's Terminal tab, whose switch
+  // hands the desk's keyboard to the pane.
   const panelRef = useRef(sessionPanel);
   panelRef.current = sessionPanel;
   const openKeys = useCallback(() => {
@@ -452,8 +450,7 @@ export function AgentChat({
   const refreshConversation = conversation.refresh;
   // The question is the thread's newest line, so it lives inside the conversation's scroller: a swipe
   // over it scrolls the thread, and following lands on its first line (`data-follow-stop`).
-  const threadFooter = useMemo(() => !showCard ? conversationFooter : <>
-    {conversationFooter}
+  const threadFooter = useMemo(() => !showCard ? undefined : (
     <div data-follow-stop className="chat-follow-stop mt-5">
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
         readOnly={cardReadOnly} lockReason={lock} refused={refused} onOpen={() => setRawTerminal(true)}
@@ -468,7 +465,7 @@ export function AgentChat({
           return outcome;
         }} />
     </div>
-  </>, [showCard, conversationFooter, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, openKeys, answer, revalidate, refreshConversation]);
+  ), [showCard, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, openKeys, answer, revalidate, refreshConversation]);
   // The mirror's poll may relax only while neither the mirror, a dialog drawn from it, nor the desk's
   // Terminal tab is on screen (lib/live-events.ts). Leaving the pane restores the default.
   const terminalTab = sessionPanel?.terminal ?? null;
@@ -1269,7 +1266,6 @@ export function AgentChat({
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
-          {!showConversation && conversationFooter && <div className="max-h-[40dvh] overflow-y-auto px-3 pb-1">{conversationFooter}</div>}
           {!subagent && showConversation && wait?.kind === "interaction" && (
             <TerminalWaitRow key={wait.hint} hint={wait.hint} agent={agent?.agent} onShow={() => setRawTerminal(true)}
               onKeys={openKeys} />

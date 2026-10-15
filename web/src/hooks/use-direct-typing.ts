@@ -7,19 +7,25 @@ import type {
 } from "react";
 
 import { useOrderedKeySender } from "@/hooks/use-ordered-key-sender";
-import { textToKeySequence } from "@/lib/key-queue";
+import { composeKey, normalizeBaseChar, textToKeySequence, type Modifier } from "@/lib/key-queue";
 import { setStatus } from "@/lib/status";
 
 // Physical-keyboard events that do not change a textarea value still need wire names. Printable
-// text, spaces and line breaks normally arrive through the input/change path instead.
+// text, spaces and line breaks normally arrive through the input/change path instead. F1–F12 are
+// bare names in Herdr's grammar, as the phone's Keys tray sends them.
 const SPECIAL_KEYS: Readonly<Record<string, string>> = {
   Escape: "Escape",
   Tab: "Tab",
+  Enter: "Enter",
+  Backspace: "Backspace",
   ArrowUp: "Up",
   ArrowDown: "Down",
   ArrowLeft: "Left",
   ArrowRight: "Right",
+  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`F${i + 1}`, `F${i + 1}`])),
 };
+
+const BARE_UNDER_SHIFT = new Set(["Enter", "Backspace", "Escape"]);
 
 function keyForInputType(inputType: string): string | null {
   if (inputType === "deleteContentBackward") return "Backspace";
@@ -27,10 +33,28 @@ function keyForInputType(inputType: string): string | null {
   return null;
 }
 
-function keyForKeyDown(key: string): string | undefined {
-  if (key === "Backspace") return "Backspace";
-  if (key === "Enter") return "Enter";
-  return SPECIAL_KEYS[key];
+/**
+ * A desk's keyboard carries what the phone's Keys tray sends: a named key keeps the Ctrl and Option
+ * held with it (`alt+Left`), and Ctrl with a printable key is that chord (`ctrl+c`). Shift rides only
+ * on keys a phone keyboard has no Shift for (`shift+Tab`): its auto-capital must not turn Return into
+ * another key. Command stays the browser's (copy, paste, close the tab), and so does Ctrl+V where it
+ * is the paste: the pasted text reaches the pane through the change path. Option alone with a
+ * printable key types a character on a Mac, so it stays text as well.
+ */
+function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string | undefined {
+  const named = SPECIAL_KEYS[event.key];
+  if (named !== undefined) {
+    const held: Modifier[] = [];
+    if (event.ctrlKey) held.push("ctrl");
+    if (event.altKey) held.push("alt");
+    if (event.shiftKey && !BARE_UNDER_SHIFT.has(named)) held.push("shift");
+    return composeKey(held, named);
+  }
+  if (!event.ctrlKey || event.altKey || event.metaKey || event.key.length !== 1) return undefined;
+  const base = normalizeBaseChar(event.key);
+  // "+" joins a chord on the wire, so it cannot be a chord's base.
+  if (base === null || base === "+" || (base === "v" && !/Mac|iPhone|iPad/.test(navigator.platform))) return undefined;
+  return composeKey(event.shiftKey && /[a-z]/.test(base) ? ["ctrl", "shift"] : ["ctrl"], base);
 }
 
 interface DirectTypingOptions {
@@ -56,9 +80,9 @@ interface DirectTypingOptions {
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
 // Herdr writes.
 //
-// It does NOT own the entry point. Arming is an explicit NAMED choice beside Keys: the "Type into
-// terminal" row of the composer's + menu on a phone, or the switch of that name in a desk's Terminal
-// tab, which also disarms when the tab leaves the screen (composer.tsx, ADR 0077).
+// It does NOT own the entry point. Arming is an explicit NAMED choice: the "Type into terminal" row
+// beside Keys in the composer's + menu on a phone, or the switch of that name in a desk's Terminal
+// tab, which also disarms when the tab leaves the screen (composer.tsx, ADR 0077, ADR 0079).
 //
 // WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
 // bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per
@@ -297,7 +321,7 @@ export function useDirectTyping({
   }
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    const key = keyForKeyDown(event.key);
+    const key = keyForKeyDown(event);
     if (key === undefined) return;
     event.preventDefault();
     sender.enqueue([key]);

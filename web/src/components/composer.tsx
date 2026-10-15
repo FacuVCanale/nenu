@@ -1,7 +1,7 @@
 import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
 import { useStopTurn } from "@/hooks/use-stop-turn";
 import { MessageQueueStrip } from "./message-queue-strip";
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useRevalidator } from "react-router";
@@ -79,8 +79,8 @@ export interface ComposerHandle {
  * One of the composer's secondary controls. The composer owns their state and behaviour. The + at
  * the start of the box reaches every message-side group in this order; View is published to the
  * pane header's ⋯ menu, so the header keeps the view and the composer keeps the message. Beside a
- * desk's session panel, Quick replies stay on the phone and the Terminal group moves to the panel's
- * Terminal tab.
+ * desk's session panel, Quick replies and Keys stay on the phone, and Type into terminal moves to the
+ * panel's Terminal tab, where the desk's own keyboard is the keys.
  */
 export interface ComposerControl {
   id: "attach" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
@@ -159,7 +159,7 @@ interface ComposerProps {
   onSent: () => void;
   /** Receives the secondary controls whenever their state changes (see ComposerControl). */
   onControlsChange?: (controls: ComposerControl[]) => void;
-  /** Beside a desk's session panel: Keys and Type into terminal live in its Terminal tab, not the +. */
+  /** Beside a desk's session panel: Type into terminal lives in its Terminal tab, and the + has no Keys. */
   sessionPanel?: SessionPanelLink;
 }
 
@@ -1184,8 +1184,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     onControlsChange?.(latestControls.current);
   }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
-  // Beside a desk's session panel the + keeps the message. Quick replies stay on the phone, and Keys and
-  // Type into terminal sit in the panel's Terminal tab, beside the mirror they act on.
+  // Beside a desk's session panel the + keeps the message. Quick replies and Keys stay on the phone, and
+  // Type into terminal sits in the panel's Terminal tab, beside the mirror it acts on.
   const inTerminalTab = (id: ComposerControl["id"]) => sessionPanel !== undefined && (id === "quick" || id === "keys" || id === "type");
   const menuGroups: ConversationActionGroup[] = MESSAGE_GROUPS.map((group) => ({
     label: group,
@@ -1205,17 +1205,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     }
     tabWasShown.current = tabShown;
   }, [tabShown]);
-
-  // The panel asks before it stops showing Terminal, where the Keys tray holds its staged queue
-  // (ADR 0005: the guard is on every way out, and the panel's ways out are its own).
-  const release = useRef(releaseKeys);
-  release.current = releaseKeys;
-  const leaving = sessionPanel?.leaving;
-  useLayoutEffect(() => {
-    if (!leaving) return;
-    leaving.current = () => release.current();
-    return () => { leaving.current = null; };
-  }, [leaving]);
   const [menuOpen, setMenuOpen] = useState(false);
   // The menu hangs from the box's leading column, which spans the box's full height: anchored there,
   // it opens above the box's top edge however tall the draft has grown, and never over the draft.
@@ -1558,21 +1547,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         )}
       </div>
 
-      {/* The desk's Terminal tab, under the mirror agent-chat.tsx draws above: Keys, then the switch
-          that arms the same mode the phone's + row does. */}
+      {/* The desk's Terminal tab, under the mirror agent-chat.tsx draws above: the switch that arms the
+          same mode the phone's + row does. Armed, the desk's keyboard is the keys (ADR 0079). */}
       {terminalTab && createPortal(
-        <div className="flex flex-col gap-3 py-3">
-          <section aria-label="Keys">
-            <NavTray onSend={pressKeys} presets={keyPresets} onQueueChange={setQueuedKeys} disabled={locked} />
-          </section>
-          <div className="px-3">
-            <ListSection footer="Quick replies stay on the phone. On a desk, type.">
-              <ListRow title="Type into terminal" hint={direct.active ? "On. Keys go straight into this pane." : "Off. Arms for this pane only, ends when you leave it."}>
-                <Switch checked={direct.active} disabled={locked || sending} aria-label="Type into terminal"
-                  onCheckedChange={() => controlActions.current.type()} />
-              </ListRow>
-            </ListSection>
-          </div>
+        <div className="p-3">
+          <ListSection>
+            <ListRow title="Type into terminal" hint={direct.active ? "On. Keys go straight into this pane." : "Off. Arms for this pane only, ends when you leave it."}>
+              <Switch checked={direct.active} disabled={locked || sending} aria-label="Type into terminal"
+                onCheckedChange={() => controlActions.current.type()} />
+            </ListRow>
+          </ListSection>
         </div>,
         terminalTab.controls,
       )}
