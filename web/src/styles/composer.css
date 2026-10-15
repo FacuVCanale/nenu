@@ -118,7 +118,7 @@
 /* Under the box, after the model: the branch the chat works on and the machine it runs on. */
 .composer-place { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; padding: 0 6px; }
 .composer-place-item { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }
-.composer-place-item .font-mono { font-size: 0.75rem; }
+.composer-place-item .font-mono { font-size: var(--text-caption); }
 @media (prefers-reduced-motion: reduce) {
   .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }
