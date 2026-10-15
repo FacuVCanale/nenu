@@ -465,7 +465,7 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
   ]);
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("target", "_blank");
-  expect(prs.getByRole("link", { name: /^Abandoned carts,/ })).toHaveAttribute("href", "/pane/w1%3Ap1");
+  expect(prs.getByRole("link", { name: /^Abandoned carts,/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
   await user.click(prs.getByRole("link", { name: /^Orders panel,/ }));
   expect(router.state.location.pathname).toBe("/project/hub/node/t9");
 });

@@ -1502,8 +1502,13 @@ async function home(): Promise<void> {
           await scrollTo(page, '[role="tablist"][aria-label="Sessions"], #home-recent');
           await shoot(page, `home-${name}-${scheme}-list`);
           if (scheme === "dark") {
-            await scrollTo(page, "#home-review");
+            // The pull requests: the PRs tab of the sessions' switcher, or the section they were before it.
+            const prsTab = page.getByRole("tab", { name: "PRs" });
+            const tabbed = (await prsTab.count()) > 0;
+            if (tabbed) await prsTab.click();
+            await scrollTo(page, tabbed ? '[role="tablist"][aria-label="Sessions"]' : "#home-review");
             await shoot(page, `home-${name}-prs`);
+            if (tabbed) await page.getByRole("tab", { name: "Recents" }).click();
             const workspaces = page.getByRole("tab", { name: "Workspaces" });
             if (await workspaces.count()) {
               await workspaces.click();

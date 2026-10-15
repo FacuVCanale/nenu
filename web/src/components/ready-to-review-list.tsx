@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { GitPullRequest } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
-import { FoldedList, HomeHeading, isOpening, OpeningSpinner } from "@/components/home-panels";
+import { FoldedList, isOpening, OpeningSpinner } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import { readyToMerge, type ReviewEntry } from "@/lib/home-stats";
@@ -135,18 +135,12 @@ export const REVIEW_ROWS = 5;
 /** Which run a pull request sits in; ready to merge comes first. */
 const reviewGroup = (entry: ReviewEntry) => readyToMerge(entry) ? "Ready to merge" : "In review";
 
-/** Home's pull requests that no session's row carries: the ones ready to merge, then the rest. */
-export function ReadyToReviewList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
-  if (!entries.length) return null;
+/** Home's PRs tab: every pull request, the ones ready to merge first, then the rest. */
+export function PullRequestList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
   const ordered = [...entries.filter(readyToMerge), ...entries.filter((entry) => !readyToMerge(entry))];
   return (
-    <section aria-labelledby="home-review" className="flex flex-col gap-1.5">
-      <HomeHeading id="home-review" label="Pull requests" count={entries.length} />
-      <div className="sm:-mx-2.5">
-        <FoldedList items={ordered} rows={REVIEW_ROWS} group={reviewGroup}>
-          {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
-        </FoldedList>
-      </div>
-    </section>
+    <FoldedList items={ordered} rows={REVIEW_ROWS} group={reviewGroup}>
+      {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
+    </FoldedList>
   );
 }
