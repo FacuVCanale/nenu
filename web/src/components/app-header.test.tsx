@@ -176,6 +176,24 @@ describe("AppHeader — the bar title", () => {
     expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
 
+  it("draws its bottom line on a desk only while it holds a title, and always on a phone", () => {
+    const line = (path: string, header: ReactElement) => {
+      const { unmount } = render(<MemoryRouter initialEntries={[path]}>{header}</MemoryRouter>);
+      const classes = [...screen.getByRole("banner").classList];
+      unmount();
+      return classes;
+    };
+    const bare = ["border-b", "lg:border-b-transparent"];
+    expect(line("/", <AppHeader bridge="connected" error={false} title="Home" />)).toEqual(expect.arrayContaining(bare));
+    expect(line("/project/acme", <AppHeader bridge="connected" error={false} title="Acme" titleHidden />)).toEqual(expect.arrayContaining(bare));
+    for (const [path, header] of [["/project/acme", <AppHeader bridge="connected" error={false} title="Acme" />],
+      ["/pane/p1", <AppHeader bridge="connected" error={false}><span>Working Claude</span></AppHeader>]] as const) {
+      const classes = line(path, header);
+      expect(classes, path).toContain("border-b");
+      expect(classes, path).not.toContain("lg:border-b-transparent");
+    }
+  });
+
   it("hides a title the page is showing as its own heading", () => {
     const visible = { ignore: '[aria-hidden="true"], [aria-hidden="true"] *' };
     const { rerender } = render(<MemoryRouter initialEntries={["/project/acme"]}><AppHeader bridge="connected" error={false} title="Acme" titleHidden /></MemoryRouter>);
