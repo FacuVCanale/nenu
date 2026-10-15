@@ -1,4 +1,4 @@
-import { createProject, listRoutines, mergeThread, openProject, OrgValidationError, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { createProject, listRoutines, mergeThread, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json } from "./http.ts";
@@ -44,6 +44,15 @@ export const orgRoutes: Route[] = [
   orgWrite("/api/org/thread/set", "org.thread.set", "Could not change the thread's automation.", async ({ orgRun }, body) => {
     const flags = await setThreadFlags(orgRun, { project: body.project, id: body.id, autoFixCi: body.autoFixCi, autoMerge: body.autoMerge });
     return { response: { flags }, detail: { project: body.project, ...flags } };
+  }),
+  // The client names the action from a closed list; Organizations writes the message the agent gets.
+  orgWrite("/api/org/thread/pr-action", "org.thread.pr-action", "Could not ask the thread.", async ({ orgRun }, body) => {
+    const asked = await prAction(orgRun, { project: body.project, id: body.id, action: body.action });
+    return { response: { asked }, detail: { project: body.project, id: asked.id, action: asked.action, pr: asked.pr, sent: asked.sent } };
+  }),
+  orgWrite("/api/org/thread/pr-create", "org.thread.pr-create", "Could not open the pull request.", async ({ orgRun }, body) => {
+    const created = await prCreate(orgRun, { project: body.project, id: body.id });
+    return { response: { created }, detail: { project: body.project, ...created } };
   }),
 ];
 

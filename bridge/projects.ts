@@ -6,7 +6,7 @@ import {
   WAITING_ACTIVITY, defaultOrgRun, readOverview, readProjectDetail, readRoutines, readTasks, upstreamOnly, validateProjectSlug,
   type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgTask,
 } from "./org-cli.ts";
-import type { AgentView, LivePublisher, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
+import type { AgentView, LivePublisher, PrAction, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
 const STAT_MS = 2_000;
@@ -244,6 +244,15 @@ function tomlThread(record: TomlObject): OrgThreadView | undefined {
   };
 }
 
+/** The actions Nenu has a button for: about a PR, in Organizations' order, and about a thread without one. */
+const PR_ACTIONS: readonly PrAction[] = ["resolve-conflicts", "fix-ci", "address-comments", "merge"];
+const THREAD_ACTIONS: readonly PrAction[] = ["create-pr"];
+
+/** The first action of `actions` Nenu knows; a value from a newer Organizations is skipped. */
+function firstAction(actions: string[] | undefined, known: readonly PrAction[]): PrAction | undefined {
+  return actions?.map((action) => known.find((name) => name === action)).find((action) => action !== undefined);
+}
+
 function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadView {
   const status = STATUSES.find((candidate) => candidate === record.status) ?? "open";
   const raw = record.pr;
@@ -257,6 +266,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(raw.mergeable ? { mergeable: raw.mergeable } : {}),
     mergeBlocker: raw.merge_blocker,
   });
+  const prAction = raw ? pr && firstAction(raw.actions, PR_ACTIONS) : firstAction(record.actions, THREAD_ACTIONS);
   return {
     id: record.id,
     title: record.title.trim() || record.id,
@@ -272,6 +282,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(record.branch ? { branch: record.branch } : {}),
     ...(prActions ? { autoFixCi: record.auto_fix_ci === true, autoMerge: record.auto_merge === true } : {}),
     ...(pr ? { pr } : {}),
+    ...(prAction ? { prAction } : {}),
   };
 }
 

@@ -291,6 +291,8 @@ export interface OrgOverviewPullRequest {
   draft: boolean | null;
   mergeable: string | null;
   merge_blocker: string | null;
+  /** Absent from an Organizations that predates them. */
+  actions?: string[];
 }
 
 export interface OrgOverviewThread {
@@ -315,6 +317,8 @@ export interface OrgOverviewThread {
   auto_fix_ci?: boolean;
   auto_merge?: boolean;
   pr: OrgOverviewPullRequest | null;
+  /** What a client may ask of the thread itself (`create-pr`); absent from an Organizations that predates it. */
+  actions?: string[];
 }
 
 export interface OrgOverviewProject {
@@ -390,7 +394,12 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     ...(typeof value.auto_fix_ci === "boolean" ? { auto_fix_ci: value.auto_fix_ci } : {}),
     ...(typeof value.auto_merge === "boolean" ? { auto_merge: value.auto_merge } : {}),
     pr,
+    ...actions(value.actions),
   };
+}
+
+function actions(value: unknown): { actions?: string[] } {
+  return Array.isArray(value) ? { actions: value.filter((action): action is string => typeof action === "string") } : {};
 }
 
 /** A malformed PR drops the whole thread rather than showing a half-read one. */
@@ -412,6 +421,7 @@ function parsePullRequest(value: unknown): OrgOverviewPullRequest | undefined {
     draft: typeof value.draft === "boolean" ? value.draft : null,
     mergeable: typeof value.mergeable === "string" ? value.mergeable : null,
     merge_blocker: typeof value.merge_blocker === "string" ? value.merge_blocker : null,
+    ...actions(value.actions),
   };
 }
 
@@ -587,6 +597,63 @@ export async function mergeThread(
     throw new OrgCliError("herdr-organizations returned an invalid merge response.");
   }
   return { id, pr: value.pr };
+}
+
+/** What `thread pr-action` asks a thread's agent to do; Merge and Create PR have their own commands. */
+export const PR_ASKS = ["resolve-conflicts", "fix-ci", "address-comments"] as const;
+export type PrAsk = typeof PR_ASKS[number];
+
+export function validatePrAsk(value: unknown): PrAsk {
+  const action = PR_ASKS.find((candidate) => candidate === value);
+  if (!action) throw new OrgValidationError("Action must be resolve-conflicts, fix-ci or address-comments.");
+  return action;
+}
+
+/**
+ * `thread pr-action`: Organizations reads the PR again and sends the thread's agent a message it
+ * writes itself. `sent: false` means someone had already asked about this state of the PR.
+ */
+export async function prAction(
+  run: OrgRun,
+  input: { project: unknown; id: unknown; action: unknown },
+): Promise<{ id: string; action: PrAsk; pr: string; sent: boolean; reason: string }> {
+  const project = validateProjectSlug(input.project);
+  const id = validateNodeId(input.id);
+  const action = validatePrAsk(input.action);
+  const value = await prCommand(run, ["thread", "pr-action", project, id, action, "--json"], "pr-action");
+  if (value.id !== id || value.action !== action || typeof value.pr !== "string" || typeof value.sent !== "boolean" || typeof value.reason !== "string") {
+    throw new OrgCliError("herdr-organizations returned an invalid pr-action response.");
+  }
+  return { id, action, pr: value.pr, sent: value.sent, reason: value.reason };
+}
+
+/** `thread pr-create`: open the PR of a thread that pushed its branch without one. */
+export async function prCreate(run: OrgRun, input: { project: unknown; id: unknown }): Promise<{ id: string; pr: string }> {
+  const project = validateProjectSlug(input.project);
+  const id = validateNodeId(input.id);
+  const value = await prCommand(run, ["thread", "pr-create", project, id, "--json"], "pr-create");
+  if (value.id !== id || typeof value.pr !== "string" || !value.pr) throw new OrgCliError("herdr-organizations returned an invalid pr-create response.");
+  return { id, pr: value.pr };
+}
+
+/**
+ * A PR command's `ok: true` document. Its refusal prints the document with `ok: false` and exits 1;
+ * the reason is then the error, word for word. Anything else that fails is the CLI's failure.
+ * Both read the PR with `gh` first, as `thread merge` does, so they get its time.
+ */
+async function prCommand(run: OrgRun, argv: string[], name: string): Promise<Record<string, unknown>> {
+  const result = await run(argv, { timeoutMs: 90_000 });
+  let value: unknown;
+  try {
+    value = JSON.parse(result.stdout);
+  } catch {
+    value = undefined;
+  }
+  const document = isRecord(value) && value.schema_version === SCHEMA_VERSION ? value : undefined;
+  if (document?.ok === false && typeof document.reason === "string" && document.reason) throw new OrgValidationError(document.reason);
+  if (result.code !== 0) throw commandError(result);
+  if (document?.ok !== true) throw new OrgCliError(`herdr-organizations returned an invalid ${name} response.`);
+  return document;
 }
 
 /** `thread set`: turn Auto-fix CI or Auto-merge on or off. At least one flag is required. */

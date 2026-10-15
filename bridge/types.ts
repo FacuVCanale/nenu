@@ -254,7 +254,16 @@ export interface ProjectThreadView {
   /** The PR automation flags. Present only when Organizations has PR actions. */
   autoFixCi?: boolean;
   autoMerge?: boolean;
+  /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
+  prAction?: PrAction;
 }
+
+/**
+ * What a client may ask about a thread's pull request, most pressing first as Organizations orders
+ * them: the first three message its agent (`thread pr-action`), `merge` is `thread merge`, and
+ * `create-pr` opens the PR of a thread that pushed its branch without one (`thread pr-create`).
+ */
+export type PrAction = "resolve-conflicts" | "fix-ci" | "address-comments" | "merge" | "create-pr";
 
 export interface ThreadPullRequest {
   url?: string;
