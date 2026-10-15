@@ -122,8 +122,8 @@ interface ComposerProps {
    *  It only changes the words; `readOnly`, `gone` and `disconnected` still decide what is locked. */
   lockReason?: LockReason;
   modelControl?: ReactNode;
-  /** The background-work chip, beside the model in the row under the draft. */
-  processesControl?: ReactNode;
+  /** Where the session runs (branch, machine), beside the model in the row under the draft. */
+  place?: ReactNode;
   /** Something beside the composer (the desk's details panel) that the empty composer's Esc closes
    *  before it would stop the turn. */
   onEscape?: () => void;
@@ -309,7 +309,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, place, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1538,11 +1538,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           </div>
         </div>
-        {(modelControl || processesControl) && (
+        {(modelControl || place) && (
           <div role="group" aria-label="Message tools" className="composer-meta">
-            {modelControl && <div className="flex min-w-0 items-center">{modelControl}</div>}
-            <div className="flex-1" />
-            {processesControl}
+            {modelControl && <div className="flex min-w-0 shrink-0 items-center">{modelControl}</div>}
+            {place}
           </div>
         )}
       </div>

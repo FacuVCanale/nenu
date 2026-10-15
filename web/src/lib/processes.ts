@@ -59,20 +59,6 @@ export function buildProcesses(activity: ActivityResponse | null, subagents: Sub
   };
 }
 
-/** "1 waiting on you", "3 running", or null when nothing needs showing. */
-export function processesLabel({ waiting, running }: Processes): string | null {
-  if (waiting.length) return `${waiting.length} waiting on you`;
-  if (running.length) return `${running.length} running`;
-  return null;
-}
-
-/** "3 done" or "2 published": what the quiet chip says once nothing waits or runs, or null for nothing. */
-export function finishedLabel({ done }: Processes, published: number): string | null {
-  if (done.length) return `${done.length} done`;
-  if (published) return `${published} published`;
-  return null;
-}
-
 export function processName(item: ProcessItem): string {
   return item.kind === "workflow" ? item.workflow.name : item.kind === "task" ? item.task.title : item.agent.name;
 }

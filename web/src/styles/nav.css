@@ -80,7 +80,6 @@
 .nav-group > .nav-label { padding: 0 10px 6px; color: var(--subtle-foreground); font-weight: 500; }
 .nav-group > .nav-project-section:first-of-type > .nav-project { margin-top: 0; }
 .nav-kbd { margin-left: auto; color: var(--subtle-foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-caption); }
-.nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: auto; padding: 0 5px; border-radius: 9999px; background: color-mix(in oklch, var(--status-blocked) 22%, transparent); color: var(--status-blocked); font-size: var(--text-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
 .nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
 .nav-project-section > .nav-project > .nav-row { font-weight: 500; }
 .nav-host { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 4px -8px -8px; padding: 0 6px 0 14px; border-top: 1px solid var(--border); }
@@ -122,6 +121,16 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-place-tab { flex-shrink: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; }
 .workbench-sidebar .nav-label:first-child { padding-top: 10px; }
 
+/* What a desk row says at its end: a project's dot and age, Home's count, a chat's pull request. */
+.nav-row-meta { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-left: auto; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.nav-row-end { display: inline-flex; flex-shrink: 0; color: var(--subtle-foreground); }
+.nav-label-text { flex: 1; min-width: 0; font: inherit; }
+.nav-label-action { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--subtle-foreground); cursor: pointer; }
+@media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
+.nav-more { color: var(--subtle-foreground); }
+/* An agent that finished or asked since you last looked: a quiet count, never a toast over the page. */
+.nav-unread { flex-shrink: 0; color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; font-variant-numeric: tabular-nums; }
+
 /* A phone's sheet and drawer: row content on the 16px gutter the sheet's title sits on. */
 .workbench-navigation[data-variant="sheet"] .nav-scroll { margin-inline: calc(-1 * var(--nav-pad, 10px)); padding-inline: 0; }
 .workbench-navigation[data-variant="sheet"] :is(.nav-top, .nav-footer) { padding-inline: 0; }
@@ -130,8 +139,26 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .workbench-navigation[data-variant="drawer"] .nav-host { padding-left: 16px; }
 }
 
+/* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, 30px rows, faint
+   icons and a soft grey for the row on screen. A touch screen keeps the 44px rows below. */
+@media (min-width: 1024px) and (pointer: fine) {
+  .workbench-navigation[data-variant="sidebar"] > .nav-top { gap: 1px; padding: 2px 8px 0; }
+  .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row, .nav-desk .nav-row { min-height: 30px; padding-block: 0; }
+  .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row > svg { color: var(--subtle-foreground); }
+  .nav-desk.nav-group { padding-top: 18px; }
+  .nav-desk .nav-group { padding-top: 10px; }
+  .nav-desk .nav-group:first-child { padding-top: 18px; }
+  .nav-desk .nav-label { min-height: 26px; padding: 0 10px; color: var(--subtle-foreground); font-size: var(--text-caption); font-weight: 400; }
+  .workbench-navigation[data-variant="sidebar"] .nav-host { border-top: 0; }
+}
+
+/* Motion answers a press only: the tree Search opens and the rows More brings in fade down into place. */
+@keyframes nav-enter { from { opacity: 0; transform: translateY(-3px); } }
+.nav-enter, .nav-desk [data-revealed] { animation: nav-enter 160ms cubic-bezier(0.2, 0, 0, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg { transition: none; }
+  .nav-enter, .nav-desk [data-revealed] { animation: none; }
 }
 
 @media (min-width: 1024px) {

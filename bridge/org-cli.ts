@@ -1,5 +1,5 @@
 import { servicePath } from "./claude-sessions.ts";
-import type { TemplateView } from "./types.ts";
+import type { RoutineList, RoutineView, TemplateView } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -149,6 +149,31 @@ export async function listTemplates(run: OrgRun, project: string): Promise<Templ
     const template = parseTemplate(item);
     return template ? [template] : [];
   });
+}
+
+/**
+ * A project's routines from `routine list --json`, in Organizations' name order. An Organizations
+ * that predates the document (it refuses `--json` or `routine`, or prints another schema) answers
+ * `available: false`, so a client can say it cannot list them instead of that there are none.
+ */
+export async function listRoutines(run: OrgRun, project: string): Promise<RoutineList> {
+  const slug = validateProjectSlug(project);
+  const unavailable: RoutineList = { available: false, routines: [], broken: 0 };
+  const result = await run(["routine", "list", slug, "--json"], { timeoutMs: 10_000 });
+  if (result.code !== 0) {
+    if (/unexpected argument|unrecognized subcommand/i.test(result.stderr)) return unavailable;
+    throw commandError(result);
+  }
+  const value = parseJson(result.stdout, "routine list");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || !Array.isArray(value.routines)) return unavailable;
+  return {
+    available: true,
+    routines: value.routines.flatMap((item) => {
+      const routine = parseRoutine(item);
+      return routine ? [routine] : [];
+    }),
+    broken: Array.isArray(value.broken) ? value.broken.length : 0,
+  };
 }
 
 /** The profiles this host can launch, by name (`profile list --names`); none when the CLI cannot say. */
@@ -392,6 +417,111 @@ function parsePullRequest(value: unknown): OrgOverviewPullRequest | undefined {
 
 // ── Writes. Each argv is built only from validated values; the client never supplies a flag. ──
 
+// ── The project's own documents: `task list`, `project show`, `routine list` (docs/json.md) ─────
+//
+// The desk's Project panel reads them, one per view and only while that view is on screen
+// (`/api/org/tasks`, `/api/org/context`). Each reader answers null, never an error, when this
+// Organizations has no such document (an older binary, another schema version, a failed run): the
+// panel then shows what the overview already says. Only the fields the panel draws are copied.
+
+export interface OrgTask {
+  /** The `## ` heading above the task in TASKS.md, empty above the first. */
+  list: string;
+  title: string;
+  owner: { kind: "unassigned" | "me" | "agent" | "person"; profile: string; machine: string; name: string };
+  /** The thread running it, empty when none. */
+  thread: string;
+  description: string;
+}
+
+export interface OrgProjectDetail {
+  /** PROJECT.md after its settings: what every thread is told. */
+  instructions: string;
+  memory: string;
+  memoryFiles: Array<{ name: string; text: string }>;
+  /** `machine` is empty for this machine. */
+  repos: Array<{ path: string; machine: string }>;
+  coordinatorProfile: string;
+  threadProfile: string;
+  maxParallelThreads: number;
+}
+
+export interface OrgRoutine {
+  name: string;
+  trigger: "schedule" | "pr";
+  /** As written (`daily 03:00`); empty for `pr`. */
+  schedule: string;
+  /** For `pr`, the pull request events it fires on. */
+  events: string[];
+  enabled: boolean;
+  /** RFC 3339, empty for `pr` and a disabled routine. */
+  nextRun: string;
+}
+
+const OWNER_KINDS = new Set(["unassigned", "me", "agent", "person"]);
+
+/** One `--json` document about one project, or null when this Organizations cannot give it. */
+async function readProjectDocument(run: OrgRun, root: string, argv: string[]): Promise<Record<string, unknown> | null> {
+  const result = await run(argv, { env: { HERDR_PROJECTS_ROOT: root }, timeoutMs: 10_000 });
+  if (result.code !== 0) return null;
+  try {
+    const value: unknown = JSON.parse(result.stdout);
+    return isRecord(value) && value.schema_version === SCHEMA_VERSION ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `task list --json`: TASKS.md in file order. Only the coordinator writes it; Nenu asks it. */
+export async function readTasks(run: OrgRun, root: string, project: string): Promise<OrgTask[] | null> {
+  const slug = validateProjectSlug(project);
+  const value = await readProjectDocument(run, root, ["task", "list", slug, "--json"]);
+  if (!value || !Array.isArray(value.tasks)) return null;
+  return value.tasks.flatMap((item): OrgTask[] => {
+    if (!isRecord(item) || !isRecord(item.owner) || typeof item.title !== "string") return [];
+    const { owner } = item;
+    if (typeof owner.kind !== "string" || !OWNER_KINDS.has(owner.kind)) return [];
+    return [{
+      list: text(item.list), title: item.title, thread: text(item.thread), description: text(item.description),
+      owner: { kind: owner.kind as OrgTask["owner"]["kind"], profile: text(owner.profile), machine: text(owner.machine), name: text(owner.name) },
+    }];
+  });
+}
+
+/** `project show --json`: what every thread receives, and where the project's threads work. */
+export async function readProjectDetail(run: OrgRun, root: string, project: string): Promise<OrgProjectDetail | null> {
+  const slug = validateProjectSlug(project);
+  const value = await readProjectDocument(run, root, ["project", "show", slug, "--json"]);
+  const detail = value?.project;
+  if (!isRecord(detail) || typeof detail.instructions !== "string") return null;
+  const records = (list: unknown) => Array.isArray(list) ? list.filter(isRecord) : [];
+  return {
+    instructions: detail.instructions,
+    memory: text(detail.memory),
+    memoryFiles: records(detail.memory_files).flatMap((file) => typeof file.name === "string" && typeof file.text === "string" ? [{ name: file.name, text: file.text }] : []),
+    repos: records(detail.repos).flatMap((repo) => typeof repo.path === "string" ? [{ path: repo.path, machine: text(repo.machine) }] : []),
+    coordinatorProfile: text(detail.coordinator_profile),
+    threadProfile: text(detail.thread_profile),
+    maxParallelThreads: isCharCount(detail.max_parallel_threads) ? detail.max_parallel_threads : 0,
+  };
+}
+
+/** `routine list --json`: what the coordinator does on a schedule or on a pull request's events. */
+export async function readRoutines(run: OrgRun, root: string, project: string): Promise<OrgRoutine[] | null> {
+  const slug = validateProjectSlug(project);
+  const value = await readProjectDocument(run, root, ["routine", "list", slug, "--json"]);
+  if (!value || !Array.isArray(value.routines)) return null;
+  return value.routines.flatMap((item): OrgRoutine[] => {
+    if (!isRecord(item) || typeof item.name !== "string" || (item.trigger !== "schedule" && item.trigger !== "pr") || typeof item.enabled !== "boolean") return [];
+    const events = Array.isArray(item.events) ? item.events.filter((event): event is string => typeof event === "string") : [];
+    return [{ name: item.name, trigger: item.trigger, schedule: text(item.schedule), events, enabled: item.enabled, nextRun: text(item.next_run) }];
+  });
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 export const MERGE_METHODS = ["squash", "merge", "rebase"] as const;
 export type MergeMethod = typeof MERGE_METHODS[number];
 
@@ -521,6 +651,23 @@ function parseTemplate(value: unknown): TemplateView | undefined {
     rulesChars: value.rules_chars,
     memoryChars: value.memory_chars,
     updated: value.updated,
+  };
+}
+
+function parseRoutine(value: unknown): RoutineView | undefined {
+  if (
+    !isRecord(value) || typeof value.name !== "string" || (value.trigger !== "schedule" && value.trigger !== "pr") ||
+    typeof value.enabled !== "boolean"
+  ) return undefined;
+  const text = (key: string) => typeof value[key] === "string" ? value[key] : "";
+  return {
+    name: value.name,
+    trigger: value.trigger,
+    schedule: text("schedule"),
+    events: Array.isArray(value.events) ? value.events.filter((event): event is string => typeof event === "string") : [],
+    enabled: value.enabled,
+    lastRun: text("last_run"),
+    nextRun: text("next_run"),
   };
 }
 

@@ -1,6 +1,7 @@
 # 0064. A project's organization is drawn the way Herdr Organizations draws it
 
-- **Status:** Accepted (2026-10-11)
+- **Status:** Accepted (2026-10-11). Amended by [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md):
+  the desk's sidebar no longer draws the tree; its Search does.
 - **Trail:** `web/src/lib/org-tree.ts` · `web/src/components/project-tasks.tsx` ·
   `web/src/components/workbench-sidebar.tsx` · `web/src/routes/node.tsx` · Organizations `src/ui.rs`
   (`open_tree`, `history`, `start_close`)

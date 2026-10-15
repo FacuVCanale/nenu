@@ -5,9 +5,13 @@ import { displayName, displayPlace } from "@/lib/display-name";
 import { homePath, panePath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
 
+/** Where the sidebar, and its +1 on a chat's row, is on screen (workbench.css). */
+const DESK = "(min-width: 1024px)";
+
 // In-app lifecycle notifications. We diff each snapshot against the previous one and surface a
 // header status line when an agent crosses into a state that wants attention. Background/OS
-// notifications are handled separately by the server via Web Push; this is the foreground equivalent.
+// notifications are handled separately by the server via Web Push; this is the foreground equivalent,
+// and a phone's alone: on a desk the sidebar's row says it.
 //
 // The first snapshot never fires (prev is null), so opening the app doesn't spam the status line
 // for agents that were already blocked — matching the server's transition semantics.
@@ -25,6 +29,8 @@ export function useAgentTransitions(agents: AgentView[], openPaneId: string | nu
       const was = before.get(agent.paneId);
       return was !== undefined && was !== agent.status && agent.paneId !== openPaneId;
     });
+    // A desk's sidebar marks the chat's row with a +1 (components/desk-nav.tsx), so a toast over the page would say it twice.
+    if (typeof window.matchMedia === "function" && window.matchMedia(DESK).matches) return;
     const blocked = changed.filter((agent) => agent.status === "blocked");
     const attention = blocked.length ? blocked : changed.filter((agent) => agent.status === "done");
     if (!attention.length) return;

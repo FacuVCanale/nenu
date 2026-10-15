@@ -185,6 +185,29 @@ export interface TemplateView {
   updated: string;
 }
 
+/** A project's routine as `routine list --json` reports it, without its prompt or command. */
+export interface RoutineView {
+  name: string;
+  trigger: "schedule" | "pr";
+  /** As written, such as `daily 09:00`; empty for a `pr` routine. */
+  schedule: string;
+  /** The pull request events a `pr` routine fires on; empty for a scheduled one. */
+  events: string[];
+  enabled: boolean;
+  /** RFC 3339, or empty: before the first run, and always for `pr`. */
+  lastRun: string;
+  /** RFC 3339, or empty for `pr` and for a disabled routine. */
+  nextRun: string;
+}
+
+/** `available` is false when this Organizations has no `routine list --json`, so the list says nothing. */
+export interface RoutineList {
+  available: boolean;
+  routines: RoutineView[];
+  /** Routine files that do not parse. */
+  broken: number;
+}
+
 /**
  * One entry in the snapshot's `sessions` list — a herdr session this bridge fronts. Additive: a
  * single-session deployment reports exactly one (the primary), so nothing about the UI changes.

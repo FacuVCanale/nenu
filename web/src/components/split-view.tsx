@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useRevalidator } from "react-router";
+import { useNavigate, useRevalidator } from "react-router";
 import { Maximize2, ChatCircle, SquareTerminal, X } from "@/components/ui/icon";
 
 import { AgentChat, type DockedHeaderView } from "@/components/agent-chat";
-import { PrBar } from "@/components/pr-bar";
+import { threadTree } from "@/components/project-tasks";
 import { NodeDot } from "@/components/node-row";
 import { Chip, ChipStrip } from "@/components/ui/chip";
 import { isLocked, useLocked } from "@/lib/idle";
 import { concerns, isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { fetchPane } from "@/lib/api";
 import { getRequestedLines, type HomeData, type PaneData } from "@/lib/loaders";
+import { nodePath } from "@/lib/nav";
 import { nodeState } from "@/lib/org-tree";
 import { isReadOnly, type ProjectThreadView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -148,6 +149,7 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
   const [screenShown, setScreenShown] = useState(false);
   const pane = usePaneMirror(thread.paneId, data.session, screenShown);
   const revalidator = useRevalidator();
+  const navigate = useNavigate();
   const agent = data.agents.find((candidate) => candidate.paneId === thread.paneId);
   const onMirrorShown = useCallback((shown: boolean) => setScreenShown(shown), []);
   const readOnly = isReadOnly(data.device);
@@ -197,7 +199,8 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
         authError={data.authError || pane?.authError}
         docked={{ header, onMirrorShown }}
         strip={<ThreadChips threads={siblings} currentPaneId={thread.paneId} onOpen={onSwitch} />}
-        composerTop={<PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={() => revalidator.revalidate()} />}
+        projectChips={{ project, thread, threads: threadTree(project, thread.parentId === "root" ? undefined : thread.parentId), session: data.session, readOnly,
+          onOpenPane: onSwitch, onOpenNode: (id) => navigate(nodePath(project.slug, id, data.session)), onChanged: () => revalidator.revalidate() }}
         onBack={onClose}
         onSelect={onSwitch}
       />

@@ -297,6 +297,36 @@ export interface ProjectView {
 
 export type NodeRole = "worker" | "coordinator";
 
+/** A TASKS.md task from Organizations' `task list --json`. Mirrors OrgTask in bridge/org-cli.ts. */
+export interface OrgTask {
+  list: string;
+  title: string;
+  owner: { kind: "unassigned" | "me" | "agent" | "person"; profile: string; machine: string; name: string };
+  thread: string;
+  description: string;
+}
+
+/** What every thread of a project receives (`project show --json`). Mirrors bridge/org-cli.ts. */
+export interface OrgProjectDetail {
+  instructions: string;
+  memory: string;
+  memoryFiles: Array<{ name: string; text: string }>;
+  repos: Array<{ path: string; machine: string }>;
+  coordinatorProfile: string;
+  threadProfile: string;
+  maxParallelThreads: number;
+}
+
+/** A project routine (`routine list --json`). Mirrors bridge/org-cli.ts. */
+export interface OrgRoutine {
+  name: string;
+  trigger: "schedule" | "pr";
+  schedule: string;
+  events: string[];
+  enabled: boolean;
+  nextRun: string;
+}
+
 export interface TemplateView {
   name: string;
   scope: "global" | "project";
@@ -309,6 +339,29 @@ export interface TemplateView {
   rulesChars: number;
   memoryChars: number;
   updated: string;
+}
+
+/** A project's routine, as `/api/org/routines` reads it from `routine list --json` (mirrors bridge/types.ts). */
+export interface RoutineView {
+  name: string;
+  trigger: "schedule" | "pr";
+  /** As written, such as `daily 09:00`; empty for a `pr` routine. */
+  schedule: string;
+  /** The pull request events a `pr` routine fires on; empty for a scheduled one. */
+  events: string[];
+  enabled: boolean;
+  /** RFC 3339, or empty: before the first run, and always for `pr`. */
+  lastRun: string;
+  /** RFC 3339, or empty for `pr` and for a disabled routine. */
+  nextRun: string;
+}
+
+/** `available` is false when the host's Organizations has no `routine list --json`, so the list says nothing. */
+export interface RoutineList {
+  available: boolean;
+  routines: RoutineView[];
+  /** Routine files that do not parse. */
+  broken: number;
 }
 
 /**

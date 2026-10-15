@@ -45,6 +45,19 @@ describe("useAgentTransitions", () => {
     expect(notify).toHaveBeenCalledOnce();
   });
 
+  // On a desk the bar marks the chat's row ("+1"), so a toast over the page would say it twice.
+  it("raises no toast on a desk, where the sidebar marks the row instead", () => {
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
+    try {
+      const { update } = setup([agent("one", "working"), agent("two", "working")]);
+      act(() => update([agent("one", "done"), agent("two", "blocked")]));
+      expect(notify).not.toHaveBeenCalled();
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
   it("does not notify the pane being read, including after navigating away from it", () => {
     const { update } = setup([agent("one", "working")], "qa", "one");
     act(() => update([agent("one", "blocked")]));

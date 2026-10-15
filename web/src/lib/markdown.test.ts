@@ -141,6 +141,20 @@ describe("bare file URLs", () => {
     ]);
   });
 
+  it("reads a bare pull request URL as a link named by its repository and number", () => {
+    const href = "https://github.com/acme/shop/pull/41";
+    expect(parseInline(`I recommend merging ${href} first.`)).toEqual([
+      { kind: "text", text: "I recommend merging " },
+      { kind: "link", href, spans: [{ kind: "text", text: "acme/shop#41" }] },
+      { kind: "text", text: " first." },
+    ]);
+    expect(parseInline(`(${href}/files)`)).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "link", href: `${href}/files`, spans: [{ kind: "text", text: "acme/shop#41" }] },
+      { kind: "text", text: ")" },
+    ]);
+  });
+
   it("leaves a file URL for another host, a web URL and a bare path as text", () => {
     for (const text of ["file://server/share/report.html", "https://example.com/report.html", `see ${path}`]) {
       expect(parseInline(text)).toEqual([{ kind: "text", text }]);

@@ -21,6 +21,9 @@ describe("ActivityPanel", () => {
     expect(screen.getByText("impl:B1")).toBeInTheDocument();
     fireEvent.click(screen.getByText("impl:B3"));
     expect(onOpenWorkflow).toHaveBeenCalledWith("wf_fe5d5046-9d2", "a5ecc06a0363074c3");
+    // What finished is history: folded until asked for.
+    expect(screen.queryByText("Typecheck bridge through the gate")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Finished/ }));
     expect(screen.getByText("Typecheck bridge through the gate")).toBeInTheDocument();
     expect(screen.getByText("failed · exit 144")).toBeInTheDocument();
     fireEvent.click(screen.getByText("nenu-workflows-view-design"));
@@ -30,8 +33,11 @@ describe("ActivityPanel", () => {
 
   test("the filters narrow what is listed", () => {
     render(<ActivityPanel data={list} now={now} onOpenWorkflow={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Tasks/ }));
-    expect(screen.getByRole("button", { name: /^Tasks/ })).toHaveAttribute("aria-pressed", "true");
+    // "Tasks" read as the project's task list; these are commands the session left running.
+    expect(screen.queryByRole("button", { name: /^Tasks/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Commands/ }));
+    expect(screen.getByRole("button", { name: /^Commands/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /^Finished/ }));
     expect(screen.queryByText("nenu-wave")).toBeNull();
     expect(screen.getByText("Run CI gates: fmt, clippy, tests, release build")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Artifacts/ }));
@@ -42,9 +48,15 @@ describe("ActivityPanel", () => {
   test("a command with output opens it", () => {
     const onOpenTask = vi.fn();
     render(<ActivityPanel data={list} now={now} onOpenWorkflow={() => {}} onOpenTask={onOpenTask} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Finished/ }));
     fireEvent.click(screen.getByRole("button", { name: "Output of Typecheck bridge through the gate" }));
     expect(onOpenTask).toHaveBeenCalledWith("b3f8meozt");
     expect(screen.queryByRole("button", { name: "Output of F1 gate progress" })).toBeNull();
+  });
+
+  test("says what each kind of background work is", () => {
+    render(<ActivityPanel data={list} now={now} onOpenWorkflow={() => {}} />);
+    expect(screen.getByText(/Workflows are agents the session fans out; commands are shell commands it left running/)).toBeInTheDocument();
   });
 
   test("says why a pane has no activity", () => {

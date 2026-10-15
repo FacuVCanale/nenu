@@ -56,6 +56,15 @@ export function timeAgoShort(ts: number, now: number = Date.now()): string {
   return full === "just now" ? "now" : full.replace(/ ago$/, "");
 }
 
+/** How soon `ts` comes, for a column of times ahead ("in 4h"); "due" once it has passed. */
+export function timeUntilShort(ts: number, now: number = Date.now()): string {
+  const mins = Math.ceil((ts - now) / 60_000);
+  if (mins <= 0) return "due";
+  if (mins < 60) return `in ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  return hrs < 24 ? `in ${hrs}h` : `in ${Math.floor(hrs / 24)}d`;
+}
+
 export function timeAgo(ts: number, now: number = Date.now()): string {
   const secs = Math.max(0, Math.round((now - ts) / 1000));
   if (secs < 60) return "just now";

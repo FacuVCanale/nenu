@@ -10,19 +10,21 @@ import { cn } from "@/lib/utils";
 // The panel is its own chunk: a phone never loads it, a desk on first open.
 const SessionPanel = lazy(() => import("./inspector-panels"));
 
-export type InspectorTab = "changes" | "files" | "artifacts" | "terminal";
-/** What the panel shows: one of the session's tabs, or the project behind ⋯. */
-export type InspectorView = InspectorTab | "project";
+/** The panel's tabs; Project only for a pane that belongs to one. */
+export type InspectorTab = "project" | "changes" | "files" | "artifacts" | "terminal";
+export const INSPECTOR_TABS: readonly InspectorTab[] = ["project", "changes", "files", "artifacts", "terminal"];
 
-export const INSPECTOR_TABS: readonly InspectorTab[] = ["changes", "files", "artifacts", "terminal"];
+/** The views of the Project tab (project-panel.tsx). */
+export type ProjectSection = "notes" | "agents" | "prs" | "context";
+export const PROJECT_SECTIONS: readonly ProjectSection[] = ["notes", "agents", "prs", "context"];
 
 /** The breakpoint where the workbench shows its sidebar; the panel exists only from there. */
 const DESK = "(min-width: 1024px)";
 const STORE_KEY = "nenu:session-panel:v1";
 export const PANEL_WIDTH = { min: 320, initial: 460, max: 760, step: 16 } as const;
 
-interface Stored { open: boolean; width: number; tab: InspectorTab }
-const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "changes" };
+interface Stored { open: boolean; width: number; tab: InspectorTab; section: ProjectSection }
+const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "project", section: "notes" };
 export const clampWidth = (width: number) => Math.round(Math.min(PANEL_WIDTH.max, Math.max(PANEL_WIDTH.min, width)));
 
 function readStored(): Stored {
@@ -32,6 +34,7 @@ function readStored(): Stored {
       open: typeof raw?.open === "boolean" ? raw.open : INITIAL.open,
       width: typeof raw?.width === "number" ? clampWidth(raw.width) : INITIAL.width,
       tab: INSPECTOR_TABS.includes(raw?.tab as InspectorTab) ? raw!.tab! : INITIAL.tab,
+      section: PROJECT_SECTIONS.includes(raw?.section as ProjectSection) ? raw!.section! : INITIAL.section,
     };
   } catch {
     return INITIAL;
@@ -68,12 +71,17 @@ export interface SessionInspectorState {
   desk: boolean;
   open: boolean;
   width: number;
-  view: InspectorView;
-  /** The session tab last picked, which ⋯ hands back to. */
+  /** The tab last picked; the panel shows Changes instead where it is not offered. */
   tab: InspectorTab;
+  section: ProjectSection;
   setOpen: (open: boolean) => void;
-  setView: (view: InspectorView) => void;
+  setTab: (tab: InspectorTab) => void;
+  setSection: (section: ProjectSection) => void;
   setWidth: (width: number) => void;
+  /** The panel's element, which folding slides out before it unmounts. */
+  panelRef: React.RefObject<HTMLElement | null>;
+  /** Set by an open the person asked for, so only that open slides the panel in. */
+  entering: React.RefObject<boolean>;
   /** Whichever of the two toggles is on screen, so a press hands focus to its counterpart. */
   toggleRef: React.RefObject<HTMLButtonElement | null>;
   /** The Terminal tab's places, published by the tab while it is on screen. */
@@ -88,8 +96,11 @@ export interface SessionInspectorState {
 export function useSessionInspector(): SessionInspectorState {
   const desk = useMediaQuery(DESK);
   const [stored, setStored] = useState(readStored);
-  const [project, setProject] = useState(false);
   const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const entering = useRef(false);
+  /** The fold under way, cancelled by an open that comes before it ends. */
+  const folding = useRef<Animation | null>(null);
   const [terminal, setTerminal] = useState<TerminalSlots | null>(null);
   const pressed = useRef(false);
   const update = (patch: Partial<Stored>) => setStored((current) => {
@@ -97,10 +108,30 @@ export function useSessionInspector(): SessionInspectorState {
     writeStored(next);
     return next;
   });
-  const view: InspectorView = project ? "project" : stored.tab;
+  /** Open slides in once mounted; folding slides out first, and unmounts when that ends. */
+  const show = (open: boolean) => {
+    if (open) {
+      const fold = folding.current;
+      folding.current = null;
+      // Still mounted mid-fold: the panel just stays, without sliding in again.
+      if (fold) fold.cancel();
+      else entering.current = true;
+      update({ open });
+      return;
+    }
+    if (folding.current) return;
+    const slide = panelRef.current && slidePanel(panelRef.current, "out");
+    if (!slide) return update({ open: false });
+    folding.current = slide;
+    slide.finished.then(() => {
+      if (folding.current !== slide) return;
+      folding.current = null;
+      update({ open: false });
+    }, () => {});
+  };
   const setOpen = (open: boolean) => {
     pressed.current = true;
-    update({ open });
+    show(open);
   };
 
   useEffect(() => {
@@ -109,15 +140,16 @@ export function useSessionInspector(): SessionInspectorState {
   }, [stored.open]);
 
   // The shortcut leaves focus where it was: folding while typing keeps the cursor in the composer.
-  const latest = useRef({ desk, open: stored.open, update });
-  latest.current = { desk, open: stored.open, update };
+  const latest = useRef({ desk, open: stored.open, show });
+  latest.current = { desk, open: stored.open, show };
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
       // `code`, not `key`: Option+B types "∫" on a Mac.
       if (event.defaultPrevented || event.shiftKey || !event.altKey || !(event.metaKey || event.ctrlKey) || event.code !== "KeyB") return;
       if (!latest.current.desk || isLocked()) return;
       event.preventDefault();
-      latest.current.update({ open: !latest.current.open });
+      // Mid-fold the panel reads as folded already, so the shortcut brings it back.
+      latest.current.show(!latest.current.open || folding.current !== null);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -127,14 +159,14 @@ export function useSessionInspector(): SessionInspectorState {
     desk,
     open: stored.open,
     width: stored.width,
-    view,
     tab: stored.tab,
+    section: stored.section,
     setOpen,
-    setView: (next) => {
-      setProject(next === "project");
-      if (next !== "project") update({ tab: next });
-    },
+    setTab: (tab) => update({ tab }),
+    setSection: (section) => update({ section }),
     setWidth: (width) => update({ width: clampWidth(width) }),
+    panelRef,
+    entering,
     toggleRef,
     terminal,
     setTerminal,
@@ -148,9 +180,22 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
     terminal: inspector.terminal,
     showTerminal: () => {
       inspector.setOpen(true);
-      inspector.setView("terminal");
+      inspector.setTab("terminal");
     },
   };
+}
+
+/**
+ * The panel's slide when the person opens or folds it: transform and opacity only, 200 ms in and
+ * 160 ms out. Null, so the change is instant, under reduced motion or without Web Animations.
+ */
+export function slidePanel(panel: HTMLElement, direction: "in" | "out"): Animation | null {
+  if (typeof panel.animate !== "function" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return null;
+  const hidden = { opacity: 0, transform: "translateX(16px)" };
+  const shown = { opacity: 1, transform: "none" };
+  return direction === "in"
+    ? panel.animate([hidden, shown], { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" })
+    : panel.animate([shown, hidden], { duration: 160, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" });
 }
 
 /** A session's pull request as the panel's Changes shows it, from GitHub or from Organizations. */

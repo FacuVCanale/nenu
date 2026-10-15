@@ -13,7 +13,8 @@ import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
 import { Elapsed, LiveGlyph } from "./work-activity-label";
 
-// A turn's work as a timeline: one line per step, its icon, a verb and what it acted on. A step with
+// A turn's work as a timeline: one line per step, its icon, a verb and what it acted on, in the quiet
+// greys, so the steps read as the agent working and its prose as what it says. A step with
 // a body (a call's output, a whole thought) opens it under its line; nothing groups steps behind a
 // second fold, so a failure is one tap from its output once the turn is open.
 
@@ -142,11 +143,11 @@ function StepTarget({ text, format, query, current }: { text: string; format: To
   if (format === "path") {
     const { dir, base } = displayPath(text, cwd, 32);
     return <span className="flex min-w-0 flex-1">
-      {dir && <span className="min-w-0 truncate text-muted-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} current={current} /></span></span>}
-      <span className="max-w-full shrink-0 truncate text-foreground"><Highlight text={base} query={query} current={current} /></span>
+      {dir && <span className="min-w-0 truncate text-subtle-foreground [direction:rtl]"><span dir="ltr"><Highlight text={dir} query={query} current={current} /></span></span>}
+      <span className="max-w-full shrink-0 truncate text-muted-foreground"><Highlight text={base} query={query} current={current} /></span>
     </span>;
   }
-  return <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", format === "code" && "font-mono text-code", format === "thought" && "italic")}>
+  return <span className={cn("min-w-0 flex-1 truncate text-subtle-foreground", format === "code" && "font-mono text-code", format === "thought" && "italic")}>
     <Highlight text={text} query={query} current={current} />
   </span>;
 }
@@ -197,7 +198,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
       <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, target, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
-        <span className={cn("text-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
+        <span className={cn("text-muted-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
         <StepTarget text={step.text} format={step.target} query={query} current={focused} />
         {failed ? <FailedChip /> : asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
         {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
@@ -226,7 +227,7 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
   return <div data-step="thinking" className="min-w-0">
     <StepLine icon={<StepIcon kind="thinking" />} live={live} label={`Thinking: ${preview}${truncated ? " · truncated" : ""}`} expanded={open} controls={contentId}
       onToggle={preview ? () => setExpanded((value) => !value) : undefined}>
-      {(live || !shown) && <span className={cn("shrink-0", live ? "text-foreground" : "text-muted-foreground")}>Thinking</span>}
+      {(live || !shown) && <span className="shrink-0 text-muted-foreground">Thinking</span>}
       <StepTarget text={shown} format="thought" query={query} current={focused} />
     </StepLine>
     {open && preview && <div id={contentId} className="min-w-0 pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]">

@@ -24,6 +24,9 @@ const pane = (action: string, method: string, level: Level): Case =>
 
 const CASES: Case[] = [
   { method: "GET", path: "/api/org/start-options", level: "read", session: false },
+  { method: "GET", path: "/api/org/routines", level: "read", session: false },
+  { method: "GET", path: "/api/org/tasks", level: "read", session: false },
+  { method: "GET", path: "/api/org/context", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
   { method: "POST", path: "/api/org/project/open", level: "write", session: true },

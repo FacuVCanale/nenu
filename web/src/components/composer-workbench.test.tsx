@@ -176,7 +176,7 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
 });
 
 it("puts one + at the start of the box and Send at its end; the row beneath holds only the session", () => {
-  setup({ modelControl: <button>Choose model</button>, processesControl: <button>Processes: 1 done</button> });
+  setup({ modelControl: <button>Choose model</button>, place: <span>main</span> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
   const input = screen.getByRole("textbox");
   const box = input.parentElement!;
@@ -189,7 +189,9 @@ it("puts one + at the start of the box and Send at its end; the row beneath hold
   expect(screen.queryByRole("button", { name: "Attach image" })).not.toBeInTheDocument();
   const toolbar = screen.getByRole("group", { name: "Message tools" });
   expect(toolbar).not.toContainElement(input);
-  expect(within(toolbar).getAllByRole("button").map((button) => button.textContent)).toEqual(["Choose model", "Processes: 1 done"]);
+  expect(within(toolbar).getAllByRole("button").map((button) => button.textContent)).toEqual(["Choose model"]);
+  // Where the session runs sits after the model, and background work lives in the row above the box.
+  expect(within(toolbar).getByText("main")).toBeInTheDocument();
 });
 
 it("opens one menu from the +, grouped Attach, Replies, Terminal and Session, and runs a row like the header menu does", async () => {
@@ -303,6 +305,8 @@ it("gives a draft the + column's width while the phone keyboard is up, so it wra
 it("gives the thread the meta row's height while the phone keyboard is up", () => {
   const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
   expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
+  // The chips above the box step aside too; an open chip's panel stays until it is closed.
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-chip-row", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
 });
 
 it("paints the armed Send in the accent its box wears, so armed reads as one signal", async () => {
