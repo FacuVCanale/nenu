@@ -2074,7 +2074,7 @@ async function motion(before: boolean): Promise<void> {
 async function scrollProbe(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const probe = () => {
-    type Jump = { t: number; label: string; dy: number; dTop: number; dHeight: number; top: number; tail: boolean; text: string };
+    type Jump = { t: number; label: string; dy: number; dTop: number; dHeight: number; top: number; tail: boolean; text: string; images: number[][] };
     const state = {
       label: "load", input: Number.NEGATIVE_INFINITY, user: 0,
       writes: [] as Array<{ t: number; label: string; kind: string; arg: string; from: number; input: boolean; stack: string }>,
@@ -2098,8 +2098,50 @@ async function scrollProbe(): Promise<void> {
     for (const type of ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"]) addEventListener(type, () => { state.input = performance.now(); }, { capture: true, passive: true });
     let prev: { el: Element; y: number; top: number; height: number; tail: boolean; user: number } | null = null;
     let lastSample = 0;
-    const frame = () => {
+    // A rAF reads layout before the frame's ResizeObservers run, so a move that comes with a resize may
+    // be put right by the app before the frame is painted. Such a move waits for this observer, made
+    // after the app's and so run after it, and counts only if it is still there.
+    let pending: { jump: Jump; el: Element; y: number; user: number } | null = null;
+    let watched: Element | null = null;
+    let settle: ResizeObserver | null = null;
+    const where = (el: Element, list: HTMLElement) => el.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    const confirm = () => {
+      const list_ = list();
+      if (!pending || !list_) return false;
+      const { jump, el, y, user } = pending;
+      pending = null;
+      const now = el.isConnected ? where(el, list_) + (state.user - user) : Number.NaN;
+      if (!(Math.abs(now - y) < 2)) state.jumps.push(jump);
+      return true;
+    };
+    // After the app's observers ran, the line stands where it is painted: measure the next frame from there.
+    // A layout the app changes in its own rAF (the keyboard's height) lands after the probe's rAF, so the
+    // move is looked for here too.
+    const settled = () => {
+      // The line this frame's rAF picked was measured before the app's correction: only re-measure it.
+      const checked = confirm();
       const el = list();
+      if (!prev?.el.isConnected || !el) return;
+      const y = where(prev.el, el);
+      if (!checked && Math.abs(y + (state.user - prev.user) - prev.y) >= 2) state.jumps.push({ t: Math.round(performance.now()), label: state.label,
+        dy: Math.round(y + (state.user - prev.user) - prev.y), dTop: Math.round(el.scrollTop - prev.top), dHeight: el.scrollHeight - prev.height,
+        top: Math.round(el.scrollTop), tail: prev.tail, text: (prev.el.textContent ?? "").slice(0, 48), images: [] });
+      prev = { ...prev, y, top: el.scrollTop, height: el.scrollHeight, user: state.user };
+    };
+    const frame = () => {
+      confirm();
+      const el = list();
+      if (el && el !== watched) {
+        settle?.disconnect();
+        watched = el;
+        settle = null;
+        setTimeout(() => {
+          if (watched !== el) return;
+          settle = new ResizeObserver(settled);
+          settle.observe(el);
+          if (el.firstElementChild) settle.observe(el.firstElementChild);
+        }, 100);
+      }
       if (el) {
         const box = el.getBoundingClientRect();
         const tail = el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
@@ -2109,9 +2151,16 @@ async function scrollProbe(): Promise<void> {
           if (!prev.el.isConnected) state.lost.push({ t: Math.round(performance.now()), label: state.label });
           else {
             const y = prev.el.getBoundingClientRect().top - box.top + (state.user - prev.user);
-            if (Math.abs(y - prev.y) >= 2) state.jumps.push({ t: Math.round(performance.now()), label: state.label, dy: Math.round(y - prev.y),
-              dTop: Math.round(el.scrollTop - prev.top), dHeight: el.scrollHeight - prev.height, top: Math.round(el.scrollTop), tail: prev.tail,
-              text: (prev.el.textContent ?? "").slice(0, 48) });
+            if (Math.abs(y - prev.y) >= 2) {
+              const jump = { t: Math.round(performance.now()), label: state.label, dy: Math.round(y - prev.y),
+                dTop: Math.round(el.scrollTop - prev.top), dHeight: el.scrollHeight - prev.height, top: Math.round(el.scrollTop), tail: prev.tail,
+                text: (prev.el.textContent ?? "").slice(0, 48),
+                // Pictures near the screen, top and height relative to the list's box: what grew, and where.
+                images: [...el.querySelectorAll("img")].map((img) => [Math.round(img.getBoundingClientRect().top - box.top), Math.round(img.getBoundingClientRect().height)])
+                  .filter(([top]) => top > -1000 && top < box.height + 1000) };
+              if (jump.dHeight !== 0 && settle) pending = { jump, el: prev.el, y: prev.y, user: prev.user };
+              else state.jumps.push(jump);
+            }
           }
         }
         const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 3);
