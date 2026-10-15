@@ -1,15 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, BookText, Check, ChatCircle, ChevronRight, Clock, ExternalLink, FileText, FolderGit2, GitPullRequest } from "@/components/ui/icon";
+import { ArrowLeft, BookText, Check, ChatCircle, ChevronRight, Clock, ExternalLink, FileText, FolderGit2, GitPullRequest, ListTodo } from "@/components/ui/icon";
 
 import { DiffBody, useDiffRead } from "@/components/diff-viewer";
 import { errorMessage } from "@/components/node-start";
 import { ProjectGlyph } from "@/components/project-glyph";
-import { canMerge, ProjectTasks, threadDetail } from "@/components/project-tasks";
+import { canMerge, prSummary, ProjectTasks, threadDetail } from "@/components/project-tasks";
 import { ICON_BUTTON, type ProjectSection } from "@/components/session-inspector";
 import { PaneActivity, PrList, prLists } from "@/components/threads-panel";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { fetchOrgContext, fetchOrgTasks, fetchPaneDiff, sendMessage } from "@/lib/api";
+import { fetchOrgContext, fetchOrgStatus, fetchOrgTasks, fetchPaneDiff, sendMessage, type OrgStatus, type OrgStatusState } from "@/lib/api";
 import { nodeState } from "@/lib/org-tree";
 import { isOpenThread, liveCoordinator } from "@/lib/projects";
 import type { AgentView, OrgProjectDetail, OrgRoutine, OrgTask, ProjectThreadView, ProjectView } from "@/lib/types";
@@ -73,6 +73,84 @@ export function ProjectPanel(props: ProjectPanelProps) {
 
 // ── Notes ─────────────────────────────────────────────────────────────────────────────────────
 
+/** What Notes knows of `project status`: still reading, its document, none from this Organizations, or why it failed. */
+type StatusRead = { kind: "reading" } | { kind: "status"; status: OrgStatus } | { kind: "none" } | { kind: "failed"; error: string };
+
+/**
+ * The project's work as Herdr Organizations computes it (`project status`), its problems above. An
+ * Organizations without the command keeps the task list as it was, and so does a failed read, which
+ * says why. Read when the tab opens and again only when a thread changes state.
+ */
+function Notes(props: ProjectPanelProps) {
+  const { project } = props;
+  const [read, setRead] = useState<StatusRead>({ kind: "reading" });
+  const states = stateKey(project.threads);
+  // An Organizations without the command will not have it on the next state change either.
+  const none = read.kind === "none";
+  useEffect(() => {
+    if (none) return;
+    const controller = new AbortController();
+    fetchOrgStatus(project.slug, controller.signal)
+      .then((reply) => setRead(reply.status ? { kind: "status", status: reply.status } : { kind: "none" }))
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted) setRead((current) => current.kind === "status" ? current : { kind: "failed", error: errorMessage(failure) });
+      });
+    return () => controller.abort();
+  }, [project.slug, states, none]);
+  switch (read.kind) {
+    case "reading": return <p role="status" className="px-1 text-sm text-muted-foreground">Reading the project…</p>;
+    case "status": return <StatusNotes {...props} status={read.status} />;
+    case "none": return <TaskNotes {...props} />;
+    case "failed": return <>
+      <TaskNotes {...props} />
+      <p role="alert" className="mt-4 px-1 text-xs text-muted-foreground">Could not read the project's status: {read.error}</p>
+    </>;
+  }
+}
+
+/** `project status`'s groups in the order Notes draws them; Done is folded below them. */
+const STATUS_GROUPS: ReadonlyArray<readonly [Exclude<OrgStatusState, "done">, string]> = [
+  ["waiting", "Needs you"], ["working", "Working"], ["review", "Ready for review"], ["landing", "Landing"], ["idle", "Idle"], ["todo", "To do"],
+];
+const STATUS_TONE: Record<OrgStatusState, string> = {
+  waiting: "text-status-blocked", working: "text-status-working", review: "text-primary", landing: "text-status-done",
+  idle: "text-muted-foreground", todo: "text-muted-foreground", done: "text-muted-foreground",
+};
+
+/** An item in the coordinator's words, what it is doing from the thread running it. */
+function statusNote(project: ProjectView, item: OrgStatus["items"][number], panes: readonly AgentView[]): Note<OrgStatusState> {
+  const thread = item.thread ? project.threads.find((candidate) => candidate.id === item.thread) : undefined;
+  const detail = !thread ? "" : item.state === "done" && thread.pr ? prSummary(thread.pr) : threadDetail(thread, panes);
+  const owner = item.owner ? ownerLabel(item.owner) : thread?.agent ?? "";
+  return { key: item.id, title: item.title, state: item.state, thread, task: item.kind === "task", detail, owner };
+}
+
+function StatusNotes(props: ProjectPanelProps & { status: OrgStatus }) {
+  const { project, panes, status } = props;
+  const [problemsShown, setProblemsShown] = useState(false);
+  const { problems } = status;
+  return <>
+    {problems.length > 0 && <>
+      <button type="button" className="task-history-toggle mb-3" aria-expanded={problemsShown} onClick={() => setProblemsShown(!problemsShown)}>
+        <ChevronRight aria-hidden className="size-3.5" />{problems.length} {problems.length === 1 ? "problem" : "problems"}
+      </button>
+      {problemsShown && <ul aria-label="Problems" className="mb-4 flex flex-col gap-1.5 pr-2 pl-8 text-footnote">
+        {problems.map((problem, index) => <li key={index}>
+          {problem.task || (problem.line === 0 ? "HANDOFF.md" : `Line ${problem.line}`)} <span className="text-muted-foreground">{problem.detail}</span>
+        </li>)}
+      </ul>}
+    </>}
+    <NoteGroups panel={props} source="status" groups={STATUS_GROUPS} tone={STATUS_TONE} notes={status.items.map((item) => statusNote(project, item, panes))}
+      empty={<div className="flex flex-col items-center gap-1 px-4 py-10 text-center">
+        <ListTodo aria-hidden className="mb-1 size-4 text-muted-foreground" />
+        <p className="text-sm font-medium">Nothing to track yet</p>
+        <p className="text-xs text-muted-foreground">The coordinator's tasks and the threads it runs show up here.</p>
+      </div>} />
+  </>;
+}
+
+// What Notes showed before `project status`: the task list, or the threads by state without one.
+
 type NoteState = "needs" | "merge" | "review" | "progress" | "todo" | "done";
 const NOTE_GROUPS: ReadonlyArray<readonly [Exclude<NoteState, "done">, string]> = [
   ["needs", "Needs you"], ["merge", "Ready to merge"], ["review", "Ready for review"], ["progress", "In progress"], ["todo", "Not started"],
@@ -81,13 +159,13 @@ const NOTE_TONE: Record<NoteState, string> = {
   needs: "text-status-blocked", merge: "text-status-done", review: "text-primary", progress: "text-status-working", todo: "text-muted-foreground", done: "text-muted-foreground",
 };
 
-interface Note {
+interface Note<State extends string = NoteState> {
   key: string;
   title: string;
-  state: NoteState;
+  state: State;
   thread?: ProjectThreadView;
-  /** The coordinator's task, absent when Notes lists threads because there is no task list. */
-  task?: OrgTask;
+  /** A TASKS.md task the coordinator can be asked to mark done; false for a thread no task names. */
+  task: boolean;
   detail: string;
   owner: string;
 }
@@ -112,21 +190,19 @@ function taskNote(project: ProjectView, task: OrgTask, panes: readonly AgentView
   const thread = task.thread ? project.threads.find((candidate) => candidate.id === task.thread) : undefined;
   const state = thread ? noteState(project, thread) : task.thread ? "progress" : "todo";
   const detail = thread ? threadDetail(thread, panes) : task.description.split("\n").find((line) => line.trim())?.trim() ?? "";
-  return { key: `task-${index}`, title: task.title, state, thread, task, detail, owner: ownerLabel(task.owner) };
+  return { key: `task-${index}`, title: task.title, state, thread, task: true, detail, owner: ownerLabel(task.owner) };
 }
 
 function threadNote(project: ProjectView, thread: ProjectThreadView, panes: readonly AgentView[]): Note {
-  return { key: thread.id, title: thread.title, state: noteState(project, thread), thread, detail: threadDetail(thread, panes), owner: thread.agent ?? "" };
+  return { key: thread.id, title: thread.title, state: noteState(project, thread), thread, task: false, detail: threadDetail(thread, panes), owner: thread.agent ?? "" };
 }
 
 /** Changes whenever a thread moves between states, so the list is read again then and only then. */
 const stateKey = (threads: readonly ProjectThreadView[]) => threads.map((thread) => `${thread.id}:${thread.status}:${thread.group ?? ""}:${thread.pr?.state ?? ""}`).join(",");
 
-function Notes({ project, panes, session, readOnly, onOpenPane, onOpenNode }: ProjectPanelProps) {
+function TaskNotes(props: ProjectPanelProps) {
+  const { project, panes } = props;
   const [tasks, setTasks] = useState<OrgTask[] | null | undefined>(undefined);
-  const [doneShown, setDoneShown] = useState(false);
-  const [asking, setAsking] = useState<Note | null>(null);
-  const [asked, setAsked] = useState<ReadonlySet<string>>(new Set());
   const states = stateKey(project.threads);
   useEffect(() => {
     const controller = new AbortController();
@@ -138,52 +214,82 @@ function Notes({ project, panes, session, readOnly, onOpenPane, onOpenNode }: Pr
   if (tasks === undefined) return <p role="status" className="px-1 text-sm text-muted-foreground">Reading the task list…</p>;
 
   const notes = tasks ? tasks.map((task, index) => taskNote(project, task, panes, index)) : project.threads.map((thread) => threadNote(project, thread, panes));
+  return <NoteGroups panel={props} source="tasks" groups={NOTE_GROUPS} tone={NOTE_TONE} notes={notes}
+    empty={<p className="px-1 text-sm text-muted-foreground">{tasks ? "The coordinator's task list is empty." : "No threads yet."}</p>}>
+    {!tasks && <p className="mt-4 px-1 text-xs text-muted-foreground">Showing the threads by state; the coordinator's task list appears here with a newer Herdr Organizations.</p>}
+  </NoteGroups>;
+}
+
+/**
+ * Notes' groups with Done folded under them; a task's circle asks the coordinator to mark it done. From
+ * `project status` a row is Cursor's, the name and then what it is doing in one line, and a done task
+ * is checked off; the task list keeps its two-line rows.
+ */
+function NoteGroups<State extends string>({ panel, source, groups, tone, notes, empty, children }: {
+  panel: ProjectPanelProps;
+  source: "status" | "tasks";
+  groups: ReadonlyArray<readonly [State, string]>;
+  tone: Record<State, string>;
+  notes: Array<Note<State>>;
+  empty: ReactNode;
+  children?: ReactNode;
+}) {
+  const { project, panes, session, readOnly, onOpenPane, onOpenNode } = panel;
+  const status = source === "status";
+  const [doneShown, setDoneShown] = useState(false);
+  const [asking, setAsking] = useState<Note<State> | null>(null);
+  const [asked, setAsked] = useState<ReadonlySet<string>>(new Set());
   const done = notes.filter((note) => note.state === "done");
   const coordinatorPane = liveCoordinator(project, panes);
   const why = readOnly ? "This device can only read" : coordinatorPane ? undefined : "Start the coordinator to change tasks";
-  const row = (note: Note) => {
+  const row = (note: Note<State>) => {
     const pr = note.thread?.pr;
     const Icon = pr ? GitPullRequest : note.thread ? ChatCircle : null;
     const open = note.thread && (() => note.thread!.paneId ? onOpenPane(note.thread!.paneId) : onOpenNode(note.thread!.id));
-    const body = <>
-      {Icon && <Icon aria-hidden className={cn("mt-0.5 size-3.5 shrink-0", NOTE_TONE[note.state])} />}
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm"><span data-task-title className="font-medium">{note.title}</span>
-          {pr?.number !== undefined && <span className="ml-1 tabular-nums text-primary">#{pr.number}</span>}</span>
-        <span className="note-meta">
-          {note.detail && <span className="min-w-0 truncate">{note.detail}</span>}
-          {asked.has(note.key) ? <span>Asked the coordinator</span> : note.owner && <span>{note.owner}</span>}
-        </span>
+    // By title, as the coordinator is asked: a task's line moves when the coordinator deletes one above it.
+    const pending = asked.has(note.title) && note.state !== "done";
+    const meta = pending ? "Asked the coordinator" : [note.detail, note.owner].filter(Boolean).join(" · ");
+    // From `project status` every row keeps the circle's and the icon's place, so the names line up.
+    const circle = note.task && note.state !== "done"
+      ? <button type="button" className="note-check" aria-label={`Mark done: ${note.title}`} title={why ?? "Ask the coordinator to mark it done"}
+        disabled={Boolean(why) || pending} onClick={() => setAsking(note)}>{pending && <Check aria-hidden className="size-3" />}</button>
+      : status && <span aria-hidden className={cn("note-check cursor-default text-muted-foreground", !note.task && "invisible")}>{note.task && <Check className="size-3" />}</span>;
+    const icon = Icon ? <Icon aria-hidden className={cn("mt-0.5 size-3.5 shrink-0", tone[note.state])} /> : status && <span aria-hidden className="size-3.5 shrink-0" />;
+    const text = status ? <span className="min-w-0 flex-1 text-sm">
+      <span data-task-title className="font-medium">{note.title}</span>{meta && <> <span className="text-muted-foreground">{meta}</span></>}
+    </span> : <span className="min-w-0 flex-1">
+      <span className="block text-sm"><span data-task-title className="font-medium">{note.title}</span>
+        {pr?.number !== undefined && <span className="ml-1 tabular-nums text-primary">#{pr.number}</span>}</span>
+      <span className="note-meta">
+        {note.detail && <span className="min-w-0 truncate">{note.detail}</span>}
+        {pending ? <span>Asked the coordinator</span> : note.owner && <span>{note.owner}</span>}
       </span>
-    </>;
+    </span>;
     return (
       <li key={note.key} className="task-row">
-        {note.task && note.state !== "done" && <button type="button" className="note-check" aria-label={`Mark done: ${note.title}`} title={why ?? "Ask the coordinator to mark it done"}
-          disabled={Boolean(why) || asked.has(note.key)} onClick={() => setAsking(note)}>
-          {asked.has(note.key) && <Check aria-hidden className="size-3" />}
-        </button>}
-        {open ? <button type="button" className="task-main" onClick={open}>{body}</button> : <div className="task-main">{body}</div>}
+        {circle}
+        {open ? <button type="button" className="task-main" onClick={open}>{icon}{text}</button> : <div className="task-main">{icon}{text}</div>}
       </li>
     );
   };
   return <>
-    {NOTE_GROUPS.map(([state, label]) => {
+    {groups.map(([state, label]) => {
       const list = notes.filter((note) => note.state === state);
       return list.length > 0 && <section key={state} aria-label={label} className="mb-4">
         <h3 className="panel-group-heading">{label}</h3>
         <ul className="task-list">{list.map(row)}</ul>
       </section>;
     })}
-    {notes.length === 0 && <p className="px-1 text-sm text-muted-foreground">{tasks ? "The coordinator's task list is empty." : "No threads yet."}</p>}
+    {notes.length === 0 && empty}
     {done.length > 0 && <>
       <button type="button" className="task-history-toggle" aria-expanded={doneShown} onClick={() => setDoneShown(!doneShown)}>
         <ChevronRight aria-hidden className="size-3.5" />Done · {done.length}
       </button>
       {doneShown && <ul className="task-list task-history" aria-label="Done">{done.map(row)}</ul>}
     </>}
-    {!tasks && <p className="mt-4 px-1 text-xs text-muted-foreground">Showing the threads by state; the coordinator's task list appears here with a newer Herdr Organizations.</p>}
+    {children}
     {coordinatorPane && <MarkDone note={asking} paneId={coordinatorPane} session={session} onCancel={() => setAsking(null)}
-      onAsked={(note) => { setAsked((current) => new Set(current).add(note.key)); setAsking(null); }} />}
+      onAsked={(note) => { setAsked((current) => new Set(current).add(note.title)); setAsking(null); }} />}
   </>;
 }
 
@@ -191,7 +297,9 @@ function Notes({ project, panes, session, readOnly, onOpenPane, onOpenNode }: Pr
  * Only the coordinator writes TASKS.md: marking a task sends it one sentence through the guarded
  * send (typed, verified, submitted), and the coordinator edits the file on its turn.
  */
-function MarkDone({ note, paneId, session, onCancel, onAsked }: { note: Note | null; paneId: string; session?: string; onCancel: () => void; onAsked: (note: Note) => void }) {
+function MarkDone<State extends string>({ note, paneId, session, onCancel, onAsked }: {
+  note: Note<State> | null; paneId: string; session?: string; onCancel: () => void; onAsked: (note: Note<State>) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ask = async () => {

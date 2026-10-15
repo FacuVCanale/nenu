@@ -478,14 +478,16 @@ export async function readTasks(run: OrgRun, root: string, project: string): Pro
   const value = await readProjectDocument(run, root, ["task", "list", slug, "--json"]);
   if (!value || !Array.isArray(value.tasks)) return null;
   return value.tasks.flatMap((item): OrgTask[] => {
-    if (!isRecord(item) || !isRecord(item.owner) || typeof item.title !== "string") return [];
-    const { owner } = item;
-    if (typeof owner.kind !== "string" || !OWNER_KINDS.has(owner.kind)) return [];
-    return [{
-      list: text(item.list), title: item.title, thread: text(item.thread), description: text(item.description),
-      owner: { kind: owner.kind as OrgTask["owner"]["kind"], profile: text(owner.profile), machine: text(owner.machine), name: text(owner.name) },
-    }];
+    const owner = isRecord(item) ? parseOwner(item.owner) : null;
+    if (!isRecord(item) || !owner || typeof item.title !== "string") return [];
+    return [{ list: text(item.list), title: item.title, thread: text(item.thread), description: text(item.description), owner }];
   });
+}
+
+/** A task's owner; null when it is not one, or of a kind this Nenu does not know. */
+function parseOwner(value: unknown): OrgTask["owner"] | null {
+  if (!isRecord(value) || typeof value.kind !== "string" || !OWNER_KINDS.has(value.kind)) return null;
+  return { kind: value.kind as OrgTask["owner"]["kind"], profile: text(value.profile), machine: text(value.machine), name: text(value.name) };
 }
 
 /** `project show --json`: what every thread receives, and where the project's threads work. */
@@ -516,6 +518,68 @@ export async function readRoutines(run: OrgRun, root: string, project: string): 
     const events = Array.isArray(item.events) ? item.events.filter((event): event is string => typeof event === "string") : [];
     return [{ name: item.name, trigger: item.trigger, schedule: text(item.schedule), events, enabled: item.enabled, nextRun: text(item.next_run) }];
   });
+}
+
+// ── `project status`: the project's work in one document, for Notes (docs/json.md, Project status) ──
+
+const STATUS_STATES = ["waiting", "working", "review", "landing", "idle", "todo", "done"] as const;
+export type OrgStatusState = typeof STATUS_STATES[number];
+
+function isStatusState(value: unknown): value is OrgStatusState {
+  return STATUS_STATES.some((state) => state === value);
+}
+
+export interface OrgStatusItem {
+  kind: "task" | "thread";
+  /** `task:<line>` (moves when lines above it do) or the thread's id. */
+  id: string;
+  title: string;
+  state: OrgStatusState;
+  /** A task's owner; null for a thread, or an owner of a kind this Nenu does not know. */
+  owner: OrgTask["owner"] | null;
+  /** The thread running it, empty when none. */
+  thread: string;
+}
+
+/** One drift problem, as `context` lists it: `line` 0 and no `task` for the handoff. */
+export interface OrgProblem {
+  rule: string;
+  line: number;
+  task: string;
+  thread: string;
+  detail: string;
+}
+
+export interface OrgStatus {
+  items: OrgStatusItem[];
+  problems: OrgProblem[];
+}
+
+/**
+ * `project status --json`. Unlike the documents above it tells "this Organizations has no such
+ * command" (null, so Notes falls back to the task list without an error) from "the command failed"
+ * (thrown). Items of a kind or state this Nenu does not know are skipped, as the contract asks.
+ */
+export async function readStatus(run: OrgRun, root: string, project: string): Promise<OrgStatus | null> {
+  const slug = validateProjectSlug(project);
+  const result = await run(["project", "status", slug, "--json"], { env: { HERDR_PROJECTS_ROOT: root }, timeoutMs: 10_000 });
+  if (result.code !== 0) {
+    if (/unexpected argument|unrecognized subcommand/i.test(result.stderr)) return null;
+    throw commandError(result);
+  }
+  const value = parseJson(result.stdout, "project status");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION) return null;
+  if (!Array.isArray(value.items) || !Array.isArray(value.problems)) throw new OrgCliError("herdr-organizations returned an invalid project status.");
+  return {
+    items: value.items.flatMap((item): OrgStatusItem[] => {
+      if (!isRecord(item) || (item.kind !== "task" && item.kind !== "thread") || !isStatusState(item.state)) return [];
+      if (typeof item.id !== "string" || typeof item.title !== "string") return [];
+      return [{ kind: item.kind, id: item.id, title: item.title, state: item.state, owner: parseOwner(item.owner), thread: text(item.thread) }];
+    }),
+    problems: value.problems.flatMap((problem): OrgProblem[] => isRecord(problem) && typeof problem.rule === "string" && typeof problem.detail === "string"
+      ? [{ rule: problem.rule, line: isCharCount(problem.line) ? problem.line : 0, task: text(problem.task), thread: text(problem.thread), detail: problem.detail }]
+      : []),
+  };
 }
 
 function text(value: unknown): string {

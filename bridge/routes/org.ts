@@ -8,6 +8,7 @@ export const orgRoutes: Route[] = [
   // Read on demand (the Routines page, a chip being opened), never on a poll.
   orgRead("/api/org/routines", "Could not read the routines.", ({ orgRun }, project) => listRoutines(orgRun, project)),
   orgRead("/api/org/tasks", "Could not read the task list.", async ({ projects }, project) => ({ tasks: await projects.tasks(project) })),
+  orgRead("/api/org/status", "Could not read the project's status.", async ({ projects }, project) => ({ status: await projects.status(project) })),
   orgRead("/api/org/context", "Could not read the project's context.", ({ projects }, project) => projects.context(project)),
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
     const started = await startNode(orgRun, rt.socketPath, {

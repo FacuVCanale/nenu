@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-15
+
+### Added
+
+- Notes on a desk shows the project's status from Herdr Organizations (`project status`): Needs
+  you, Working, Ready for review, Landing, Idle, To do and Done, one quiet row each, with a line
+  that counts the project's problems and opens them. An older Organizations keeps the task list.
+
 ## [1.9.0] - 2026-10-15
 
 ### Added

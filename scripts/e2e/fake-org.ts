@@ -8,10 +8,14 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 interface FakeThread { id: string; title: string; parent_id: string; role: "worker" | "coordinator"; status: string; [key: string]: unknown }
 /**
  * A project may carry what the newer documents print: `tasks` (task list), `detail` (project show's
- * extra fields) and `routines` (routine list). Without them the fake answers those commands the way an
- * Organizations that predates them does: an unrecognized subcommand.
+ * extra fields), `routines` (routine list) and `projectStatus` (project status, without its
+ * `schema_version`). Without them the fake answers those commands the way an Organizations that
+ * predates them does: an unrecognized subcommand.
  */
-interface FakeProject { slug: string; threads: FakeThread[]; tasks?: unknown[]; detail?: Record<string, unknown>; routines?: unknown[]; [key: string]: unknown }
+interface FakeProject {
+  slug: string; threads: FakeThread[]; tasks?: unknown[]; detail?: Record<string, unknown>; routines?: unknown[]; projectStatus?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 interface FakeState { profiles: string[]; projects: FakeProject[] }
 
 const file = process.env.NENU_E2E_ORG;
@@ -71,9 +75,9 @@ function resolve(slug: string, id: string): void {
 }
 
 /** The project a newer document is about, or the unrecognized-subcommand error of an older Organizations. */
-function newer(slug: string | undefined, field: "tasks" | "detail" | "routines"): FakeProject {
+function newer(slug: string | undefined, field: "tasks" | "detail" | "routines" | "projectStatus", word = command): FakeProject {
   const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
-  if (project[field] === undefined) fail(`unrecognized subcommand '${command}'`);
+  if (project[field] === undefined) fail(`unrecognized subcommand '${word}'`);
   return project;
 }
 
@@ -96,8 +100,12 @@ if (command === "overview") {
   const project = newer(positionals[0], "tasks");
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, tasks: project.tasks }));
 } else if (command === "project" && sub === "show" && "json" in flags) {
-  const { threads: _threads, tasks: _tasks, detail, routines: _routines, coordinator: _coordinator, ...project } = newer(positionals[0], "detail");
+  const { threads: _threads, tasks: _tasks, detail, routines: _routines, projectStatus: _status, coordinator: _coordinator, ...project } = newer(positionals[0], "detail");
   console.log(JSON.stringify({ schema_version: 1, project: { ...project, dir: `/srv/projects/${project.slug}`, counts: {}, icon: "", tone: "", ...detail } }));
+} else if (command === "project" && sub === "status" && "json" in flags) {
+  // An Organizations with `project show` but not `project status` names the subcommand it lacks.
+  const project = newer(positionals[0], "projectStatus", "status");
+  console.log(JSON.stringify({ schema_version: 1, project: project.slug, ...project.projectStatus }));
 } else if (command === "routine" && sub === "list" && "json" in flags) {
   const project = newer(positionals[0], "routines");
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, routine_commands: false, routines: project.routines, broken: [] }));

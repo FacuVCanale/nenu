@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw";
 import { useState } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 
+import type { OrgStatus } from "@/lib/api";
 import type { AgentView, OrgTask, PaneDiff, ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
 import { ProjectPanel, type ProjectSection } from "./project-panel";
@@ -38,6 +39,29 @@ const tasks: OrgTask[] = [
   { list: "Done", title: "Search index", owner: owner("agent", "codex"), thread: "t-0001", description: "" },
 ];
 
+// What `project status` says of the same project: a task per TASKS.md line, then the threads no task names.
+const item = (id: string, title: string, state: OrgStatus["items"][number]["state"], extra: Partial<OrgStatus["items"][number]> = {}): OrgStatus["items"][number] =>
+  ({ kind: "task", id, title, state, owner: owner("agent", "claude"), thread: "", ...extra });
+const status: OrgStatus = {
+  items: [
+    item("task:3", "Payments webhook", "waiting", { thread: "t-0011" }),
+    item("task:4", "Cart badge", "review", { thread: "t-0013" }),
+    item("task:5", "Checkout flow", "working", { thread: "t-0012" }),
+    item("task:8", "Gift cards at checkout", "todo", { owner: owner("unassigned") }),
+    item("task:11", "Admin export to CSV", "todo", { owner: owner("me") }),
+    item("task:12", "Refund flow", "todo", { owner: owner("person", "", "blocked on design") }),
+    item("task:15", "Search index", "done", { owner: owner("agent", "codex"), thread: "t-0001" }),
+    item("task:16", "Product images on the CDN", "done", { owner: owner("unassigned") }),
+    { kind: "thread", id: "t-0015", title: "Order confirmation email", state: "landing", owner: null, thread: "t-0015" },
+    { kind: "thread", id: "t-0014", title: "Login hotfix", state: "idle", owner: null, thread: "t-0014" },
+  ],
+  problems: [
+    { rule: "handoff-over-limit", line: 0, task: "", thread: "", detail: "9412 characters, this digest shows the first 8000" },
+    { rule: "status-in-owner", line: 12, task: "Refund flow", thread: "", detail: "the owner \"blocked on design\" is status text" },
+    { rule: "done-not-deleted", line: 16, task: "Product images on the CDN", thread: "", detail: "checked done but still listed" },
+  ],
+};
+
 const diff: PaneDiff = {
   ok: true, base: "main", head: "acme-t-0012", source: "worktree", totals: { files: 1, additions: 3, deletions: 1 },
   files: [{ path: "app/cart.ts", status: "modified", additions: 3, deletions: 1, hunks: [{ header: "@@ -1 +1 @@", oldStart: 1, newStart: 1, lines: ["-a", "+b"] }] }],
@@ -46,14 +70,23 @@ const diff: PaneDiff = {
 let reads: string[] = [];
 let sent: Array<{ pane: string; text: string }> = [];
 let taskList: OrgTask[] | null = tasks;
+/** `project status`: null is an Organizations without the command, a string a run that failed. */
+let projectStatus: OrgStatus | null | string = null;
 let context: Record<string, unknown> = {};
 
 beforeEach(() => {
   reads = [];
   sent = [];
   taskList = tasks;
+  projectStatus = null;
   context = { ok: true, detail: null, routines: null };
   server.use(
+    http.get("/api/org/status", ({ request }) => {
+      reads.push(`status?${new URL(request.url).searchParams}`);
+      return typeof projectStatus === "string"
+        ? HttpResponse.json({ ok: false, error: projectStatus }, { status: 502 })
+        : HttpResponse.json({ ok: true, status: projectStatus });
+    }),
     http.get("/api/org/tasks", ({ request }) => {
       reads.push(`tasks?${new URL(request.url).searchParams}`);
       return HttpResponse.json({ ok: true, tasks: taskList });
@@ -94,10 +127,107 @@ it("names the project and offers Notes, Agents, PRs and Context, with counts whe
   expect(tabs).toEqual(["Notes", "Agents3", "PRs2", "Context"]);
 });
 
-it("Notes is the coordinator's task list by state, read only while it is on screen", async () => {
+it("Notes is the project's status by state, one quiet row per item, read only while it is on screen", async () => {
+  projectStatus = status;
+  const onOpenPane = vi.fn();
+  render(<Panel onOpenPane={onOpenPane} />);
+  await screen.findByRole("region", { name: "Needs you" });
+  expect(reads).toEqual(["status?project=acme"]);
+  expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label")))
+    .toEqual(["Needs you", "Working", "Ready for review", "Landing", "Idle", "To do"]);
+  expect(titles(group("Needs you"))).toEqual(["Payments webhook"]);
+  expect(titles(group("Working"))).toEqual(["Checkout flow"]);
+  expect(titles(group("Ready for review"))).toEqual(["Cart badge"]);
+  expect(titles(group("Landing"))).toEqual(["Order confirmation email"]);
+  expect(titles(group("Idle"))).toEqual(["Login hotfix"]);
+  expect(titles(group("To do"))).toEqual(["Gift cards at checkout", "Admin export to CSV", "Refund flow"]);
+  // The name, then in the same line what it is doing and whose it is.
+  expect(within(group("Ready for review")).getByRole("button", { name: "Cart badge PR #41 · approved · checks passed · claude" })).toBeInTheDocument();
+  expect(within(group("To do")).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["Gift cards at checkout", "Admin export to CSV you", "Refund flow blocked on design"]);
+  // A row opens its thread, as it did.
+  await userEvent.click(within(group("Working")).getByRole("button", { name: /^Checkout flow/ }));
+  expect(onOpenPane).toHaveBeenCalledWith("w1:flow");
+  // Done is history, checked off and folded until asked for: Organizations knows a checked task is done.
+  expect(screen.queryByText("Product images on the CDN")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Done · 2" }));
+  const done = screen.getByRole("list", { name: "Done" });
+  expect(titles(done)).toEqual(["Search index", "Product images on the CDN"]);
+  expect(within(done).getByText("PR #30 merged · codex")).toBeInTheDocument();
+  expect(within(done).queryByRole("button", { name: /^Mark done/ })).not.toBeInTheDocument();
+  expect(screen.queryByText(/newer Herdr Organizations/)).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("tab", { name: "Context" }));
+  await waitFor(() => expect(reads).toEqual(["status?project=acme", "context?project=acme"]));
+});
+
+it("a line above Notes counts its problems and opens them", async () => {
+  projectStatus = status;
+  render(<Panel />);
+  const line = await screen.findByRole("button", { name: "3 problems" });
+  expect(line).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("checked done but still listed")).not.toBeInTheDocument();
+  await userEvent.click(line);
+  const problems = screen.getByRole("list", { name: "Problems" });
+  expect(within(problems).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+    "HANDOFF.md 9412 characters, this digest shows the first 8000",
+    "Refund flow the owner \"blocked on design\" is status text",
+    "Product images on the CDN checked done but still listed",
+  ]);
+  await userEvent.click(line);
+  expect(screen.queryByRole("list", { name: "Problems" })).not.toBeInTheDocument();
+});
+
+it("without problems or items, Notes says there is nothing to track yet", async () => {
+  projectStatus = { items: [], problems: [] };
+  render(<Panel />);
+  expect(await screen.findByText("Nothing to track yet")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /problems?$/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region")).not.toBeInTheDocument();
+});
+
+it("marking a task from the project's status asks the coordinator the same way", async () => {
+  projectStatus = status;
+  render(<Panel />);
+  await screen.findByRole("region", { name: "To do" });
+  expect(screen.queryByRole("button", { name: "Mark done: Login hotfix" })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Mark done: Refund flow" }));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Ask the coordinator" }));
+  await waitFor(() => expect(sent).toEqual([{ pane: "w1:coord", text: 'Please mark as done the task "Refund flow" in TASKS.md. (Sent from Nenu.)' }]));
+  expect(await screen.findByText("Asked the coordinator")).toBeInTheDocument();
+});
+
+it("a task asked to be marked done keeps the mark when the coordinator moves its line", async () => {
+  projectStatus = status;
+  const { rerender } = render(<Panel />);
+  await userEvent.click(await screen.findByRole("button", { name: "Mark done: Refund flow" }));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Ask the coordinator" }));
+  await screen.findByText("Asked the coordinator");
+  // The line above it goes: Refund flow is task:11 now, and task:12 is another task.
+  projectStatus = { ...status, items: [
+    ...status.items.filter((entry) => !entry.id.startsWith("task:1")),
+    item("task:11", "Refund flow", "todo", { owner: owner("person", "", "blocked on design") }),
+    item("task:12", "Coupon codes in the admin", "todo", { owner: owner("person", "", "Dana") }),
+  ] };
+  rerender(<Panel view={{ ...project, threads: threads.map((entry) => entry.id === "t-0012" ? { ...entry, group: "ready-for-review" } : entry) }} />);
+  await waitFor(() => expect(reads).toEqual(["status?project=acme", "status?project=acme"]));
+  await within(group("To do")).findByText("Coupon codes in the admin");
+  const rows = within(group("To do")).getAllByRole("listitem").map((row) => row.textContent);
+  expect(rows).toContain("Refund flow Asked the coordinator");
+  expect(rows).toContain("Coupon codes in the admin Dana");
+});
+
+it("when `project status` fails, Notes shows the task list and says why", async () => {
+  projectStatus = "herdr-organizations failed (1): no project `acme`";
+  render(<Panel />);
+  await screen.findByRole("region", { name: "Not started" });
+  expect(reads).toEqual(["status?project=acme", "tasks?project=acme"]);
+  expect(screen.getByRole("alert")).toHaveTextContent("Could not read the project's status: herdr-organizations failed (1): no project `acme`");
+});
+
+it("without `project status`, Notes is the coordinator's task list by state, read only while it is on screen", async () => {
   render(<Panel />);
   await screen.findByRole("region", { name: "Needs you" });
-  expect(reads).toEqual(["tasks?project=acme"]);
+  expect(reads).toEqual(["status?project=acme", "tasks?project=acme"]);
   expect(titles(group("Needs you"))).toEqual(["Payments webhook"]);
   expect(titles(group("Ready to merge"))).toEqual(["Cart badge"]);
   expect(titles(group("In progress"))).toEqual(["Checkout flow"]);
@@ -112,7 +242,7 @@ it("Notes is the coordinator's task list by state, read only while it is on scre
   expect(screen.getByText("Search index")).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("tab", { name: "Context" }));
-  await waitFor(() => expect(reads).toEqual(["tasks?project=acme", "context?project=acme"]));
+  await waitFor(() => expect(reads).toEqual(["status?project=acme", "tasks?project=acme", "context?project=acme"]));
 });
 
 it("marking a task asks the coordinator through the guarded send, never the file", async () => {
