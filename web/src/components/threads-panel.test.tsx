@@ -78,3 +78,13 @@ it("a PR's size opens its diff beside the row, without opening the thread", asyn
   expect(onOpenPane).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Merge Build" })).toBeInTheDocument();
 });
+
+it("says when Organizations will merge a pull request on its own", () => {
+  renderList([
+    thread("A", "Auto", { number: 1, state: "open", checks: { passed: 1, failed: 0, pending: 1 } }, { autoMerge: true }),
+    thread("B", "Manual", { number: 2, state: "open", checks: { passed: 1, failed: 0, pending: 1 } }, { autoMerge: false }),
+  ]);
+  const list = screen.getByRole("list", { name: "Open pull requests" });
+  expect(within(list).getByRole("button", { name: /^Auto/ })).toHaveTextContent("PR #1 · Checks running 1/2 · Auto-merge");
+  expect(within(list).getByRole("button", { name: /^Manual/ })).not.toHaveTextContent("Auto-merge");
+});
