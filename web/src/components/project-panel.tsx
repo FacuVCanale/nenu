@@ -50,7 +50,7 @@ export function ProjectPanel(props: ProjectPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="project-panel-head">
-        <ProjectGlyph slug={project.slug} size={18} />
+        <ProjectGlyph slug={project.slug} pick={project} size={18} />
         <h2 className="project-panel-name">{project.name}</h2>
         <div role="tablist" aria-label="Project sections" className="flex min-w-0 items-center gap-0.5">
           {tabs.map(([key, label]) => (

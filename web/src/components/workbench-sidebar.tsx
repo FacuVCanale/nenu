@@ -243,7 +243,7 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick,
 }
 
 function HitMark({ hit }: { hit: SearchHit }) {
-  if (hit.kind === "project") return <ProjectGlyph slug={hit.project.slug} />;
+  if (hit.kind === "project") return <ProjectGlyph slug={hit.project.slug} pick={hit.project} />;
   if (hit.kind === "node") return <NodeDot state={hit.state} />;
   if (hit.kind === "workspace") return <LayoutGrid aria-hidden size={14} />;
   return <PaneMark pane={hit.pane} />;
@@ -436,7 +436,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
         <Link className="nav-row" to={projectPath(project.slug, session)} aria-current={projectSlug === project.slug && !nodeId ? "page" : undefined}>
           <span className="nav-lead">
             <OpeningMark to={projectPath(project.slug, session)}>
-              <ProjectGlyph slug={project.slug} />
+              <ProjectGlyph slug={project.slug} pick={project} />
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>

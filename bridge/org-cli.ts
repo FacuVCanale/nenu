@@ -322,7 +322,15 @@ export interface OrgOverviewProject {
   name: string;
   goal: string;
   status: "active" | "paused" | "archived";
+  /** The glyph and colour names picked with `set <slug> icon|tone`; empty when none was, or the name is malformed. */
+  icon: string;
+  tone: string;
   threads: OrgOverviewThread[];
+}
+
+/** A picked icon or tone name: Organizations validates it as it does a slug, so anything else reads as no pick. */
+export function pickName(value: unknown): string {
+  return typeof value === "string" && SLUG_RE.test(value) ? value : "";
 }
 
 /**
@@ -358,6 +366,8 @@ function parseProject(value: unknown): OrgOverviewProject | undefined {
     name: value.name,
     goal: value.goal,
     status: value.status,
+    icon: pickName(value.icon),
+    tone: pickName(value.tone),
     threads: value.threads.flatMap((item) => {
       const thread = parseThread(item);
       return thread ? [thread] : [];
