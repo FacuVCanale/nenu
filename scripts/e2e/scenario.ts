@@ -258,6 +258,8 @@ export interface OrgSeed {
   profiles: string[];
   projects: Array<{
     slug: string; name: string; goal: string; status: "active" | "paused";
+    /** The glyph and colour picked with `set <slug> icon|tone`, empty when none was picked. */
+    icon?: string; tone?: string;
     coordinator?: { pane_id: string; workspace_id: string; tab_id: string };
     threads: Array<Record<string, unknown> & { id: string }>;
     /** `routine list --json`'s routines, as Organizations prints them. */
