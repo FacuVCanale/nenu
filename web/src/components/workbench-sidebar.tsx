@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, Clock, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
+import { ChevronRight, Clock, House, Laptop, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
 
 import { machineName } from "@/components/composer-chips";
 import { DeskLists } from "@/components/desk-nav";
@@ -366,8 +366,9 @@ function useRevealProject(currentProject: string | undefined, setExpanded: (slug
 
 /**
  * The host Nenu reaches Herdr on, whether that link is up, and how much it holds. The desk's footer
- * names the host alone, as Cursor's names its account: the link's dot and "Not connected" show only
- * once Herdr is out of reach, and the counts are Home's to give.
+ * names the host alone, as Cursor's names its account, behind the machine mark the composer uses and in
+ * the column of the rows' icons: the link's dot and "Not connected" show only once Herdr is out of
+ * reach, and the counts are Home's to give.
  */
 function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
   const connected = data.bridge === "connected" && !data.error;
@@ -375,9 +376,10 @@ function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
   const agents = data.agents.length;
   const meta = !connected ? "Not connected"
     : !desk && `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}`;
+  const dot = <span className={cn("size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />;
   return (
     <div className="nav-host">
-      {(!desk || !connected) && <span className={cn("size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />}
+      {desk ? <span className="nav-lead">{connected ? <Laptop aria-hidden size={16} /> : dot}</span> : dot}
       <span className="nav-host-text">
         <span className="nav-host-name">{desk ? host : `herdr · ${host}`}</span>
         {meta && <span className="nav-host-meta">{meta}</span>}
