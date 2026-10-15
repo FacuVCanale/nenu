@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
@@ -69,7 +69,7 @@ describe.each([["the terminal view", false], ["the conversation view", true]])("
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(sentTexts()).toEqual([`${BLOCK}\n\nPlease address these.`]);
     expect(vi.mocked(sendMessage).mock.calls[0]![0]).toBe(paneId);
-    expect(chips()).toBeNull();
+    await waitFor(() => expect(chips()).toBeNull());
     expect(diffCommentsFor(paneId)).toEqual([]);
     expect(screen.getByRole("textbox")).toHaveValue("");
   });
@@ -79,7 +79,7 @@ describe.each([["the terminal view", false], ["the conversation view", true]])("
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(sentTexts()).toEqual([BLOCK]);
-    expect(chips()).toBeNull();
+    await waitFor(() => expect(chips()).toBeNull());
   });
 
   it("keeps the chips and the draft when the send is refused, and Try again sends them again", async () => {
@@ -87,13 +87,15 @@ describe.each([["the terminal view", false], ["the conversation view", true]])("
     const { paneId, user } = setup({ nativeWorkbench });
     await user.type(screen.getByRole("textbox"), "Please address these.");
     await user.click(screen.getByRole("button", { name: "Send" }));
+    // The refusal is said once the send's answer is in; only then is "kept" a claim about it.
+    const retry = await screen.findByRole("button", { name: "Try again" });
     expect(chipLabels()).toEqual(["cart.ts:21", "checkout.tsx:41"]);
     expect(diffCommentsFor(paneId)).toHaveLength(2);
     expect(screen.getByRole("textbox")).toHaveValue("Please address these.");
 
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(retry);
     expect(sentTexts()).toEqual([`${BLOCK}\n\nPlease address these.`, `${BLOCK}\n\nPlease address these.`]);
-    expect(chips()).toBeNull();
+    await waitFor(() => expect(chips()).toBeNull());
   });
 
   it("sends a slash command alone and keeps the comments for the next message", async () => {
@@ -101,6 +103,7 @@ describe.each([["the terminal view", false], ["the conversation view", true]])("
     await user.type(screen.getByRole("textbox"), "/compact");
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(sentTexts()).toEqual(["/compact"]);
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
     expect(diffCommentsFor(paneId)).toHaveLength(2);
     expect(chipLabels()).toEqual(["cart.ts:21", "checkout.tsx:41"]);
   });
@@ -114,6 +117,7 @@ it.each([[false, ["cart.ts:21", "checkout.tsx:41"]], [true, null]])("on a send t
   await user.type(screen.getByRole("textbox"), "Please address these.");
   await user.click(screen.getByRole("button", { name: "Send" }));
   expect(sentTexts()).toEqual([`${BLOCK}\n\nPlease address these.`]);
+  await screen.findByRole("alert", { name: "Not confirmed" });
   expect(chips() && chipLabels()).toEqual(left);
 });
 
