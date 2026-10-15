@@ -1675,12 +1675,14 @@ async function inspector(before: boolean): Promise<void> {
     if (!before) {
       const { page, close } = await open(DESKTOP, herd.working);
       steps["desktop-changes-open"] = log;
+      // A project's session opens its panel on Project (ADR 0081); Changes is the next tab.
+      await panel(page).getByRole("tab", { name: /Changes/ }).click();
       await panel(page).getByRole("button", { name: /app\/checkout\.tsx/ }).click();
       await step("desktop-changes", page);
       await step("desktop-uncommitted", page, () => panel(page).getByRole("radio", { name: "Uncommitted" }).click());
       await step("desktop-files", page, () => panel(page).getByRole("tab", { name: /Files/ }).click());
       await step("desktop-artifacts", page, () => panel(page).getByRole("tab", { name: /Artifacts/ }).click());
-      await step("desktop-project", page, () => panel(page).getByRole("button", { name: /^Project/ }).click());
+      await step("desktop-project", page, () => panel(page).getByRole("tab", { name: /^Project/ }).click());
       await step("desktop-closed", page, () => page.keyboard.press("Meta+Alt+KeyB"));
       await step("desktop-reopened", page, () => page.getByRole("button", { name: "Show session panel" }).click());
       await step("desktop-switched", page, () => page.goto(bridge.url + `/pane/${encodeURIComponent(herd.blocked)}`));
