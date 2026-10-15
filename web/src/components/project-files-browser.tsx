@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, FileText, Folder, FolderOpen, RefreshCw } from "@/components/ui/icon";
+import { FileIcon } from "@/components/ui/file-icon";
+import { ChevronRight, Folder, FolderOpen, RefreshCw } from "@/components/ui/icon";
 import { fetchProjectFiles, type ProjectFilesPage } from "@/lib/api";
 
 type Props = {
@@ -92,9 +93,9 @@ function Directory({
               style={{ paddingLeft: `${Math.min(depth, 10) * 12 + 24}px` }}
               className="flex min-h-11 w-full items-center gap-2 rounded-md pr-2 text-left text-sm hover:bg-muted/40"
             >
-              <FileText
-                aria-hidden="true"
-                className="size-4 shrink-0 text-muted-foreground"
+              <FileIcon
+                name={file.name}
+                className="shrink-0 text-muted-foreground"
               />
               <span className="truncate">{file.name}</span>
             </button>
