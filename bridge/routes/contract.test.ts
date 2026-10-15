@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
@@ -26,6 +26,7 @@ const CASES: Case[] = [
   { method: "GET", path: "/api/org/start-options", level: "read", session: false },
   { method: "GET", path: "/api/org/routines", level: "read", session: false },
   { method: "GET", path: "/api/org/tasks", level: "read", session: false },
+  { method: "GET", path: "/api/org/status", level: "read", session: false },
   { method: "GET", path: "/api/org/context", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
@@ -80,9 +81,31 @@ const seen: string[] = [];
 const audited: Array<{ action: string; device?: string | null; detail?: Record<string, unknown> }> = [];
 let outside = "";
 
+// Organizations is a stub on an empty registry, so no route here reaches the operator's projects.
+const ORG_ENV = ["COLLIE_HERDR_ORGANIZATIONS_BIN", "HERDR_PROJECTS_ROOT"] as const;
+const savedEnv = ORG_ENV.map((key) => [key, process.env[key]] as const);
+const STATUS = {
+  schema_version: 1, project: "acme", generated_at: "2026-10-10T14:00:00Z", objective: "", sources: {},
+  items: [{ kind: "task", id: "task:3", title: "Cart badge", list: "", owner: { kind: "me", profile: "", machine: "", name: "" }, state: "review", group: "", task: "Cart badge", thread: "t-0013", pr: null, created: "", updated: "", flags: [] }],
+  drift: {}, problems: [{ rule: "done-not-deleted", line: 4, task: "Old task", thread: "", detail: "checked done but still listed" }], next: [],
+};
+
 beforeAll(async () => {
   const dir = await mkdtemp(join(tmpdir(), "nenu-route-contract-"));
   outside = await mkdtemp(join(tmpdir(), "nenu-route-outside-"));
+  // `project status <slug> --json`: acme has one, `older` is an Organizations without the command, anything else fails.
+  const org = join(dir, "herdr-organizations");
+  await writeFile(org, `#!/bin/sh
+[ "$1 $2 $4" = "project status --json" ] || { echo "error: unrecognized subcommand '$1'" >&2; exit 2; }
+case "$3" in
+  acme) printf '%s\\n' '${JSON.stringify(STATUS)}' ;;
+  older) echo "error: unrecognized subcommand 'status'" >&2; exit 2 ;;
+  *) echo "herdr-organizations: no project \\\`$3\\\`" >&2; exit 1 ;;
+esac
+`);
+  await chmod(org, 0o755);
+  process.env.COLLIE_HERDR_ORGANIZATIONS_BIN = org;
+  process.env.HERDR_PROJECTS_ROOT = join(dir, "projects");
   // A shell pane: no agent, so no handler reaches for a conversation, journal or daemon.
   const paneInfo = { pane_id: "w:p", terminal_id: "t", workspace_id: "w", tab_id: "tab", focused: false, cwd: dir, agent_status: "idle" as const, revision: 0 };
   const herdr = {
@@ -117,7 +140,13 @@ beforeAll(async () => {
   };
 });
 
-afterAll(() => dispose());
+afterAll(async () => {
+  await dispose();
+  for (const [key, value] of savedEnv) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
 
 async function send(method: string, path: string, headers: Record<string, string>): Promise<{ status: number; body: string }> {
   const response = await fetch(url + path, { method, headers });
@@ -202,6 +231,29 @@ describe("unrouted requests fall through to static, ungated", () => {
     const result = await send("GET", "/auth/sign-in", { origin: "http://evil.example" });
     expect(result.status).toBe(404);
     expect(result.body).toContain("Nothing is configured at this address");
+  });
+});
+
+describe("a project's status for Notes", () => {
+  const read = async (project: string) => {
+    const response = await fetch(`${url}/api/org/status?project=${project}`, { headers: { "x-device": "tablet" } });
+    return { status: response.status, body: await response.json() as Record<string, unknown> };
+  };
+
+  test("serves the document Organizations computed, copied down to what Notes draws", async () => {
+    expect(await read("acme")).toEqual({ status: 200, body: { ok: true, status: {
+      items: [{ kind: "task", id: "task:3", title: "Cart badge", state: "review", owner: { kind: "me", profile: "", machine: "", name: "" }, thread: "t-0013" }],
+      problems: [{ rule: "done-not-deleted", line: 4, task: "Old task", thread: "", detail: "checked done but still listed" }],
+    } } });
+  });
+
+  test("answers no status, not an error, from an Organizations without the command", async () => {
+    expect(await read("older")).toEqual({ status: 200, body: { ok: true, status: null } });
+  });
+
+  test("answers an error when the command ran and failed, and refuses a slug that is not one", async () => {
+    expect(await read("gone")).toEqual({ status: 502, body: { ok: false, error: "herdr-organizations failed (1): herdr-organizations: no project `gone`" } });
+    expect((await read("..%2Fx")).status).toBe(400);
   });
 });
 

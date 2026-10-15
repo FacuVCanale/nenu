@@ -11,6 +11,7 @@ import {
   readOverview,
   readProjectDetail,
   readRoutines,
+  readStatus,
   readTasks,
   replaceCoordinator,
   resolveNode,
@@ -401,5 +402,81 @@ describe("herdr-organizations project documents (task list, project show, routin
       { name: "pr-followup", trigger: "pr", schedule: "", events: ["opened", "merged"], enabled: false, nextRun: "" },
     ]);
     expect(calls[0]!.argv).toEqual(["routine", "list", "acme", "--json"]);
+  });
+});
+
+describe("herdr-organizations project status", () => {
+  const owner = { kind: "agent", profile: "claude", machine: "", name: "" };
+  const pr = { url: "https://github.com/acme/shop/pull/41", state: "OPEN", review: "APPROVED", checks: null, additions: 3, deletions: 1, failing: [], comment_count: 0, draft: false, mergeable: "MERGEABLE", merge_blocker: null };
+  const item = (extra: Record<string, unknown>) => ({
+    kind: "task", id: "task:3", title: "Cart badge", list: "Checkout", owner, state: "review", group: "ready-for-review", task: "Cart badge",
+    thread: "t-0013", pr, created: "2026-10-10T13:00:00Z", updated: "2026-10-10T13:50:00Z", flags: [], ...extra,
+  });
+  const document = {
+    schema_version: 1, project: "acme", generated_at: "2026-10-10T14:00:00Z", objective: "Ship the checkout.",
+    sources: { tasks_updated: "", handoff_updated: "", handoff_chars: 9412, handoff_limit: 8000, pr_checked: "" },
+    items: [
+      item({}),
+      item({ id: "task:9", title: "Refund flow", owner: { kind: "person", profile: "", machine: "", name: "blocked on design" }, state: "todo", group: "", thread: "", pr: null, flags: ["status-in-owner"] }),
+      item({ id: "task:12", title: "Product images", owner: { kind: "robot" }, state: "done", thread: "", pr: null, flags: ["done-not-deleted"] }),
+      item({ kind: "thread", id: "t-0015", title: "Order email", list: "", owner: null, state: "landing", group: "landing", task: "", thread: "t-0015" }),
+      item({ kind: "thread", id: "t-0014", title: "Login hotfix", list: "", owner: null, state: "idle", group: "idle", task: "", thread: "t-0014", pr: null }),
+      // Kinds and states this Nenu does not know yet are skipped, as the contract asks.
+      item({ kind: "pr", id: "pr:44", title: "Bump a library" }),
+      item({ id: "task:20", title: "Someday", state: "parked" }),
+      item({ id: 7, title: "Not an id" }),
+      "not an item",
+    ],
+    drift: { handoff_over_limit: 1, thread_resolved: 0, thread_missing: 0, done_not_deleted: 1, status_in_owner: 1, duplicate_title: 0, inbox_unhandled: 2 },
+    problems: [
+      { rule: "handoff-over-limit", line: 0, task: "", thread: "", detail: "9412 characters, this digest shows the first 8000" },
+      { rule: "status-in-owner", line: 9, task: "Refund flow", thread: "", detail: "the owner \"blocked on design\" is status text" },
+      { rule: "a-rule-from-later", line: 12, task: "Product images", detail: "checked done but still listed" },
+      { rule: "no-detail", line: 4 },
+    ],
+    next: [{ thread: "t-0013", line: "Ask for review" }],
+  };
+
+  it("reads the project's work by state, and its problems, from the project's root", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify(document), stderr: "" });
+    expect(await readStatus(run, "/root", "acme")).toEqual({
+      items: [
+        { kind: "task", id: "task:3", title: "Cart badge", state: "review", owner, thread: "t-0013" },
+        { kind: "task", id: "task:9", title: "Refund flow", state: "todo", owner: { kind: "person", profile: "", machine: "", name: "blocked on design" }, thread: "" },
+        { kind: "task", id: "task:12", title: "Product images", state: "done", owner: null, thread: "" },
+        { kind: "thread", id: "t-0015", title: "Order email", state: "landing", owner: null, thread: "t-0015" },
+        { kind: "thread", id: "t-0014", title: "Login hotfix", state: "idle", owner: null, thread: "t-0014" },
+      ],
+      problems: [
+        { rule: "handoff-over-limit", line: 0, task: "", thread: "", detail: "9412 characters, this digest shows the first 8000" },
+        { rule: "status-in-owner", line: 9, task: "Refund flow", thread: "", detail: "the owner \"blocked on design\" is status text" },
+        { rule: "a-rule-from-later", line: 12, task: "Product images", thread: "", detail: "checked done but still listed" },
+      ],
+    });
+    expect(calls).toEqual([{ argv: ["project", "status", "acme", "--json"], opts: { env: { HERDR_PROJECTS_ROOT: "/root" }, timeoutMs: 10_000 } }]);
+  });
+
+  it("answers no document when this Organizations has no `project status`, or another contract", async () => {
+    for (const result of [
+      { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'status'\n\nUsage: herdr-organizations project [OPTIONS] <COMMAND>" },
+      { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'project'" },
+      { code: 2, stdout: "", stderr: "error: unexpected argument '--json' found" },
+      { code: 0, stdout: JSON.stringify({ ...document, schema_version: 2 }), stderr: "" },
+    ]) expect(await readStatus(fakeRun(result).run, "/root", "acme")).toBeNull();
+  });
+
+  it("fails, rather than answering no document, when the command ran and failed", async () => {
+    await expect(readStatus(fakeRun({ code: 1, stdout: "", stderr: "herdr-organizations: no project `acme`" }).run, "/root", "acme"))
+      .rejects.toThrow("herdr-organizations failed (1): herdr-organizations: no project `acme`");
+    await expect(readStatus(fakeRun({ code: 124, stdout: "", stderr: "" }).run, "/root", "acme")).rejects.toThrow("herdr-organizations failed (124).");
+    await expect(readStatus(fakeRun({ code: 0, stdout: "not json", stderr: "" }).run, "/root", "acme")).rejects.toThrow("invalid JSON for project status");
+    await expect(readStatus(fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, project: "acme" }), stderr: "" }).run, "/root", "acme"))
+      .rejects.toThrow("an invalid project status");
+  });
+
+  it("refuses a slug that is not one before running anything", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "", stderr: "" });
+    await expect(readStatus(run, "/root", "--all")).rejects.toThrow("lowercase");
+    expect(calls).toEqual([]);
   });
 });
