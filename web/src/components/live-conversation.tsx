@@ -561,8 +561,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         </div>
         {/* The list's top edge fades into the page instead of cutting text under the strip above it.
             A gradient over the list, not a mask on it: a mask would also clip the fixed popovers and
-            sheets that open from inside the thread. */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-3 bg-linear-to-b from-background" />
+            sheets that open from inside the thread. In sRGB: Tailwind's default oklab toward
+            `transparent` passes through grey in WebKit, a band across every light chat. */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-3 bg-linear-to-b/srgb from-background" />
         {paused && <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-(--page-gutter)">
           <div className="mx-auto max-w-(--chat-column)">
             <ScrollToLatest corner onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />
