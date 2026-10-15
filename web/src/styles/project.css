@@ -95,7 +95,7 @@
 .context-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .context-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 @media (hover: hover) { button.context-row:hover { background: var(--workbench-row-hover); } }
-.context-text { max-height: 320px; margin: 0 12px 10px 36px; overflow: auto; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.context-text { max-height: 320px; margin: 0 12px 10px 36px; overflow: auto; color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--text-code); line-height: var(--text-code--line-height); white-space: pre-wrap; overflow-wrap: anywhere; }
 .context-chip { display: inline-flex; padding: 3px 10px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 @media (prefers-reduced-motion: reduce) {
   .project-panel-body[data-moved] { animation: none; }
