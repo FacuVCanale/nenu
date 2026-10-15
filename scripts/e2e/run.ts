@@ -2258,6 +2258,12 @@ async function sidebar(before: boolean): Promise<void> {
           await page.waitForTimeout(400);
           await shoot("search-browse");
           await page.keyboard.press("Escape");
+          // The collapsed rail, then the bar open again for what follows.
+          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "1"), null);
+          await visit(chat, "textarea");
+          await shoot("rail");
+          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "0"), null);
+          await visit(chat, "textarea");
           if (scheme === "light") {
             // Another agent finishes while this chat is open: a toast, or a mark on its row in the bar.
             fake.setStatus(herd.idle, "working");
