@@ -10,7 +10,7 @@ import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
 import { ASK, awaits, closeRefusal, historyCount, holds, nodeState, orgTree, type OrgNode } from "@/lib/org-tree";
-import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
+import { STATUS_LABEL, type AgentView, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
 export function prSummary(pr: ThreadPullRequest): string {
@@ -33,6 +33,18 @@ export function prSummary(pr: ThreadPullRequest): string {
 /** Organizations merges only when it says nothing blocks the merge (`mergeBlocker === null`). */
 export function canMerge(project: ProjectView, thread: ProjectThreadView): boolean {
   return Boolean(project.prActions) && thread.pr?.state === "open" && thread.pr.mergeBlocker === null;
+}
+
+export const PR_ACTION_LABEL: Record<PrAction, string> = {
+  "resolve-conflicts": "Resolve conflicts", "fix-ci": "Fix CI", "address-comments": "Address comments", merge: "Merge", "create-pr": "Create PR",
+};
+
+/**
+ * A thread's one PR button: the first action Organizations names, even over a Merge further down its
+ * list. One that names none (it predates actions) keeps Merge where nothing blocks it.
+ */
+export function prButton(project: ProjectView, thread: ProjectThreadView): PrAction | undefined {
+  return thread.prAction ?? (canMerge(project, thread) ? "merge" : undefined);
 }
 
 /** What a thread is doing, for its row: the question, the PR, the agent's own title, or its state. */

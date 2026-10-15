@@ -1,4 +1,5 @@
 import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
+import type { PrAction } from "./types";
 // Thin REST client for the bridge. Everything is same-origin, so credentials/headers are
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
@@ -924,4 +925,29 @@ export function fetchPaneDiff(paneId: string, pr: number, session?: string, sign
 /** What the pane's session changed, `scope` deep, with or without a pull request (bridge/pane-diff.ts `sessionDiff`). */
 export function fetchSessionDiff(paneId: string, scope: DiffScope, session?: string, signal?: AbortSignal): Promise<PaneDiff> {
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/diff?scope=${scope}`, session), { signal });
+}
+
+/**
+ * Ask a thread's agent about its PR; Organizations writes the message. `sent: false`: it had been
+ * asked already. Like a merge, it reads the PR from GitHub first, so it gets a merge's time.
+ */
+export function askOrgThreadPr(
+  input: { project: string; id: string; action: Exclude<PrAction, "merge" | "create-pr"> },
+  session?: string,
+): Promise<{ ok: true; asked: { id: string; action: string; pr: string; sent: boolean; reason: string } }> {
+  return req(withSession("/api/org/thread/pr-action", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MERGE_TIMEOUT_MS);
+}
+
+/** Open the PR of a thread that pushed its branch without one, through GitHub like a merge. */
+export function createOrgThreadPr(
+  input: { project: string; id: string },
+  session?: string,
+): Promise<{ ok: true; created: { id: string; pr: string } }> {
+  return req(withSession("/api/org/thread/pr-create", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MERGE_TIMEOUT_MS);
 }
