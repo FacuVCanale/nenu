@@ -55,8 +55,8 @@ function prSeed(herd: DemoHerd, now: number): OrgSeed {
     worker("t-0015", "Coupon codes", "ready-for-review", 6, { pr: pr(44, ["address-comments"], { review: "CHANGES_REQUESTED", comment_count: 3, merge_blocker: "review is CHANGES_REQUESTED" }) }),
     worker("t-0016", "Gift cards", "ready-for-review", 9, { pr: pr(45, ["resolve-conflicts"], { mergeable: "CONFLICTING", merge_blocker: "GitHub reports a merge conflict" }) }),
     worker("t-0017", "Admin export", "ready-for-review", 15, { pr: pr(46, []) }),
-    // Approved and green with a bot's comment: Organizations lists Address comments first; Merge wins.
-    worker("t-0019", "Search filters", "ready-for-review", 25, { pr: pr(48, ["address-comments", "merge"], { review: "APPROVED", comment_count: 1, merge_blocker: null }) }),
+    // Approved and green with a bot's comment: Organizations lists Merge first, Address comments after.
+    worker("t-0019", "Search filters", "ready-for-review", 25, { pr: pr(48, ["merge", "address-comments"], { review: "APPROVED", comment_count: 1, merge_blocker: null }) }),
     // The ticker read a failure; Organizations' own read before sending finds it passed since.
     worker("t-0018", "Payments retry", "ready-for-review", 20, { pr: pr(47, ["fix-ci"], failing), refuse: "no check fails on its pull request (6 passed, 0 pending)" }),
   );
