@@ -116,6 +116,8 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
   /** Heading and its second line; the project's name and goal by default. */
   title?: string;
   subtitle?: ReactNode;
+  /** Leave the heading out, where the page around already names the project. */
+  bare?: boolean;
 }
 
 /**
@@ -124,12 +126,12 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
  * detail; an open one can be closed and the coordinator replaced. Under a coordinator below the
  * project, that coordinator heads the list instead of the project's own.
  */
-export function ProjectTasks({ threads, coordinator, title, subtitle, ...tree }: ProjectTasksProps) {
+export function ProjectTasks({ threads, coordinator, title, subtitle, bare = false, ...tree }: ProjectTasksProps) {
   const { project, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged } = tree;
   return (
     <div className="project-tasks">
-      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"}
-        mark={title === undefined ? <ProjectGlyph slug={project.slug} size={20} className="mt-1" /> : undefined} />
+      {!bare && <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"}
+        mark={title === undefined ? <ProjectGlyph slug={project.slug} size={20} className="mt-1" /> : undefined} />}
       {coordinator
         ? <ul className="task-list mb-2"><CoordinatorRow thread={coordinator} panes={panes} currentPaneId={currentPaneId} onOpenPane={onOpenPane} onOpenNode={onOpenNode} /></ul>
         : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />}

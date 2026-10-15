@@ -2,7 +2,10 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdir
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
-import { WAITING_ACTIVITY, defaultOrgRun, readOverview, upstreamOnly, type OrgOverviewProject, type OrgOverviewThread, type OrgRun } from "./org-cli.ts";
+import {
+  WAITING_ACTIVITY, defaultOrgRun, readOverview, readProjectDetail, readRoutines, readTasks, upstreamOnly, validateProjectSlug,
+  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgTask,
+} from "./org-cli.ts";
 import type { AgentView, LivePublisher, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
@@ -397,6 +400,20 @@ export class ProjectRegistry {
     const node = threads.find((thread) => thread.id === id);
     const open = threads.filter((thread) => thread.parentId === id && thread.status !== "resolved").length;
     return node && open ? `${node.title} still has ${open} open under it; close those first.` : undefined;
+  }
+
+  /** A project's task list from this registry's root; null when Organizations has none to give. */
+  async tasks(project: string): Promise<OrgTask[] | null> {
+    const slug = validateProjectSlug(project);
+    return this.run ? readTasks(this.run, this.root, slug) : null;
+  }
+
+  /** What a project's threads receive and its routines, each null when Organizations has none to give. */
+  async context(project: string): Promise<{ detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
+    const slug = validateProjectSlug(project);
+    if (!this.run) return { detail: null, routines: null };
+    const [detail, routines] = await Promise.all([readProjectDetail(this.run, this.root, slug), readRoutines(this.run, this.root, slug)]);
+    return { detail, routines };
   }
 
   /** Re-read now, ignoring the spawn throttle: after a write the person is waiting for the result. */

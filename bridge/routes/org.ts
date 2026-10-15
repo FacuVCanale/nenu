@@ -4,9 +4,11 @@ import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json } from "./http.ts";
 
 export const orgRoutes: Route[] = [
-  orgRead("/api/org/start-options", "Could not read the start options.", startOptions),
+  orgRead("/api/org/start-options", "Could not read the start options.", ({ orgRun }, project) => startOptions(orgRun, project)),
   // Read on demand (the Routines page, a chip being opened), never on a poll.
-  orgRead("/api/org/routines", "Could not read the routines.", listRoutines),
+  orgRead("/api/org/routines", "Could not read the routines.", ({ orgRun }, project) => listRoutines(orgRun, project)),
+  orgRead("/api/org/tasks", "Could not read the task list.", async ({ projects }, project) => ({ tasks: await projects.tasks(project) })),
+  orgRead("/api/org/context", "Could not read the project's context.", ({ projects }, project) => projects.context(project)),
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
     const started = await startNode(orgRun, rt.socketPath, {
       project: body.project, title: body.title, parent: body.parent, task: body.task, role: body.role, profile: body.profile, template: body.template,
@@ -45,21 +47,22 @@ export const orgRoutes: Route[] = [
   }),
 ];
 
-/** A GET that answers one Organizations read about `?project=`: 400 for a bad slug, 502 when the CLI fails. */
-function orgRead(path: string, failure: string, read: (orgRun: Services["orgRun"], project: string) => Promise<object>): Route {
+/**
+ * A GET of one project's document for the desk's Project panel. A document this Organizations does
+ * not have comes back as null with 200, so the panel degrades instead of showing an error.
+ */
+function orgRead(path: string, failure: string, read: (ctx: Services, project: string) => Promise<object>): Route {
   return {
     method: "GET",
     path,
     access: "read",
     session: false,
-    async handle({ orgRun }, { req, url }) {
+    async handle(ctx: Services, { req, url }) {
       try {
-        return json({ ok: true, ...await read(orgRun, url.searchParams.get("project") ?? "") }, req.headers.get("accept-encoding"));
+        return json({ ok: true, ...(await read(ctx, url.searchParams.get("project") ?? "")) }, req.headers.get("accept-encoding"));
       } catch (error) {
-        return json({
-          ok: false,
-          error: error instanceof Error ? error.message : failure,
-        }, req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
+        return json({ ok: false, error: error instanceof Error ? error.message : failure },
+          req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
       }
     },
   };

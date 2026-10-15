@@ -297,6 +297,36 @@ export interface ProjectView {
 
 export type NodeRole = "worker" | "coordinator";
 
+/** A TASKS.md task from Organizations' `task list --json`. Mirrors OrgTask in bridge/org-cli.ts. */
+export interface OrgTask {
+  list: string;
+  title: string;
+  owner: { kind: "unassigned" | "me" | "agent" | "person"; profile: string; machine: string; name: string };
+  thread: string;
+  description: string;
+}
+
+/** What every thread of a project receives (`project show --json`). Mirrors bridge/org-cli.ts. */
+export interface OrgProjectDetail {
+  instructions: string;
+  memory: string;
+  memoryFiles: Array<{ name: string; text: string }>;
+  repos: Array<{ path: string; machine: string }>;
+  coordinatorProfile: string;
+  threadProfile: string;
+  maxParallelThreads: number;
+}
+
+/** A project routine (`routine list --json`). Mirrors bridge/org-cli.ts. */
+export interface OrgRoutine {
+  name: string;
+  trigger: "schedule" | "pr";
+  schedule: string;
+  events: string[];
+  enabled: boolean;
+  nextRun: string;
+}
+
 export interface TemplateView {
   name: string;
   scope: "global" | "project";

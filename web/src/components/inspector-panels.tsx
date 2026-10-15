@@ -1,12 +1,12 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { Ellipsis, ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
+import { ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, LayoutTemplate, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
 
 import { ArtifactsPanel } from "@/components/artifacts-panel";
 import { useConversationScan } from "@/components/chat-files-browser";
 import { DiffBody, useDiffRead } from "@/components/diff-viewer";
 import { ciLabel, ciTone } from "@/components/pr-bar";
 import { ProjectFilesBrowser } from "@/components/project-files-browser";
-import { clampWidth, ICON_BUTTON, PANEL_WIDTH, type InspectorTab, type InspectorView, type SessionInspectorState, type SessionPr, type TerminalSlots } from "@/components/session-inspector";
+import { clampWidth, ICON_BUTTON, PANEL_WIDTH, slidePanel, type InspectorTab, type SessionInspectorState, type SessionPr, type TerminalSlots } from "@/components/session-inspector";
 import { fetchActivity, type ActivityArtifact } from "@/lib/activity";
 import { fetchSessionDiff } from "@/lib/api";
 import { chatFileReferences } from "@/lib/chat-files";
@@ -15,6 +15,7 @@ import type { DiffScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TABS: ReadonlyArray<readonly [InspectorTab, string, IconComponent]> = [
+  ["project", "Project", LayoutTemplate],
   ["changes", "Changes", GitCompareArrows],
   ["files", "Files", FolderTree],
   ["artifacts", "Artifacts", Layers],
@@ -22,8 +23,8 @@ const TABS: ReadonlyArray<readonly [InspectorTab, string, IconComponent]> = [
 ];
 
 /**
- * A session's panel on a desk, right of its chat: Changes, Files, Artifacts and Terminal for that
- * pane, each read only while it is on screen, and the project's own panel behind ⋯ when the pane has one.
+ * A session's panel on a desk, right of its chat: the project first when the pane has one, then
+ * Changes, Files, Artifacts and Terminal for that pane, each read only while it is on screen.
  */
 export default function SessionPanel({ inspector, paneId, session, artifacts, pr, project }: {
   inspector: SessionInspectorState;
@@ -32,12 +33,17 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
   /** The pane has a conversation whose files can be listed (an agent, not a shell). */
   artifacts: boolean;
   pr?: SessionPr;
-  /** The project's panel (Threads, PRs, Activity, Memory), shown in place of the tabs from ⋯. */
+  /** The Project tab's body (project-panel.tsx); without it the tab is not offered. */
   project?: ReactNode;
 }) {
-  const tabs = artifacts ? TABS : TABS.filter(([key]) => key !== "artifacts");
-  const view: InspectorView = inspector.view === "project" ? (project ? "project" : "changes")
-    : tabs.some(([key]) => key === inspector.view) ? inspector.view : "changes";
+  const tabs = TABS.filter(([key]) => (key !== "artifacts" || artifacts) && (key !== "project" || project));
+  const view: InspectorTab = tabs.some(([key]) => key === inspector.tab) ? inspector.tab : "changes";
+  const { panelRef, entering } = inspector;
+  useLayoutEffect(() => {
+    // Only an open the person asked for slides in; a reload or a pane switch shows the panel in place.
+    if (entering.current && panelRef.current) slidePanel(panelRef.current, "in");
+    entering.current = false;
+  }, [panelRef, entering]);
   const drag = useRef<{ x: number; width: number } | null>(null);
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const width = dragWidth ?? inspector.width;
@@ -63,33 +69,28 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
   };
 
   return (
-    <aside aria-label="Session panel" className="session-panel" style={{ width }}>
+    <aside ref={panelRef} aria-label="Session panel" className="session-panel" style={{ width }}>
       <div role="separator" aria-orientation="vertical" aria-label="Resize session panel" tabIndex={0}
         aria-valuenow={width} aria-valuemin={PANEL_WIDTH.min} aria-valuemax={PANEL_WIDTH.max}
         className="session-panel-resize" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onKeyDown={onKeyDown} />
-      <div className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-3">
-        <div role="tablist" aria-label="Session" className="flex min-w-0 items-center gap-1">
+      <div className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-2">
+        {/* Five tabs fit a panel at its first width; a narrower one scrolls them rather than overlap the fold button. */}
+        <div role="tablist" aria-label="Session" className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
           {tabs.map(([key, label, Icon]) => (
-            <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => inspector.setView(key)} className="panel-tab">
+            <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => inspector.setTab(key)} className="panel-tab shrink-0 px-1.5">
               <Icon aria-hidden className="size-3.5" />{label}
             </button>
           ))}
         </div>
-        <span className="flex-1" />
-        {project && <button type="button" aria-label="Project: Threads, PRs, Activity, Memory" title="Project: Threads, PRs, Activity, Memory"
-          aria-pressed={view === "project"} onClick={() => inspector.setView(view === "project" ? inspector.tab : "project")} className={ICON_BUTTON}>
-          <Ellipsis aria-hidden className="size-4" />
-        </button>}
         <button ref={inspector.toggleRef} type="button" aria-label="Hide session panel" title="Hide session panel (⌘⌥B)" onClick={() => inspector.setOpen(false)} className={ICON_BUTTON}>
           <PanelRightClose aria-hidden className="size-4" />
         </button>
       </div>
-      {view === "project" ? <div className="flex min-h-0 flex-1 flex-col">{project}</div> : (
-        <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className={cn("min-h-0 flex-1", view === "terminal" ? "flex flex-col" : "overflow-y-auto")}>
-          {view === "terminal" ? <Terminal publish={inspector.setTerminal} />
-            : <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} />}
-        </div>
-      )}
+      <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className={cn("min-h-0 flex-1", view === "terminal" || view === "project" ? "flex flex-col" : "overflow-y-auto")}>
+        {view === "project" ? project
+          : view === "terminal" ? <Terminal publish={inspector.setTerminal} />
+          : <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} />}
+      </div>
     </aside>
   );
 }
@@ -112,7 +113,7 @@ function Terminal({ publish }: { publish: (slots: TerminalSlots | null) => void 
 }
 
 /** The body of the tab on screen; the panel remounts it for another pane. */
-function TabBody({ tab, paneId, session, pr }: { tab: Exclude<InspectorTab, "terminal">; paneId: string; session?: string; pr?: SessionPr }) {
+function TabBody({ tab, paneId, session, pr }: { tab: Exclude<InspectorTab, "terminal" | "project">; paneId: string; session?: string; pr?: SessionPr }) {
   const openFile = useContext(FilePreviewContext);
   const open = (path: string) => openFile?.(path);
   if (tab === "changes") return <Changes paneId={paneId} session={session} pr={pr} />;

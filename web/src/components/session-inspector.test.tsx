@@ -1,7 +1,7 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import type { PaneDiff } from "@/lib/types";
 import { server } from "@/test/setup";
@@ -64,6 +64,7 @@ function Desk({ pr, project, artifacts = true }: { pr?: SessionPr; project?: Rea
   </>;
 }
 const panel = () => screen.getByRole("complementary", { name: "Session panel" });
+const cleanupDesk = () => cleanup();
 
 it("reads only the tab on screen: Changes first, Files and Artifacts when picked", async () => {
   render(<Desk />);
@@ -155,25 +156,64 @@ it("still opens and folds when the browser refuses storage", async () => {
   }
 });
 
-it("keeps the project one click away behind ⋯ Project, and a tab brings the session back", async () => {
-  render(<Desk project={<p>Threads list</p>} />);
-  await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
-  const more = within(panel()).getByRole("button", { name: "Project: Threads, PRs, Activity, Memory" });
-  await userEvent.click(more);
-  expect(more).toHaveAttribute("aria-pressed", "true");
-  expect(within(panel()).getByText("Threads list")).toBeInTheDocument();
-  expect(within(panel()).getByRole("tab", { name: /Changes/ })).toHaveAttribute("aria-selected", "false");
+it("puts the project first among the tabs when the pane has one, with no ⋯ to find it behind", async () => {
+  render(<Desk project={<p>Project views</p>} />);
+  // A first open lands on the project; nothing of the session is read until its tab is picked.
+  expect(await within(panel()).findByText("Project views")).toBeInTheDocument();
+  expect(seen).toEqual([]);
+  const tabs = within(within(panel()).getByRole("tablist", { name: "Session" })).getAllByRole("tab").map((tab) => tab.textContent);
+  expect(tabs).toEqual(["Project", "Changes", "Files", "Artifacts", "Terminal"]);
+  expect(within(panel()).queryByRole("button", { name: /^Project/ })).not.toBeInTheDocument();
+  await userEvent.click(within(panel()).getByRole("tab", { name: "Project" }));
+  expect(within(panel()).getByText("Project views")).toBeInTheDocument();
+  expect(within(panel()).getByRole("tab", { name: "Changes" })).toHaveAttribute("aria-selected", "false");
 
-  await userEvent.click(within(panel()).getByRole("tab", { name: /Changes/ }));
-  expect(within(panel()).queryByText("Threads list")).not.toBeInTheDocument();
+  await userEvent.click(within(panel()).getByRole("tab", { name: "Changes" }));
+  expect(within(panel()).queryByText("Project views")).not.toBeInTheDocument();
   await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
 });
 
-it("offers no ⋯ Project outside a project, and no Artifacts for a shell", async () => {
+it("remembers Project as the tab to open on, and falls back to Changes outside a project", async () => {
+  const { unmount } = render(<Desk project={<p>Project views</p>} />);
+  await userEvent.click(within(panel()).getByRole("tab", { name: "Project" }));
+  unmount();
+  render(<Desk project={<p>Project views</p>} />);
+  expect(within(panel()).getByText("Project views")).toBeInTheDocument();
+  cleanupDesk();
+  render(<Desk />);
+  await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
+  expect(within(panel()).getByRole("tab", { name: "Changes" })).toHaveAttribute("aria-selected", "true");
+});
+
+it("offers no Project outside a project, and no Artifacts for a shell", async () => {
   render(<Desk artifacts={false} />);
   await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
-  expect(within(panel()).queryByRole("button", { name: /^Project/ })).not.toBeInTheDocument();
+  expect(within(panel()).queryByRole("tab", { name: /^Project/ })).not.toBeInTheDocument();
   expect(within(panel()).queryByRole("tab", { name: /Artifacts/ })).not.toBeInTheDocument();
+});
+
+it("folds after its slide out, and an open during the slide keeps the panel where it is", async () => {
+  const finishes: Array<() => void> = [];
+  const cancel = vi.fn();
+  const animate = vi.fn(() => ({ finished: new Promise<void>((resolve) => finishes.push(resolve)), cancel }));
+  Object.defineProperty(HTMLElement.prototype, "animate", { value: animate, configurable: true });
+  try {
+    render(<Desk />);
+    await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
+    await userEvent.click(within(panel()).getByRole("button", { name: "Hide session panel" }));
+    // Still on screen while it slides out; the shortcut then brings it back instead of folding twice.
+    expect(panel()).toBeInTheDocument();
+    act(() => { fireEvent.keyDown(window, { key: "∫", code: "KeyB", metaKey: true, altKey: true }); });
+    expect(cancel).toHaveBeenCalledOnce();
+    await act(async () => { finishes[0]!(); });
+    expect(panel()).toBeInTheDocument();
+
+    await userEvent.click(within(panel()).getByRole("button", { name: "Hide session panel" }));
+    await act(async () => { finishes[1]!(); });
+    expect(screen.getByRole("button", { name: "Show session panel" })).toBeInTheDocument();
+  } finally {
+    delete (HTMLElement.prototype as { animate?: unknown }).animate;
+  }
 });
 
 it("has no panel and no shortcut on a phone", async () => {

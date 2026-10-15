@@ -22,8 +22,8 @@ import { ArtifactList } from "./artifact-list";
 type Filter = "all" | "workflows" | "tasks" | "artifacts";
 const FINISHED_PREVIEW = 5;
 
-function Group({ title, count, extra, children }: { title: string; count: number; extra?: ReactNode; children: ReactNode }) {
-  const [open, setOpen] = useState(true);
+function Group({ title, count, extra, folded = false, children }: { title: string; count: number; extra?: ReactNode; folded?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(!folded);
   return (
     <section className="flex flex-col gap-0.5">
       <div className="flex min-h-11 items-center gap-2 rounded-md bg-muted/40 px-2.5 text-[12.5px] font-medium lg:min-h-8">
@@ -172,7 +172,8 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
   const filters: [Filter, string, number | null][] = [
     ["all", "All", null],
     ["workflows", "Workflows", data.workflows.length],
-    ["tasks", "Tasks", data.tasks.length],
+    // Claude Code calls them background tasks; beside a project's task list that name reads as the list.
+    ["tasks", "Commands", data.tasks.length],
     ["artifacts", "Artifacts", data.artifacts.length],
   ];
   const empty = !data.workflows.length && !data.tasks.length && !data.artifacts.length;
@@ -192,6 +193,9 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
           </button>
         ))}
       </div>
+      {!empty && <p className="px-1 text-xs text-muted-foreground">
+        What this session runs on its own. Workflows are agents the session fans out; commands are shell commands it left running.
+      </p>}
       {stale && (
         <div role="status" className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>Couldn’t refresh. Showing last known activity.</span>
@@ -213,6 +217,7 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
         <Group
           title="Finished"
           count={finished.length}
+          folded
           extra={finished.length > FINISHED_PREVIEW && (
             <button type="button" onClick={() => setShowAll(!showAll)} className="min-h-11 px-1 text-xs font-normal text-muted-foreground hover:text-foreground lg:min-h-0">
               {showAll ? "Show less" : "Show all"}

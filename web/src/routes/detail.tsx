@@ -113,7 +113,7 @@ export function DetailRoute() {
   const pr = sessionPr(root, paneId);
   return (
     <div className="project-frame">
-      {chat({ headerAction: inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined,
+      {chat({ headerTrail: inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined,
         sessionPanel: inspector.desk ? panelLink(inspector) : undefined })}
       {inspector.desk && inspector.open && <SessionInspector inspector={inspector} paneId={paneId} session={session}
         artifacts={root.agents.some((pane) => pane.paneId === paneId)} pr={pr} />}

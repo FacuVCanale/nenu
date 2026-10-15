@@ -13,11 +13,11 @@ import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
-interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; projectChips?: { thread?: { title: string }; threads: unknown[] }; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
+interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; headerTrail?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; projectChips?: { thread?: { title: string }; threads: unknown[] }; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, project, title, headerAction, overlay, strip, conversationFooter, projectChips, docked }: StubProps) => (
+  AgentChat: ({ paneId, project, title, headerAction, headerTrail, overlay, strip, conversationFooter, projectChips, docked }: StubProps) => (
     <div data-testid={docked ? "docked" : "chat"} data-role={project?.role}>
-      {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>}
+      {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}{headerTrail}</header>}
       {strip === undefined ? <nav aria-label="Workspace tabs" /> : strip}
       {overlay ?? <div data-testid="conversation">{`conversation:${paneId}`}{conversationFooter}</div>}
       {projectChips && <p data-testid="chips">{`chips for ${projectChips.thread?.title ?? "the project"}`}</p>}
@@ -128,10 +128,12 @@ it("merges a thread's PR from a phone's PRs tab only after confirming", async ()
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
 });
 
-/** The project's panel, behind ⋯ in a desk's session panel. */
+/** The project's Agents, the first tab of a desk's session panel. */
 async function projectPanel(user: ReturnType<typeof userEvent.setup>) {
   const panel = within(await screen.findByRole("complementary", { name: "Session panel" }));
-  await user.click(panel.getByRole("button", { name: "Project: Threads, PRs, Activity, Memory" }));
+  await user.click(panel.getByRole("tab", { name: "Project" }));
+  // The Project tab is a lazy chunk: under load it lands a beat after the tab is picked.
+  await user.click(await panel.findByRole("tab", { name: /^Agents/ }));
   return panel;
 }
 
@@ -140,7 +142,7 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   server.use(http.get("/api/pane/:id", () => HttpResponse.json({ paneId: "worker", text: "", truncated: false, revision: 1 })));
   const { router, user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
   const panel = await projectPanel(user);
-  expect(panel.getByRole("tablist", { name: "Project panel" })).toBeInTheDocument();
+  expect(panel.getByRole("tablist", { name: "Project sections" })).toBeInTheDocument();
   expect(screen.queryByRole("tablist", { name: "Project" })).not.toBeInTheDocument();
   await user.click(panel.getByRole("button", { name: /^Build/ }));
   expect(router.state.location.search).toBe("?thread=worker");
@@ -151,13 +153,13 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   // The docked header keeps the chat's own menu (keys, find, files and the rest).
   expect(docked.getByRole("button", { name: "More actions" })).toBeInTheDocument();
   // The panel steps aside for the docked thread.
-  expect(screen.queryByRole("tablist", { name: "Project panel" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tablist", { name: "Project sections" })).not.toBeInTheDocument();
   await user.click(docked.getByRole("button", { name: "Close thread" }));
   expect(router.state.location.search).toBe("");
-  expect(await screen.findByRole("tablist", { name: "Project panel" })).toBeInTheDocument();
+  expect(await screen.findByRole("tablist", { name: "Project sections" })).toBeInTheDocument();
 });
 
-describe("a wide screen, the project behind the session panel's ⋯", () => {
+describe("a wide screen, the project as the session panel's first tab", () => {
   beforeEach(() => { wide = true; });
 
   it("draws no thread cards under the coordinator's chat, with the panel open or put away", async () => {
@@ -186,7 +188,7 @@ describe("a wide screen, the project behind the session panel's ⋯", () => {
     server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
     const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
     const panel = await projectPanel(user);
-    await user.click(panel.getByRole("tab", { name: "PRs" }));
+    await user.click(panel.getByRole("tab", { name: /^PRs/ }));
     // Merge only where Organizations says nothing blocks it.
     expect(panel.queryByRole("button", { name: "Merge Build" })).not.toBeInTheDocument();
     expect(panel.getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
@@ -196,10 +198,23 @@ describe("a wide screen, the project behind the session panel's ⋯", () => {
     await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
   });
 
-  it("names every tab of the panel, not only the open one", async () => {
+  it("names every section of the project, not only the open one", async () => {
     const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-    const tabs = within((await projectPanel(user)).getByRole("tablist", { name: "Project panel" })).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Threads", "PRs", "Activity", "Memory"]);
+    const tabs = within((await projectPanel(user)).getByRole("tablist", { name: "Project sections" })).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Notes", "Agents2", "PRs2", "Context"]);
+  });
+
+  it("a pull request opens its diff in the panel, and its thread from a second action", async () => {
+    server.use(http.get("/api/pane/:id/diff", () => HttpResponse.json({ ok: true, base: "main", head: "docs", source: "worktree",
+      totals: { files: 1, additions: 1, deletions: 0 }, files: [{ path: "docs/readme.md", status: "modified", additions: 1, deletions: 0, hunks: [] }] })));
+    const { router, user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
+    const panel = await projectPanel(user);
+    await user.click(panel.getByRole("tab", { name: /^PRs/ }));
+    await user.click(panel.getByRole("button", { name: /^Docs/ }));
+    expect(await panel.findByRole("button", { name: /docs\/readme\.md/ })).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
+    await user.click(panel.getByRole("button", { name: "Open thread" }));
+    expect(router.state.location.search).toBe("?thread=docs");
   });
 });
 

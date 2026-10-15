@@ -28,6 +28,9 @@ import type {
   SendRequest,
   SnapshotResponse,
   TemplateView,
+  OrgProjectDetail,
+  OrgRoutine,
+  OrgTask,
   UpdateInfo,
   UploadResponse,
 } from "./types";
@@ -685,6 +688,16 @@ export function fetchOrgStartOptions(
 /** A project's routines, read once when something shows them; never polled. */
 export function fetchOrgRoutines(project: string, session?: string): Promise<{ ok: true } & RoutineList> {
   return req(withSession(`/api/org/routines?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+/** The coordinator's task list; `tasks` is null when this Organizations has no `task list`. */
+export function fetchOrgTasks(project: string, signal?: AbortSignal): Promise<{ ok: true; tasks: OrgTask[] | null }> {
+  return req(`/api/org/tasks?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+/** What the project's threads receive and its routines; each null when this Organizations has none. */
+export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
+  return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
 /** Start a worker or coordinator; a template carries its own role and profile. */
