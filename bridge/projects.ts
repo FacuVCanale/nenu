@@ -244,17 +244,16 @@ function tomlThread(record: TomlObject): OrgThreadView | undefined {
   };
 }
 
-/**
- * The one PR button, in this order: Merge whenever Organizations lists it, then its own order.
- * Organizations lists Address comments while the PR has any comment, a bot's included, and a count
- * of comments never falls, so taken first it would hide Merge for good.
- */
+/** The actions Nenu has a button for: about a PR, and about a thread without one. */
 const PR_ACTIONS: readonly PrAction[] = ["merge", ...PR_ASKS];
 const THREAD_ACTIONS: readonly PrAction[] = ["create-pr"];
 
-/** The first of `known` that `actions` names; a value from a newer Organizations is never offered. */
-function offered(actions: string[] | undefined, known: readonly PrAction[]): PrAction | undefined {
-  return known.find((name) => actions?.includes(name));
+/**
+ * The first action of `actions` Nenu knows. Organizations lists them most pressing first, Merge
+ * leading whenever it would merge, so Nenu never reorders them; a value from a newer one is skipped.
+ */
+function firstAction(actions: string[] | undefined, known: readonly PrAction[]): PrAction | undefined {
+  return actions?.map((action) => known.find((name) => name === action)).find((action) => action !== undefined);
 }
 
 function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadView {
@@ -270,7 +269,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(raw.mergeable ? { mergeable: raw.mergeable } : {}),
     mergeBlocker: raw.merge_blocker,
   });
-  const prAction = raw ? pr && offered(raw.actions, PR_ACTIONS) : offered(record.actions, THREAD_ACTIONS);
+  const prAction = raw ? pr && firstAction(raw.actions, PR_ACTIONS) : firstAction(record.actions, THREAD_ACTIONS);
   return {
     id: record.id,
     title: record.title.trim() || record.id,
