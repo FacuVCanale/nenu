@@ -2274,8 +2274,11 @@ async function chips(before: boolean): Promise<void> {
           if (chip === "PRs" && name.startsWith("worker-phone")) {
             // The PR bar's diff, from the PRs panel now: its size opens the PR's changes.
             if (await tap(page.getByRole("button", { name: /^View changes/ }).first(), "prs:diff")) {
+              const viewer = page.getByRole("dialog").first();
+              found[`${name}:prs:diff-open`] = await viewer.waitFor({ timeout: 5000 }).then(() => true, () => false);
+              await page.waitForTimeout(800);
               await shoot("prs-diff");
-              await page.keyboard.press("Escape");
+              await viewer.getByRole("button", { name: "Close" }).first().click();
               await page.waitForTimeout(400);
             }
           }
