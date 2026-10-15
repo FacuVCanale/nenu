@@ -77,17 +77,20 @@ export function useHomeActivity(agents: readonly AgentView[], session?: string):
   return byPane;
 }
 
-/** What a pull request's checks say, in two or three words, and their colour; null when it has none. */
+/**
+ * What a pull request's checks say, in two or three words, and their colour; null when it has none. The
+ * colour is a phone's: a desk keeps the words grey and the colour to the row's icon.
+ */
 function checksWord(checks: ReviewEntry["checks"]): { word: string; tone: string } | null {
   if (!checks) return null;
-  if (checks.failed) return { word: `${checks.failed} ${checks.failed === 1 ? "check" : "checks"} failing`, tone: "text-destructive" };
-  if (checks.pending) return { word: "checks running", tone: "text-status-working" };
-  return checks.passed ? { word: "checks passed", tone: "text-status-done" } : null;
+  if (checks.failed) return { word: `${checks.failed} ${checks.failed === 1 ? "check" : "checks"} failing`, tone: "max-lg:text-destructive" };
+  if (checks.pending) return { word: "checks running", tone: "max-lg:text-status-working" };
+  return checks.passed ? { word: "checks passed", tone: "max-lg:text-status-done" } : null;
 }
 
 const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, { word: string; tone?: string }> = {
-  approved: { word: "approved", tone: "text-status-done" },
-  changes_requested: { word: "changes requested", tone: "text-destructive" },
+  approved: { word: "approved", tone: "max-lg:text-status-done" },
+  changes_requested: { word: "changes requested", tone: "max-lg:text-destructive" },
   review_required: { word: "needs review" },
   commented: { word: "commented" },
 };
@@ -108,8 +111,11 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
   const label = [entry.title, number && number.word, size, ...said.map((fact) => fact.word)].filter(Boolean).join(", ");
   const to = entry.open && ("paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session));
   const busy = !!to && isOpening(opening, to);
+  // What a desk says in red, on the icon alone: a check failing or changes asked for.
+  const blocked = !!entry.checks?.failed || entry.review === "changes_requested";
   const body = <>
-    <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0 justify-self-center", readyToMerge(entry) ? "text-status-done" : "text-muted-foreground")} />
+    <GitPullRequest aria-hidden className={cn("row-span-2 size-4 shrink-0 justify-self-center",
+      readyToMerge(entry) ? "text-status-done" : blocked ? "text-muted-foreground lg:text-destructive" : "text-muted-foreground")} />
     <span className="col-start-2 truncate text-body sm:text-subhead">{entry.title}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 truncate text-footnote text-muted-foreground">
       <span className="shrink-0 max-sm:hidden">{entry.repo} ·</span>

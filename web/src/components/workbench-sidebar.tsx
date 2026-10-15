@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, Clock, House, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
+import { ChevronRight, Clock, House, Laptop, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
 
 import { DeskLists } from "@/components/desk-nav";
 import { openNewDialog } from "@/components/new-agent-sheet";
@@ -186,7 +186,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
       {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}
       {(!phone || !query.trim()) && <div className="nav-footer">
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />
-        <HostRow data={data} />
+        <HostRow data={data} desk={!phone} />
       </div>}
     </nav>
   );
@@ -363,20 +363,27 @@ function useRevealProject(currentProject: string | undefined, setExpanded: (slug
   }, [currentProject, setExpanded]);
 }
 
-/** The host Nenu reaches Herdr on, whether that link is up, and how much it holds. */
-function HostRow({ data }: { data: HomeData }) {
+/**
+ * The host Nenu reaches Herdr on, whether that link is up, and how much it holds. The desk's footer
+ * names the host alone, as Cursor's names its account, behind the machine mark the composer uses and in
+ * the column of the rows' icons: the link's dot and "Not connected" show only once Herdr is out of
+ * reach, and the counts are Home's to give.
+ */
+function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
   const connected = data.bridge === "connected" && !data.error;
   const { hostname } = window.location;
   const host = /^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local";
   const agents = data.agents.length;
+  const meta = !connected ? "Not connected"
+    : !desk && `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}`;
   return (
     <div className="nav-host">
-      <span className={cn("size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />
+      {desk && connected
+        ? <Laptop aria-hidden size={16} className="nav-host-mark" />
+        : <span className={cn("nav-host-dot size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />}
       <span className="nav-host-text">
-        <span className="nav-host-name">herdr · {host}</span>
-        <span className="nav-host-meta">
-          {connected ? `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}` : "Not connected"}
-        </span>
+        <span className="nav-host-name">{desk ? host : `herdr · ${host}`}</span>
+        {meta && <span className="nav-host-meta">{meta}</span>}
       </span>
       <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings"><Settings2 aria-hidden size={16} /></Link>
     </div>

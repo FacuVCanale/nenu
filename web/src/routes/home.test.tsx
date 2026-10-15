@@ -19,6 +19,14 @@ vi.mock("@/components/new-agent-sheet", async (original) => ({ ...(await origina
 
 beforeEach(() => localStorage.clear());
 
+/** A desk's media: 1024px and wider. */
+function desk() {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(min-width: 1024px)", media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  }));
+}
+
 const data: HomeData = {
   bridge: "connected", device: undefined, session: "work", sessions: [], error: false, authError: false,
   snoozedUntil: null, update: undefined, tabs: [], shellPanes: [],
@@ -254,6 +262,29 @@ describe("Recents and Workspaces", () => {
     expect(within(main.getByRole("tabpanel", { name: "Recents" })).queryByRole("link", { name: /^Landing,/ })).not.toBeInTheDocument();
     await user.click(needs.getByRole("link", { name: "Reply" }));
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
+  });
+
+  it("draws the sessions' control on a desk as text tabs, the open one on a soft grey, and the project filter with no box", async () => {
+    desk();
+    try {
+      const { main } = await setup(recentData);
+      const recents = main.getByRole("tab", { name: "Recents" });
+      expect(recents).toHaveClass("panel-tab");
+      expect(recents).not.toHaveClass("project-segment");
+      expect(main.getByRole("tablist", { name: "Sessions" })).not.toHaveClass("project-segmented");
+      const filter = main.getByRole("combobox", { name: "Project" }).closest("label");
+      expect(filter).toHaveClass("quiet-action");
+      expect(filter).not.toHaveClass("border");
+      expect(main.getByRole("heading", { level: 1 })).toHaveClass("text-large-title", "lg:text-title");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps a phone's sessions control the segmented one, on its track", async () => {
+    const { main } = await setup(recentData);
+    expect(main.getByRole("tab", { name: "Recents" })).toHaveClass("project-segment");
+    expect(main.getByRole("tablist", { name: "Sessions" })).toHaveClass("project-segmented");
   });
 
   it("narrows the list to one project on a desk, from the snapshot it already has", async () => {

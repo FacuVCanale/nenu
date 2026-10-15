@@ -1,7 +1,7 @@
 // A project's mark: one of 24 line-and-dot glyphs on a 16px grid, in one of 10 hues, picked by FNV-1a
-// of its slug. The same project draws the same mark on every device and after every reload, with
-// nothing stored. The hues are theme tokens (`--glyph-<hue>` in index.css), so a mark follows the
-// theme with no JavaScript.
+// of its slug unless the project picked its own in Organizations. The same project draws the same mark
+// on every device and after every reload, with nothing stored. The hues are theme tokens
+// (`--glyph-<hue>` in index.css), so a mark follows the theme with no JavaScript.
 
 /** One glyph as at most three paths: the 1.4px lines, the filled dots, and a dashed line. */
 export interface Glyph {
@@ -59,6 +59,10 @@ export const GLYPH_NAMES = Object.keys(GLYPHS) as GlyphName[];
 export const HUE_NAMES = ["red", "orange", "amber", "green", "teal", "blue", "indigo", "violet", "pink", "slate"] as const;
 export type HueName = (typeof HUE_NAMES)[number];
 
+/** Red and amber say "needs you" and "working" everywhere else, so only a project's own pick draws them. */
+const STATE_HUES: ReadonlySet<HueName> = new Set(["red", "amber"]);
+const HASHED_HUES = HUE_NAMES.filter((hue) => !STATE_HUES.has(hue));
+
 const utf8 = new TextEncoder();
 
 /** FNV-1a over the text's UTF-8 bytes, 32 bits unsigned. */
@@ -68,8 +72,26 @@ export function fnv1a(text: string): number {
   return hash >>> 0;
 }
 
-/** A slug's mark: the hash's low bits pick the glyph, the byte above them the hue. */
-export function projectMark(slug: string): { glyph: GlyphName; hue: HueName } {
+/** The glyph and hue a project picked in Organizations (its `icon` and `tone`), empty when it picked none. */
+export interface MarkPick {
+  icon?: string;
+  tone?: string;
+}
+
+const isGlyph = (name: string | undefined): name is GlyphName => !!name && Object.hasOwn(GLYPHS, name);
+const isHue = (name: string | undefined): name is HueName => (HUE_NAMES as readonly string[]).includes(name ?? "");
+
+/**
+ * A project's mark: what it picked, where Nenu draws that name; otherwise its slug's. The hash's low
+ * bits pick the glyph and the byte above them the hue. A slug landing on red or amber takes another hue
+ * from the byte after, so every other project keeps the colour it always had.
+ */
+export function projectMark(slug: string, pick: MarkPick = {}): { glyph: GlyphName; hue: HueName } {
   const hash = fnv1a(slug);
-  return { glyph: GLYPH_NAMES[hash % GLYPH_NAMES.length]!, hue: HUE_NAMES[(hash >>> 8) % HUE_NAMES.length]! };
+  const landed = HUE_NAMES[(hash >>> 8) % HUE_NAMES.length]!;
+  const hashed = STATE_HUES.has(landed) ? HASHED_HUES[(hash >>> 16) % HASHED_HUES.length]! : landed;
+  return {
+    glyph: isGlyph(pick.icon) ? pick.icon : GLYPH_NAMES[hash % GLYPH_NAMES.length]!,
+    hue: isHue(pick.tone) ? pick.tone : hashed,
+  };
 }

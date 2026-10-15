@@ -7,6 +7,7 @@ import { AutoDeny, QuestionCard, useLockLine, type LockReason } from "@/componen
 import { StatusDot } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import type { NeedsYouItem } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
 import { displayName, displayPlace } from "@/lib/display-name";
@@ -22,6 +23,14 @@ function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | 
 }
 
 const WAITING = "waiting in the terminal";
+
+/**
+ * The button a row opens its thread with (Answer, Reply): solid on a phone, outlined on a desk, where a
+ * solid one is the brightest thing on the page and the page's one primary belongs to the composer.
+ */
+function useOpenButton(): string {
+  return buttonVariants({ size: "sm", variant: useMediaQuery("(min-width: 1024px)") ? "outline" : "default" });
+}
 
 /**
  * Home's "Needs you": one row per pane, oldest first, so the lists under it stay in the first screen.
@@ -43,6 +52,7 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
   opening: string | null;
 }) {
   const lockLine = useLockLine(lockReason);
+  const openButton = useOpenButton();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
   if (!items.length && !receipts.length) return null;
 
@@ -58,7 +68,7 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
         }
         if (reply) {
           return <Row key={paneId} who={who} to={to} opening={busy} line={ASK.reply.label}
-            actions={<Link to={to} className={buttonVariants({ size: "sm" })}>{ASK.reply.action}</Link>} />;
+            actions={<Link to={to} className={openButton}>{ASK.reply.action}</Link>} />;
         }
         return <Row key={paneId} who={who} to={to} opening={busy} line={WAITING} actions={<ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />} />;
       })}
@@ -153,6 +163,7 @@ function AskRow({ interaction: i, who, to, opening, lockLine, readOnly, refused,
 }) {
   const [busy, setBusy] = useState<number | null>(null);
   const [notice, setNotice] = useState<{ tone: "warn" | "error"; text: string } | null>(null);
+  const openButton = useOpenButton();
   // The row that replaced a refused one says why nothing was sent, until the next tap.
   useEffect(() => {
     if (refused) setNotice({ tone: "warn", text: refused });
@@ -197,7 +208,7 @@ function AskRow({ interaction: i, who, to, opening, lockLine, readOnly, refused,
               ))}
             </span>
           )}
-          <Link to={to} className={cn(buttonVariants({ size: "sm" }), inPlace && "sm:invisible")}>Answer</Link>
+          <Link to={to} className={cn(openButton, inPlace && "sm:invisible")}>Answer</Link>
         </span>
       } />
   );

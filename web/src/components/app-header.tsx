@@ -82,8 +82,11 @@ export function AppHeader({
   const mark = !back && home;
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
   const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : "lg:hidden");
+  // A desk draws no line under a bar with nothing in its middle (Home, a project before its heading
+  // scrolls away): an empty band under a rule reads as a missing title. A phone keeps its line.
+  const titled = (title !== undefined && !home && !titleHidden) || Boolean(children) || Boolean(override);
   return (
-    <header className="workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted">
+    <header className={cn("workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted", !titled && "lg:border-b-transparent")}>
       {override ?? (
         <>
           {mark ? (

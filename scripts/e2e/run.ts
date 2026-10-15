@@ -1675,12 +1675,14 @@ async function inspector(before: boolean): Promise<void> {
     if (!before) {
       const { page, close } = await open(DESKTOP, herd.working);
       steps["desktop-changes-open"] = log;
+      // A project's session opens its panel on Project (ADR 0081); Changes is the next tab.
+      await panel(page).getByRole("tab", { name: /Changes/ }).click();
       await panel(page).getByRole("button", { name: /app\/checkout\.tsx/ }).click();
       await step("desktop-changes", page);
       await step("desktop-uncommitted", page, () => panel(page).getByRole("radio", { name: "Uncommitted" }).click());
       await step("desktop-files", page, () => panel(page).getByRole("tab", { name: /Files/ }).click());
       await step("desktop-artifacts", page, () => panel(page).getByRole("tab", { name: /Artifacts/ }).click());
-      await step("desktop-project", page, () => panel(page).getByRole("button", { name: /^Project/ }).click());
+      await step("desktop-project", page, () => panel(page).getByRole("tab", { name: /^Project/ }).click());
       await step("desktop-closed", page, () => page.keyboard.press("Meta+Alt+KeyB"));
       await step("desktop-reopened", page, () => page.getByRole("button", { name: "Show session panel" }).click());
       await step("desktop-switched", page, () => page.goto(bridge.url + `/pane/${encodeURIComponent(herd.blocked)}`));
@@ -2339,6 +2341,13 @@ async function surface(): Promise<void> {
         }
         await page.goto(bridge.url + "/");
         await page.locator(pages[0]![2]).first().waitFor({ timeout: 15_000 });
+        if (deviceName === "desktop") {
+          // The bar under a resting pointer, which shows what it keeps out of sight until then (a row's shortcut).
+          await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^New chat/ }).hover();
+          await page.waitForTimeout(300);
+          await shoot("sidebar-hover");
+          await page.mouse.move(720, 450);
+        }
         if (deviceName === "phone") {
           await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
         } else {
