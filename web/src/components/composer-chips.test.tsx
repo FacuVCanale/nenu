@@ -101,6 +101,17 @@ it("keeps everything the PR bar offered behind PRs: Merge with its confirmation,
   expect(await screen.findByRole("dialog", { name: /Merge/ })).toBeVisible();
 });
 
+it("the PRs panel offers each PR's one button, and counts a pushed branch that waits for its PR", async () => {
+  const pushed: ProjectThreadView = { id: "t-15", title: "Login hotfix", parentId: "t-10", role: "worker", status: "open", group: "idle", branch: "acme/login-hotfix", prAction: "create-pr", updated: minutesAgo(20) };
+  const withActions = [...threads.map((thread) => thread.id === own.id ? { ...thread, prAction: "fix-ci" as const } : thread.id === "t-14" ? { ...thread, prAction: "merge" as const } : thread), pushed];
+  const { user } = renderChat({ threads: withActions, project: { ...project, threads: withActions } });
+  await user.click(within(await row()).getByRole("button", { name: "PRs, 3" }));
+  const panel = screen.getByRole("region", { name: "Pull requests" });
+  expect(within(panel).getByRole("button", { name: "Fix CI Checkout flow" })).toHaveTextContent(/^Fix CI$/);
+  expect(within(panel).getByRole("button", { name: "Merge Cart badge" })).toHaveTextContent(/^Merge$/);
+  expect(within(panel).getByRole("button", { name: "Create PR Login hotfix" })).toHaveTextContent(/^Create PR$/);
+});
+
 it("closes the panel with Escape and hands focus back to its chip", async () => {
   const { user } = renderChat();
   const prs = within(await row()).getByRole("button", { name: "PRs, 2" });
