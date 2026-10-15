@@ -109,6 +109,72 @@ export function tickJournal(file: string, now: () => number, everyMs = 2000): ()
   return () => clearInterval(timer);
 }
 
+// A Claude log row as the CLI writes it: tool calls in an assistant message, their results in the
+// next user row, a finished turn's answer marked end_turn and its duration on a system row.
+function claudeRow(type: "user" | "assistant" | "system", parent: string | null, at: number, body: Record<string, unknown>): { uuid: string; line: string } {
+  const uuid = `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
+  return { uuid, line: JSON.stringify({ type, uuid, parentUuid: parent, timestamp: new Date(at).toISOString(), ...body }) + "\n" };
+}
+const say = (content: unknown[], stop: "tool_use" | "end_turn" | null) => ({ message: { role: "assistant", content, stop_reason: stop } });
+const toolCall = (id: string, n: number) => n % 3 === 0
+  ? { type: "tool_use", id, name: "Bash", input: { command: `rg -n "checkout" src/ | head -${20 + n}`, description: `Search step ${n}` } }
+  : n % 3 === 1 ? { type: "tool_use", id, name: "Read", input: { file_path: `src/checkout/step-${n}.ts` } }
+  : { type: "tool_use", id, name: "Edit", input: { file_path: `src/checkout/step-${n}.ts`, old_string: "a", new_string: "b" } };
+const toolResult = (id: string, n: number) => ({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: id,
+  content: Array.from({ length: 3 + (n % 9) }, (_, i) => `src/checkout/step-${n}.ts:${i + 1}: const total${i} = cart.items.length * ${n};`).join("\n") }] } });
+const answer = (n: number, shot: boolean) => `## Step ${n}\n\nThe checkout flow now ${n % 2 ? "keeps the cart" : "drops stale coupons"} across reloads.\n\n` +
+  (shot ? `Screenshot: shots/step-${n}.png\n\n` : "") +
+  `- Updated \`src/checkout/step-${n}.ts\`\n- Added a test for the empty cart\n\n\`\`\`ts\nexport function total${n}(cart: Cart) {\n  return cart.items.reduce((sum, item) => sum + item.price, 0);\n}\n\`\`\`\n\n` +
+  "Everything else stays as it was. ".repeat(1 + (n % 4));
+
+/**
+ * A long session for scroll checks: `turns` finished turns, each a question, commentary, two tool calls
+ * with their results and a Markdown answer. With `shots` (the pane's folder) every fourth answer names a
+ * screenshot written there, as agents do. Returns the last row's uuid, the parent of what follows.
+ */
+export async function writeLongJournal(file: string, turns: number, at: number, shots?: string): Promise<string> {
+  const png = shots ? await readFile(resolve(import.meta.dir, "../../web/public/nenu-pwa-512x512.png")) : null;
+  if (shots) await mkdir(join(shots, "shots"), { recursive: true });
+  let parent: string | null = null;
+  let body = "";
+  const add = (row: { uuid: string; line: string }) => { body += row.line; parent = row.uuid; };
+  for (let n = 0; n < turns; n++) {
+    const t = at + n * 60_000;
+    add(claudeRow("user", parent, t, { message: { role: "user", content: `Question ${n}: ${"what changes in the checkout flow? ".repeat(1 + (n % 3))}` } }));
+    for (const k of [1, 2]) {
+      const id = `toolu_${n}_${k}`;
+      add(claudeRow("assistant", parent, t + k * 1000, say([{ type: "text", text: `Looking at step ${n}.${k}.` }, toolCall(id, n + k)], "tool_use")));
+      add(claudeRow("user", parent, t + k * 1000 + 500, toolResult(id, n + k)));
+    }
+    const shot = png !== null && n % 4 === 0;
+    if (shot) await writeFile(join(shots!, "shots", `step-${n}.png`), png);
+    add(claudeRow("assistant", parent, t + 5000, say([{ type: "text", text: answer(n, shot) }], "end_turn")));
+    add(claudeRow("system", parent, t + 5001, { subtype: "turn_duration", durationMs: 5000 }));
+  }
+  await writeFile(file, body);
+  return parent!;
+}
+
+/**
+ * A turn that keeps running after `parent`: a question, then every `everyMs` a call, its result half a
+ * step later, and a line of commentary every third step. Returns a stop function.
+ */
+export function tickWorkingTurn(file: string, parent: string, now: () => number, everyMs = 1500): () => void {
+  let n = 0;
+  let last = parent;
+  const add = (row: { uuid: string; line: string }) => { last = row.uuid; void appendFile(file, row.line); };
+  add(claudeRow("user", last, now(), { message: { role: "user", content: "Keep going with the checkout cleanup." } }));
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  const step = setInterval(() => {
+    const id = `toolu_live_${++n}`;
+    const content = n % 3 === 0 ? [{ type: "text", text: `Step ${n}: ${"checking the next file. ".repeat(1 + (n % 4))}` }, toolCall(id, n)] : [toolCall(id, n)];
+    add(claudeRow("assistant", last, now(), say(content, "tool_use")));
+    const k = n;
+    timers.push(setTimeout(() => add(claudeRow("user", last, now(), toolResult(id, k))), everyMs / 2));
+  }, everyMs);
+  return () => { clearInterval(step); for (const timer of timers) clearTimeout(timer); };
+}
+
 /**
  * What fake-org.ts starts from: Organizations' `overview --json` projects, plus the profile names.
  * A project's `coordinator` binds its coordinator to a demo pane, as `.state/coordinator.json` does.

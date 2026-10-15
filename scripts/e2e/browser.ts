@@ -39,7 +39,10 @@ export interface Page {
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   clock: { install(opts: { time: number }): Promise<void> };
   route(url: string, handler: (route: Route) => unknown): Promise<void>;
-  keyboard: { press(key: string): Promise<void> };
+  keyboard: { press(key: string): Promise<void>; type(text: string, opts?: { delay?: number }): Promise<void> };
+  mouse: { move(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void> };
+  setViewportSize(size: { width: number; height: number }): Promise<void>;
+  goBack(): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
   waitForFunction<A>(fn: (arg: A) => unknown, arg: A, opts?: { timeout?: number }): Promise<unknown>;
   close(): Promise<void>;
