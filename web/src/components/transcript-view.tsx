@@ -144,12 +144,15 @@ function Turn({
   showHeader,
   query,
   focused = false,
+  stamp,
 }: {
   entry: TranscriptEntry;
   /** False for a turn continuing the same speaker's run: only the run's first bubble shows its time. */
   showHeader: boolean;
   query: string;
   focused?: boolean;
+  /** The time a turn's answer shows beside its Copy: when the turn finished, or "" for none. */
+  stamp?: string;
 }) {
   const time = clockTime(entry.ts);
   const inline = journalImages(entry).length > 0;
@@ -170,15 +173,16 @@ function Turn({
     );
   }
 
-  // A chat, not a log: your messages are soft bubbles on the right, the agent's are plain text on
-  // the left. The header already names the agent, so neither side repeats a speaker label; the time
-  // sits under your bubble and on hover for the agent.
+  // A chat, not a log: your messages are soft bubbles on the right, raised a step off the page as the
+  // composer is, and the agent's are plain text on the left. The header already names the agent, so
+  // neither side repeats a speaker label; the time sits under your bubble, beside a finished turn's
+  // Copy, and on hover for the agent.
   // What a command of theirs loaded (a skill's body) is not their words: a line beside the bubble.
   if (entry.role === "user") {
     const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
-        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere] select-text">
+        <div className="max-w-[min(85%,28rem)] min-w-0 space-y-1.5 rounded-xl border bg-card px-3.5 py-2.5 [overflow-wrap:anywhere] select-text">
           {entry.parts.map((part, i) => part.kind === "context" ? null : (
             <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
           ))}
@@ -197,8 +201,10 @@ function Turn({
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
       <EntryImages entry={entry} />
-      {words.trim() && <div className="flex">
-        <CopyButton what="message" payload={() => ({ text: words })} className={cn(QUIET_ACTION, "-ml-2")} />
+      {(words.trim() || stamp) && <div className="flex items-center gap-1 text-footnote text-subtle-foreground">
+        {words.trim() && <CopyButton what="message" iconOnly payload={() => ({ text: words })}
+          className={cn(QUIET_ACTION, "-ml-1.5 min-w-7 justify-center px-1.5 text-subtle-foreground")} />}
+        {stamp && <time dateTime={entry.ts}>{stamp}</time>}
       </div>}
     </div>
   );
@@ -221,8 +227,8 @@ function askedCall(turn: WorkTurn): string | undefined {
 }
 
 /** A turn's work, one step per row, in the order it happened. */
-function ActivityLog({ entries, query, focusedUuid, active, asked, live }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; asked?: string; live: LiveStep | null }) {
-  return <ol className="min-w-0 select-text">
+function ActivityLog({ entries, query, focusedUuid, active, asked, live, className }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; asked?: string; live: LiveStep | null; className?: string }) {
+  return <ol data-work-log className={cn("min-w-0 select-text", className)}>
     {entries.map((entry) => {
       const steps = stepParts(entry, live);
       if (!steps.length && !journalImages(entry).length) return null;
@@ -249,10 +255,11 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   // A turn held up by a dialog has not ended: the call the dialog asks about waits, the others run on.
   const asked = waiting ? askedCall(turn) : undefined;
   const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
-  const label = turn.interrupted ? "Stopped" : turn.settled ? "Worked" : "Work log";
-  const duration = turn.durationMs !== undefined ? ` ${turn.interrupted ? "after" : "for"} ${formatWorkDuration(turn.durationMs)}` : "";
-  // One time per turn, when it finished. The question's time is already under its bubble, so a turn
-  // that ends in the minute it started says it no second time.
+  const duration = turn.settled && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
+  const label = turn.interrupted ? (duration ? "Stopped after" : "Stopped") : turn.settled ? "Worked" : "Work log";
+  // One time per turn, when it finished, beside its answer's Copy (or on its line when it has no
+  // answer). The question's time is already under its bubble, so a turn that ends in the minute it
+  // started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
   const finished = clockTime(end);
   const endTime = finished !== clockTime(turn.startedAt ?? "") ? finished : "";
@@ -269,26 +276,34 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   const answerPaths = turn.answer ? turn.answer.parts.flatMap((part) => part.kind === "text" ? filePathsInText(part.text) : []) : [];
   const delivered = [...new Set(turn.activity.flatMap((entry) => entry.parts.flatMap(sentFiles)))]
     .filter((path) => !IMAGE_EXTENSION.test(path) && !answerPaths.some((mention) => path === mention || path.endsWith(`/${mention.replace(/^\.\//, "")}`)));
+  // The line reads as the board's "Worked 1m 52s": the duration a step quieter than the word, and the
+  // chevron after them, shown under a finger and, under a pointer, once the line is hovered or open.
+  // The line holds nothing but its toggle unless a turn with no answer keeps its time beside it.
+  const line = <button type="button" data-work-toggle aria-expanded={open} disabled={!hasDetails} onClick={() => setExpanded(!open)}
+    className="group flex min-h-8 w-fit max-w-full min-w-0 items-center gap-1.5 text-left text-footnote text-muted-foreground hover:text-foreground disabled:opacity-100 coarse:min-h-11">
+    {turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" />
+      : <>{label} {duration && <span className="text-subtle-foreground">{duration}</span>}</>}
+    {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
+    {hasDetails && <ChevronRight aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-150 ease-out motion-reduce:transition-none",
+      open ? "rotate-90" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100")} />}
+  </button>;
   return <div className="space-y-2" data-work-turn={turn.id}>
-    <div className="flex max-w-full flex-wrap items-center gap-x-1.5 text-footnote text-muted-foreground">
-      <button type="button" data-work-toggle aria-expanded={open} disabled={!hasDetails}
-        onClick={() => setExpanded(!open)} className="flex min-h-8 min-w-0 items-center gap-1.5 text-left hover:text-foreground disabled:opacity-100 coarse:min-h-11">
-        <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`} />
-        {turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" /> : <span>{label}{turn.settled ? duration : ""}</span>}
-        {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
-      </button>
-      {endTime && <span className="whitespace-nowrap">· <time dateTime={end}>{endTime}</time></span>}
-    </div>
+    {endTime && !turn.answer ? <div className="flex max-w-full flex-wrap items-center gap-x-1.5 text-footnote text-muted-foreground">
+      {line}<span className="whitespace-nowrap">· <time dateTime={end}>{endTime}</time></span>
+    </div> : line}
     {tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
       <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />))}
     {/* The rail under the turn's line ties its steps to it; a running turn keeps its live row under it, open or folded. */}
     {(open || live) && <div className="ml-[7px] min-w-0 border-l pl-3">
-      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live} />}
+      {/* Opened by a tap, the steps fade in under the line; opened on their own (a running turn, a
+          search hit), they are simply there. */}
+      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live}
+        className={expanded ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out motion-reduce:animate-none" : undefined} />}
       {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     </div>}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
-      <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} />
+      <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} stamp={endTime} />
     </div>}
     <ArtifactCards paths={delivered} />
     <ImageStrip images={turnImages} max={3} label="Images from this turn" />

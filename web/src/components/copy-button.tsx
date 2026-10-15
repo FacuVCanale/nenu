@@ -34,9 +34,10 @@ function writeClipboard({ text, html }: CopyPayload): Promise<void> {
 /**
  * Copy, then Copied (or Failed) for two seconds. It is as wide as its widest word from the start, so
  * the answer never moves what sits beside it. `what` names the thing copied ("Copy table") where a
- * page holds several; `payload` is read at the tap.
+ * page holds several; `payload` is read at the tap. `iconOnly` draws the icon alone (a message's
+ * quiet action): Copied shows as a check, and only a failure puts its word beside it.
  */
-export function CopyButton({ payload, what, className = QUIET_ACTION }: { payload: () => CopyPayload; what?: string; className?: string }) {
+export function CopyButton({ payload, what, className = QUIET_ACTION, iconOnly = false }: { payload: () => CopyPayload; what?: string; className?: string; iconOnly?: boolean }) {
   const [state, setState] = useState<keyof typeof COPY_LABEL>("idle");
   useEffect(() => {
     if (state === "idle") return;
@@ -44,10 +45,17 @@ export function CopyButton({ payload, what, className = QUIET_ACTION }: { payloa
     return () => clearTimeout(timer);
   }, [state]);
 
+  const copy = () => writeClipboard(payload()).then(() => setState("copied"), () => setState("failed"));
+  const icon = state === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />;
+  if (iconOnly) return (
+    <button type="button" aria-label={state === "idle" ? (what ? `Copy ${what}` : "Copy") : COPY_LABEL[state]} className={className} onClick={copy}>
+      {icon}
+      {state === "failed" ? <span aria-live="polite">{COPY_LABEL.failed}</span> : <span aria-live="polite" className="sr-only">{state === "copied" ? COPY_LABEL.copied : ""}</span>}
+    </button>
+  );
   return (
-    <button type="button" aria-label={what && state === "idle" ? `Copy ${what}` : undefined} className={className}
-      onClick={() => writeClipboard(payload()).then(() => setState("copied"), () => setState("failed"))}>
-      {state === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    <button type="button" aria-label={what && state === "idle" ? `Copy ${what}` : undefined} className={className} onClick={copy}>
+      {icon}
       <span className="grid justify-items-center">
         <span aria-live="polite" className="col-start-1 row-start-1">{COPY_LABEL[state]}</span>
         {Object.values(COPY_LABEL).map((label) => (

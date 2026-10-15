@@ -2223,7 +2223,7 @@ async function chat(): Promise<void> {
     }
     const shots: string[] = [];
     const thread = (page: Page) => page.evaluate(() => document.querySelector(".chat-thread")?.getElementsByTagName("*").length ?? 0, null);
-    const seen: Record<string, number> = {};
+    const seen: Record<string, unknown> = {};
     for (const [deviceName, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
       for (const scheme of ["dark", "light"] as const) {
         const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
@@ -2238,6 +2238,8 @@ async function chat(): Promise<void> {
           shots.push(path);
         };
         seen[`${deviceName}-${scheme}-thread`] = await thread(page);
+        // What the folds say, from the journal's turn_duration rows through the real bridge.
+        seen[`${deviceName}-${scheme}-worked`] = await page.evaluate(() => Array.from(document.querySelectorAll("[data-work-toggle]")).map((el) => (el as HTMLElement).innerText.trim()), null);
         await shoot("chat");
         if (scheme === "dark") {
           await page.locator("[data-work-toggle]").first().click();

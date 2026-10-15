@@ -1,11 +1,12 @@
 import { createContext, useContext, useMemo, useState } from "react";
 
-import { parseMarkdown, type MdBlock, type MdSpan } from "@/lib/markdown";
+import { parseMarkdown, pullRequestRef, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
 import { tableHtml, tableMarkdown } from "@/lib/table-copy";
 import { cn } from "@/lib/utils";
+import { GitPullRequest } from "@/components/ui/icon";
 import { CodeBlock } from "./code-block";
 import { CopyButton, QUIET_ACTION } from "./copy-button";
 import { TexMath } from "./math";
@@ -59,10 +60,17 @@ const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] bo
 const WHOLE = "inline-block max-w-full [overflow-wrap:anywhere]";
 const WHOLE_CODE_CHARS = 24;
 
+/** The words a span draws, for measuring a label. */
+const spanText = (spans: MdSpan[]): string => spans.map((span) => "spans" in span ? spanText(span.spans) : span.kind === "image" ? span.alt : span.text).join("");
+
+// Inside a link's label, another link (a bare pull request URL used as the label) draws as its words.
+const InLinkContext = createContext(false);
+
 // Emphasis and links hold child spans (agents nest them — ``**`sha`**`` is routine), so this recurses
 // through <Spans>. `code` is the leaf.
 function Span({ span }: { span: MdSpan }) {
   const openFile = useContext(FilePreviewContext);
+  const inLink = useContext(InLinkContext);
   switch (span.kind) {
     case "image":
       return <InlineImage path={span.path} alt={span.alt} />;
@@ -90,7 +98,11 @@ function Span({ span }: { span: MdSpan }) {
       if (open) return <button type="button" className={cn(WHOLE, "text-left")} onClick={open}>{code}</button>;
       return span.text.length <= WHOLE_CODE_CHARS ? <span className={WHOLE}>{code}</span> : code;
     }
-    case "link":
+    case "link": {
+      if (inLink) return <Spans spans={span.spans} />;
+      // A pull request reads as one: its icon before the label, no underline until a pointer rests on
+      // it, and a short label kept whole with its icon, as a short code span is.
+      const pr = pullRequestRef(span.href) !== null;
       // `href` was scheme-checked in the parser. noreferrer/noopener because these URLs come from
       // agent output, and target=_blank keeps the PWA shell alive behind the tap.
       return (
@@ -98,11 +110,14 @@ function Span({ span }: { span: MdSpan }) {
           href={span.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary underline underline-offset-2 [overflow-wrap:anywhere]"
+          className={cn("text-primary underline-offset-2 [overflow-wrap:anywhere]", pr ? "hover:underline" : "underline",
+            pr && spanText(span.spans).length <= WHOLE_CODE_CHARS && WHOLE)}
         >
+          {pr && <GitPullRequest aria-hidden="true" className="mr-0.5 inline-block size-[0.95em] align-[-0.125em]" />}
           <LinkLabel spans={span.spans} />
         </a>
       );
+    }
     default:
       return <Hit text={span.text} />;
   }
@@ -123,9 +138,10 @@ function InlineImage({ path, alt }: { path: string; alt: string }) {
   return openFile ? <button type="button" aria-label={`Open ${name}`} className="inline-block max-w-full text-left" onClick={() => openFile(path)}>{image}</button> : image;
 }
 
-// A code-formatted filename inside a link is its label, never another nested interactive control.
+// A code-formatted filename or a pull request URL inside a link is its label, never another nested
+// interactive control.
 const LinkLabel = ({ spans }: { spans: MdSpan[] }) => (
-  <FilePreviewContext.Provider value={null}><Spans spans={spans} /></FilePreviewContext.Provider>
+  <InLinkContext.Provider value><FilePreviewContext.Provider value={null}><Spans spans={spans} /></FilePreviewContext.Provider></InLinkContext.Provider>
 );
 
 const Spans = ({ spans }: { spans: MdSpan[] }) => (

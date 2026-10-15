@@ -398,6 +398,14 @@ describe("TranscriptView — work folding", () => {
     expect(fold).not.toHaveTextContent("for");
   });
 
+  it("says a stopped turn stopped, and after how long when the journal measured it", () => {
+    const stopped = (turnState: TranscriptEntry["turn"]) => [activity, { ...final, phase: undefined, turn: turnState }];
+    const { rerender } = render(<TranscriptView entries={stopped({ status: "aborted", durationMs: 9_000 })} activityStatus="idle" />);
+    expect(screen.getByRole("button", { name: "Stopped after 9s" })).toBeInTheDocument();
+    rerender(<TranscriptView entries={stopped({ status: "aborted" })} activityStatus="idle" />);
+    expect(screen.getByRole("button", { name: "Stopped" })).toBeInTheDocument();
+  });
+
   it("animates the work it opens only when you open it, never on its own", async () => {
     const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
     // Open by itself while it runs: it draws in place.
@@ -635,10 +643,13 @@ describe("TranscriptView — the work timeline", () => {
 
   it("keeps the finished turn's time beside its answer's Copy, not on its Worked line", () => {
     const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: /^Worked 4m 12s/ }).parentElement).not.toHaveTextContent(clock("09:09"));
+    expect(screen.getByRole("button", { name: /^Worked 4m 12s/ })).not.toHaveTextContent(clock("09:09"));
     const answer = container.querySelector('[data-work-turn] [data-speaker="assistant"]') as HTMLElement;
     const copy = within(answer).getByRole("button", { name: "Copy message" });
     expect(copy.parentElement).toHaveTextContent(clock("09:09"));
+    const times = container.querySelectorAll("[data-work-turn] time");
+    expect(times).toHaveLength(1);
+    expect(answer).toContainElement(times[0] as HTMLElement);
   });
 
   it("gives a turn that ends in the minute it started no second time, since its question already shows it", () => {
