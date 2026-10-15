@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-10-15
+
+### Changed
+
+- A quieter desk: project glyphs never hash to red or amber (4d423046), the bar shows shortcuts only on hover and just the host in its footer (05381fd2, 50d888b9), and Home gets text tabs, a 22 px headline, grey state words, an outlined Answer and a flat PR row (0795e77f). The phone is unchanged.
+
 ## [1.10.0] - 2026-10-15
 
 ### Added
