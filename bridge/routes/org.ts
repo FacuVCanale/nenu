@@ -21,6 +21,8 @@ export const orgRoutes: Route[] = [
       }
     },
   },
+  orgRead("/api/org/tasks", "Could not read the task list.", async ({ projects }, project) => ({ tasks: await projects.tasks(project) })),
+  orgRead("/api/org/context", "Could not read the project's context.", ({ projects }, project) => projects.context(project)),
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
     const started = await startNode(orgRun, rt.socketPath, {
       project: body.project, title: body.title, parent: body.parent, task: body.task, role: body.role, profile: body.profile, template: body.template,
@@ -58,6 +60,27 @@ export const orgRoutes: Route[] = [
     return { response: { flags }, detail: { project: body.project, ...flags } };
   }),
 ];
+
+/**
+ * A GET of one project's document for the desk's Project panel. A document this Organizations does
+ * not have comes back as null with 200, so the panel degrades instead of showing an error.
+ */
+function orgRead(path: string, failure: string, read: (ctx: Services, project: string) => Promise<Record<string, unknown>>): Route {
+  return {
+    method: "GET",
+    path,
+    access: "read",
+    session: false,
+    async handle(ctx: Services, { req, url }) {
+      try {
+        return json({ ok: true, ...(await read(ctx, url.searchParams.get("project") ?? "")) }, req.headers.get("accept-encoding"));
+      } catch (error) {
+        return json({ ok: false, error: error instanceof Error ? error.message : failure },
+          req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
+      }
+    },
+  };
+}
 
 /**
  * A POST that runs one Organizations write for the person's tap, audits it, and re-reads the
