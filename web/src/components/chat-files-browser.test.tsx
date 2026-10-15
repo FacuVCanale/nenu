@@ -47,6 +47,16 @@ describe("ChatFilesBrowser", () => {
     expect(screen.getByText("guide.md")).toBeInTheDocument();
   });
 
+  it("marks each file the conversation names with the icon of its kind", async () => {
+    render(<ChatFilesBrowser paneId="w1:p1" history={available([entry("one", "docs/report.md, src/app.tsx and out/data.bin")])} />);
+    await userEvent.click(screen.getByRole("button", { name: "Artifacts and files" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Files/ }));
+    const glyph = (name: string) => screen.getByRole("button", { name: `Open ${name}` }).querySelector("svg")?.getAttribute("class");
+    expect(glyph("report.md")).toContain("icon-file-type");
+    expect(glyph("app.tsx")).toContain("icon-typescript");
+    expect(glyph("data.bin")).toContain("icon-file-text");
+  });
+
   // Leaving for Project aborts the scan mid-page. Coming back must resume from the oldest page it
   // already holds: resuming from the newest one re-reads known turns and blames the conversation.
   it("resumes an interrupted scan where it stopped, without saying the conversation changed", async () => {
