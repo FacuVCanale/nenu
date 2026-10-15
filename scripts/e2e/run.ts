@@ -2339,6 +2339,13 @@ async function surface(): Promise<void> {
         }
         await page.goto(bridge.url + "/");
         await page.locator(pages[0]![2]).first().waitFor({ timeout: 15_000 });
+        if (deviceName === "desktop") {
+          // The bar under a resting pointer, which shows what it keeps out of sight until then (a row's shortcut).
+          await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^New chat/ }).hover();
+          await page.waitForTimeout(300);
+          await shoot("sidebar-hover");
+          await page.mouse.move(720, 450);
+        }
         if (deviceName === "phone") {
           await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
         } else {
