@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup as cleanupRender, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
@@ -6,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView, ProjectView } from "@/lib/types";
+import { declarations } from "@/test/css-rules";
 import { WorkbenchSidebar, type SidebarRequest } from "./workbench-sidebar";
 
 function pane(paneId: string, paneLabel: string, lastActiveAt = 0): AgentView {
@@ -413,10 +416,37 @@ describe("the sidebar", () => {
     expect(screen.queryByText(/show up here/)).toBeNull();
   });
 
-  it("names the host and what it holds in the footer, beside Settings", () => {
+  it("names only the host in the desk's footer, beside Settings: no link dot while Herdr answers, no counts", () => {
     open();
-    expect(screen.getByText("2 workspaces · 6 agents")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    const footer = document.querySelector<HTMLElement>(".nav-host")!;
+    expect(footer).toHaveTextContent(/^localhost$/);
+    expect(footer.querySelector(".rounded-full")).toBeNull();
+    expect(within(footer).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("shows the desk footer's red dot only once Herdr is out of reach, and says so", () => {
+    open("/", { ...herd, bridge: "disconnected" } as HomeData);
+    const footer = document.querySelector<HTMLElement>(".nav-host")!;
+    expect(footer.querySelector(".rounded-full")).toHaveClass("bg-status-blocked");
+    expect(footer).toHaveTextContent("Not connected");
+  });
+
+  it("keeps a phone sheet's footer as it was: the link dot, the host and what it holds", () => {
+    const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={herd} variant="sheet" request={{ target: "search", seq: 1 }} /> }]);
+    render(<RouterProvider router={router} />);
+    const footer = document.querySelector<HTMLElement>(".nav-host")!;
+    expect(footer.querySelector(".rounded-full")).toHaveClass("bg-status-done");
+    expect(footer).toHaveTextContent("herdr · localhost");
+    expect(footer).toHaveTextContent("2 workspaces · 6 agents");
+  });
+
+  it("keeps a row's shortcut out of sight until a pointer rests on the row or a key lands on it", () => {
+    const nav = readFileSync(resolve(import.meta.dirname, "../styles/nav.css"), "utf8");
+    const hover = ["@layer components", "@media (hover: hover)"];
+    expect(declarations(nav, ".nav-kbd", hover).opacity).toBe("0");
+    expect(declarations(nav, ".nav-row:is(:hover, :focus-visible) > .nav-kbd", hover).opacity).toBe("1");
+    open("/", herd);
+    expect(screen.getByRole("button", { name: /^Search/ })).toHaveAttribute("aria-keyshortcuts", "Meta+K");
   });
 });
 
