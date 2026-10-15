@@ -2380,7 +2380,9 @@ async function surface(): Promise<void> {
     return { shots, idle, unexpectedWrites: bridge.fake!.writes() };
   }, CAPTURE_EPOCH, (herd, now) => {
     const seed = homeOrg(herd, now, size);
-    const neighbour = (slug: string, name: string, goal: string) => ({ slug, name, goal, status: "active" as const, threads: [] });
+    // Acme Shop picked its mark in Organizations, red included; the neighbours picked none, so theirs is the slug's.
+    Object.assign(seed.projects[0]!, { icon: "flag", tone: "red" });
+    const neighbour = (slug: string, name: string, goal: string) => ({ slug, name, goal, status: "active" as const, icon: "", tone: "", threads: [] });
     seed.projects.push(
       neighbour("docs-site", "Docs site", "Guides and the API reference"),
       neighbour("mobile-app", "Mobile app", "The iOS and Android clients"),

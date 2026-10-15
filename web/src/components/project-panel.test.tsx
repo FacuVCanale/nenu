@@ -127,6 +127,13 @@ it("names the project and offers Notes, Agents, PRs and Context, with counts whe
   expect(tabs).toEqual(["Notes", "Agents3", "PRs2", "Context"]);
 });
 
+it("heads the panel with the mark the project picked in Organizations", () => {
+  render(<Panel view={{ ...project, icon: "flag", tone: "red" }} />);
+  const glyph = document.querySelector<SVGElement>(".project-panel-head svg[data-glyph]")!;
+  expect(glyph).toHaveAttribute("data-glyph", "flag");
+  expect(glyph.style.color).toBe("var(--glyph-red)");
+});
+
 it("Notes is the project's status by state, one quiet row per item, read only while it is on screen", async () => {
   projectStatus = status;
   const onOpenPane = vi.fn();

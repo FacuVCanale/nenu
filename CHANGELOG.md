@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-15
+
+### Added
+
+- Comment a changed line in any diff; comments wait as `file:line` chips over that thread's composer and go first in its next message (e736215f).
+
+### Fixed
+
+- A project's icon and tone picked in Herdr Organizations now draw in Nenu instead of its slug's mark (3e28abd6).
+- A light chat on a desk no longer shows a grey band under its header or strip (aebd3c5d).
+
 ## [1.11.0] - 2026-10-15
 
 ### Added

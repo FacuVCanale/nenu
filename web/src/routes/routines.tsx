@@ -46,7 +46,7 @@ function ProjectRoutines({ project, session }: { project: ProjectView; session?:
   return (
     <section aria-label={project.name}>
       <h2 className="flex items-center gap-2.5 px-2.5 pb-1.5 text-footnote font-medium text-muted-foreground">
-        <ProjectGlyph slug={project.slug} size={14} />{project.name}
+        <ProjectGlyph slug={project.slug} pick={project} size={14} />{project.name}
       </h2>
       {!read ? line("Reading…")
         : read.error ? line(read.error)

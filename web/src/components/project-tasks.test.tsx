@@ -41,6 +41,10 @@ it("heads the project with its own glyph, and a coordinator's scope with its tit
   expect(glyph()).toHaveAttribute("data-glyph", "orbit");
   expect(glyph()).toHaveAttribute("width", "20");
   document.body.innerHTML = "";
+  setup({ project: { ...project, icon: "flag", tone: "red" } });
+  expect(glyph()).toHaveAttribute("data-glyph", "flag");
+  expect((glyph() as SVGElement).style.color).toBe("var(--glyph-red)");
+  document.body.innerHTML = "";
   setup({ title: "Checkout redesign" });
   expect(glyph()).toBeNull();
 });

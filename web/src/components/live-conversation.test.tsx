@@ -34,6 +34,14 @@ describe("LiveConversation", () => {
     expect(screen.getByText("abc1234 fix")).toBeInTheDocument();
   });
 
+  it("fades the list's top edge into the page in sRGB, which WebKit draws without a grey band", () => {
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" session="work" history={{ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false }} loading={false} error={false} /></MemoryRouter>);
+    // Tailwind's default `in oklab` toward `transparent` (black at alpha 0) draws a grey band in
+    // WebKit across every light chat's top edge; jsdom cannot draw it, so the class is the guard.
+    const fade = document.querySelector("[aria-hidden].from-background")!;
+    expect(fade.classList).toContain("bg-linear-to-b/srgb");
+  });
+
   it("preserves the reading window and draft when work is expanded during live updates", () => {
     const initial: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
     const view = (history: PaneHistoryResponse) => <><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /><textarea aria-label="Draft" defaultValue="Still writing" /></>;

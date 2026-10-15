@@ -268,8 +268,10 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; herd
     // demo panes run, so threads bound to those panes read as live.
     for (const project of org.projects) {
       await mkdir(join(paths.projects, project.slug), { recursive: true });
+      // A pick is stored where `set` stores it, so the first read (from the files) already has it.
+      const picks = (["icon", "tone"] as const).filter((key) => project[key]).map((key) => `${key} = ${JSON.stringify(project[key])}\n`).join("");
       await writeFile(join(paths.projects, project.slug, "PROJECT.md"),
-        `+++\nname = ${JSON.stringify(project.name)}\ngoal = ${JSON.stringify(project.goal)}\nrepos = [{ path = ${JSON.stringify(dir)} }]\n+++\n`);
+        `+++\nname = ${JSON.stringify(project.name)}\ngoal = ${JSON.stringify(project.goal)}\n${picks}repos = [{ path = ${JSON.stringify(dir)} }]\n+++\n`);
       if (project.coordinator) {
         await mkdir(join(paths.projects, project.slug, ".state"), { recursive: true });
         await writeFile(join(paths.projects, project.slug, ".state", "coordinator.json"), JSON.stringify({ session: "", cwd: dir, ...project.coordinator }));

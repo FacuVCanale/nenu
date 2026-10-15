@@ -66,7 +66,7 @@ function DeskProjects({ data, now, onNewProject }: { data: HomeData; now: number
         return (
           <Link key={project.slug} className="nav-row" to={to} aria-current={current(project) ? "page" : undefined}
             data-revealed={more && index >= PROJECTS_SHOWN ? "" : undefined}>
-            <span className="nav-lead"><OpeningMark to={to}><ProjectGlyph slug={project.slug} /></OpeningMark></span>
+            <span className="nav-lead"><OpeningMark to={to}><ProjectGlyph slug={project.slug} pick={project} /></OpeningMark></span>
             <span className="nav-row-text">{project.name}</span>
             <span className="nav-row-meta" aria-hidden>
               {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}

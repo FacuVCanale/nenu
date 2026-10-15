@@ -50,7 +50,7 @@ export function ProjectPanel(props: ProjectPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="project-panel-head">
-        <ProjectGlyph slug={project.slug} size={18} />
+        <ProjectGlyph slug={project.slug} pick={project} size={18} />
         <h2 className="project-panel-name">{project.name}</h2>
         <div role="tablist" aria-label="Project sections" className="flex min-w-0 items-center gap-0.5">
           {tabs.map(([key, label]) => (
@@ -370,7 +370,7 @@ function PrDiff({ thread, session, onBack, onOpenThread }: { thread: ProjectThre
         <button type="button" onClick={onOpenThread} className="quiet-action"><ChatCircle aria-hidden className="size-3.5" />Open thread</button>
         {pr.url && <a href={pr.url} target="_blank" rel="noreferrer" className="quiet-action"><ExternalLink aria-hidden className="size-3.5" />GitHub</a>}
       </div>
-      {readable ? <div className="-mx-4"><DiffBody read={read} /></div>
+      {readable ? <div className="-mx-4"><DiffBody read={read} comments={{ paneId, session }} /></div>
         : <p className="px-1 text-sm text-muted-foreground">Its diff is read from its thread's folder, and the thread has no pane open.</p>}
     </div>
   );

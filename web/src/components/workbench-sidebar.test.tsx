@@ -246,6 +246,19 @@ describe("the sidebar", () => {
     expect(document.querySelector(".nav-avatar")).toBeNull();
   });
 
+  it("draws the mark a project picked in Organizations, red included, in the tree, Search and the drawer", async () => {
+    const picked = { ...herd, projects: [{ ...acme, icon: "flag", tone: "red" }] } as unknown as HomeData;
+    const mark = (svg: Element | null) => [svg?.getAttribute("data-glyph"), (svg as SVGElement | null)?.style.color];
+    const user = await openTree("/", picked);
+    expect(mark(document.querySelector(".nav-project svg[data-glyph]"))).toEqual(["flag", "var(--glyph-red)"]);
+    await user.keyboard("acme");
+    const hit = within(screen.getByRole("group", { name: "Projects" })).getByRole("option", { name: /, project$/ });
+    expect(mark(hit.querySelector("svg[data-glyph]"))).toEqual(["flag", "var(--glyph-red)"]);
+    cleanupRender();
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={picked} variant="drawer" /> }])} />);
+    expect(mark(document.querySelector(".nav-project svg[data-glyph]"))).toEqual(["flag", "var(--glyph-red)"]);
+  });
+
   it("lists only the workspaces no project holds, and folds a coordinator's threads", async () => {
     const user = await openTree();
     const workspaces = screen.getByRole("region", { name: "Workspaces" });
@@ -524,6 +537,13 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     // No tree under it: its threads are chats, its coordinator is the project's own row.
     expect(section("Projects").queryByText("Checkout flow")).toBeNull();
     expect(screen.queryByRole("button", { name: "Acme tasks" })).toBeNull();
+  });
+
+  it("draws a project's row with the mark it picked in Organizations", () => {
+    open("/", { ...herd, projects: [{ ...acme, icon: "flag", tone: "red" }] } as unknown as HomeData);
+    const glyph = section("Projects").getByRole("link", { name: /^Acme/ }).querySelector<SVGElement>("svg[data-glyph]")!;
+    expect(glyph).toHaveAttribute("data-glyph", "flag");
+    expect(glyph.style.color).toBe("var(--glyph-red)");
   });
 
   it("shows five projects and the rest behind More, keeping the one on screen in view", async () => {

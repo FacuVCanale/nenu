@@ -65,6 +65,14 @@ it("says when Organizations cannot list routines, or failed to, instead of claim
   expect(await within(screen.getByRole("region", { name: "Docs site" })).findByText(/no project/)).toBeInTheDocument();
 });
 
+it("marks each project with the glyph it picked in Organizations", async () => {
+  serve({ shop: { available: true, broken: 0, routines: [] } });
+  open([{ ...project("shop", "Acme Shop"), icon: "flag", tone: "red" }]);
+  const glyph = (await screen.findByRole("region", { name: "Acme Shop" })).querySelector<SVGElement>("svg[data-glyph]")!;
+  expect(glyph).toHaveAttribute("data-glyph", "flag");
+  expect(glyph.style.color).toBe("var(--glyph-red)");
+});
+
 it("says there is nothing to list without projects", async () => {
   serve({});
   open([]);

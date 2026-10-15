@@ -87,10 +87,10 @@ const overviewThread = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
-function overviewRun(threads: unknown[], calls: string[][] = []): OrgRun {
+function overviewRun(threads: unknown[], calls: string[][] = [], project: Record<string, unknown> = {}): OrgRun {
   return async (argv) => {
     calls.push(argv);
-    return { code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo (json)", goal: "", status: "active", dir: "/x", counts: {}, threads }] }), stderr: "" };
+    return { code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo (json)", goal: "", status: "active", dir: "/x", counts: {}, icon: "", tone: "", threads, ...project }] }), stderr: "" };
   };
 }
 
@@ -236,6 +236,28 @@ describe("ProjectRegistry: Organizations fields", () => {
     });
     await registry.refresh();
     expect(registry.list("default", true, [])[0]!.threads[0]!.pr).not.toHaveProperty("diff");
+  });
+
+  test("a project's picked glyph and tone reach the client from the files at once, then from --json", async () => {
+    const root = fixture();
+    writeFileSync(join(root, "demo", "PROJECT.md"), `+++\nname = "Demo Project"\nicon = "flag"\ntone = "red"\nrepos = [{ path = "/work/demo" }]\n+++\n`);
+    // The two sources disagree here only to tell them apart; Organizations prints what PROJECT.md holds.
+    const registry = registryFor(root, { run: overviewRun([overviewThread({})], [], { icon: "bolt", tone: "teal" }) });
+    expect(registry.list("default", true, [])[0]).toMatchObject({ source: "files", icon: "flag", tone: "red" });
+
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]).toMatchObject({ source: "json", icon: "bolt", tone: "teal" });
+  });
+
+  test("a project that picked nothing carries neither field, from the files or from --json", async () => {
+    const registry = registryFor(fixture(), { run: overviewRun([overviewThread({})]) });
+    for (const source of ["files", "json"] as const) {
+      if (source === "json") await registry.refresh();
+      const project = registry.list("default", true, [])[0]!;
+      expect(project.source).toBe(source);
+      expect(project).not.toHaveProperty("icon");
+      expect(project).not.toHaveProperty("tone");
+    }
   });
 
   test("falls back to the files when the installed Organizations has no --json", async () => {
