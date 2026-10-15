@@ -101,9 +101,11 @@ export async function seedDemoHerd(fake: FakeHerdr, opts: { claudeRoot: string; 
  * A finished Claude conversation shaped as Claude Code 2.1 writes it: tool calls with their results,
  * an `end_turn` answer and the `turn_duration` row after it. Two turns (1m 52s and 14s) whose answers
  * name pull requests as Markdown links and as a bare URL; `repeat` copies them for a long thread.
+ * `tail` adds a third turn, still running (a step done, a note, a command waiting for its output) or
+ * finished; written again with the same `at`, the running file only grows into the finished one.
  * Synthetic content.
  */
-export async function writeChatJournal(file: string, at: number, repeat = 1): Promise<void> {
+export async function writeChatJournal(file: string, at: number, repeat = 1, tail: "none" | "running" | "finished" = "none"): Promise<void> {
   const pr = (n: number) => `https://github.com/acme/shop/pull/${n}`;
   let body = "";
   let parent: string | null = null;
@@ -151,6 +153,21 @@ export async function writeChatJournal(file: string, at: number, repeat = 1): Pr
     turn("Looks good. Also check the empty-cart state before you push.", [
       ["Edit", { file_path: "app/cart.tsx", old_string: "a", new_string: "b" }, "The file app/cart.tsx has been updated."],
     ], `The empty cart now shows a single "Browse products" button. The cart tests pass, and it is pushed to [#42](${pr(42)}).`, 14_000);
+  }
+  if (tail !== "none") {
+    user("Run the cart tests again, then push to the checkout branch.");
+    const start = clock;
+    call("Read", { file_path: "app/cart.test.ts" }, "describe(\"cart\")", 20_000);
+    clock += 15_000;
+    const id = `toolu_${n + 1}`;
+    assistant("tool_use", [{ type: "text", text: "The totals test still covers the coupon, so this run checks both." },
+      { type: "tool_use", id, name: "Bash", input: { command: "bun test app/cart.test.ts" } }]);
+    if (tail === "finished") {
+      clock = start + 75_000;
+      user([{ type: "tool_result", tool_use_id: id, content: "5 pass\n0 fail" }]);
+      assistant("end_turn", [{ type: "text", text: `The cart tests pass, 5 of 5, and the branch is pushed to [#42](${pr(42)}).` }]);
+      row({ type: "system", subtype: "turn_duration", durationMs: 75_000, isMeta: false });
+    }
   }
   await writeFile(file, body);
 }

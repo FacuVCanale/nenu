@@ -293,8 +293,10 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
     </div> : line}
     {tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
       <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />))}
-    {/* The rail under the turn's line ties its steps to it; a running turn keeps its live row under it, open or folded. */}
-    {(open || live) && <div className="ml-[7px] min-w-0 border-l pl-3">
+    {/* While the turn runs, its steps are part of the conversation: they flow under its line, no rail
+        and no indent, its live row last. Finished, they fold away; opened again, the rail under the
+        line ties them to it. */}
+    {(open || live) && <div className={turn.settled ? "ml-[7px] min-w-0 border-l pl-3" : "min-w-0"}>
       {/* Opened by a tap, the steps fade in under the line; opened on their own (a running turn, a
           search hit), they are simply there. */}
       {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live}

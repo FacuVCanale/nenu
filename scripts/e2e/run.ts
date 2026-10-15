@@ -2203,7 +2203,7 @@ async function surface(): Promise<void> {
 
 /**
  * A finished conversation (scenario.ts `writeChatJournal`) on a phone and a desk, dark and light,
- * folded and with its first turn open. Then a long one (the same two turns twenty times), on the real
+ * folded and with its first turn open; a third turn while it runs and once it ends. Then a long one (the same two turns twenty times), on the real
  * clock in a WebKit of its own per run: the thread's DOM elements, and the browser's CPU and resident
  * memory over `--seconds` left alone. Give it a private `PLAYWRIGHT_BROWSERS_PATH`, as for `surface`.
  */
@@ -2214,14 +2214,23 @@ async function chat(): Promise<void> {
     const herd = bridge.herd!;
     const folder = dirname(herd.journals.get(herd.idle)!);
     const panes = { short: "w1:chat", long: "w1:long" };
+    // One running pane per capture, so each finishes once and its journal only ever grows.
+    const runs = [["phone", PHONE, "dark"], ["desktop", DESKTOP, "dark"], ["desktop", DESKTOP, "light"]] as const;
+    const running = runs.map((_, i) => ({ paneId: `w1:run${i}`, file: join(folder, `6666666${i}-6666-4666-8666-666666666666.jsonl`), at: bridge.now() }));
     bridge.fake!.addTab("w1:t3", "chat");
+    const pane = (paneId: string, sessionId: string, status: "done" | "working") => bridge.fake!.addPane({ paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude",
+      label: "Checkout flow", sessionId, cwd: bridge.dir, status, lines: ["● The empty cart now shows a single button."] });
     for (const [key, paneId, repeat] of [["short", panes.short, 1], ["long", panes.long, 20]] as const) {
       const session = key === "short" ? "44444444-4444-4444-8444-444444444444" : "55555555-5555-4555-8555-555555555555";
       await writeChatJournal(join(folder, `${session}.jsonl`), bridge.now(), repeat);
-      bridge.fake!.addPane({ paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude", label: "Checkout flow", sessionId: session, cwd: bridge.dir, status: "done", lines: ["● The empty cart now shows a single button."] });
+      pane(paneId, session, "done");
+    }
+    for (const run of running) {
+      await writeChatJournal(run.file, run.at, 1, "running");
+      pane(run.paneId, basename(run.file, ".jsonl"), "working");
     }
     // The bridge reads Herdr on its own beat; the panes are there once its snapshot names them.
-    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(panes.long); tries++) {
+    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(running.at(-1)!.paneId); tries++) {
       if (tries > 60) throw new Error("the bridge never listed the chat panes");
       await sleep(500);
     }
@@ -2258,6 +2267,29 @@ async function chat(): Promise<void> {
         }
         await context.close();
       }
+    }
+
+    for (const [i, [deviceName, device, scheme]] of runs.entries()) {
+      const { paneId, file, at } = running[i]!;
+      const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + `/pane/${encodeURIComponent(paneId)}`);
+      await page.getByText("The totals test still covers the coupon").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      const shoot = async (name: string) => {
+        const path = join(outDir, `${name}-${deviceName}-${scheme}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      await shoot("working");
+      await writeChatJournal(file, at, 1, "finished");
+      bridge.fake!.setStatus(paneId, "done");
+      await page.getByText("The cart tests pass, 5 of 5").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      seen[`finished-${deviceName}-${scheme}-worked`] = await page.evaluate(() => Array.from(document.querySelectorAll("[data-work-toggle]")).map((el) => (el as HTMLElement).innerText.trim()), null);
+      await shoot("finished");
+      await context.close();
     }
 
     const idle = [];

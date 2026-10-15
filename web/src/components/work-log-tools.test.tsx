@@ -30,8 +30,8 @@ it("draws a call as one line, what it did and on what, with its output behind on
 it("draws a step's line in the quiet greys, so it reads as the agent's work and not its words", () => {
   render(<Steps calls={[status, { kind: "tool", name: "Read", summary: "/repo/app/cart.ts", result: { text: "x" } }]} />);
   expect(screen.getByText("Ran")).toHaveClass("text-muted-foreground");
-  expect(screen.getByText("git status")).toHaveClass("text-subtle-foreground");
-  expect(screen.getByText("cart.ts")).toHaveClass("text-muted-foreground");
+  expect(screen.getByText("git status").parentElement).toHaveClass("text-subtle-foreground");
+  expect(screen.getByText("cart.ts").parentElement).toHaveClass("text-muted-foreground");
 });
 
 it("shows a failed call as Failed on its own line, and opens its output with one tap", async () => {
