@@ -2248,6 +2248,8 @@ async function sidebar(before: boolean): Promise<void> {
         await shoot("home");
         await visit(chat, "textarea");
         await shoot("chat");
+        // Nothing may move at rest: a running animation here costs CPU for as long as the page is open.
+        seen[`animationsAtRest-${deviceName}-${scheme}`] = await page.evaluate(() => document.getAnimations().length, null);
         if (deviceName === "desktop") {
           if (!before) {
             await visit("/routines", 'main >> text="nightly-dependency-check"');
