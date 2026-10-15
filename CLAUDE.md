@@ -178,11 +178,12 @@ the unit name; the Herdr action runs from anywhere.
   encoded form. `bun scripts/history-response-bench.ts <history-response.json>` measures this path
   without printing transcript content.
 - **"Type into terminal" is armed by a named choice and dies with the pane view.** It is a named row
-  of the phone's + menu and, beside a desk's session panel, a switch in its Terminal tab, where Keys
-  live too ([ADR 0077](./.adr/0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md)); no
-  gesture arms it. It disarms on a pane switch, a composer lock (gone pane, read-only, idle pause), a
-  hidden page, a failed batch and, on a desk, the Terminal tab leaving the screen — never persisted,
-  never restored.
+  of the phone's + menu and, beside a desk's session panel, a switch in its Terminal tab
+  ([ADR 0077](./.adr/0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md)); no gesture
+  arms it. There the desk's keyboard is the keys, Ctrl chords and F-keys included, and the tab has no
+  Keys tray; Command stays the browser's ([ADR 0079](./.adr/0079-on-a-desk-the-keyboard-is-the-keys.md)).
+  It disarms on a pane switch, a composer lock (gone pane, read-only, idle pause), a hidden page, a
+  failed batch and, on a desk, the Terminal tab leaving the screen — never persisted, never restored.
   Don't lift it, and don't add the reply guard's `composerReady` pre-flight to it; the reasoning for
   both sits in `web/src/hooks/use-direct-typing.ts`'s header.
 - **The operator's rows in `commands.toml` replace the shipped command catalog on the panes they

@@ -1630,7 +1630,7 @@ describe("AgentChat — the desk's Terminal tab", () => {
         <button type="button" onClick={() => setShown((on) => !on)}>toggle tab</button>
         {shown && <section aria-label="Terminal tab"><div ref={setMirror} /><div ref={setControls} /></section>}
         <AgentChat paneId={paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={"$ bun test\n3 pass"} onBack={vi.fn()} onSelect={vi.fn()}
-          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal, leaving: { current: null } }} />
+          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal }} />
         <MirrorShown />
       </>;
     }
