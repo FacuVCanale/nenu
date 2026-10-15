@@ -8,7 +8,7 @@ import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
-import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
+import type { RecentChat, ReviewEntry, WorkspaceChats } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
 import { ASK } from "@/lib/org-tree";
 import { projectForPane } from "@/lib/projects";
@@ -147,14 +147,15 @@ function SessionRow({ chat, session, now, opening, group }: { chat: RecentChat; 
   );
 }
 
-export type SessionList = "recents" | "workspaces";
+export type SessionList = "recents" | "workspaces" | "prs";
 
-const LISTS: ReadonlyArray<[SessionList, string]> = [["recents", "Recents"], ["workspaces", "Workspaces"]];
+const LISTS: ReadonlyArray<[SessionList, string]> = [["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]];
 const LIST_KEY = "nenu:home-list:v1";
 
 function readList(): SessionList {
   try {
-    return localStorage.getItem(LIST_KEY) === "workspaces" ? "workspaces" : "recents";
+    const list = localStorage.getItem(LIST_KEY);
+    return list === "workspaces" || list === "prs" ? list : "recents";
   } catch {
     return "recents";
   }
@@ -216,34 +217,42 @@ function WorkspaceRow({ group, now, open, onToggle, children }: {
 
 /**
  * Home's one list of sessions under a control that reorders it: Recents, everything that moved last
- * first (what Needs you shows stays out), or Workspaces, one row per Herdr workspace that opens in
- * place on its sessions. A desk narrows both to one project. Both read the snapshot Home already has;
- * the list is remembered on this device, the project is not.
+ * first (what Needs you shows stays out), Workspaces, one row per Herdr workspace that opens in place
+ * on its sessions, or PRs, every pull request, drawn by `pullRequests`; that tab is there only while
+ * there is one. A desk narrows each to one project. All read the snapshot Home already has; the list
+ * is remembered on this device, the project is not.
  */
-export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, projects, session, now, opening }: {
+export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, reviews: everyReview, pullRequests, projects, session, now, opening }: {
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
+  reviews: readonly ReviewEntry[];
+  pullRequests: (entries: readonly ReviewEntry[]) => ReactNode;
   projects: readonly ProjectView[];
   session?: string;
   now: number;
   opening: string | null;
 }) {
-  const [list, setList] = useState<SessionList>(readList);
+  const [chosen, setList] = useState<SessionList>(readList);
+  const lists = everyReview.length ? LISTS : LISTS.filter(([key]) => key !== "prs");
+  const list = lists.some(([key]) => key === chosen) ? chosen : "recents";
   // A desk narrows both lists to one project's sessions; "" is every project.
   const [only, setOnly] = useState("");
   // The workspaces opened in place; none until a tap opens one.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
-  if (!everyRecent.length && !everyWorkspace.length) return null;
+  if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
-  const kept = (chat: RecentChat) => !project || projectForPane([project], chat.agent.paneId) !== undefined;
+  const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
+  const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
   const recent = everyRecent.filter(kept);
   const workspaces = everyWorkspace.map((group) => ({ ...group, chats: group.chats.filter(kept) })).filter((group) => group.chats.length > 0);
+  // A pull request belongs to a project through the session or the thread it opens.
+  const reviews = everyReview.filter((entry) => !project || (entry.open !== undefined && ("paneId" in entry.open ? inProject(entry.open.paneId) : entry.open.project === project.slug)));
   const row = (chat: RecentChat, group?: string) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} />;
   return (
     <section aria-label="Sessions" className="flex flex-col gap-2">
       <div className="flex items-center gap-2.5">
-        <div role="tablist" aria-label="Sessions" className="project-segmented mx-0 grid-cols-2 max-sm:flex-1 sm:w-60">
-          {LISTS.map(([key, label]) => (
+        <div role="tablist" aria-label="Sessions" className={cn("project-segmented mx-0 max-sm:flex-1", lists.length === 3 ? "grid-cols-3 sm:w-80" : "grid-cols-2 sm:w-60")}>
+          {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
               onClick={() => { setList(key); rememberList(key); }} className="project-segment">{label}</button>
           ))}
@@ -261,7 +270,11 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
         )}
       </div>
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
-        {list === "recents"
+        {list === "prs"
+          ? reviews.length
+            ? pullRequests(reviews)
+            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">No pull request in {project?.name}.</p>
+          : list === "recents"
           ? recent.length
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>

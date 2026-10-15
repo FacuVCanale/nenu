@@ -9,7 +9,7 @@ import fixture from "@/components/activity/activity.fixture.json";
 import { fixtureAgents } from "@/test/handlers";
 import type { AgentView } from "@/lib/types";
 import type { ReviewEntry } from "@/lib/home-stats";
-import { ReadyToReviewList, useHomeActivity } from "./ready-to-review-list";
+import { PullRequestList, useHomeActivity } from "./ready-to-review-list";
 
 afterEach(() => resetLiveEvents());
 
@@ -35,14 +35,14 @@ test("an unchanged re-read keeps Home's activity map; a changed one replaces it"
   live.stop();
 });
 
-// Home lists here only the PRs no live session carries, and a diff is read from a live pane's folder
-// (bridge/routes/diff.ts), so a size here is the PR's size and the row is one tap into it.
+// A diff is read from a live pane's folder (bridge/routes/diff.ts), so a size here is the PR's size
+// and the row is one tap into it: its session in Nenu, else its page on GitHub.
 test("a review row is one tap into its PR, its size read as text", () => {
   const entries: ReviewEntry[] = [
     { key: "a/b#7", title: "Fix", repo: "b", number: 7, draft: false, updatedAt: 0, diff: { additions: 5, deletions: 1 }, open: { paneId: "w1:p1" } },
     { key: "a/b#8", title: "Other", repo: "b", number: 8, draft: false, updatedAt: 0, diff: { additions: 9, deletions: 2 }, url: "https://github.com/a/b/pull/8" },
   ];
-  render(<MemoryRouter><ReadyToReviewList entries={entries} opening={null} /></MemoryRouter>);
+  render(<MemoryRouter><PullRequestList entries={entries} opening={null} /></MemoryRouter>);
   expect(screen.queryByRole("button", { name: /^View changes/ })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Fix, #7, +5 −1" })).toHaveAttribute("href", "/pane/w1%3Ap1");
   expect(screen.getByRole("link", { name: "Other, #8, +9 −2" })).toHaveAttribute("href", "https://github.com/a/b/pull/8");

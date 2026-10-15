@@ -1,6 +1,7 @@
 import { ArtifactsPanel } from "./artifacts-panel";
 import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FileIcon } from "@/components/ui/file-icon";
 import { FileText, Pending, Paperclip, RefreshCw } from "@/components/ui/icon";
 
 import { BottomSheet, finePointer } from "@/components/ui/sheet";
@@ -290,7 +291,7 @@ export function ChatFilesBrowser({
               <li key={reference.path}>
                 <button type="button" aria-label={`Open ${reference.name}`} onClick={() => openReference(reference.path)}
                   className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText aria-hidden="true" className="size-4" /></span>
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileIcon name={reference.name} /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{reference.name}</span>
                     <span className="block truncate font-mono text-caption text-muted-foreground">{reference.path}</span>

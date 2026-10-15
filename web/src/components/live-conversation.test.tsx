@@ -365,6 +365,93 @@ describe("LiveConversation", () => {
     }
     expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
   });
+
+  // Measured on the e2e bench (`run.ts scroll`): a screenshot the agent named loads only as the reader
+  // nears it, from 0 to 320 px tall, and pushed the line being read down by that much, twelve times on
+  // one read up the thread. The strip stepping aside for the phone keyboard moved it 32 px. Safari has
+  // no scroll anchoring, so nothing kept the line where the reader had it.
+  it("keeps the line being read in place when something above it changes height", () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) { this.cb = cb; }
+      observe() { observers.push(this.cb); }
+      disconnect() {}
+    });
+    const resize = () => act(() => { for (const cb of [...observers]) cb([], {} as ResizeObserver); });
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    const line = screen.getByText("One commit: abc1234.");
+    // Where the line sits in the list; on screen it is that less the scroll.
+    let offset = 1700;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { top: this === line ? offset - box.top : 0, left: 0, width: 390, height: 600 } as DOMRect;
+    });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => line });
+    onTestFinished(() => { delete (document as { elementFromPoint?: unknown }).elementFromPoint; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    fireEvent.touchStart(scroller, { touches: [{ clientX: 100, clientY: 200 }] });
+    box.top = 1500;
+    fireEvent.scroll(scroller);
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+
+    // A picture above the line loads.
+    offset += 320;
+    box.height += 320;
+    resize();
+    expect(box.top).toBe(1820);
+    // The strip above the list steps aside for the keyboard.
+    offset -= 32;
+    box.height -= 32;
+    resize();
+    expect(box.top).toBe(1788);
+    // A picture loads in the frame the reader moves up 100 px: the move is theirs, the push is not.
+    offset += 320;
+    box.height += 320;
+    box.top -= 100;
+    fireEvent.scroll(scroller);
+    expect(box.top).toBe(2008);
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+  });
+
+  // Measured on the bench: the top line fell in the gap between two blocks of a turn, so the point hit
+  // the turn itself, which starts above the picture and does not move when it grows.
+  it("keeps the line when the reader's top line falls in a gap inside a turn that holds the picture", () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) { this.cb = cb; }
+      observe() { observers.push(this.cb); }
+      disconnect() {}
+    });
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 3000, client: 600 });
+    const line = screen.getByText("One commit: abc1234.");
+    const turn = line.closest<HTMLElement>("[data-turn]")!;
+    // The turn starts 600 px above the screen; a picture inside it, above the line, grows.
+    let picture = 0;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const at = (offset: number, height: number) => ({ top: offset - box.top, bottom: offset - box.top + height, left: 0, width: 390, height } as DOMRect);
+      if (this === turn) return at(900, 900 + picture);
+      if (turn.contains(this) && this.contains(line)) return this === line ? at(1500 + picture, 40) : at(1500 + picture, 300);
+      return turn.contains(this) ? at(900, 300) : { top: 0, bottom: 600, left: 0, width: 390, height: 600 } as DOMRect;
+    });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => turn });
+    onTestFinished(() => { delete (document as { elementFromPoint?: unknown }).elementFromPoint; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+    fireEvent.touchStart(scroller, { touches: [{ clientX: 100, clientY: 200 }] });
+    box.top = 1500;
+    fireEvent.scroll(scroller);
+
+    picture = 320;
+    box.height += 320;
+    act(() => { for (const cb of [...observers]) cb([], {} as ResizeObserver); });
+    expect(box.top).toBe(1820);
+  });
 });
 
 /** Scroll geometry jsdom lacks: `top` clamps like a browser's, and scrollTo moves it. */

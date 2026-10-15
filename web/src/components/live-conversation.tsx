@@ -55,6 +55,31 @@ function stopCap(el: HTMLElement): number | null {
   return cap < el.scrollHeight - el.clientHeight ? cap : null;
 }
 
+/** The element on the reader's top line, where it stood and where the list stood then. */
+type Line = { node: Element; top: number; scroll: number };
+
+/**
+ * The innermost element on the reader's top line, under the chrome a phone draws over the list (its
+ * scroll-padding). A point in a gap between turns hits the column itself, which moves with nothing
+ * above it, so a few points further down are tried before giving up. A point in a gap inside a turn
+ * hits the turn, which starts above the line and does not move when a picture in it grows above the
+ * line, so the line goes down to the turn's first child that reaches it.
+ */
+function lineAt(el: HTMLElement, column: HTMLElement | null): Line | null {
+  if (typeof document.elementFromPoint !== "function") return null;
+  const view = el.getBoundingClientRect();
+  const top = view.top + (parseFloat(getComputedStyle(el).scrollPaddingTop) || 0);
+  for (const down of [1, 24, 48, 96]) {
+    const y = top + down;
+    let node = document.elementFromPoint(view.left + view.width / 2, y);
+    if (!node || node === el || node === column || !el.contains(node)) continue;
+    for (let child: Element | undefined; node.getBoundingClientRect().top < y - 1
+      && (child = Array.from(node.children).find((each) => each.getBoundingClientRect().bottom > y));) node = child;
+    return { node, top: node.getBoundingClientRect().top, scroll: el.scrollTop };
+  }
+  return null;
+}
+
 /** How far a finger moves before a touch is a drag, not a tap. */
 const TAP_SLOP = 10;
 /** A drag down this far on the thread closes the phone keyboard. */
@@ -156,6 +181,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // The list's height just before an older page goes in above the reader. Restoring adds only the
   // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
   const anchorHeight = useRef<number | null>(null);
+  // The line the reader is on while they read away from the tail. Safari has no scroll anchoring (and
+  // the list turns it off elsewhere, since following and paging move it themselves), so when anything
+  // above that line changes height (a picture loading as the reader nears it, the strip that steps
+  // aside for the keyboard, a result landing on a held row) the list moves by the same amount.
+  const reading = useRef<Line | null>(null);
   const editShift = useEditShift(scrollRef);
   const cardTitle = useId();
   const shown = frozen ?? history;
@@ -316,18 +346,32 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     }
   }, [entries, pin]);
 
-  // Follow viewport/content resizing (including the mobile keyboard) only while at the live tail.
+  // Whatever moved the reader's line without the list scrolling is undone by scrolling it the same way.
+  // Run on a resize and on every scroll event: a picture can load in the frame the reader moves.
+  const holdLine = useCallback((el: HTMLElement) => {
+    const line = reading.current;
+    const moved = line?.node.isConnected ? line.node.getBoundingClientRect().top - line.top + el.scrollTop - line.scroll : 0;
+    if (Math.abs(moved) >= 1) {
+      el.scrollTop += moved;
+      lastTop.current = el.scrollTop;
+    }
+    reading.current = lineAt(el, contentRef.current);
+  }, []);
+
+  // Follow viewport/content resizing (including the mobile keyboard) while at the live tail; away from
+  // it, keep the reader's line where it was.
   useEffect(() => {
     const el = scrollRef.current;
     const content = contentRef.current;
     if (!el || !content || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (following.current) pin(el);
+      else holdLine(el);
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [pin]);
+  }, [pin, holdLine]);
 
   // A tap on the thread's text, or a drag down of DISMISS_DRAG px, closes the keyboard. A tap on a
   // control stays the control's; a drag up or sideways (a code block) is only scrolling.
@@ -377,7 +421,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     // Our own pins leave scrollTop where they put it; any other move is the reader's.
     if (Math.abs(el.scrollTop - lastTop.current) >= 1) onCap.current = false;
     lastTop.current = el.scrollTop;
-    if (restoring.current) return;
+    // Paging and a tapped step move the list to keep the reader's place; the line is measured again.
+    if (restoring.current) {
+      reading.current = following.current ? null : lineAt(el, contentRef.current);
+      return;
+    }
     // Reading inside a question at the tail is being at the tail: its foot may be far below.
     const cap = stopCap(el);
     if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
@@ -392,6 +440,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     } else if (following.current) {
       pin(el);
     }
+    if (following.current) reading.current = null;
+    else holdLine(el);
   }
 
   async function loadOlder() {

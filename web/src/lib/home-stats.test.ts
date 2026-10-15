@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouItems, readyToMerge, recentChats, reviewItems, reviewQueue, runningWorkflows, unboundReviews } from "./home-stats";
+import { greeting, homeHeadline, needsYouItems, readyToMerge, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -215,10 +215,3 @@ describe("recent chats", () => {
   });
 });
 
-it("keeps for Ready to review only the pull requests no live session carries", () => {
-  const gh = (number: number, paneIds: string[]): PullRequestView => ({
-    repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`, branch: `b${number}`, draft: false, paneIds, updatedAt: number,
-  });
-  const reviews = reviewQueue([], [gh(1, ["live"]), gh(2, []), gh(3, ["gone"])]);
-  expect(unboundReviews(reviews, [agent("live", "idle")]).map((entry) => entry.number)).toEqual([3, 2]);
-});

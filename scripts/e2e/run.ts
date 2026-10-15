@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { browsersCache, DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeChatJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
@@ -34,6 +34,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
+//   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -1505,8 +1506,13 @@ async function home(): Promise<void> {
           await scrollTo(page, '[role="tablist"][aria-label="Sessions"], #home-recent');
           await shoot(page, `home-${name}-${scheme}-list`);
           if (scheme === "dark") {
-            await scrollTo(page, "#home-review");
+            // The pull requests: the PRs tab of the sessions' switcher, or the section they were before it.
+            const prsTab = page.getByRole("tab", { name: "PRs" });
+            const tabbed = (await prsTab.count()) > 0;
+            if (tabbed) await prsTab.click();
+            await scrollTo(page, tabbed ? '[role="tablist"][aria-label="Sessions"]' : "#home-review");
             await shoot(page, `home-${name}-prs`);
+            if (tabbed) await page.getByRole("tab", { name: "Recents" }).click();
             const workspaces = page.getByRole("tab", { name: "Workspaces" });
             if (await workspaces.count()) {
               await workspaces.click();
@@ -2068,6 +2074,213 @@ async function motion(before: boolean): Promise<void> {
 }
 
 /**
+ * The conversation's scroll on a phone while nobody touches it. A long session whose turn keeps running
+ * (a call every 1.5 s, its result half a step later), read at the tail, read 1800 px up, typed into,
+ * with the keyboard open and closed, paging older messages, through a sheet, and back from Home. In the
+ * page every write to the list's scroll position is logged with its stack, and each frame the line
+ * the reader was looking at is measured again: a move their own drag does not explain is a jump.
+ */
+async function scrollProbe(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const probe = () => {
+    type Jump = { t: number; label: string; dy: number; dTop: number; dHeight: number; top: number; tail: boolean; text: string; images: number[][] };
+    const state = {
+      label: "load", input: Number.NEGATIVE_INFINITY, user: 0,
+      writes: [] as Array<{ t: number; label: string; kind: string; arg: string; from: number; input: boolean; stack: string }>,
+      jumps: [] as Jump[], lost: [] as Array<{ t: number; label: string }>, samples: [] as Array<[number, string, number, number, number]>,
+    };
+    (window as unknown as { __scroll: typeof state }).__scroll = state;
+    const list = () => document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+    const recent = () => performance.now() - state.input < 300;
+    const write = (kind: string, el: Element, arg: unknown) => {
+      const scroller = list();
+      if (!scroller || !(el === scroller || scroller.contains(el))) return;
+      state.writes.push({ t: Math.round(performance.now()), label: state.label, kind, arg: JSON.stringify(arg) ?? "", from: scroller.scrollTop, input: recent(),
+        stack: (new Error().stack ?? "").split("\n").slice(2, 10).map((line) => line.trim()).join(" < ") });
+    };
+    const top = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")!;
+    Object.defineProperty(Element.prototype, "scrollTop", { configurable: true, get: top.get, set(this: Element, value: number) { write("scrollTop=", this, value); top.set!.call(this, value); } });
+    for (const name of ["scrollTo", "scrollBy", "scrollIntoView"] as const) {
+      const native = Element.prototype[name] as (...args: unknown[]) => void;
+      (Element.prototype as unknown as Record<string, unknown>)[name] = function (this: Element, ...args: unknown[]) { write(name, this, args[0]); return native.apply(this, args); };
+    }
+    for (const type of ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"]) addEventListener(type, () => { state.input = performance.now(); }, { capture: true, passive: true });
+    let prev: { el: Element; y: number; top: number; height: number; tail: boolean; user: number } | null = null;
+    let lastSample = 0;
+    // A rAF reads layout before the frame's ResizeObservers run, so a move that comes with a resize may
+    // be put right by the app before the frame is painted. Such a move waits for this observer, made
+    // after the app's and so run after it, and counts only if it is still there.
+    let pending: { jump: Jump; el: Element; y: number; user: number } | null = null;
+    let watched: Element | null = null;
+    let settle: ResizeObserver | null = null;
+    const where = (el: Element, list: HTMLElement) => el.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    const confirm = () => {
+      const list_ = list();
+      if (!pending || !list_) return false;
+      const { jump, el, y, user } = pending;
+      pending = null;
+      const now = el.isConnected ? where(el, list_) + (state.user - user) : Number.NaN;
+      if (!(Math.abs(now - y) < 2)) state.jumps.push(jump);
+      return true;
+    };
+    // After the app's observers ran, the line stands where it is painted: measure the next frame from there.
+    // A layout the app changes in its own rAF (the keyboard's height) lands after the probe's rAF, so the
+    // move is looked for here too.
+    const settled = () => {
+      // The line this frame's rAF picked was measured before the app's correction: only re-measure it.
+      const checked = confirm();
+      const el = list();
+      if (!prev?.el.isConnected || !el) return;
+      const y = where(prev.el, el);
+      if (!checked && Math.abs(y + (state.user - prev.user) - prev.y) >= 2) state.jumps.push({ t: Math.round(performance.now()), label: state.label,
+        dy: Math.round(y + (state.user - prev.user) - prev.y), dTop: Math.round(el.scrollTop - prev.top), dHeight: el.scrollHeight - prev.height,
+        top: Math.round(el.scrollTop), tail: prev.tail, text: (prev.el.textContent ?? "").slice(0, 48), images: [] });
+      prev = { ...prev, y, top: el.scrollTop, height: el.scrollHeight, user: state.user };
+    };
+    const frame = () => {
+      confirm();
+      const el = list();
+      if (el && el !== watched) {
+        settle?.disconnect();
+        watched = el;
+        settle = null;
+        setTimeout(() => {
+          if (watched !== el) return;
+          settle = new ResizeObserver(settled);
+          settle.observe(el);
+          if (el.firstElementChild) settle.observe(el.firstElementChild);
+        }, 100);
+      }
+      if (el) {
+        const box = el.getBoundingClientRect();
+        const tail = el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+        // The line the reader looked at last frame, measured again: where it went is what they saw move.
+        // What the reader's own drag moved since last frame is theirs; the rest of the move is not.
+        if (prev) {
+          if (!prev.el.isConnected) state.lost.push({ t: Math.round(performance.now()), label: state.label });
+          else {
+            const y = prev.el.getBoundingClientRect().top - box.top + (state.user - prev.user);
+            if (Math.abs(y - prev.y) >= 2) {
+              const jump = { t: Math.round(performance.now()), label: state.label, dy: Math.round(y - prev.y),
+                dTop: Math.round(el.scrollTop - prev.top), dHeight: el.scrollHeight - prev.height, top: Math.round(el.scrollTop), tail: prev.tail,
+                text: (prev.el.textContent ?? "").slice(0, 48),
+                // Pictures near the screen, top and height relative to the list's box: what grew, and where.
+                images: Array.from(el.querySelectorAll("img"), (img) => [Math.round(img.getBoundingClientRect().top - box.top), Math.round(img.getBoundingClientRect().height)] as [number, number])
+                  .filter(([top]) => top > -1000 && top < box.height + 1000) };
+              if (jump.dHeight !== 0 && settle) pending = { jump, el: prev.el, y: prev.y, user: prev.user };
+              else state.jumps.push(jump);
+            }
+          }
+        }
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 3);
+        const anchor = hit && el.contains(hit) ? hit.closest("p, li, pre, h2, [data-turn], [data-work-turn]") ?? hit : null;
+        prev = anchor ? { el: anchor, y: anchor.getBoundingClientRect().top - box.top, top: el.scrollTop, height: el.scrollHeight, tail, user: state.user } : null;
+        if (performance.now() - lastSample > 250) {
+          lastSample = performance.now();
+          state.samples.push([Math.round(lastSample), state.label, Math.round(el.scrollTop), el.scrollHeight, el.clientHeight]);
+        }
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  };
+  type State = { writes: Array<{ label: string; input: boolean; kind: string; stack: string }>; jumps: Array<{ label: string; dy: number; tail: boolean }>; lost: Array<{ label: string }>; samples: unknown[] };
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const file = herd.journals.get(herd.working)!;
+    const last = await writeLongJournal(file, 90, bridge.now() - 2 * 3_600_000, bridge.dir);
+    const stopTurn = tickWorkingTurn(file, last, bridge.now);
+    const context = await browser.newContext({ ...PHONE, reducedMotion: "no-preference", timezoneId: "UTC", locale: "en-US" });
+    const page = await context.newPage();
+    await page.addInitScript(probe, null);
+    const label = (name: string) => page.evaluate((n: string) => { (window as unknown as { __scroll: { label: string } }).__scroll.label = n; }, name);
+    const at = () => page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+      return el ? { top: Math.round(el.scrollTop), gap: Math.round(el.scrollHeight - el.scrollTop - el.clientHeight) } : null;
+    }, null);
+    // Mobile WebKit takes no wheel and Playwright has no touch drag, so the reader's drag is a pointerdown
+    // on the list (what the app and the probe count as input) and then the scroll it produces, a frame a step.
+    const drag = (dy: number, times: number) => page.evaluate(async ([step, count]: [number, number]) => {
+      const el = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+      if (!el) return;
+      for (let i = 0; i < count; i++) {
+        el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+        const from = el.scrollTop;
+        el.scrollTop += step;
+        (window as unknown as { __scroll: { user: number } }).__scroll.user += el.scrollTop - from;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+    }, [dy, times] as [number, number]);
+    const shots: string[] = [];
+    const shoot = async (name: string) => { const path = join(outDir, `${name}.png`); await page.screenshot({ path }); shots.push(path); };
+    const steps: Array<{ step: string; before: unknown; after: unknown }> = [];
+    const step = async (name: string, act: () => Promise<void>, settleMs: number) => {
+      const before = await at();
+      await label(`${name}:act`);
+      await act();
+      await label(name);
+      await sleep(settleMs);
+      steps.push({ step: name, before, after: await at() });
+      await shoot(name);
+    };
+
+    await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
+    await page.locator('[data-speaker="assistant"]').first().waitFor({ timeout: 15_000 });
+    const latest = () => page.getByRole("button", { name: /latest|new message|waiting/i }).first().click({ timeout: 3000 }).catch(() => {});
+    await step("tail", async () => {}, 8000);
+    await step("read", () => drag(-300, 6), 15_000);
+    // Reading up the way a person does: a screen's worth, a pause to read it, again.
+    await step("read-slowly", async () => { for (let i = 0; i < 10; i++) { await drag(-300, 1); await sleep(1200); } }, 3000);
+    await step("type", async () => { await page.locator("textarea").first().click(); await page.keyboard.type("checking the thread while typing", { delay: 120 }); }, 4000);
+    await step("keyboard-open", () => page.setViewportSize({ width: 390, height: 500 }), 5000);
+    await step("keyboard-closed", () => page.setViewportSize({ width: 390, height: 844 }), 5000);
+    await step("near-tail", async () => { await latest(); await sleep(1500); await drag(-125, 2); }, 10_000);
+    await step("turn-ends", async () => {
+      stopTurn();
+      await appendFile(file, JSON.stringify({ type: "assistant", uuid: "00000000-0000-4000-8000-ffffffffff01", parentUuid: null, timestamp: new Date(bridge.now()).toISOString(),
+        message: { role: "assistant", content: [{ type: "text", text: "Done: the checkout cleanup is finished." }], stop_reason: "end_turn" } }) + "\n");
+      bridge.fake!.setStatus(herd.working, "idle");
+    }, 8000);
+    await step("older", async () => {
+      for (let i = 0; i < 60; i++) {
+        const now = await at();
+        if (!now || now.top < 600) break;
+        await drag(-500, 1);
+      }
+    }, 6000);
+    await step("sheet", async () => {
+      await page.getByRole("button", { name: "Message tools" }).first().click({ timeout: 3000 }).catch(() => {});
+      await sleep(800);
+      await page.keyboard.press("Escape");
+    }, 4000);
+    // In the app, not a reload: the probe's log lives in the page.
+    await step("away-and-back", async () => {
+      await page.evaluate(() => { document.querySelector<HTMLAnchorElement>('a[href="/"]')?.click(); }, null);
+      await sleep(1500);
+      await page.goBack();
+    }, 6000);
+    await step("tail-keyboard", async () => {
+      await latest();
+      await page.locator("textarea").first().click();
+      await page.setViewportSize({ width: 390, height: 500 });
+    }, 6000);
+    const state = await page.evaluate(() => (window as unknown as { __scroll: unknown }).__scroll, null) as State;
+    await context.close();
+    const labels = [...new Set(steps.map((s) => s.step))];
+    const summary = Object.fromEntries(labels.map((name) => {
+      const mine = (label: string) => label === name || label === `${name}:act`;
+      const jumps = state.jumps.filter((j) => mine(j.label) && !j.tail);
+      const writes = state.writes.filter((w) => mine(w.label) && !w.input);
+      return [name, { jumpsWhileReading: jumps.length, upPx: jumps.filter((j) => j.dy > 0).reduce((a, j) => a + j.dy, 0), downPx: jumps.filter((j) => j.dy < 0).reduce((a, j) => a - j.dy, 0),
+        writesWithoutInput: writes.length, writers: [...new Set(writes.map((w) => `${w.kind} ${w.stack.split(" < ")[0]}`))].slice(0, 6), lost: state.lost.filter((l) => mine(l.label)).length }];
+    }));
+    return { steps, summary, state, shots, unexpectedWrites: bridge.fake!.writes() };
+  });
+  await writeFile(join(outDir, "scroll.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ steps: result.steps, summary: result.summary, shots: `${result.shots.length} in ${outDir}` }, null, 2));
+}
+
+/**
  * Every WebKit process run from this bench's browser path, with RSS in KB and CPU time in ms. WebKit's
  * helpers are XPC services whose parent is launchd, so the path is what ties them to a browser: give
  * the bench a private copy (PLAYWRIGHT_BROWSERS_PATH) and another bench's WebKit stays out of the count.
@@ -2613,8 +2826,9 @@ else if (command === "sidebar") await sidebar(values.before === true);
 else if (command === "idle") await idle();
 else if (command === "chips") await chips(values.before === true);
 else if (command === "chat") await chat();
+else if (command === "scroll") await scrollProbe();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar|chips|idle|chat [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar|chips|idle|chat|scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
