@@ -12,8 +12,9 @@ import fixture from "./activity/activity.fixture.json";
 import { AgentChat } from "./agent-chat";
 import { SubagentConversation } from "./subagent-conversation";
 
-// The processes chip as the operator meets it in a working Claude's chat: one chip in the composer
-// row, a list whose rows open in place, and details that never cover the whole screen.
+// Background work as the operator meets it in a working Claude's chat: what waits on you behind the
+// Needs you chip and what runs behind Working, both in the row above the composer, each a list whose
+// rows open in place in a panel over the row, and details that never cover the whole screen.
 
 const list = fixture.list as ActivityResponse & { available: true };
 const detail = fixture.detail as WorkflowDetailResponse;
@@ -59,18 +60,27 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
   return { user: userEvent.setup() };
 }
 
-const chip = () => screen.findByRole("button", { name: /^Processes/ });
+const row = () => screen.findByRole("group", { name: "Status" });
+const chip = async (name: RegExp) => within(await row()).getByRole("button", { name });
+const working = () => chip(/^(Working|Done|Published), \d+$/);
+const needs = () => chip(/^Needs you, \d+$/);
 
-it("shows one chip that names who waits on you, and lists waiting, then running, then a folded Done", async () => {
+it("names what waits on you and what runs in two chips, each listing only its own", async () => {
   const { user } = renderChat();
-  const button = await chip();
-  expect(button).toHaveTextContent("Background · 1 waiting on you");
-  expect(button).toHaveAccessibleName(/1 waiting on you, \d+ running/);
-  await user.click(button);
-  const sheet = screen.getByRole("dialog", { name: "Processes" });
+  const ask = await needs();
+  expect(ask).toHaveAccessibleName("Needs you, 1");
+  expect(await working()).toHaveAccessibleName(/^Working, \d+$/);
+  await user.click(ask);
+  expect(ask).toHaveAttribute("aria-expanded", "true");
+  const asking = screen.getByRole("region", { name: "Needs you" });
+  expect(within(within(asking).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / }).map((r) => r.getAttribute("aria-label"))).toEqual(["Expand reviewer"]);
+  // One panel at a time: Working takes Needs you's place.
+  await user.click(await working());
+  expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
+  const sheet = screen.getByRole("region", { name: "Working" });
   const rows = within(within(sheet).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / });
-  expect(rows[0]).toHaveAccessibleName("Expand reviewer");
   expect(rows.map((r) => r.getAttribute("aria-label"))).toContain(`Expand ${runningRun.name}`);
+  expect(rows.map((r) => r.getAttribute("aria-label"))).not.toContain("Expand reviewer");
   expect(within(sheet).queryByRole("list", { name: "Done" })).not.toBeInTheDocument();
   await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
   expect(within(sheet).getByRole("list", { name: "Done" })).toBeVisible();
@@ -85,15 +95,25 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   activityList = { ...list, workflows: list.workflows.filter((w) => w.status !== "running"), tasks: [] };
   subagentList = subagents([{ ...explorer, status: "completed" }]);
   const { user } = renderChat();
-  const button = await chip();
-  // The chip names its subject: a bare "3 done" did not say done what.
-  expect(button).toHaveTextContent(/^Background · \d+ done$/);
-  expect(button).not.toHaveTextContent(/running|waiting/);
+  const button = await working();
+  // Nothing runs, so the chip does not say Working: it says what finished.
+  expect(button).toHaveAccessibleName(/^Done, \d+$/);
+  expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   await user.click(button);
-  const sheet = screen.getByRole("dialog", { name: "Processes" });
+  const sheet = screen.getByRole("region", { name: "Done" });
   expect(within(sheet).getByText("Nothing running in the background.")).toBeVisible();
   await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
   expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
+});
+
+it("says Published when all the session left is pages it published", async () => {
+  activityList = { ...list, workflows: [], tasks: [] };
+  subagentList = subagents([]);
+  const { user } = renderChat();
+  const button = await working();
+  expect(button).toHaveAccessibleName("Published, 1");
+  await user.click(button);
+  expect(within(screen.getByRole("region", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toBeVisible();
 });
 
 it("shows no chip when the session has nothing at all", async () => {
@@ -102,19 +122,19 @@ it("shows no chip when the session has nothing at all", async () => {
   renderChat();
   await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
   await act(async () => {});
-  expect(screen.queryByRole("button", { name: /^Processes/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
 });
 
 it("on a desk, the list stays open while you read it when the last process ends", async () => {
   setDesktop(true);
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await working());
   await user.click(screen.getByRole("button", { name: /^Done \(\d+\)$/ }));
   activityList = { ...list, workflows: list.workflows.map((w) => ({ ...w, status: w.status === "running" ? "completed" : w.status, durationMs: w.durationMs ?? 1 })), tasks: [] };
   subagentList = subagents([]);
   act(() => { window.dispatchEvent(new Event("online")); });
-  await waitFor(() => expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent(/done$/));
-  expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
+  await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
+  expect(screen.getByRole("region", { name: "Done" })).toBeVisible();
   expect(screen.getByRole("list", { name: "Done" })).toBeVisible();
 });
 
@@ -123,7 +143,7 @@ it("on a desk, Esc closes the details panel instead of stopping the turn", async
   const keys: string[] = [];
   server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => { keys.push(JSON.stringify(await request.json())); return HttpResponse.json({ ok: true }); }));
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   await screen.findByRole("complementary", { name: `Details: ${runningRun.name}` });
@@ -132,7 +152,7 @@ it("on a desk, Esc closes the details panel instead of stopping the turn", async
   expect(screen.queryByRole("complementary", { name: /^Details/ })).not.toBeInTheDocument();
   expect(keys).toEqual([]);
   // Focus inside the panel: Esc closes it too.
-  await user.click(screen.getByRole("button", { name: /^Processes/ }));
+  await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   const panel = await screen.findByRole("complementary", { name: `Details: ${runningRun.name}` });
@@ -147,21 +167,21 @@ it("keeps the last known subagents while the pane reconnects", async () => {
   const props: ComponentProps<typeof AgentChat> = { paneId: agent.paneId, agent, agents: [agent], shellPanes: [], tabs: [], text: "", onBack: vi.fn(), onSelect: vi.fn() };
   const view = (bridge: ComponentProps<typeof AgentChat>["bridge"]) => <RouterProvider router={createMemoryRouter([{ path: "/", element: <AgentChat {...props} bridge={bridge} /> }])} />;
   const { rerender } = render(view("connected"));
-  expect(await chip()).toHaveTextContent("1 waiting on you");
+  expect(await needs()).toHaveAccessibleName("Needs you, 1");
   rerender(view("disconnected"));
   await act(async () => {});
   expect(screen.queryByText("Couldn’t refresh. Showing last known activity.")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent("1 waiting on you");
+  expect(await needs()).toHaveAccessibleName("Needs you, 1");
 });
 
-it("on a phone, details replace the sheet's content: one sheet, named once, with the header's Back", async () => {
+it("on a phone, details replace the panel's content: one panel, named once, with the header's Back", async () => {
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
-  expect(screen.getAllByRole("dialog")).toHaveLength(1);
-  const sheet = screen.getByRole("dialog", { name: runningRun.name });
-  // Once the details have drawn, the run is named once, by the sheet's own title.
+  expect(screen.queryByRole("region", { name: "Working" })).not.toBeInTheDocument();
+  const sheet = screen.getByRole("region", { name: runningRun.name });
+  // Once the details have drawn, the run is named once, by the panel's own title.
   expect(await within(sheet).findByText("agents done")).toBeVisible();
   expect(within(sheet).getAllByRole("heading", { name: runningRun.name })).toHaveLength(1);
   // The way back is the header's chevron before that title, not a second control in the body.
@@ -170,19 +190,19 @@ it("on a phone, details replace the sheet's content: one sheet, named once, with
   const title = within(sheet).getByRole("heading", { name: runningRun.name });
   expect(backs[0]!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await user.click(backs[0]!);
-  expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
+  expect(screen.getByRole("region", { name: "Working" })).toBeVisible();
 });
 
 it("on a desk, details open in a side panel and the chat stays usable", async () => {
   setDesktop(true);
   const { user } = renderChat();
-  await user.click(await chip());
-  expect(screen.getByRole("dialog", { name: "Processes" })).toBeVisible();
+  await user.click(await working());
+  expect(screen.getByRole("region", { name: "Working" })).toBeVisible();
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   const panel = screen.getByRole("complementary", { name: `Details: ${runningRun.name}` });
   expect(await within(panel).findByRole("heading", { name: runningRun.name })).toBeVisible();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Working" })).not.toBeInTheDocument();
   const box = screen.getByRole("textbox");
   await user.type(box, "still typing");
   expect(box).toHaveValue("still typing");
@@ -190,31 +210,31 @@ it("on a desk, details open in a side panel and the chat stays usable", async ()
   expect(screen.queryByRole("complementary", { name: /^Details/ })).not.toBeInTheDocument();
 });
 
-it("a command's output opens as details, not a second sheet", async () => {
+it("a command's output opens as details in the same panel", async () => {
   activityList = { ...list, tasks: [{ id: "b1", kind: "bash", title: "bun test --watch", status: "running", at: 0, hasOutput: true }] };
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await working());
   await user.click(screen.getByRole("button", { name: "Expand bun test --watch" }));
   await user.click(screen.getByRole("button", { name: "Details of bun test --watch" }));
-  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.getByRole("region", { name: "bun test --watch" })).toBeVisible();
   expect(await screen.findByText("412 pass")).toBeVisible();
 });
 
 it("opens a subagent's conversation in place of the chat, and Back to Main returns", async () => {
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await needs());
   await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
   expect(screen.getByText("Review the diff")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   expect(await screen.findByText("Child result")).toBeVisible();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Back to Main" }));
   expect(screen.queryByText("Child result")).not.toBeInTheDocument();
 });
 
 it("says a Claude subagent takes messages only through Main, and Write through Main returns addressed to it", async () => {
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await needs());
   await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   const view = screen.getByRole("region", { name: "reviewer conversation" });
@@ -230,7 +250,7 @@ it("says a Claude subagent takes messages only through Main, and Write through M
 
 it("offers no way to write to a subagent from a read-only device", async () => {
   const { user } = renderChat({ device: { enforced: true, device: "phone", authorized: false } });
-  await user.click(await chip());
+  await user.click(await needs());
   await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   const view = screen.getByRole("region", { name: "reviewer conversation" });
@@ -248,10 +268,12 @@ it("tells a Codex sub-agent's reader the same, in Codex's words", async () => {
 it("does not present a stale subagent as running after a refresh fails", async () => {
   activityList = { ...list, workflows: [], tasks: [] };
   renderChat();
-  await chip();
+  await needs();
   subagentList = 503;
   act(() => { window.dispatchEvent(new Event("online")); });
-  await waitFor(() => expect(screen.getByRole("button", { name: /^Processes/ })).not.toHaveTextContent(/running|waiting/));
+  // Nothing it cannot vouch for still counts as waiting or working: the chip only says what finished.
+  await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
+  expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
 });
 
 it("discards a child's cached transcript when access is revoked", async () => {
@@ -279,12 +301,12 @@ it("does not read subagents behind the idle cover and reads again on resume", as
 
 it("keeps a run's details open on a phone when the last process ends, and the chip goes quiet", async () => {
   const { user } = renderChat();
-  await user.click(await chip());
+  await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   activityList = { ...list, workflows: [{ ...runningRun, status: "completed", durationMs: 1 }], tasks: [] };
   subagentList = subagents([]);
   act(() => { window.dispatchEvent(new Event("online")); });
-  await waitFor(() => expect(screen.getByRole("button", { name: /^Processes/ })).toHaveTextContent(/done$/));
-  expect(screen.getByRole("dialog", { name: runningRun.name })).toBeVisible();
+  await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
+  expect(screen.getByRole("region", { name: runningRun.name })).toBeVisible();
 });

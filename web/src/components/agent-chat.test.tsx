@@ -1226,7 +1226,7 @@ it("shows a subagent's work step file relative to the pane's folder too", async 
   const user = userEvent.setup();
   const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
   renderChat({ agent, agents: [agent] });
-  await user.click(await screen.findByRole("button", { name: /^Processes/ }));
+  await user.click(await screen.findByRole("button", { name: /^Working, / }));
   await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   const work = await screen.findByRole("button", { name: /^(Worked|Work log|Working)/ });

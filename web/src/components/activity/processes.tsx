@@ -1,9 +1,7 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Sparkle, ChevronDown, ChevronRight, Radio, Terminal, Workflow, X } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
-import { BottomSheet } from "@/components/ui/sheet";
-import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useWorkflowDetail, type ActivityState } from "@/hooks/use-activity";
 import {
   agentElapsed,
@@ -15,16 +13,16 @@ import {
   type ActivityTask,
 } from "@/lib/activity";
 import { modelDisplayName } from "@/lib/model-display";
-import { finishedLabel, processesLabel, processName, type ProcessItem, type Processes, type ProcessState } from "@/lib/processes";
+import { processName, type ProcessItem, type Processes, type ProcessState } from "@/lib/processes";
 import { cn } from "@/lib/utils";
 import { AgentBar, Meta, PhaseSteps, StateDot } from "./activity-parts";
 import { ArtifactList } from "./artifact-list";
 import { TaskOutput } from "./task-output";
-import { RunNamedAbove, WorkflowDetail } from "./workflow-detail";
+import { WorkflowDetail } from "./workflow-detail";
 
-// The session's background work behind one chip in the composer row: what waits on you, what runs,
-// and what finished, in a list whose rows open in place. Details go to a side panel on a desk and
-// replace the sheet's content on a phone; nothing here covers the whole screen or stacks sheets.
+// The session's background work behind the chips above the composer: what waits on you behind Needs
+// you, what runs and what finished behind Working, in lists whose rows open in place. Details go to a
+// side panel on a desk and replace the panel's content on a phone; nothing covers the whole screen.
 
 /** Finished rows shown before "Show all". */
 export const DONE_PREVIEW = 5;
@@ -33,14 +31,6 @@ export type ProcessDetail =
   | { kind: "workflow"; runId: string; agentId: string | null }
   | { kind: "task"; taskId: string; title: string };
 
-const DOT: Record<ProcessState, string> = {
-  waiting: "bg-status-blocked",
-  running: "bg-status-working",
-  done: "bg-status-done",
-  failed: "bg-destructive",
-  unknown: "bg-status-unknown",
-};
-
 const STATE_LABEL: Record<ProcessState, string> = {
   waiting: "Waiting on you",
   running: "Running",
@@ -48,10 +38,6 @@ const STATE_LABEL: Record<ProcessState, string> = {
   failed: "Failed",
   unknown: "Status unavailable",
 };
-
-function Dot({ state, className }: { state: ProcessState; className?: string }) {
-  return <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[state], className)} />;
-}
 
 function KindIcon({ item }: { item: ProcessItem }) {
   const Icon = item.kind === "workflow" ? Workflow : item.kind === "subagent" ? Sparkle : item.task.kind === "monitor" ? Radio : Terminal;
@@ -221,50 +207,4 @@ export function ProcessPanel({ title, onClose, children }: { title: string; onCl
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
     </aside>
   );
-}
-
-/**
- * The chip in the composer row: "● 3 running", or "● 1 waiting on you" in the blocked colour. Once
- * nothing waits or runs it goes quiet ("3 done", no dot) so finished work stays one tap away, and it
- * is absent only when the session has nothing at all. A desk opens the list as a popover anchored to the chip; a
- * phone opens a bottom sheet sized to its content, whose content the details replace: the sheet's
- * header then names the run and steps back to the list.
- * On a desk, details are handed to `onDetail` for the side panel and the popover closes.
- */
-export function ProcessesChip({ processes, published = 0, desktop, open, onOpenChange, list, detail, detailContent, detailName, onBack }: {
-  processes: Processes;
-  /** Pages the session published, which keep the quiet chip when nothing else finished. */
-  published?: number;
-  desktop: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  list: ReactNode;
-  /** Phone only: the details shown in place of the list. */
-  detail?: ProcessDetail | null;
-  detailContent?: ReactNode;
-  detailName?: string;
-  onBack?: () => void;
-}) {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const live = processesLabel(processes);
-  const label = live ?? finishedLabel(processes, published);
-  if (!label && !open) return null;
-  const waiting = processes.waiting.length > 0;
-  const aria = `Processes: ${live ? [waiting ? `${processes.waiting.length} waiting on you` : "", processes.running.length ? `${processes.running.length} running` : ""].filter(Boolean).join(", ") : label}`;
-  const phoneDetail = !desktop && detail ? detailContent : null;
-  return <>
-    {label && <button ref={trigger} type="button" aria-label={aria} aria-haspopup="dialog" aria-expanded={open} onClick={() => onOpenChange(!open)}
-      className={cn("composer-quiet hit-area gap-1.5 tabular-nums", waiting && "text-status-blocked")}>
-      {live && <Dot state={waiting ? "waiting" : "running"} className="size-2" />}
-      <span className="truncate">Background · {label}</span>
-    </button>}
-    {desktop
-      ? <WorkbenchPopover open={open} onDismiss={() => onOpenChange(false)} anchorRef={trigger} label="Processes" className="w-[min(26rem,calc(100vw-2rem))] [&>div:last-child]:p-1.5">
-        {list}
-      </WorkbenchPopover>
-      : <BottomSheet open={open} onClose={() => onOpenChange(false)} title={phoneDetail ? detailName ?? "Details" : "Processes"}
-        onBack={phoneDetail ? onBack : undefined}>
-        {phoneDetail ? <RunNamedAbove value>{phoneDetail}</RunNamedAbove> : list}
-      </BottomSheet>}
-  </>;
 }
