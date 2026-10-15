@@ -92,6 +92,17 @@ it("follows a video named outside the pane's folder to the file the bridge finds
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
+it("reports a video the browser cannot play after one successful bridge probe without retrying", async () => {
+  fetchFile.mockResolvedValue(new Response("video bytes", { status: 206, headers: { "content-type": "video/mp4" } }));
+  render(<FilePreview paneId="w1:p1" path="out/film.mp4" onClose={() => {}} />);
+
+  fireEvent.error(document.querySelector("video")!);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not play this video. Download it to open in another player.");
+  expect(fetchFile).toHaveBeenCalledExactlyOnceWith("w1:p1", "out/film.mp4", undefined, expect.any(AbortSignal));
+  expect(inspect).not.toHaveBeenCalled();
+});
+
 it("surfaces unavailable files and retries without leaving the chat", async () => {
   fetchFile.mockRejectedValueOnce(new Error("File unavailable in this workspace."));
   fetchFile.mockResolvedValueOnce(new Response("hello", { headers: { "content-type": "text/plain" } }));
