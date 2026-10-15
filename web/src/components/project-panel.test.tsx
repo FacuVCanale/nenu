@@ -143,7 +143,7 @@ it("Notes is the project's status by state, one quiet row per item, read only wh
   expect(titles(group("To do"))).toEqual(["Gift cards at checkout", "Admin export to CSV", "Refund flow"]);
   // The name, then in the same line what it is doing and whose it is.
   expect(within(group("Ready for review")).getByRole("button", { name: "Cart badge PR #41 · approved · checks passed · claude" })).toBeInTheDocument();
-  expect(within(group("To do")).getByRole("button", { name: "Admin export to CSV you" })).toBeInTheDocument();
+  expect(within(group("To do")).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["Gift cards at checkout", "Admin export to CSV you", "Refund flow blocked on design"]);
   // A row opens its thread, as it did.
   await userEvent.click(within(group("Working")).getByRole("button", { name: /^Checkout flow/ }));
   expect(onOpenPane).toHaveBeenCalledWith("w1:flow");
@@ -169,9 +169,9 @@ it("a line above Notes counts its problems and opens them", async () => {
   await userEvent.click(line);
   const problems = screen.getByRole("list", { name: "Problems" });
   expect(within(problems).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-    "HANDOFF.md9412 characters, this digest shows the first 8000",
-    "Refund flowthe owner \"blocked on design\" is status text",
-    "Product images on the CDNchecked done but still listed",
+    "HANDOFF.md 9412 characters, this digest shows the first 8000",
+    "Refund flow the owner \"blocked on design\" is status text",
+    "Product images on the CDN checked done but still listed",
   ]);
   await userEvent.click(line);
   expect(screen.queryByRole("list", { name: "Problems" })).not.toBeInTheDocument();
@@ -194,6 +194,26 @@ it("marking a task from the project's status asks the coordinator the same way",
   await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Ask the coordinator" }));
   await waitFor(() => expect(sent).toEqual([{ pane: "w1:coord", text: 'Please mark as done the task "Refund flow" in TASKS.md. (Sent from Nenu.)' }]));
   expect(await screen.findByText("Asked the coordinator")).toBeInTheDocument();
+});
+
+it("a task asked to be marked done keeps the mark when the coordinator moves its line", async () => {
+  projectStatus = status;
+  const { rerender } = render(<Panel />);
+  await userEvent.click(await screen.findByRole("button", { name: "Mark done: Refund flow" }));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Ask the coordinator" }));
+  await screen.findByText("Asked the coordinator");
+  // The line above it goes: Refund flow is task:11 now, and task:12 is another task.
+  projectStatus = { ...status, items: [
+    ...status.items.filter((entry) => !entry.id.startsWith("task:1")),
+    item("task:11", "Refund flow", "todo", { owner: owner("person", "", "blocked on design") }),
+    item("task:12", "Coupon codes in the admin", "todo", { owner: owner("person", "", "Dana") }),
+  ] };
+  rerender(<Panel view={{ ...project, threads: threads.map((entry) => entry.id === "t-0012" ? { ...entry, group: "ready-for-review" } : entry) }} />);
+  await waitFor(() => expect(reads).toEqual(["status?project=acme", "status?project=acme"]));
+  await within(group("To do")).findByText("Coupon codes in the admin");
+  const rows = within(group("To do")).getAllByRole("listitem").map((row) => row.textContent);
+  expect(rows).toContain("Refund flow Asked the coordinator");
+  expect(rows).toContain("Coupon codes in the admin Dana");
 });
 
 it("when `project status` fails, Notes shows the task list and says why", async () => {

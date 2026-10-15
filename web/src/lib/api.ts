@@ -695,6 +695,22 @@ export function fetchOrgTasks(project: string, signal?: AbortSignal): Promise<{ 
   return req(`/api/org/tasks?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
+/** `project status`'s states. Mirrors OrgStatusState in bridge/org-cli.ts. */
+export type OrgStatusState = "waiting" | "working" | "review" | "landing" | "idle" | "todo" | "done";
+
+/** A project's work in one document (`project status --json`), as Notes draws it. Mirrors OrgStatus in bridge/org-cli.ts. */
+export interface OrgStatus {
+  /** One per TASKS.md task in file order, then one per open thread no task names; `owner` is null for a thread. */
+  items: Array<{ kind: "task" | "thread"; id: string; title: string; state: OrgStatusState; owner: OrgTask["owner"] | null; thread: string }>;
+  /** `line` is 0 and `task` empty for the handoff. */
+  problems: Array<{ rule: string; line: number; task: string; thread: string; detail: string }>;
+}
+
+/** The project's status for Notes; `status` is null when this Organizations has no `project status`. */
+export function fetchOrgStatus(project: string, signal?: AbortSignal): Promise<{ ok: true; status: OrgStatus | null }> {
+  return req(`/api/org/status?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
 /** What the project's threads receive and its routines; each null when this Organizations has none. */
 export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
   return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
