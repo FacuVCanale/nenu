@@ -332,6 +332,17 @@ describe("Recents and Workspaces", () => {
     expect(reads).toBe(0);
   });
 
+  it("unfolds a one-tab workspace under a project filter that leaves out the pane it opens on", async () => {
+    const scratch = { ...data.agents[0]!, paneId: "w2:scratch", workspaceId: "w2", workspaceLabel: "hub", paneLabel: "Scratch", lastSeenAt: now };
+    const { user, main } = await setup({ ...recentData, agents: [...recentData.agents, scratch] });
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
+    expect(panel.getByRole("link", { name: /^hub,/ })).toHaveAttribute("href", "/pane/w2%3Ascratch?s=work");
+    await user.selectOptions(main.getByRole("combobox", { name: "Project" }), "hub");
+    await user.click(panel.getByRole("button", { name: /^hub,/ }));
+    expect(panel.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/c1?s=work", "/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work"]);
+  });
+
   it("offers no project filter where there are no projects", async () => {
     const { main } = await setup(data);
     expect(main.queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
