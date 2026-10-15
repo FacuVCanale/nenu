@@ -102,7 +102,11 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
   );
 }
 
-/** A chat: its state as a small dot, its one name, and a pull request's glyph when it has one open. */
+/**
+ * A chat: its state as a small dot, its one name, a quiet +1 when it finished or asked for you since
+ * you last opened it (the desk's answer to an agent finishing elsewhere, instead of a toast), and a
+ * pull request's glyph when it has one open.
+ */
 function ChatRow({ chat, session, current, revealed }: { chat: DeskChat; session?: string; current: boolean; revealed: boolean }) {
   const { thread, pane } = chat;
   const to = chat.paneId ? panePath(chat.paneId, session) : nodePath(chat.project!, thread!.id, session);
@@ -117,10 +121,12 @@ function ChatRow({ chat, session, current, revealed }: { chat: DeskChat; session
       </span>
       <span className="nav-row-text">{chat.title}</span>
       {word && <span className="sr-only">, {word}</span>}
+      {chat.unread && !current && <span className="nav-unread" data-unread aria-hidden>+1</span>}
       {pr && <>
         <span className="nav-row-end" aria-hidden><GitPullRequest size={14} /></span>
         <span className="sr-only">, pull request{pr.number ? ` #${pr.number}` : ""}</span>
       </>}
+      {chat.unread && !current && <span className="sr-only">, new</span>}
     </Link>
   );
 }

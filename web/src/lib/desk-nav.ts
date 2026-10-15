@@ -16,9 +16,15 @@ export interface DeskChat {
   pane?: AgentView;
   /** When it last moved, epoch ms; 0 when nothing says. */
   at: number;
+  /** It finished or asked for you since it was last opened in Nenu: the row's +1, in place of a toast. */
+  unread: boolean;
 }
 
 const updatedAt = (thread: ProjectThreadView) => Date.parse(thread.updated ?? "") || 0;
+
+/** `done` already means not yet seen in Nenu (ADR 0071); an ask is new until the chat is opened after it. */
+const unread = (pane: AgentView | undefined) =>
+  (pane?.status === "done" || pane?.status === "blocked") && (pane.lastActiveAt ?? 0) > (pane.lastSeenAt ?? 0);
 
 /**
  * Every open thread of every project and every agent pane outside them. A project's own coordinator
@@ -30,11 +36,11 @@ export function deskChats(data: { agents: readonly AgentView[]; projects?: reado
     const pane = thread.paneId ? panes.get(thread.paneId) : undefined;
     return {
       key: `${project.slug}/${thread.id}`, title: thread.title, paneId: pane?.paneId, project: project.slug, thread, pane,
-      at: Math.max(updatedAt(thread), pane ? chatRecency(pane) : 0),
+      at: Math.max(updatedAt(thread), pane ? chatRecency(pane) : 0), unread: unread(pane),
     };
   }));
   const loose = looseChats(data.agents, data.projects).map((pane): DeskChat => ({
-    key: pane.paneId, title: displayName(pane, data.projects), paneId: pane.paneId, pane, at: chatRecency(pane),
+    key: pane.paneId, title: displayName(pane, data.projects), paneId: pane.paneId, pane, at: chatRecency(pane), unread: unread(pane),
   }));
   return [...threads, ...loose];
 }

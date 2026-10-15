@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { CircleAlert, TriangleAlert, CircleCheck, ChevronRight, Info, X } from "@/components/ui/icon";
+import { CircleAlert, TriangleAlert, CircleCheck, Info, X } from "@/components/ui/icon";
 
 import { cn } from "@/lib/utils";
 import { clearStatus, pauseStatus, resumeStatus, useStatus, type StatusMessage, type StatusTone } from "@/lib/status";
@@ -29,8 +29,8 @@ const reducedMotion = () => typeof window.matchMedia === "function" && window.ma
  * One app-wide, nonmodal notification surface. On a phone it drops in over the header, under the
  * status bar, so it never covers the transcript or the card it is reporting on. On a desk it sits
  * top-right under the 52px header: bottom-right measured on top of the composer's Send and model
- * row, and an error stays until dismissed. A swipe up dismisses it, and a notice with a destination
- * is one control that opens it.
+ * row, and an error stays until dismissed. A swipe up or its ✕ dismisses it, and a notice with a
+ * destination is a control that opens it.
  */
 export function StatusArea() {
   const status = useStatus();
@@ -159,19 +159,17 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
       )}>
       {message.to ? (
         <Link to={message.to} onClick={() => clearStatus(message.id)}
-          className="flex min-h-13 items-start gap-3 rounded-xl py-3.5 pl-4 pr-3">
+          className="flex min-h-13 items-start gap-3 rounded-xl py-3.5 pl-4 pr-12">
           {icon}{text}
-          <ChevronRight aria-hidden="true" className="mt-0.5 size-4 shrink-0 self-center text-subtle-foreground" />
         </Link>
       ) : (
-        <>
-          <div className="flex min-h-13 items-start gap-3 py-3.5 pl-4 pr-12">{icon}{text}</div>
-          <button type="button" aria-label="Dismiss notification" onClick={() => clearStatus(message.id)}
-            className="absolute right-1 top-1 flex size-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground">
-            <X aria-hidden="true" className="size-4" />
-          </button>
-        </>
+        <div className="flex min-h-13 items-start gap-3 py-3.5 pl-4 pr-12">{icon}{text}</div>
       )}
+      {/* Every notice closes where it sits, one that opens a chat included. */}
+      <button type="button" aria-label="Dismiss notification" onClick={() => clearStatus(message.id)}
+        className="absolute right-1 top-1 flex size-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground">
+        <X aria-hidden="true" className="size-4" />
+      </button>
     </div>
   );
 }
