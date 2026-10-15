@@ -11,9 +11,12 @@ import { homeOrg, seedDiffRepo, type DemoHerd, type OrgSeed } from "./scenario.t
 // each of the project's views in dark and light, a pull request's diff, the panel folded and opened
 // again, and the same views against an Organizations that predates `task list` and `project show`.
 // Then, on the real clock, a fresh WebKit left alone on the panel for --seconds: CPU, memory and DOM.
-// `--before` drives the panel as it was, behind ⋯ (Threads, PRs, Activity, Memory).
+// `--before` drives the panel as it was, behind ⋯ (Threads, PRs, Activity, Memory). `--notes` takes
+// only Notes, at 1440 and 1024 wide (the narrowest desk) in dark and light, against an Organizations
+// with `project status`, one with `task list` but no `project status`, and one with neither; then its
+// problems and its Done opened, and 900 wide, where a desk's panel is not drawn.
 //
-//   bun scripts/e2e/project-panel.ts [--before] [--idle-only] [--port 8797] [--out DIR] [--seconds 60]
+//   bun scripts/e2e/project-panel.ts [--before] [--idle-only | --notes] [--port 8797] [--out DIR] [--seconds 60]
 //
 // The idle count takes every WebKit process that appears while it runs: give the bench a private copy
 // of the browser (PLAYWRIGHT_BROWSERS_PATH) when another bench may be running.
@@ -25,6 +28,7 @@ const { values } = parseArgs({
     seconds: { type: "string", default: "60" },
     before: { type: "boolean", default: false },
     "idle-only": { type: "boolean", default: false },
+    notes: { type: "boolean", default: false },
   },
 });
 const port = Number(values.port);
@@ -32,25 +36,88 @@ const before = values.before === true;
 const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), `project-panel-${Date.now()}`);
 const CAPTURE_EPOCH = Date.parse("2026-10-10T14:00:00Z");
 
-/** homeOrg with its own coordinator on the Codex pane, and, unless `legacy`, the newer documents. */
-function panelSeed(herd: DemoHerd, now: number, size: { additions: number; deletions: number }, legacy: boolean): OrgSeed {
+/**
+ * What the bench's Organizations can print: `project status` and everything older, `task list` and
+ * `project show` without `project status`, or neither of them.
+ */
+type OrgVariant = "status" | "tasks" | "legacy";
+
+/**
+ * homeOrg with its own coordinator on the Codex pane, a thread landing its pull request and a merged
+ * one, and the documents `variant` prints. TASKS.md, as `task list` and `project status` read it:
+ *
+ *   ## Checkout                                  3-6: Payments webhook · t-0011, Cart badge · t-0013,
+ *                                                     Checkout flow · t-0012, Login hotfix · t-0014
+ *   ## Backlog                                   9: Gift cards at checkout (two lines of notes),
+ *                                                12: Admin export to CSV (me), 13: Coupon codes (Dana),
+ *                                                14: Refund flow (blocked on design)
+ *   ## Done                                      17: Search index (codex) · t-0001,
+ *                                                18: [x] Product images on the CDN
+ */
+function panelSeed(herd: DemoHerd, now: number, size: { additions: number; deletions: number }, variant: OrgVariant): OrgSeed {
   const seed = homeOrg(herd, now, size);
   const project = seed.projects[0]!;
   project.coordinator = { workspace_id: "w2", tab_id: "w2:t1", pane_id: herd.codex };
-  project.threads = project.threads.map((thread) => thread.id === "t-0012" ? { ...thread, auto_merge: true } : thread);
-  if (legacy) return seed;
+  const cart = project.threads.find((thread) => thread.id === "t-0013")!;
+  const pr = (number: number, state: string) => ({ ...(cart.pr as Record<string, unknown>), url: `https://github.com/acme/shop/pull/${number}`, state });
+  project.threads = project.threads.map((thread) => thread.id === "t-0012" ? { ...thread, auto_merge: true }
+    : thread.id === "t-0001" ? { ...thread, pr: pr(30, "MERGED") }
+    : thread);
+  project.threads.push({ ...cart, id: "t-0015", title: "Order confirmation email", parent_id: "root", group: "landing", group_label: "landing", auto_merge: true, pr: pr(43, "OPEN") });
+  if (variant === "legacy") return seed;
   const agent = (profile: string) => ({ kind: "agent", profile, machine: "", name: "" });
   const none = { kind: "unassigned", profile: "", machine: "", name: "" };
-  Object.assign(project, {
+  const me = { kind: "me", profile: "", machine: "", name: "" };
+  const person = (name: string) => ({ kind: "person", profile: "", machine: "", name });
+  const thread = (id: string) => project.threads.find((candidate) => candidate.id === id)!;
+  const item = (line: number, list: string, title: string, owner: unknown, state: string, id = "", flags: string[] = []) => ({
+    kind: "task", id: `task:${line}`, title, list, owner, state, group: id ? thread(id).group : "", task: title, thread: id, pr: id ? thread(id).pr : null,
+    created: id ? thread(id).updated : "", updated: id ? thread(id).updated : "", flags,
+  });
+  const work = (id: string, state: string) => ({
+    kind: "thread", id, title: thread(id).title, list: "", owner: null, state, group: thread(id).group, task: "", thread: id, pr: thread(id).pr,
+    created: thread(id).updated, updated: thread(id).updated, flags: [],
+  });
+  const projectStatus = {
+    generated_at: new Date(now).toISOString(), objective: "Ship the new checkout before the sale.",
+    sources: { tasks_updated: new Date(now - 3_600_000).toISOString(), handoff_updated: new Date(now - 7_200_000).toISOString(), handoff_chars: 9_412, handoff_limit: 8_000, pr_checked: new Date(now - 60_000).toISOString() },
+    items: [
+      item(3, "Checkout", "Payments webhook", agent("claude"), "waiting", "t-0011"),
+      item(4, "Checkout", "Cart badge", agent("claude"), "review", "t-0013"),
+      item(5, "Checkout", "Checkout flow", agent("claude"), "working", "t-0012"),
+      item(6, "Checkout", "Login hotfix", agent("claude"), "idle", "t-0014"),
+      item(9, "Backlog", "Gift cards at checkout", none, "todo"),
+      item(12, "Backlog", "Admin export to CSV", me, "todo"),
+      item(13, "Backlog", "Coupon codes in the admin", person("Dana"), "todo"),
+      item(14, "Backlog", "Refund flow", person("blocked on design"), "todo", "", ["status-in-owner"]),
+      item(17, "Done", "Search index", agent("codex"), "done", "t-0001", ["thread-resolved", "pr-merged"]),
+      item(18, "Done", "Product images on the CDN", none, "done", "", ["done-not-deleted"]),
+      work("t-0010", "working"),
+      work("t-0015", "landing"),
+      // A kind this Nenu does not know yet: Organizations may add pull requests no thread opened.
+      { kind: "pr", id: "pr:44", title: "Bump the image library", state: "review", flags: [] },
+    ],
+    drift: { handoff_over_limit: 1, thread_resolved: 1, thread_missing: 0, done_not_deleted: 1, status_in_owner: 1, duplicate_title: 0, inbox_unhandled: 0 },
+    problems: [
+      { rule: "handoff-over-limit", line: 0, task: "", thread: "", detail: "9412 characters, this digest shows the first 8000" },
+      { rule: "status-in-owner", line: 14, task: "Refund flow", thread: "", detail: "the owner \"blocked on design\" is status text; a running thread goes after \" · \"" },
+      { rule: "thread-resolved", line: 17, task: "Search index", thread: "t-0001", detail: "the thread is resolved and its PR merged" },
+      { rule: "done-not-deleted", line: 18, task: "Product images on the CDN", thread: "", detail: "checked done but still listed" },
+    ],
+    next: [{ thread: "t-0012", line: "Run the cart tests on a phone" }],
+  };
+  Object.assign(project, variant === "status" ? { projectStatus } : {}, {
     tasks: [
       { list: "Checkout", title: "Payments webhook", owner: agent("claude"), thread: "t-0011", description: "" },
       { list: "Checkout", title: "Cart badge", owner: agent("claude"), thread: "t-0013", description: "" },
       { list: "Checkout", title: "Checkout flow", owner: agent("claude"), thread: "t-0012", description: "" },
       { list: "Checkout", title: "Login hotfix", owner: agent("claude"), thread: "t-0014", description: "" },
       { list: "Backlog", title: "Gift cards at checkout", owner: none, thread: "", description: "Needs the payments webhook first.\nKeep the totals in cents." },
-      { list: "Backlog", title: "Admin export to CSV", owner: { kind: "me", profile: "", machine: "", name: "" }, thread: "", description: "" },
-      { list: "Backlog", title: "Coupon codes in the admin", owner: { kind: "person", profile: "", machine: "", name: "Dana" }, thread: "", description: "" },
+      { list: "Backlog", title: "Admin export to CSV", owner: me, thread: "", description: "" },
+      { list: "Backlog", title: "Coupon codes in the admin", owner: person("Dana"), thread: "", description: "" },
+      { list: "Backlog", title: "Refund flow", owner: person("blocked on design"), thread: "", description: "" },
       { list: "Done", title: "Search index", owner: agent("codex"), thread: "t-0001", description: "" },
+      { list: "Done", title: "Product images on the CDN", owner: none, thread: "", description: "" },
     ],
     detail: {
       instructions: "Work on a branch per thread and open a pull request.\nRun the cart tests before asking for review.\n",
@@ -72,13 +139,13 @@ function panelSeed(herd: DemoHerd, now: number, size: { additions: number; delet
   return seed;
 }
 
-async function bench<T>(legacy: boolean, fn: (bridge: TestBridge, browser: Browser) => Promise<T>): Promise<T> {
+async function bench<T>(variant: OrgVariant, fn: (bridge: TestBridge, browser: Browser) => Promise<T>): Promise<T> {
   const prs = join(outDir, "gh-prs.json");
   process.env.NENU_E2E_GH_PRS = prs;
   let size = { additions: 0, deletions: 0 };
   const bridge = await startTestBridge({
     port, fake: true, epoch: CAPTURE_EPOCH,
-    org: (herd, now) => panelSeed(herd, now, size, legacy),
+    org: (herd, now) => panelSeed(herd, now, size, variant),
     repo: (dir) => {
       size = seedDiffRepo(dir);
       writeFileSync(join(dir, ".git/info/exclude"), "/*\n!/app/\n!/docs/\n");
@@ -235,13 +302,72 @@ async function idle(bridge: TestBridge) {
   return runs;
 }
 
+/** Notes alone at each width and scheme; then its problems and its Done, each opened and closed again. */
+async function notes(bridge: TestBridge, browser: Browser, variant: OrgVariant) {
+  const shots: string[] = [];
+  const requests: Record<string, string[]> = {};
+  for (const scheme of ["dark", "light"] as const) {
+    for (const width of [1440, 1024, 900]) {
+      const context = await browser.newContext({ ...DESKTOP, viewport: { width, height: 900 }, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      const log: string[] = [];
+      page.on("request", (request) => {
+        const url = new URL(request.url());
+        if (url.pathname.startsWith("/api/") && !POLLS.test(url.pathname)) log.push(decodeURIComponent(url.pathname + url.search));
+      });
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + `/pane/${encodeURIComponent(bridge.herd!.codex)}`);
+      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1200);
+      const shot = async (name: string) => {
+        const path = join(outDir, `${variant}-${name}-${width}-${scheme}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      if (width >= 1024) {
+        const panel = page.getByRole("complementary", { name: "Session panel" });
+        await panel.getByRole("tab", { name: /^Project/ }).click();
+        await panel.getByRole("tab", { name: /^Notes/ }).click();
+        await page.waitForTimeout(900);
+        requests[`notes-${width}-${scheme}`] = [...log];
+        await shot("notes");
+        for (const [name, label] of [["problems", /^\d+ problems?$/], ["done", /^Done/]] as const) {
+          const toggle = panel.getByRole("button", { name: label });
+          if (width !== 1440 || !(await toggle.count())) continue;
+          await toggle.click();
+          await page.waitForTimeout(400);
+          await shot(name);
+          await toggle.click();
+        }
+      } else {
+        await shot("no-panel");
+      }
+      await context.close();
+    }
+  }
+  return { shots, requests };
+}
+
 await mkdir(outDir, { recursive: true });
-const result = await bench(false, async (bridge, browser) => {
+if (values.notes) {
+  const runs: Record<string, Awaited<ReturnType<typeof notes>> & { orgCalls: string[]; unexpectedWrites: unknown[] }> = {};
+  for (const variant of ["status", "tasks", "legacy"] as const) {
+    runs[variant] = await bench(variant, async (bridge, browser) => ({
+      ...(await notes(bridge, browser, variant)),
+      orgCalls: (await bridge.orgCalls()).map((argv) => argv.join(" ")),
+      unexpectedWrites: bridge.fake!.writes(),
+    }));
+  }
+  await writeFile(join(outDir, "project-notes.json"), JSON.stringify(runs, null, 2));
+  console.log(JSON.stringify(Object.fromEntries(Object.entries(runs).map(([variant, run]) => [variant, { ...run, shots: run.shots.length }])), null, 2));
+  process.exit(Object.values(runs).some((run) => run.unexpectedWrites.length) ? 1 : 0);
+}
+const result = await bench("status", async (bridge, browser) => {
   const views = values["idle-only"] ? { shots: [], requests: {} } : await capture(bridge, browser, false);
   const rest = await idle(bridge);
   return { ...views, idle: rest, orgCalls: (await bridge.orgCalls()).map((argv) => argv.join(" ")), unexpectedWrites: bridge.fake!.writes() };
 });
-const legacy = before || values["idle-only"] ? undefined : await bench(true, async (bridge, browser) => ({
+const legacy = before || values["idle-only"] ? undefined : await bench("legacy", async (bridge, browser) => ({
   ...(await capture(bridge, browser, true)),
   orgCalls: (await bridge.orgCalls()).map((argv) => argv.join(" ")),
   unexpectedWrites: bridge.fake!.writes(),
