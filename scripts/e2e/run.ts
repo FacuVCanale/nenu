@@ -31,6 +31,7 @@ import { appendJournal, deskOrg, demoOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
 //   bun scripts/e2e/run.ts surface  [--port 8797] [--out DIR] [--seconds 60]  Surfaces and project marks on every screen, idle CPU, memory and DOM
 //   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
+//   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -2301,6 +2302,22 @@ async function sidebar(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/** Only `sidebar`'s idle cost (Home and a chat, a desk at rest), with no captures: run it once per build to compare two. */
+async function idle(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  let size = { additions: 0, deletions: 0 };
+  const result = await withBench(async (bridge) => {
+    const chat = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
+    const views = [["home", "/", '[role="tab"]:has-text("Recents")'], ["chat", chat, "textarea"]] as const;
+    return { idle: await idleCost(bridge, views, Number(values.seconds) * 1000), unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => deskOrg(herd, now, size), (dir) => {
+    size = seedDiffRepo(dir);
+    benchRepo(dir);
+  });
+  await writeFile(join(outDir, "idle.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+}
+
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -2322,8 +2339,9 @@ else if (command === "terminal") await terminal(values.before === true);
 else if (command === "motion") await motion(values.before === true);
 else if (command === "surface") await surface();
 else if (command === "sidebar") await sidebar(values.before === true);
+else if (command === "idle") await idle();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar|idle [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
