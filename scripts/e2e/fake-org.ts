@@ -104,6 +104,44 @@ if (command === "overview") {
 } else if (command === "open") {
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
   console.log(`started claude as hp-${positionals[0]}; it reads AGENTS.md and primes itself`);
+} else if (command === "thread" && (sub === "pr-action" || sub === "pr-create") && "json" in flags) {
+  prAction(sub, positionals[0], positionals[1], positionals[2]);
 } else {
   fail(`unrecognized subcommand '${command}'`);
+}
+
+/**
+ * `thread pr-action` and `thread pr-create`: an action the thread's PR (or, without one, the thread)
+ * lists is sent once and then "already asked"; one it does not list, or any on a thread seeded with
+ * `refuse`, prints the refusal document and exits 1, as Organizations does when its fresh read of the
+ * PR disagrees with the ticker's.
+ */
+function prAction(sub: string, slug: string | undefined, id: string | undefined, action = "create-pr"): void {
+  const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
+  const thread = project.threads.find((candidate) => candidate.id === id) ?? fail(`no thread ${id}`);
+  const pr = thread.pr as { url: string; actions?: string[] } | null;
+  const listed = (pr ? pr.actions : thread.actions as string[] | undefined) ?? [];
+  const reason = typeof thread.refuse === "string" ? thread.refuse : listed.includes(action) ? "" : `its pull request does not call for ${action}`;
+  const print = (doc: Record<string, unknown>) => console.log(JSON.stringify({ schema_version: 1, id, ...doc }));
+  if (reason) {
+    console.error(`error: ${reason}`);
+    print(sub === "pr-create" ? { ok: false, pr: pr?.url ?? "", reason } : { ok: false, action, pr: pr?.url ?? "", sent: false, message: "", reason });
+    process.exit(1);
+  }
+  if (sub === "pr-create") {
+    const next = Math.max(0, ...project.threads.map((t) => Number((t.pr as { url?: string } | null)?.url?.split("/").pop() ?? 0))) + 1;
+    const url = `https://github.com/acme/shop/pull/${next}`;
+    Object.assign(thread, { actions: [], pr: { url, state: "", review: "", checks: null, additions: null, deletions: null, failing: [], comment_count: null, draft: null, mergeable: null, merge_blocker: "the ticker has not read this pull request yet", actions: [] } });
+    writeFileSync(file!, JSON.stringify(state, null, 2));
+    print({ ok: true, pr: url, reason: "" });
+    return;
+  }
+  const asked = (thread.asked as string[] | undefined) ?? [];
+  if (asked.includes(action)) {
+    print({ ok: true, action, pr: pr!.url, sent: false, message: "", reason: "thread pr-action already asked it at 2026-10-10T14:00:00Z about this state of its pull request (commit 0123456)" });
+    return;
+  }
+  thread.asked = [...asked, action];
+  writeFileSync(file!, JSON.stringify(state, null, 2));
+  print({ ok: true, action, pr: pr!.url, sent: true, message: `Your pull request needs ${action}.`, reason: "" });
 }
