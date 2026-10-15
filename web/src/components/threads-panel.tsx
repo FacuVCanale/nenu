@@ -6,7 +6,7 @@ import { ProcessDetailView, type ProcessDetail } from "@/components/activity/pro
 import { DiffStat } from "@/components/diff-stat";
 import { MergeDialog } from "@/components/merge-dialog";
 import { errorMessage } from "@/components/node-start";
-import { PR_ACTION_LABEL, prButton, threadAge } from "@/components/project-tasks";
+import { canMerge, threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { askOrgThreadPr, createOrgThreadPr } from "@/lib/api";
@@ -139,13 +139,26 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
   </>;
 }
 
+const PR_ACTION_LABEL: Record<PrAction, string> = {
+  "resolve-conflicts": "Resolve conflicts", "fix-ci": "Fix CI", "address-comments": "Address comments", merge: "Merge", "create-pr": "Create PR",
+};
+
+/**
+ * A thread's one PR button, as the bridge chose it from Organizations' actions. Without one (an
+ * Organizations, or a bridge not yet restarted, that predates them) Merge where nothing blocks it,
+ * as before; Organizations lists `merge` exactly then, so the answer is the same.
+ */
+function prButton(project: ProjectView, thread: ProjectThreadView): PrAction | undefined {
+  return thread.prAction ?? (canMerge(project, thread) ? "merge" : undefined);
+}
+
 /** How long a press's answer stays on its button before the button is offered again. */
 const ANSWER_MS = 3000;
 
 /**
  * A PR's one button. Merge opens its confirmation; the others run at once, and the button says
- * Asking…, then Asked or Already asked for a moment. A refusal is Organizations' own words, under
- * which button of which thread it answers.
+ * Asking…, then Asked or Already asked for a moment. Who had already asked, and a refusal in
+ * Organizations' own words, are notices naming the button and thread they answer.
  */
 function PrActionButton({ project, thread, action, session, onMerge, onChanged }: {
   project: ProjectView;
@@ -156,28 +169,30 @@ function PrActionButton({ project, thread, action, session, onMerge, onChanged }
   onChanged: () => void;
 }) {
   const label = PR_ACTION_LABEL[action];
-  const [answer, setAnswer] = useState<{ text: string; detail?: string } | "busy" | null>(null);
+  const [answer, setAnswer] = useState<{ text: string; settled: boolean } | null>(null);
   useEffect(() => {
-    if (answer === null || answer === "busy") return;
+    if (!answer?.settled) return;
     const timer = setTimeout(() => setAnswer(null), ANSWER_MS);
     return () => clearTimeout(timer);
   }, [answer]);
 
   async function press() {
     if (action === "merge") return onMerge(thread);
-    setAnswer("busy");
+    const about = { description: `${label} · ${thread.title}` };
+    setAnswer({ text: action === "create-pr" ? "Opening…" : "Asking…", settled: false });
     try {
       if (action === "create-pr") {
         const { created } = await createOrgThreadPr({ project: project.slug, id: thread.id }, session);
         setStatus(`Opened PR #${created.pr.slice(created.pr.lastIndexOf("/") + 1)} for ${thread.title}`, "success");
-        setAnswer({ text: "Opened" });
+        setAnswer({ text: "Opened", settled: true });
       } else {
         const { asked } = await askOrgThreadPr({ project: project.slug, id: thread.id, action }, session);
-        setAnswer(asked.sent ? { text: "Asked" } : { text: "Already asked", detail: asked.reason });
+        if (!asked.sent) setStatus(asked.reason, "info", undefined, about);
+        setAnswer({ text: asked.sent ? "Asked" : "Already asked", settled: true });
       }
       onChanged();
     } catch (failure) {
-      setStatus(errorMessage(failure), "error", undefined, { description: `${label} · ${thread.title}` });
+      setStatus(errorMessage(failure), "error", undefined, about);
       setAnswer(null);
     }
   }
@@ -185,8 +200,8 @@ function PrActionButton({ project, thread, action, session, onMerge, onChanged }
   // Outline: a list of PRs would otherwise stack ink buttons; Merge's dialog holds the primary.
   return (
     <Button type="button" variant="outline" size="sm" className="mr-1 self-center bg-transparent" aria-label={`${label} ${thread.title}`}
-      title={answer !== null && answer !== "busy" ? answer.detail : undefined} disabled={answer !== null} onClick={() => void press()}>
-      {answer === null ? label : answer === "busy" ? (action === "create-pr" ? "Opening…" : "Asking…") : answer.text}
+      disabled={answer !== null} onClick={() => void press()}>
+      {answer?.text ?? label}
     </Button>
   );
 }

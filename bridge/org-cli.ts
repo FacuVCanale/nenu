@@ -1,5 +1,5 @@
 import { servicePath } from "./claude-sessions.ts";
-import type { RoutineList, RoutineView, TemplateView } from "./types.ts";
+import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -394,11 +394,11 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     ...(typeof value.auto_fix_ci === "boolean" ? { auto_fix_ci: value.auto_fix_ci } : {}),
     ...(typeof value.auto_merge === "boolean" ? { auto_merge: value.auto_merge } : {}),
     pr,
-    ...actions(value.actions),
+    ...parseActions(value.actions),
   };
 }
 
-function actions(value: unknown): { actions?: string[] } {
+function parseActions(value: unknown): { actions?: string[] } {
   return Array.isArray(value) ? { actions: value.filter((action): action is string => typeof action === "string") } : {};
 }
 
@@ -421,7 +421,7 @@ function parsePullRequest(value: unknown): OrgOverviewPullRequest | undefined {
     draft: typeof value.draft === "boolean" ? value.draft : null,
     mergeable: typeof value.mergeable === "string" ? value.mergeable : null,
     merge_blocker: typeof value.merge_blocker === "string" ? value.merge_blocker : null,
-    ...actions(value.actions),
+    ...parseActions(value.actions),
   };
 }
 
@@ -599,10 +599,7 @@ export async function mergeThread(
   return { id, pr: value.pr };
 }
 
-/** What `thread pr-action` asks a thread's agent to do; Merge and Create PR have their own commands. */
-export const PR_ASKS = ["resolve-conflicts", "fix-ci", "address-comments"] as const;
-export type PrAsk = typeof PR_ASKS[number];
-
+/** Merge and Create PR have their own commands; `thread pr-action` takes only the requests. */
 export function validatePrAsk(value: unknown): PrAsk {
   const action = PR_ASKS.find((candidate) => candidate === value);
   if (!action) throw new OrgValidationError("Action must be resolve-conflicts, fix-ci or address-comments.");

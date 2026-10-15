@@ -204,8 +204,9 @@ export interface ProjectThreadView {
   prAction?: PrAction;
 }
 
-/** Mirrors PrAction in bridge/types.ts: Organizations' order, most pressing first. */
-export type PrAction = "resolve-conflicts" | "fix-ci" | "address-comments" | "merge" | "create-pr";
+/** Mirror PrAsk and PrAction in bridge/types.ts. */
+export type PrAsk = "resolve-conflicts" | "fix-ci" | "address-comments";
+export type PrAction = PrAsk | "merge" | "create-pr";
 
 /** Mirrors ThreadPullRequest in bridge/types.ts. */
 export interface ThreadPullRequest {

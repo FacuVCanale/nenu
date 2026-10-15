@@ -1,5 +1,5 @@
 import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
-import type { PrAction } from "./types";
+import type { PrAsk } from "./types";
 // Thin REST client for the bridge. Everything is same-origin, so credentials/headers are
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
@@ -932,7 +932,7 @@ export function fetchSessionDiff(paneId: string, scope: DiffScope, session?: str
  * asked already. Like a merge, it reads the PR from GitHub first, so it gets a merge's time.
  */
 export function askOrgThreadPr(
-  input: { project: string; id: string; action: Exclude<PrAction, "merge" | "create-pr"> },
+  input: { project: string; id: string; action: PrAsk },
   session?: string,
 ): Promise<{ ok: true; asked: { id: string; action: string; pr: string; sent: boolean; reason: string } }> {
   return req(withSession("/api/org/thread/pr-action", session), {

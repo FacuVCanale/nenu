@@ -258,12 +258,14 @@ export interface ProjectThreadView {
   prAction?: PrAction;
 }
 
+/** What `thread pr-action` asks a thread's agent to do, most pressing first as Organizations orders them. */
+export const PR_ASKS = ["resolve-conflicts", "fix-ci", "address-comments"] as const;
+export type PrAsk = typeof PR_ASKS[number];
 /**
- * What a client may ask about a thread's pull request, most pressing first as Organizations orders
- * them: the first three message its agent (`thread pr-action`), `merge` is `thread merge`, and
- * `create-pr` opens the PR of a thread that pushed its branch without one (`thread pr-create`).
+ * What a client may ask about a thread's pull request: a request to its agent, `merge` (`thread
+ * merge`), or `create-pr`, which opens the PR of a thread that pushed its branch without one.
  */
-export type PrAction = "resolve-conflicts" | "fix-ci" | "address-comments" | "merge" | "create-pr";
+export type PrAction = PrAsk | "merge" | "create-pr";
 
 export interface ThreadPullRequest {
   url?: string;

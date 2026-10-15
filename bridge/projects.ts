@@ -6,7 +6,7 @@ import {
   WAITING_ACTIVITY, defaultOrgRun, readOverview, readProjectDetail, readRoutines, readTasks, upstreamOnly, validateProjectSlug,
   type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgTask,
 } from "./org-cli.ts";
-import type { AgentView, LivePublisher, PrAction, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
+import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
 const STAT_MS = 2_000;
@@ -244,13 +244,17 @@ function tomlThread(record: TomlObject): OrgThreadView | undefined {
   };
 }
 
-/** The actions Nenu has a button for: about a PR, in Organizations' order, and about a thread without one. */
-const PR_ACTIONS: readonly PrAction[] = ["resolve-conflicts", "fix-ci", "address-comments", "merge"];
+/**
+ * The one PR button, in this order: Merge whenever Organizations lists it, then its own order.
+ * Organizations lists Address comments while the PR has any comment, a bot's included, and a count
+ * of comments never falls, so taken first it would hide Merge for good.
+ */
+const PR_ACTIONS: readonly PrAction[] = ["merge", ...PR_ASKS];
 const THREAD_ACTIONS: readonly PrAction[] = ["create-pr"];
 
-/** The first action of `actions` Nenu knows; a value from a newer Organizations is skipped. */
-function firstAction(actions: string[] | undefined, known: readonly PrAction[]): PrAction | undefined {
-  return actions?.map((action) => known.find((name) => name === action)).find((action) => action !== undefined);
+/** The first of `known` that `actions` names; a value from a newer Organizations is never offered. */
+function offered(actions: string[] | undefined, known: readonly PrAction[]): PrAction | undefined {
+  return known.find((name) => actions?.includes(name));
 }
 
 function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadView {
@@ -266,7 +270,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(raw.mergeable ? { mergeable: raw.mergeable } : {}),
     mergeBlocker: raw.merge_blocker,
   });
-  const prAction = raw ? pr && firstAction(raw.actions, PR_ACTIONS) : firstAction(record.actions, THREAD_ACTIONS);
+  const prAction = raw ? pr && offered(raw.actions, PR_ACTIONS) : offered(record.actions, THREAD_ACTIONS);
   return {
     id: record.id,
     title: record.title.trim() || record.id,
