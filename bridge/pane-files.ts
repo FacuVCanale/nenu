@@ -73,6 +73,25 @@ export interface PaneFile {
   etag: string;
 }
 
+/** Follow a relative name through the conversation's folders, supplied newest first. */
+export async function openPaneFile(
+  cwd: string | undefined,
+  requestedPath: string | null,
+  delivered: () => Promise<readonly string[]> = async () => [],
+  stateDir?: string,
+  folders?: () => Promise<readonly string[]>,
+): Promise<PaneFile | Response> {
+  const file = await openNamedFile(cwd, requestedPath, delivered, stateDir);
+  if (!folders || !(file instanceof Response) || file.status !== 404 || !requestedPath || isAbsolute(requestedPath)) return file;
+  for (const folder of await folders().catch(() => [])) {
+    const candidate = resolve(folder, requestedPath);
+    if (!candidate.startsWith(folder + sep)) continue;
+    const found = await openNamedFile(cwd, candidate, undefined, stateDir);
+    if (!(found instanceof Response)) return found;
+  }
+  return file;
+}
+
 /**
  * Project previews are an explicit exception to journal-only reads: the client may name a file,
  * but the live pane supplies its root. Resolve both names, refuse escapes and sensitive paths,
@@ -80,18 +99,12 @@ export interface PaneFile {
  * A file outside the root is served only when the pane's journal shows the agent delivered it
  * (`delivered`, loaded lazily), named by its exact path or by a trailing part of it; the
  * private-path policy and bounded read still apply.
- *
- * A relative name the folder itself lacks may be relative to a folder the conversation names
- * (`folders`, loaded lazily: a Claude session that `cd`'d into a repo below the pane's folder). It
- * is followed there only when exactly one such folder holds it inside the pane's folder, so the
- * set of files served never grows and an ambiguous name is not guessed.
  */
-export async function openPaneFile(
+async function openNamedFile(
   cwd: string | undefined,
   requestedPath: string | null,
   delivered: () => Promise<readonly string[]> = async () => [],
   stateDir?: string,
-  folders?: () => Promise<readonly string[]>,
 ): Promise<PaneFile | Response> {
   if (!requestedPath || requestedPath.length > 4096 || /[\x00-\x1f]/.test(requestedPath)) {
     return fileError("A valid project file path is required.", 400);
@@ -105,16 +118,12 @@ export async function openPaneFile(
   // is not in the project falls back to the newest delivery whose path ends with it.
   const suffix = isAbsolute(requestedPath) ? null : sep + normalize(requestedPath);
   let outside: Promise<string | undefined> | undefined;
-  let mentioned: Promise<string | null> | undefined;
   const locate = async () => {
     const contained = await containedRealpath(candidate, root);
     if (contained) return contained;
     const sent = await (outside ??= delivered().then((paths) => paths.includes(candidate)
       ? candidate : suffix ? paths.findLast((path) => path.endsWith(suffix)) : undefined, () => undefined));
-    if (sent) return await realpath(sent).catch(() => null);
-    return folders && !isAbsolute(requestedPath)
-      ? await (mentioned ??= inMentionedFolder(requestedPath, root, folders).catch(() => null))
-      : null;
+    return sent ? await realpath(sent).catch(() => null) : null;
   };
   const path = await locate();
   if (!path) {
@@ -139,22 +148,6 @@ export async function openPaneFile(
     await handle.close();
     return error instanceof Response ? error : unavailable();
   }
-}
-
-/**
- * The one file a relative name reaches under the folders a conversation names, contained in the
- * pane's real folder; null when none or more than one does.
- */
-async function inMentionedFolder(name: string, root: string, folders: () => Promise<readonly string[]>): Promise<string | null> {
-  const found = new Set<string>();
-  for (const folder of await folders()) {
-    const candidate = resolve(folder, name);
-    if (!candidate.startsWith(folder + sep)) continue;
-    const contained = await containedRealpath(candidate, root);
-    if (contained) found.add(contained);
-    if (found.size > 1) return null;
-  }
-  return found.size === 1 ? [...found][0]! : null;
 }
 
 /** Read up to `size` bytes; a file that grows after the stat stays capped at that size. */
