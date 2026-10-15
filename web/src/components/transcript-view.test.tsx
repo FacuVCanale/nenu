@@ -406,6 +406,23 @@ describe("TranscriptView — work folding", () => {
     expect(screen.getByRole("button", { name: "Stopped" })).toBeInTheDocument();
   });
 
+  it("lets running work flow in the conversation, and hangs it from the rail only once finished and reopened", async () => {
+    const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
+    expect(container.querySelector("[data-work-log]")!.parentElement).not.toHaveClass("border-l");
+    expect(container.querySelector("[data-work-log]")!.parentElement).not.toHaveClass("pl-3");
+    rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
+    expect(container.querySelector("[data-work-log]")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
+    expect(container.querySelector("[data-work-log]")!.parentElement).toHaveClass("border-l");
+  });
+
+  it("leaves no empty box under a message that names no media", () => {
+    const { container } = render(<FileMediaContext.Provider value={() => "/api/file"}>
+      <TranscriptView entries={[turn({ uuid: "q" }), turn({ uuid: "a", role: "assistant", parts: [{ kind: "text", text: "Done, nothing to show." }] })]} />
+    </FileMediaContext.Provider>);
+    expect(container.querySelectorAll("[data-speaker] div:empty")).toHaveLength(0);
+  });
+
   it("animates the work it opens only when you open it, never on its own", async () => {
     const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
     // Open by itself while it runs: it draws in place.
