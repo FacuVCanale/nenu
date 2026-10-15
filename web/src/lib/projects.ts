@@ -45,37 +45,38 @@ export function looseChats(panes: readonly AgentView[], projects: readonly Proje
   return panes.filter((pane) => !projectForPane(projects, pane.paneId));
 }
 
-export type RecencyKey = "today" | "week" | "older";
-export const RECENCY_LABEL: Record<RecencyKey, string> = { today: "Today", week: "Last 7 days", older: "Older" };
+export type RecencyKey = "today" | "week" | "month" | "older";
+export const RECENCY_LABEL: Record<RecencyKey, string> = { today: "Today", week: "Last 7 days", month: "Last 30 days", older: "Older" };
 
 /** Last time the chat moved or was opened; 0 when an older bridge reports neither. */
 export function chatRecency(pane: AgentView): number {
   return Math.max(pane.lastActiveAt ?? 0, pane.lastSeenAt ?? 0);
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export function recencyOf(ts: number, now: number): RecencyKey {
   if (!ts) return "older";
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
   if (ts >= startOfToday.getTime()) return "today";
-  return now - ts < 7 * 24 * 60 * 60 * 1000 ? "week" : "older";
+  if (now - ts < 7 * DAY_MS) return "week";
+  return now - ts < 30 * DAY_MS ? "month" : "older";
 }
 
-export interface ChatGroup {
+export interface RecencyGroup<T> {
   key: RecencyKey;
   label: string;
-  chats: AgentView[];
+  items: T[];
 }
 
 export function byRecency(panes: readonly AgentView[]): AgentView[] {
   return [...panes].sort((a, b) => chatRecency(b) - chatRecency(a));
 }
 
-/** Newest first, bucketed into the non-empty recency groups in display order. */
-export function groupChats(panes: readonly AgentView[], now: number): ChatGroup[] {
-  const sorted = byRecency(panes);
+/** Newest first, in every period in display order, an empty one included. */
+export function groupByRecency<T>(items: readonly T[], at: (item: T) => number, now: number): RecencyGroup<T>[] {
+  const sorted = [...items].sort((a, b) => at(b) - at(a));
   return (Object.keys(RECENCY_LABEL) as RecencyKey[])
-    .map((key) => ({ key, label: RECENCY_LABEL[key], chats: sorted.filter((pane) => recencyOf(chatRecency(pane), now) === key) }))
-    .filter((group) => group.chats.length > 0);
+    .map((key) => ({ key, label: RECENCY_LABEL[key], items: sorted.filter((item) => recencyOf(at(item), now) === key) }));
 }
-

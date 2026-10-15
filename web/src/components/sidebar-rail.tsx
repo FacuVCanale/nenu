@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
-import { House, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { Clock, House, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StatusDot } from "@/components/status-badge";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
+import { liveliest, projectAgents } from "@/lib/desk-nav";
 import { needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
+import { homePath, projectPath, routinesPath, settingsPath, workspacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { workspaceName } from "@/lib/spaces";
-import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
 
 /** A name's words as upper-case letters: split at spaces, punctuation and a lower-to-upper case change. */
 function words(name: string): string[][] {
@@ -58,11 +59,6 @@ export function railHue(name: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < name.length; i++) hash = Math.imul(hash ^ name.charCodeAt(i), 0x01000193);
   return HUES[(hash >>> 0) % HUES.length]!;
-}
-
-/** The dot on a tile: the most pressing state among its agents. Resting agents draw none. */
-function liveliest(panes: readonly AgentView[]): AgentStatus | undefined {
-  return (["blocked", "working", "done"] as const).find((status) => panes.some((pane) => pane.status === status));
 }
 
 /** How long a hover rests before an item's name shows. While one shows, and briefly after, the next one shows at once. */
@@ -188,11 +184,10 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
   const currentSpace = spaceId ?? [...data.agents, ...data.shellPanes].find((pane) => pane.paneId === paneId)?.workspaceId;
   const loose = looseWorkspaces(data);
-  const projects = (data.projects ?? []).map((project): Tile => {
-    const held = new Set(project.workspaceIds ?? []);
-    const panes = data.agents.filter((pane) => held.has(pane.workspaceId) || projectForPane(data.projects, pane.paneId)?.project.slug === project.slug);
-    return { key: project.slug, name: project.name, to: projectPath(project.slug, data.session), current: currentProject === project.slug, status: liveliest(panes) };
-  });
+  const projects = (data.projects ?? []).map((project): Tile => ({
+    key: project.slug, name: project.name, to: projectPath(project.slug, data.session), current: currentProject === project.slug,
+    status: liveliest(projectAgents(project, data.agents, data.projects)),
+  }));
   const workspaces = loose.workspaces.map((workspace): Tile => ({
     key: workspace.workspaceId, name: workspaceName(workspace), to: workspacePath(workspace.workspaceId, data, data.session),
     current: currentSpace === workspace.workspaceId, status: liveliest(loose.agents.filter((pane) => pane.workspaceId === workspace.workspaceId)),
@@ -204,11 +199,12 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
         aria-expanded="false" aria-controls={sidebarId} onClick={onExpand}>
         <PanelLeft aria-hidden="true" size={16} />
       </button>
-      <button type="button" className="workbench-icon-button" aria-label="New" data-rail-tip="New" onClick={onNewChat} disabled={!onNewChat}><SquarePen aria-hidden size={16} /></button>
+      <button type="button" className="workbench-icon-button" aria-label="New chat" data-rail-tip="New chat" onClick={onNewChat} disabled={!onNewChat}><SquarePen aria-hidden size={16} /></button>
       <button type="button" className="workbench-icon-button" aria-label="Search" data-rail-tip="Search" onClick={onSearch}><Search aria-hidden size={16} /></button>
       <Link className="workbench-icon-button rail-attention" to={homePath(data.session)} aria-label={attention ? `Home, ${needYou(attention)}` : "Home"} data-rail-tip="Home">
         <House aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
       </Link>
+      <Link className="workbench-icon-button" to={routinesPath(data.session)} aria-label="Routines" data-rail-tip="Routines"><Clock aria-hidden size={16} /></Link>
       <span className="rail-divider" aria-hidden />
       {projects.map((tile) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} />} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}

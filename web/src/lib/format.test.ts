@@ -1,4 +1,4 @@
-import { clockTime, initials, shortCwd, timeAgo, timeAgoShort } from "./format";
+import { clockTime, initials, shortCwd, timeAgo, timeAgoShort, timeUntilShort } from "./format";
 
 describe("shortCwd", () => {
   it("collapses /home/<user> to ~", () => {
@@ -109,6 +109,18 @@ describe("timeAgoShort", () => {
 
   it("says 'now' rather than 'just now'", () => {
     expect(timeAgoShort(now - 1000, now)).toBe("now");
+  });
+});
+
+describe("timeUntilShort", () => {
+  const now = 1_000_000_000;
+  it("reads a time ahead as how soon, and one already passed as due", () => {
+    expect(timeUntilShort(now + 30_000, now)).toBe("in 1m");
+    expect(timeUntilShort(now + 12 * 60_000, now)).toBe("in 12m");
+    expect(timeUntilShort(now + 4 * 3_600_000, now)).toBe("in 4h");
+    expect(timeUntilShort(now + 2 * 86_400_000, now)).toBe("in 2d");
+    expect(timeUntilShort(now, now)).toBe("due");
+    expect(timeUntilShort(now - 60_000, now)).toBe("due");
   });
 });
 

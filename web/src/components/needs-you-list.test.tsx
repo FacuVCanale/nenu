@@ -31,6 +31,15 @@ it("reads a blocked row as its thread, where it lives and why it waits", () => {
   expect(row).toHaveAttribute("href", "/pane/w5%3Aa2?s=work");
 });
 
+// "Needs you" is said by a small dot and plain words: a red fill or a red border made the row shout.
+it("says the row needs you with a small red dot alone, on a quiet surface with no red fill or border", () => {
+  const card = renderRow().closest(".relative")!;
+  expect(card.className).not.toMatch(/status-blocked/);
+  const red = [...card.querySelectorAll("[class*='status-blocked']")];
+  expect(red).toHaveLength(1);
+  expect(red[0]).toHaveClass("size-1.5", "rounded-full");
+});
+
 // jsdom lays nothing out, so this pins the class the fix stands on: the column that holds the name
 // and the place may shrink below its text (min-w-0). Without it the name keeps its full width, crosses
 // the card and pushes the chevron off a phone screen while every class below still reads right. The

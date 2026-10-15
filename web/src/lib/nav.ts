@@ -40,6 +40,11 @@ export function homePath(session?: string): string {
   return `/${sessionSearch(session)}`;
 }
 
+/** The routines route: every project's routines, read only. */
+export function routinesPath(session?: string): string {
+  return `/routines${sessionSearch(session)}`;
+}
+
 /** The settings route, carrying the current session like the other path helpers. */
 export function settingsPath(session?: string): string {
   return `/settings${sessionSearch(session)}`;
