@@ -674,11 +674,9 @@ async function workspaceRows(): Promise<void> {
             await page.locator(at.link(name)).first().click();
             await page.waitForTimeout(1500);
             landed.push({ view: `${deviceName}/${view}`, workspace: name, landed: await pathname(page) });
-            if (name === "docs") {
-              const tapped = join(outDir, `${view}-${deviceName}-${scheme}-docs-tapped.png`);
-              await page.screenshot({ path: tapped, animations: "disabled" });
-              shots.push(tapped);
-            }
+            const tapped = join(outDir, `${view}-${deviceName}-${scheme}-${name}-tapped.png`);
+            await page.screenshot({ path: tapped, animations: "disabled" });
+            shots.push(tapped);
           }
         }
         await context.close();
