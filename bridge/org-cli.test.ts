@@ -229,6 +229,24 @@ describe("herdr-organizations --json contract", () => {
     expect(project?.threads[0]).not.toHaveProperty("kind");
   });
 
+  it("copies the glyph and tone a project picked, and reads a missing, empty or malformed pick as none", async () => {
+    const project = (slug: string, pick: Record<string, unknown>) => ({ slug, name: slug, goal: "", status: "active", threads: [], ...pick });
+    const projects = [
+      project("picked", { icon: "flag", tone: "red" }),
+      project("unpicked", { icon: "", tone: "" }),
+      project("older", {}),
+      project("odd", { icon: "Flag Icon", tone: 7 }),
+    ];
+    const { run } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, projects }), stderr: "" });
+
+    expect((await readOverview(run, "/root"))!.map(({ slug, icon, tone }) => ({ slug, icon, tone }))).toEqual([
+      { slug: "picked", icon: "flag", tone: "red" },
+      { slug: "unpicked", icon: "", tone: "" },
+      { slug: "older", icon: "", tone: "" },
+      { slug: "odd", icon: "", tone: "" },
+    ]);
+  });
+
   it("treats a failing command, bad JSON or another schema version as no contract", async () => {
     for (const result of [
       { code: 2, stdout: "", stderr: "unexpected argument '--json'" },

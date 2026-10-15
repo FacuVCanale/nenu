@@ -510,6 +510,16 @@ it("folds each project to its own glyph and each loose workspace to two letters 
   expect(shownText(rail.getByRole("link", { name: /^docs\b/ }))).toMatch(/^[A-Z0-9]{2}$/);
 });
 
+it("folds a project to the mark it picked in Organizations in the rail", async () => {
+  desktop();
+  const { sidebar, user } = setup({ ...herd, projects: herd.projects!.map((project) => ({ ...project, icon: "flag", tone: "red" })) });
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
+  const glyph = rail.getByRole("link", { name: /^Acme Shop\b/ }).querySelector<SVGElement>("svg[data-glyph]")!;
+  expect(glyph).toHaveAttribute("data-glyph", "flag");
+  expect(glyph.style.color).toBe("var(--glyph-red)");
+});
+
 /** The fleet's folded rail with client-alpha-portal's name up; from there the test drives the clock. */
 async function railNamed() {
   desktop();

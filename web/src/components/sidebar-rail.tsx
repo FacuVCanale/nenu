@@ -206,7 +206,7 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
       </Link>
       <Link className="workbench-icon-button" to={routinesPath(data.session)} aria-label="Routines" data-rail-tip="Routines"><Clock aria-hidden size={16} /></Link>
       <span className="rail-divider" aria-hidden />
-      {projects.map((tile) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} />} />)}
+      {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} pick={data.projects?.[i]} />} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}
       {workspaces.map((tile, i) => <RailTile key={tile.key} tile={tile}
         mark={<span className="rail-tile" style={{ "--rail-hue": railHue(tile.name) } as CSSProperties} aria-hidden>{monograms[i]}</span>} />)}

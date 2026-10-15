@@ -289,6 +289,9 @@ export interface ProjectView {
   name: string;
   goal?: string;
   status: "active" | "paused";
+  /** The glyph and colour names the project picked in Organizations; absent when it picked none. */
+  icon?: string;
+  tone?: string;
   coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
   threads: ProjectThreadView[];
   /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */

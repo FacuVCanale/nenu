@@ -131,7 +131,7 @@ export function ProjectTasks({ threads, coordinator, title, subtitle, bare = fal
   return (
     <div className="project-tasks">
       {!bare && <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"}
-        mark={title === undefined ? <ProjectGlyph slug={project.slug} size={20} className="mt-1" /> : undefined} />}
+        mark={title === undefined ? <ProjectGlyph slug={project.slug} pick={project} size={20} className="mt-1" /> : undefined} />}
       {coordinator
         ? <ul className="task-list mb-2"><CoordinatorRow thread={coordinator} panes={panes} currentPaneId={currentPaneId} onOpenPane={onOpenPane} onOpenNode={onOpenNode} /></ul>
         : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />}

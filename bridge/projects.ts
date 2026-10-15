@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  WAITING_ACTIVITY, defaultOrgRun, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
   type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type WorkspaceView } from "./types.ts";
@@ -130,7 +130,11 @@ function humanize(slug: string): string {
   return slug.split(/[-_]/).filter(Boolean).map((word) => word[0]?.toUpperCase() + word.slice(1)).join(" ");
 }
 
-function projectSettings(path: string, root: string, slug: string): { name: string; goal?: string; roots: string[] } | undefined {
+/** A project's picked icon and tone, each only when it picked one. */
+type Picks = Pick<ProjectView, "icon" | "tone">;
+const picks = (icon?: string, tone?: string): Picks => ({ ...(icon ? { icon } : {}), ...(tone ? { tone } : {}) });
+
+function projectSettings(path: string, root: string, slug: string): ({ name: string; goal?: string; roots: string[] } & Picks) | undefined {
   const text = boundedText(path, root)?.replaceAll("\r\n", "\n");
   if (!text?.startsWith("+++\n")) return undefined;
   const end = text.indexOf("\n+++", 4);
@@ -145,7 +149,7 @@ function projectSettings(path: string, root: string, slug: string): { name: stri
   const rawName = string(front.name).trim();
   const name = rawName || humanize(slug);
   const goal = string(front.goal).trim();
-  return { name, ...(goal ? { goal } : {}), roots };
+  return { name, ...(goal ? { goal } : {}), roots, ...picks(pickName(front.icon), pickName(front.tone)) };
 }
 
 function within(path: string, root: string): boolean {
@@ -309,7 +313,7 @@ export function looseWorkspaceIds(workspaces: readonly WorkspaceView[], projects
   return workspaces.map((workspace) => workspace.workspaceId).filter((id) => !held.has(id));
 }
 
-interface FileProject {
+interface FileProject extends Picks {
   slug: string;
   name: string;
   goal?: string;
@@ -391,6 +395,7 @@ export class ProjectRegistry {
           name: record.name,
           ...(record.goal ? { goal: record.goal } : {}),
           status: record.status,
+          ...picks(record.icon, record.tone),
           coordinator: coordinatorPane ? {
             paneId: coordinatorPane.paneId,
             agent: coordinatorPane.agent,
@@ -601,6 +606,7 @@ export class ProjectRegistry {
         name: settings.name,
         ...(settings.goal ? { goal: settings.goal } : {}),
         status: status === "paused" ? "paused" as const : "active" as const,
+        ...picks(settings.icon, settings.tone),
         session: string(coordinator.session),
         roots: [...settings.roots, string(coordinator.cwd)].filter((root) => isAbsolute(root)),
         coordinator: binding(coordinator),
@@ -622,6 +628,7 @@ export class ProjectRegistry {
         name: project.name,
         ...(project.goal ? { goal: project.goal } : {}),
         status: project.status,
+        ...picks(project.icon, project.tone),
         // Neither the session nor the coordinator's pane is in the contract yet; the files supply them.
         session: local?.session ?? "",
         roots: local?.roots ?? [],
