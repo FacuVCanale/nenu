@@ -106,6 +106,17 @@ describe.each([["the terminal view", false], ["the conversation view", true]])("
   });
 });
 
+// Text that may already be in the terminal stays on its bubble rather than under Send (a resend would
+// duplicate it), and the comments it carried go with it. The terminal view keeps its draft, and them.
+it.each([[false, ["cart.ts:21", "checkout.tsx:41"]], [true, null]])("on a send that may have arrived (conversation view: %s), the comments stay with the message", async (nativeWorkbench, left) => {
+  vi.mocked(sendMessage).mockResolvedValueOnce({ ok: false, requestId: "r", stage: "submit", error: "Typed into the pane but not submitted.", textDelivered: true });
+  const { user } = setup({ nativeWorkbench });
+  await user.type(screen.getByRole("textbox"), "Please address these.");
+  await user.click(screen.getByRole("button", { name: "Send" }));
+  expect(sentTexts()).toEqual([`${BLOCK}\n\nPlease address these.`]);
+  expect(chips() && chipLabels()).toEqual(left);
+});
+
 it("shows a comment made while the composer is on screen", async () => {
   const { paneId } = setup();
   await act(async () => saveDiffComment(paneId, undefined, { ...cart, line: 30 }, "One more"));

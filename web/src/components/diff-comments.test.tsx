@@ -83,7 +83,7 @@ it("cancels with Esc, saving nothing and leaving the sheet around it open", asyn
 it("opens the box from a tap on the line where nothing hovers", async () => {
   const user = userEvent.setup();
   const original = window.matchMedia;
-  window.matchMedia = ((query: string) => ({ ...original(query), matches: query === "(hover: none)" })) as typeof window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: query === "(hover: none)", media: query })) as typeof window.matchMedia;
   try {
     renderDiff(nextPane());
     await openFile(user);
