@@ -61,21 +61,21 @@ export const filePaneActions: Record<string, PaneAction> = {
     marksSeen: false,
     async handle(services, request) {
       const { req, url } = request;
-      const { cwd, journalEntries, delivered } = await paneFileScope(services, request);
+      const { cwd, journalEntries, delivered, folders } = await paneFileScope(services, request);
       const requestedPath = url.searchParams.get("path");
       const ifNoneMatch = req.headers.get("if-none-match");
       if (isChatUploadPath(services.cfg.stateDir, requestedPath))
         return secure(await chatUploadPreviewResponse(services.cfg.stateDir, requestedPath, await journalEntries(), ifNoneMatch));
-      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, stateDir: services.cfg.stateDir }));
+      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, folders, stateDir: services.cfg.stateDir }));
     },
   },
   "html-preview": {
     level: "read",
     marksSeen: false,
     async handle(services, request) {
-      const { cwd, delivered } = await paneFileScope(services, request);
+      const { cwd, delivered, folders } = await paneFileScope(services, request);
       return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
-        { delivered, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, stateDir: services.cfg.stateDir }));
+        { delivered, folders, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, stateDir: services.cfg.stateDir }));
     },
   },
   files: {
