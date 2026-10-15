@@ -34,6 +34,8 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/org/project/create", level: "write", session: true },
   { method: "POST", path: "/api/org/thread/merge", level: "write", session: true },
   { method: "POST", path: "/api/org/thread/set", level: "write", session: true },
+  { method: "POST", path: "/api/org/thread/pr-action", level: "write", session: true },
+  { method: "POST", path: "/api/org/thread/pr-create", level: "write", session: true },
   { method: "GET", path: "/api/snapshot", level: "read", session: true },
   { method: "POST", path: "/api/snapshot", level: "read", session: true },
   { method: "GET", path: "/api/events", level: "read", session: true },
@@ -215,6 +217,18 @@ describe("pane actions", () => {
     expect(seen).toEqual(["w:p"]);
     await send("GET", "/api/pane/w%3Ap/conversations", {});
     expect(seen).toEqual(["w:p", "w:p"]);
+  });
+});
+
+describe("asking a thread about its pull request", () => {
+  test("an action outside the closed list is refused before anything runs, and nothing is audited", async () => {
+    audited.length = 0;
+    for (const action of ["merge", "--admin", "fix-ci; gh pr merge"]) {
+      const response = await fetch(`${url}/api/org/thread/pr-action`, { method: "POST", headers: { ...SAME_ORIGIN(), "x-device": "phone", "content-type": "application/json" },
+        body: JSON.stringify({ project: "demo", id: "t-0002", action }) });
+      expect({ status: response.status, body: await response.json() }).toEqual({ status: 400, body: { ok: false, error: "Action must be resolve-conflicts, fix-ci or address-comments." } });
+    }
+    expect(audited).toEqual([]);
   });
 });
 

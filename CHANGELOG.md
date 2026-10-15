@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-15
+
+### Added
+
+- Each pull request shows the one button its state calls for (Merge, Resolve conflicts, Fix CI or Address comments), in Herdr Organizations' order, and a pushed branch without a PR offers Create PR; Organizations writes the request to the thread and says when it was already asked (5f81821a, 1f7ea7a4, f53ec136).
+
 ## [1.10.1] - 2026-10-15
 
 ### Changed

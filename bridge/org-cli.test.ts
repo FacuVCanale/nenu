@@ -7,7 +7,11 @@ import {
   listTemplates,
   mergeThread,
   openProject,
+  OrgCliError,
   orgEnv,
+  OrgValidationError,
+  prAction,
+  prCreate,
   readOverview,
   readProjectDetail,
   readRoutines,
@@ -316,6 +320,52 @@ describe("herdr-organizations PR actions and project creation", () => {
     const { run } = fakeRun({ code: 1, stdout: "", stderr: "error: refusing to merge: 1 check(s) failed" });
 
     await expect(mergeThread(run, { project: "demo", id: "t-0002" })).rejects.toThrow("refusing to merge: 1 check(s) failed");
+  });
+
+  it("asks a thread about its PR with an action from the closed list, and says whether it was sent", async () => {
+    const reply = (sent: boolean, reason = "") => ({ code: 0, stdout: JSON.stringify({ schema_version: 1, ok: true, id: "t-0002", action: "fix-ci", pr: "https://github.com/acme/demo/pull/42", sent, message: sent ? "Fix the failing check." : "", reason }), stderr: "" });
+    const { run, calls } = fakeRun(reply(true));
+
+    expect(await prAction(run, { project: "demo", id: "t-0002", action: "fix-ci" })).toEqual({ id: "t-0002", action: "fix-ci", pr: "https://github.com/acme/demo/pull/42", sent: true, reason: "" });
+    expect(calls).toEqual([{ argv: ["thread", "pr-action", "demo", "t-0002", "fix-ci", "--json"], opts: { timeoutMs: 90_000 } }]);
+    // Merge and Create PR have their own commands; nothing else, and no flag, reaches the argv.
+    for (const action of ["merge", "create-pr", "--admin", "fix-ci --force", undefined, 1]) {
+      await expect(prAction(run, { project: "demo", id: "t-0002", action })).rejects.toThrow("Action must be resolve-conflicts, fix-ci or address-comments.");
+    }
+    await expect(prAction(run, { project: "../demo", id: "t-0002", action: "fix-ci" })).rejects.toThrow("Project must use");
+    await expect(prAction(run, { project: "demo", id: "t-2", action: "fix-ci" })).rejects.toThrow("Node ID must");
+    expect(calls).toHaveLength(1);
+
+    const already = "auto-fix already asked it at 2026-10-15T10:00:00Z about this state of its pull request (commit 0123456)";
+    expect(await prAction(fakeRun(reply(false, already)).run, { project: "demo", id: "t-0002", action: "fix-ci" })).toMatchObject({ sent: false, reason: already });
+  });
+
+  it("passes a PR action's refusal through word for word, and anything else as the CLI's failure", async () => {
+    const reason = "no check fails on its pull request (3 passed, 0 pending)";
+    const refused = { code: 1, stdout: JSON.stringify({ schema_version: 1, ok: false, id: "t-0002", action: "fix-ci", pr: "https://github.com/acme/demo/pull/42", sent: false, message: "", reason }), stderr: `error: ${reason}` };
+    const error = await prAction(fakeRun(refused).run, { project: "demo", id: "t-0002", action: "fix-ci" }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(OrgValidationError);
+    expect((error as Error).message).toBe(reason);
+
+    const broken = await prAction(fakeRun({ code: 1, stdout: "", stderr: "error: no project `demo`" }).run, { project: "demo", id: "t-0002", action: "fix-ci" }).catch((caught: unknown) => caught);
+    expect(broken).toBeInstanceOf(OrgCliError);
+    expect((broken as Error).message).toBe("herdr-organizations failed (1): error: no project `demo`");
+    // A reply about another thread or action is no answer to this press.
+    const other = { code: 0, stdout: JSON.stringify({ schema_version: 1, ok: true, id: "t-0003", action: "fix-ci", pr: "", sent: true, message: "", reason: "" }), stderr: "" };
+    await expect(prAction(fakeRun(other).run, { project: "demo", id: "t-0002", action: "fix-ci" })).rejects.toThrow("invalid pr-action response");
+  });
+
+  it("opens a thread's pull request, or says why Organizations would not", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, ok: true, id: "t-0007", pr: "https://github.com/acme/demo/pull/43", reason: "" }), stderr: "" });
+
+    expect(await prCreate(run, { project: "demo", id: "t-0007" })).toEqual({ id: "t-0007", pr: "https://github.com/acme/demo/pull/43" });
+    expect(calls).toEqual([{ argv: ["thread", "pr-create", "demo", "t-0007", "--json"], opts: { timeoutMs: 90_000 } }]);
+    await expect(prCreate(run, { project: "demo", id: "--help" })).rejects.toThrow("Node ID must");
+    expect(calls).toHaveLength(1);
+
+    const reason = "its agent is not idle (working)";
+    const refused = { code: 1, stdout: JSON.stringify({ schema_version: 1, ok: false, id: "t-0007", pr: "", reason }), stderr: `error: ${reason}` };
+    await expect(prCreate(fakeRun(refused).run, { project: "demo", id: "t-0007" })).rejects.toThrow(new OrgValidationError(reason));
   });
 
   it("sets only the named automation flags", async () => {
