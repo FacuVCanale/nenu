@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, memo, useContext, useMemo, useState } from "react";
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
@@ -252,10 +252,11 @@ function Block({ block }: { block: MdBlock }) {
 }
 
 /**
- * Render agent prose as formatted Markdown. Memoised on the source string: a transcript page holds
- * dozens of these and the parse is pure, so re-parsing on every unrelated re-render is pure waste.
+ * Render agent prose as formatted Markdown. Memoised on its props, all plain values: a transcript
+ * re-renders on every poll and holds dozens of these, so unchanged prose skips both the parse and its
+ * elements. The contexts it reads (find, file links) still reach it when they change.
  */
-export function MarkdownText({
+export const MarkdownText = memo(function MarkdownText({
   text,
   className,
   query = "",
@@ -279,4 +280,4 @@ export function MarkdownText({
       </div>
     </FindContext.Provider>
   );
-}
+});
