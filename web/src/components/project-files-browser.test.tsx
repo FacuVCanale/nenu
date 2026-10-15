@@ -20,3 +20,13 @@ it("expands folders in place, retains siblings and reads each folder only when f
   expect(screen.getByRole("button", { name: "app.ts" })).toBeVisible();
   expect(fetchFiles).toHaveBeenCalledTimes(2);
 });
+
+// Each file reads as its kind: Markdown, TypeScript, and the document for a kind Nenu does not know.
+it("marks each file with the icon of its kind", async () => {
+  fetchFiles.mockResolvedValue({ path: ".", truncated: false, files: ["README.md", "app.ts", "data.bin"].map((name) => ({ name, path: name, kind: "file" })) });
+  render(<ProjectFilesBrowser paneId="p" onOpen={vi.fn()} />);
+  const glyph = async (name: string) => (await screen.findByRole("button", { name })).querySelector("svg")?.getAttribute("class");
+  expect(await glyph("README.md")).toContain("icon-file-type");
+  expect(await glyph("app.ts")).toContain("icon-typescript");
+  expect(await glyph("data.bin")).toContain("icon-file-text");
+});

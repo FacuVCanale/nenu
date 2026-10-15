@@ -263,12 +263,6 @@ export function workspaceChats(herd: Herd, projects: readonly ProjectView[] | un
   }));
 }
 
-/** The pull requests no live session's row carries: on a branch no pane is on, or on a thread without a pane. */
-export function unboundReviews(reviews: readonly ReviewEntry[], panes: readonly AgentView[]): ReviewEntry[] {
-  const live = new Set(panes.map((pane) => pane.paneId));
-  return reviews.filter((entry) => !(entry.open && "paneId" in entry.open && live.has(entry.open.paneId)));
-}
-
 /** Workflows still running, with the pane that launched them. */
 export function runningWorkflows(activity: ReadonlyMap<string, ActivityResponse>): Array<{ paneId: string; workflow: ActivityWorkflow }> {
   return [...activity].flatMap(([paneId, res]) => res.available

@@ -430,7 +430,8 @@ it("keeps workflows still running in the one column, each opening its chat", asy
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
 });
 
-it("lists the pull requests no session carries as one row each, ready to merge first, and opens each in its thread or on GitHub", async () => {
+// Pull requests are a tab of the sessions' switcher, never a section of their own.
+it("lists every pull request under the PRs tab, ready to merge first, and opens each in its session, its thread or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
     branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
@@ -446,33 +447,47 @@ it("lists the pull requests no session carries as one row each, ready to merge f
   ] });
   expect(headline()).toBe("1 needs you");
   expect(subline()).toBe("5 to review");
-  const prs = within(main.getByRole("region", { name: /^Pull requests/ }));
-  // A PR on a session's branch rides on that session's row; the rest are here, ready to merge first.
+  expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
+  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces", "PRs"]);
+  // A session's row still carries its pull request.
+  expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
+  await user.click(main.getByRole("tab", { name: "PRs" }));
+  const prs = within(main.getByRole("tabpanel", { name: "PRs" }));
+  // The five the headline counts, ready to merge first.
   expect(prs.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Ready to merge", "In review"]);
   expect(prs.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
     "Publish products, #1696, +40 −2, checks passed, approved",
     "Orders panel, #1700, checks passed, approved",
+    "Abandoned carts, #1698, +3752 −154, 1 check failing",
     "Gift cards, #1697, +30 −9, 1 check failing, changes requested",
     "Email campaigns, #1699, checks running, draft",
   ]);
-  expect(prs.queryByRole("link", { name: /Abandoned carts/ })).not.toBeInTheDocument();
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("target", "_blank");
-  const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ });
-  expect(row).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
+  expect(prs.getByRole("link", { name: /^Abandoned carts,/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
   await user.click(prs.getByRole("link", { name: /^Orders panel,/ }));
   expect(router.state.location.pathname).toBe("/project/hub/node/t9");
 });
 
-it("shows the first rows and the rest on request", async () => {
+it("shows the first pull requests and the rest on request, and remembers the tab", async () => {
   const pullRequests = Array.from({ length: 9 }, (_, i): PullRequestView => ({
     repo: "a/b", number: i + 1, title: `PR ${i + 1}`, url: `https://github.com/a/b/pull/${i + 1}`, branch: "x", draft: false, paneIds: [],
   }));
   const { user, main } = await setup({ ...data, pullRequests });
-  const review = within(main.getByRole("region", { name: /^Pull requests/ }));
+  await user.click(main.getByRole("tab", { name: "PRs" }));
+  const review = within(main.getByRole("tabpanel", { name: "PRs" }));
   expect(review.getAllByRole("link")).toHaveLength(5);
   await user.click(review.getByRole("button", { name: "Show all 9" }));
   expect(review.getAllByRole("link")).toHaveLength(9);
+  expect(localStorage.getItem("nenu:home-list:v1")).toBe("prs");
+});
+
+it("has no PRs tab when there is no pull request, and falls back to Recents from a remembered one", async () => {
+  localStorage.setItem("nenu:home-list:v1", "prs");
+  const { main } = await setup();
+  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces"]);
+  expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
+  expect(main.getByRole("tabpanel", { name: "Recents" })).toBeInTheDocument();
 });
 
 it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one place to jump from", async () => {

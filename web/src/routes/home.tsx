@@ -8,11 +8,11 @@ import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, useOpeningPat
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
 import { lockReasonOf } from "@/components/question-card";
-import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
+import { PullRequestList, useHomeActivity } from "@/components/ready-to-review-list";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useInteractions } from "@/hooks/use-interactions";
 import { isConnecting } from "@/lib/connection";
-import { greeting, homeHeadline, idleAgents, needsYouItems, recentChats, reviewQueue, runningWorkflows, unboundReviews, workspaceChats } from "@/lib/home-stats";
+import { greeting, homeHeadline, idleAgents, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { openNewAgent } from "@/lib/spawn";
 import { isReadOnly } from "@/lib/types";
@@ -20,9 +20,9 @@ import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
-// (answered in place), the pull requests no session carries (ready to merge first), then one list of
-// every session that reads as Recents or by Workspace, each row carrying its pull request, and the
-// workflows still running. Starting something is New's; writing to a coordinator is its own chat's.
+// (answered in place), then one list of every session that reads as Recents or by Workspace, each row
+// carrying its pull request, with every pull request (ready to merge first) as that list's PRs tab,
+// and the workflows still running. Starting something is New's; writing to a coordinator is its own chat's.
 // Projects live in the sidebar (Search on a phone). Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
@@ -82,8 +82,9 @@ export function HomeRoute() {
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
-        <ReadyToReviewList entries={unboundReviews(reviews, panes)} session={data.session} opening={opening} />
-        <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} projects={data.projects ?? []} session={data.session} now={now} opening={opening} />
+        <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} reviews={reviews}
+          pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
+          projects={data.projects ?? []} session={data.session} now={now} opening={opening} />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
             <HomeHeading id="home-running" label="Running in background" count={running.length} />

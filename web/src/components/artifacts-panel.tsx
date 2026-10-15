@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronRight, FileText, Film, ImageIcon, LayoutTemplate, Lock } from "@/components/ui/icon";
+import { fileIcon } from "@/components/ui/file-icon";
+import { ChevronRight, FileText, ImageIcon, LayoutTemplate, Lock } from "@/components/ui/icon";
 
 import { ArtifactRow, isClaudeLink } from "@/components/activity/artifact-list";
 import { FileOpenButton } from "@/components/file-open-dialog";
@@ -74,7 +75,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
       <ul>{delivered.map((file) => {
         const known = found.get(file.path);
         const board = known?.state === "preview" ? known.designboard : undefined;
-        const Icon = board ? LayoutTemplate : file.kind === "video" ? Film : file.kind === "photo" ? ImageIcon : FileText;
+        const Icon = board ? LayoutTemplate : fileIcon(file.name);
         const kind = board ? "Designboard" : KIND_LABEL[fileExtension(file)] ?? fileExtension(file).toUpperCase();
         return <li key={file.path}>
           <button type="button" aria-label={`Open ${board ?? file.name}`} title={file.path} className={ROW}
