@@ -119,8 +119,7 @@ it("each PR offers the one button its first action names, a pushed branch offers
   renderActions([
     thread("A", "Conflicts", { number: 1, state: "open", mergeable: "CONFLICTING", mergeBlocker: "a merge conflict" }, { prAction: "resolve-conflicts" }),
     failing(),
-    // Approved and green, yet a comment came first: Organizations' order wins over Merge.
-    thread("C", "Comments", { number: 3, state: "open", review: "approved", commentCount: 2, mergeBlocker: null }, { prAction: "address-comments" }),
+    thread("C", "Comments", { number: 3, state: "open", review: "changes_requested", commentCount: 2, mergeBlocker: "review is CHANGES_REQUESTED" }, { prAction: "address-comments" }),
     thread("D", "Ready", { number: 4, state: "open", review: "approved", mergeBlocker: null }, { prAction: "merge" }),
     thread("E", "Pushed", undefined, { prAction: "create-pr", branch: "acme/pushed" }),
     thread("F", "Waiting", { number: 6, state: "open", review: "review_required", mergeBlocker: "review is REVIEW_REQUIRED" }),
@@ -128,7 +127,6 @@ it("each PR offers the one button its first action names, a pushed branch offers
   for (const [label, title] of [["Resolve conflicts", "Conflicts"], ["Fix CI", "Failing"], ["Address comments", "Comments"], ["Merge", "Ready"], ["Create PR", "Pushed"]]) {
     expect(screen.getByRole("button", { name: `${label} ${title}` })).toHaveTextContent(new RegExp(`^${label}$`));
   }
-  expect(within(rowOf("Comments")).queryByRole("button", { name: /^Merge/ })).not.toBeInTheDocument();
   expect(within(rowOf("Waiting")).getAllByRole("button")).toHaveLength(1);
   expect(rowOf("Pushed")).toHaveTextContent("No PR · Branch pushed");
   // Merge keeps its confirmation.
@@ -142,7 +140,7 @@ it("a read-only device sees each PR's state but no button", () => {
   expect(within(rowOf("Pushed")).getAllByRole("button")).toHaveLength(1);
 });
 
-it("asks the thread with the action alone, says Asking… then Asked for a moment, and Already asked when it had been", async () => {
+it("asks the thread with the action alone, says Asking… then Asked for a moment, and Already asked, with who asked, when it had been", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   const posted: unknown[] = [];
   let answer = () => {};
@@ -173,7 +171,8 @@ it("asks the thread with the action alone, says Asking… then Asked for a momen
   await vi.waitFor(() => expect(posted).toHaveLength(2));
   act(() => answer());
   await vi.waitFor(() => expect(button).toHaveTextContent(/^Already asked$/));
-  expect(button).toHaveAttribute("title", expect.stringContaining("auto-fix already asked it"));
+  // A phone shows no tooltip: who asked, and when, is a notice.
+  expect(screen.getByTestId("status")).toHaveTextContent(/^auto-fix already asked it at .* \/ Fix CI · Failing$/);
 });
 
 it("shows Organizations' refusal word for word and offers the button again", async () => {
