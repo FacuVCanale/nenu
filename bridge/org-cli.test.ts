@@ -406,7 +406,7 @@ describe("herdr-organizations project documents (task list, project show, routin
 });
 
 describe("herdr-organizations project status", () => {
-  const owner = { kind: "agent", profile: "claude", machine: "", name: "" };
+  const owner = { kind: "agent" as const, profile: "claude", machine: "", name: "" };
   const pr = { url: "https://github.com/acme/shop/pull/41", state: "OPEN", review: "APPROVED", checks: null, additions: 3, deletions: 1, failing: [], comment_count: 0, draft: false, mergeable: "MERGEABLE", merge_blocker: null };
   const item = (extra: Record<string, unknown>) => ({
     kind: "task", id: "task:3", title: "Cart badge", list: "Checkout", owner, state: "review", group: "ready-for-review", task: "Cart badge",

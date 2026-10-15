@@ -518,6 +518,71 @@ export async function readRoutines(run: OrgRun, root: string, project: string): 
   });
 }
 
+// ── `project status`: the project's work in one document, for Notes (docs/json.md, Project status) ──
+
+export const STATUS_STATES = ["waiting", "working", "review", "landing", "idle", "todo", "done"] as const;
+export type OrgStatusState = typeof STATUS_STATES[number];
+
+export interface OrgStatusItem {
+  kind: "task" | "thread";
+  /** `task:<line>` (moves when lines above it do) or the thread's id. */
+  id: string;
+  title: string;
+  state: OrgStatusState;
+  /** A task's owner; null for a thread, or an owner of a kind this Nenu does not know. */
+  owner: OrgTask["owner"] | null;
+  /** The thread running it, empty when none. */
+  thread: string;
+}
+
+/** One drift problem, as `context` lists it: `line` 0 and no `task` for the handoff. */
+export interface OrgProblem {
+  rule: string;
+  line: number;
+  task: string;
+  thread: string;
+  detail: string;
+}
+
+export interface OrgStatus {
+  items: OrgStatusItem[];
+  problems: OrgProblem[];
+}
+
+/**
+ * `project status --json`. Unlike the documents above it tells "this Organizations has no such
+ * command" (null, so Notes falls back to the task list without an error) from "the command failed"
+ * (thrown). Items of a kind or state this Nenu does not know are skipped, as the contract asks.
+ */
+export async function readStatus(run: OrgRun, root: string, project: string): Promise<OrgStatus | null> {
+  const slug = validateProjectSlug(project);
+  const result = await run(["project", "status", slug, "--json"], { env: { HERDR_PROJECTS_ROOT: root }, timeoutMs: 10_000 });
+  if (result.code !== 0) {
+    if (/unexpected argument|unrecognized subcommand/i.test(result.stderr)) return null;
+    throw commandError(result);
+  }
+  const value = parseJson(result.stdout, "project status");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION) return null;
+  if (!Array.isArray(value.items) || !Array.isArray(value.problems)) throw new OrgCliError("herdr-organizations returned an invalid project status.");
+  const states: readonly string[] = STATUS_STATES;
+  return {
+    items: value.items.flatMap((item): OrgStatusItem[] => {
+      if (!isRecord(item) || (item.kind !== "task" && item.kind !== "thread") || typeof item.id !== "string" || typeof item.title !== "string") return [];
+      if (typeof item.state !== "string" || !states.includes(item.state)) return [];
+      const { owner } = item;
+      return [{
+        kind: item.kind, id: item.id, title: item.title, state: item.state as OrgStatusState, thread: text(item.thread),
+        owner: isRecord(owner) && typeof owner.kind === "string" && OWNER_KINDS.has(owner.kind)
+          ? { kind: owner.kind as OrgTask["owner"]["kind"], profile: text(owner.profile), machine: text(owner.machine), name: text(owner.name) }
+          : null,
+      }];
+    }),
+    problems: value.problems.flatMap((problem): OrgProblem[] => isRecord(problem) && typeof problem.rule === "string" && typeof problem.detail === "string"
+      ? [{ rule: problem.rule, line: isCharCount(problem.line) ? problem.line : 0, task: text(problem.task), thread: text(problem.thread), detail: problem.detail }]
+      : []),
+  };
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }

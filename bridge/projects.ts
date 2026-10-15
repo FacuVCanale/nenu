@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  WAITING_ACTIVITY, defaultOrgRun, readOverview, readProjectDetail, readRoutines, readTasks, upstreamOnly, validateProjectSlug,
-  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgTask,
+  WAITING_ACTIVITY, defaultOrgRun, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import type { AgentView, LivePublisher, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
 
@@ -406,6 +406,12 @@ export class ProjectRegistry {
   async tasks(project: string): Promise<OrgTask[] | null> {
     const slug = validateProjectSlug(project);
     return this.run ? readTasks(this.run, this.root, slug) : null;
+  }
+
+  /** A project's status for Notes; null when this Organizations has no `project status`, thrown when it failed. */
+  async status(project: string): Promise<OrgStatus | null> {
+    const slug = validateProjectSlug(project);
+    return this.run ? readStatus(this.run, this.root, slug) : null;
   }
 
   /** What a project's threads receive and its routines, each null when Organizations has none to give. */
