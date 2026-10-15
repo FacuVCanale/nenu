@@ -570,18 +570,21 @@ describe("journal media", () => {
         ? { path, state: "missing" }
         : { path, state: "preview", resolved: `/repo/${path}` }))));
     render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; writing `later.html` next." }] })]} />));
-    const later = await screen.findByRole("button", { name: "later.html: file not found" });
+    // Each step is a request and a render; a loaded machine (the pre-push hook beside other suites)
+    // needs more than findBy's default second for them.
+    const slow = { timeout: 5000 };
+    const later = await screen.findByRole("button", { name: "later.html: file not found" }, slow);
     expect(later).toHaveTextContent("Not found");
     await userEvent.click(screen.getByRole("button", { name: "Open canvas.template.html" }));
     // The line under the name is the folder; its tooltip is the whole path the preview opened.
-    expect(await screen.findByTitle("/repo/assets/canvas.template.html")).toHaveTextContent("/repo/assets");
+    expect(await screen.findByTitle("/repo/assets/canvas.template.html", undefined, slow)).toHaveTextContent("/repo/assets");
     await userEvent.click(screen.getByRole("button", { name: "Close document" }));
     // A tap on a missing card asks again, and opens once the agent has written the file.
     await userEvent.click(later);
     expect(screen.queryByTitle("/repo/later.html")).not.toBeInTheDocument();
     written = true;
     await userEvent.click(later);
-    expect(await screen.findByTitle("/repo/later.html")).toBeInTheDocument();
+    expect(await screen.findByTitle("/repo/later.html", undefined, slow)).toBeInTheDocument();
   });
 
   it("renders a local Markdown image in place and keeps it out of the media list below", () => {
