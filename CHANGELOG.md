@@ -8,6 +8,23 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-15
+
+### Added
+
+- Each file row in Files and Artifacts shows the icon of its kind; a kind Nenu does not know keeps
+  the plain document icon.
+
+### Changed
+
+- Home's pull requests are the PRs tab of the sessions' switcher (Recents, Workspaces, PRs), not a
+  section, and the tab lists every PR the header counts.
+
+### Fixed
+
+- On a phone, a picture loading above the line being read, or the keyboard's strip opening and
+  closing, no longer moves the thread.
+
 ## [1.8.0] - 2026-10-15
 
 **The desk looks like Cursor's agents window.** Notes, Context and Routines read the coordinator's task list, the project's memory and its routines from Herdr Organizations' new JSON (its PR #25); with an older Organizations they say so and show what they can.
