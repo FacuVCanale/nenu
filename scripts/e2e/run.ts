@@ -2161,7 +2161,7 @@ async function scrollProbe(): Promise<void> {
                 dTop: Math.round(el.scrollTop - prev.top), dHeight: el.scrollHeight - prev.height, top: Math.round(el.scrollTop), tail: prev.tail,
                 text: (prev.el.textContent ?? "").slice(0, 48),
                 // Pictures near the screen, top and height relative to the list's box: what grew, and where.
-                images: [...el.querySelectorAll("img")].map((img) => [Math.round(img.getBoundingClientRect().top - box.top), Math.round(img.getBoundingClientRect().height)])
+                images: Array.from(el.querySelectorAll("img"), (img) => [Math.round(img.getBoundingClientRect().top - box.top), Math.round(img.getBoundingClientRect().height)] as [number, number])
                   .filter(([top]) => top > -1000 && top < box.height + 1000) };
               if (jump.dHeight !== 0 && settle) pending = { jump, el: prev.el, y: prev.y, user: prev.user };
               else state.jumps.push(jump);

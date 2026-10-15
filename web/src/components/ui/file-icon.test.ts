@@ -4,8 +4,8 @@ import { fileIcon } from "./file-icon";
 import { FileArchive, FileAudio, FileBraces, FileCode, FileCog, FileCsv, FileCss, FileDatabase, FileDiff, FileDoc, FileHtml, FileImage, FilePdf,
   FileSpreadsheet, FileTerminal, FileText, FileType, FileVideo, JavaScript, Python, TypeScript } from "./icon";
 
-// Fran asked for each row in Files to show the kind of file it is, and the document every row showed
-// until then for any kind Nenu does not know.
+// Each row in a list of files shows the kind of file it is; a kind Nenu does not know keeps the
+// document every row showed before.
 it("draws each kind of file with its own icon, by the name's extension in any case", () => {
   const cases: Array<[string, unknown]> = [
     ["report.md", FileType], ["notes.txt", FileType], ["docs/guide.mdx", FileType],

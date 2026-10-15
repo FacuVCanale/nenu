@@ -430,8 +430,7 @@ it("keeps workflows still running in the one column, each opening its chat", asy
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
 });
 
-// Fran asked for the pull requests out of Home: they are a tab of the sessions' switcher, never a
-// section of their own.
+// Pull requests are a tab of the sessions' switcher, never a section of their own.
 it("lists every pull request under the PRs tab, ready to merge first, and opens each in its session, its thread or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
