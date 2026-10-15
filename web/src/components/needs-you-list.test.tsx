@@ -118,6 +118,22 @@ describe("a dialog's row", () => {
     expect(await row.findByText("The question changed in the terminal.")).toBeVisible();
   });
 
+  it("draws Answer solid on a phone and outlined on a desk, where it is never the brightest thing on the page", () => {
+    expect(renderAsk(question).row.getByRole("link", { name: "Answer" })).toHaveClass("bg-foreground");
+    cleanup();
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 1024px)", media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }));
+    try {
+      const answer = renderAsk(question).row.getByRole("link", { name: "Answer" });
+      expect(answer).toHaveClass("border");
+      expect(answer).not.toHaveClass("bg-foreground");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("opens the thread to answer a dialog with more than two answers", async () => {
     const { row, router } = renderAsk(question);
     expect(row.getByText("Which fruit?")).toBeInTheDocument();

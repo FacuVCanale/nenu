@@ -6,6 +6,7 @@ import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat, ReviewEntry, WorkspaceChats } from "@/lib/home-stats";
@@ -92,18 +93,22 @@ export function FoldedList<T>({ items, rows, group, children }: { items: readonl
   </>;
 }
 
+const DESK = "(min-width: 1024px)";
+
 /** How many sessions Recents lists before "Show all". */
 export const RECENT_ROWS = 6;
 
-const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { working: "text-status-working", done: "text-status-done" };
+// A state's word takes its colour on a phone only: a desk keeps the word grey and the colour to the row's
+// mark, as Cursor keeps it to the dot or the icon.
+const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { working: "max-lg:text-status-working", done: "max-lg:text-status-done" };
 
 const sr = (text: string) => <span className="sr-only">{text}</span>;
 
 /** The state word a row leads its second line with, and its colour. */
 function stateOf(chat: RecentChat): { word: string; tone?: string } {
   if (chat.agent.kind === "shell") return { word: "Shell" };
-  if (chat.ask === "reply") return { word: ASK.reply.label, tone: "text-status-blocked" };
-  if (chat.review) return { word: "Ready to review", tone: "text-primary" };
+  if (chat.ask === "reply") return { word: ASK.reply.label, tone: "max-lg:text-status-blocked" };
+  if (chat.review) return { word: "Ready to review", tone: "max-lg:text-primary" };
   const status = STATUS_LABEL[chat.agent.status];
   return { word: status.charAt(0).toUpperCase() + status.slice(1), tone: STATUS_TEXT[chat.agent.status] };
 }
@@ -176,7 +181,7 @@ function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: st
   const states = chats.map(stateOf);
   const word = WORKSPACE_STATES.find((candidate) => states.some((state) => state.word === candidate));
   // A thread waiting for your reply needs you as much as a dialog does, and both say it in red.
-  if (word === WORKSPACE_STATES[0] || word === WORKSPACE_STATES[1]) return { word: WORKSPACE_STATES[1]!, tone: "text-status-blocked" };
+  if (word === WORKSPACE_STATES[0] || word === WORKSPACE_STATES[1]) return { word: WORKSPACE_STATES[1]!, tone: "max-lg:text-status-blocked" };
   return states.find((state) => state.word === word) ?? { word: "Empty" };
 }
 
@@ -239,6 +244,8 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [only, setOnly] = useState("");
   // The workspaces opened in place; none until a tap opens one.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
+  const desk = useMediaQuery(DESK);
   if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
@@ -251,14 +258,16 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   return (
     <section aria-label="Sessions" className="flex flex-col gap-2">
       <div className="flex items-center gap-2.5">
-        <div role="tablist" aria-label="Sessions" className={cn("project-segmented mx-0 max-sm:flex-1", lists.length === 3 ? "grid-cols-3 sm:w-80" : "grid-cols-2 sm:w-60")}>
+        <div role="tablist" aria-label="Sessions"
+          className={desk ? "-ml-2 flex items-center gap-1" : cn("project-segmented mx-0 max-sm:flex-1", lists.length === 3 ? "grid-cols-3 sm:w-80" : "grid-cols-2 sm:w-60")}>
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
-              onClick={() => { setList(key); rememberList(key); }} className="project-segment">{label}</button>
+              onClick={() => { setList(key); rememberList(key); }} className={desk ? "panel-tab" : "project-segment"}>{label}</button>
           ))}
         </div>
         {projects.length > 0 && (
-          <label className="relative ml-auto inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-footnote text-muted-foreground focus-within:ring-2 focus-within:ring-ring hover:text-foreground max-sm:hidden">
+          <label className={cn("relative ml-auto min-w-0 focus-within:ring-2 focus-within:ring-ring max-sm:hidden",
+            desk ? "quiet-action -mr-2" : "inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-footnote text-muted-foreground hover:text-foreground")}>
             <ListFilter aria-hidden className="size-3.5 shrink-0" />
             <span className="max-w-[12rem] truncate">{project?.name ?? "All projects"}</span>
             <ChevronDown aria-hidden className="size-3.5 shrink-0" />

@@ -1,12 +1,12 @@
-import { GLYPHS, projectMark } from "@/lib/project-glyph";
+import { GLYPHS, projectMark, type MarkPick } from "@/lib/project-glyph";
 import { cn } from "@/lib/utils";
 
 /**
  * A project's own mark, drawn from its slug (lib/project-glyph.ts): 16px beside a name in the sidebar
  * and Search, 20px at the head of the project. Decorative, since its name always sits beside it.
  */
-export function ProjectGlyph({ slug, size = 16, className }: { slug: string; size?: number; className?: string }) {
-  const { glyph, hue } = projectMark(slug);
+export function ProjectGlyph({ slug, pick, size = 16, className }: { slug: string; pick?: MarkPick; size?: number; className?: string }) {
+  const { glyph, hue } = projectMark(slug, pick);
   const { stroke, fill, dash } = GLYPHS[glyph];
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 16 16" data-glyph={glyph} className={cn("shrink-0", className)}

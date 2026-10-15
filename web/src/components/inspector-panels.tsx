@@ -160,10 +160,11 @@ function Changes({ paneId, session, pr }: { paneId: string; session?: string; pr
   );
 }
 
+/** The session's pull request as a flat row above its diff, as the panel's other rows are: no box around it. */
 function PrSummary({ pr }: { pr: SessionPr }) {
   const name = pr.number !== undefined ? `#${pr.number}` : "Pull request";
   return (
-    <section aria-label={pr.number !== undefined ? `Pull request #${pr.number}` : "Pull request"} className="mx-3 flex flex-col gap-1.5 rounded-xl border border-border p-3 text-[13px]">
+    <section aria-label={pr.number !== undefined ? `Pull request #${pr.number}` : "Pull request"} className="flex flex-col gap-1.5 px-4 pb-1 text-[13px]">
       <div className="flex min-w-0 items-center gap-2">
         <GitPullRequest aria-hidden className={cn("size-4 shrink-0", pr.state === "merged" ? "text-violet-400" : "text-status-done")} />
         <span className="shrink-0 font-semibold tabular-nums">{name}</span>
@@ -176,7 +177,7 @@ function PrSummary({ pr }: { pr: SessionPr }) {
         <span className="inline-flex items-center gap-1.5 tabular-nums"><span aria-hidden className={cn("size-1.5 rounded-full", ciTone(pr.checks))} />{ciLabel(pr.checks)}</span>
         {pr.diff && <span className="font-mono tabular-nums"><span className="text-status-done">+{pr.diff.additions}</span> <span className="text-status-blocked">−{pr.diff.deletions}</span></span>}
       </div>
-      {pr.url && <a href={pr.url} target="_blank" rel="noreferrer" className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-accent">
+      {pr.url && <a href={pr.url} target="_blank" rel="noreferrer" className="quiet-action -ml-2 w-fit">
         <ExternalLink aria-hidden className="size-3" />Open on GitHub
       </a>}
     </section>
