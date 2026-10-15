@@ -78,6 +78,15 @@ export function safeHref(raw: string): string | null {
   return SAFE_SCHEME.test(href) ? href : null;
 }
 
+// A pull request's page as GitHub (and GitHub Enterprise) address it, with a tab or an anchor after it.
+const PULL_REQUEST = /^https?:\/\/[^/\s]+\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)(?:[/?#]\S*)?$/i;
+
+/** `owner/repo#N` for a link to a pull request, else null. */
+export function pullRequestRef(href: string): string | null {
+  const m = PULL_REQUEST.exec(href);
+  return m ? `${m[1]}/${m[2]}#${m[3]}` : null;
+}
+
 // TeX inside math delimiters: an escaped character (so `\$` and `\}` stay in the formula), or anything
 // but a dollar, a backslash, a backtick or a newline. No backtick means a formula never swallows a
 // code span, and code is never math.
@@ -93,9 +102,10 @@ const INLINE_RE = new RegExp(
     "\\*\\*(\\S(?:[^\\n]*?\\S)?)\\*\\*", // 3    bold
     "\\*(\\S(?:[^\\n*]*?\\S)?)\\*", // 4    italic
     "(!?)\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6,7 image or link
-    // 8,9  a bare file:// URL in prose, after a space or an opening bracket, short of the punctuation
-    // that ends a sentence. An agent writes it meaning a link, so it reads as one.
-    "(^|[\\s([{])(file:\\/\\/[^\\s\"'`<>()[\\]{}|\\\\*]*[^\\s\"'`<>()[\\]{}|\\\\*.,;:!?])",
+    // 8,9  a bare file:// or web URL in prose, after a space or an opening bracket, short of the
+    // punctuation that ends a sentence. A file URL and a pull request's page read as links (an agent
+    // writes them meaning one); any other web URL stays text.
+    "(^|[\\s([{])((?:file|https?):\\/\\/[^\\s\"'`<>()[\\]{}|\\\\*]*[^\\s\"'`<>()[\\]{}|\\\\*.,;:!?])",
     String.raw`\$\$((?:${TEX})+?)\$\$`, // 10   display math
     String.raw`\\\[((?:${TEX})+?)\\\]`, // 11   display math
     String.raw`\\\(((?:${TEX})+?)\\\)`, // 12   inline math
@@ -155,7 +165,9 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
       else push({ kind: "text", text: m[0] });
     } else if (m[9] !== undefined) {
       const path = localFilePath(m[9]);
-      push(path ? { kind: "file", path, spans: [{ kind: "text", text: m[9] }] } : { kind: "text", text: m[9] });
+      const pr = path ? null : pullRequestRef(m[9]);
+      push(path ? { kind: "file", path, spans: [{ kind: "text", text: m[9] }] }
+        : pr ? { kind: "link", href: m[9], spans: [{ kind: "text", text: pr }] } : { kind: "text", text: m[9] });
     } else {
       const tex = m[10] ?? m[11] ?? m[12] ?? m[13] ?? "";
       const display = m[10] !== undefined || m[11] !== undefined;

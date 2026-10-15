@@ -87,6 +87,22 @@ describe("file links", () => {
   });
 });
 
+describe("pull request links", () => {
+  it("marks a link to a pull request with the pull request icon, kept whole with its number", () => {
+    render(<MarkdownText text="Merge [#41](https://github.com/acme/shop/pull/41), then read [the guide](https://example.com/guide)." />);
+    const pr = screen.getByRole("link", { name: "#41" });
+    expect(pr).toHaveAttribute("href", "https://github.com/acme/shop/pull/41");
+    expect(pr.querySelector("svg.icon-git-pull-request")).not.toBeNull();
+    expect(pr).toHaveClass("inline-block");
+    expect(screen.getByRole("link", { name: "the guide" }).querySelector("svg")).toBeNull();
+  });
+
+  it("never puts a link inside a link, even when the label is a pull request URL", () => {
+    const { container } = render(<MarkdownText text="[](https://github.com/acme/shop/pull/41)" />);
+    expect(container.querySelectorAll("a")).toHaveLength(1);
+  });
+});
+
 describe("code blocks", () => {
   const SOURCE = "export function ComposerShell() {\n  return <div className=\"workbench-composer\" />;\n}";
   const BLOCK = "Así queda:\n\n```tsx\n" + SOURCE + "\n```";

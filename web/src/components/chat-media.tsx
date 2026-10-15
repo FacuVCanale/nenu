@@ -28,6 +28,8 @@ export function ChatMedia({ text, compact = false, uploads = true }: { text: str
   const carried = compact ? splitMessageImages(text).images : [];
   const images = uploads ? carried : [];
   const shown = media.filter((path) => !carried.includes(path));
+  // Nothing to show draws nothing: every message runs through here, and most name no media.
+  if (!images.length && !shown.length && !pages.length) return null;
   const gallery = shown.filter((path) => !VIDEO.test(path));
   const open = (path: string) => {
     if (viewer && gallery.includes(path)) viewer.open(gallery.map((p) => ({ kind: "file", path: p })), gallery.indexOf(path));

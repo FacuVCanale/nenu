@@ -1,13 +1,13 @@
 import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { browsersCache, DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { appendJournal, deskOrg, demoOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, writeChatJournal, writeJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
@@ -33,6 +33,7 @@ import { appendJournal, deskOrg, demoOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
+//   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -2463,6 +2464,132 @@ async function chips(before: boolean): Promise<void> {
 }
 
 
+/**
+ * A finished conversation (scenario.ts `writeChatJournal`) on a phone and a desk, dark and light,
+ * folded and with its first turn open; a third turn while it runs and once it ends. Then a long one (the same two turns twenty times), on the real
+ * clock in a WebKit of its own per run: the thread's DOM elements, and the browser's CPU and resident
+ * memory over `--seconds` left alone. Give it a private `PLAYWRIGHT_BROWSERS_PATH`, as for `surface`.
+ */
+async function chat(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const windowMs = Number(values.seconds) * 1000;
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const folder = dirname(herd.journals.get(herd.idle)!);
+    const panes = { short: "w1:chat", long: "w1:long" };
+    // One running pane per capture, so each finishes once and its journal only ever grows.
+    const runs = [["phone", PHONE, "dark"], ["desktop", DESKTOP, "dark"], ["desktop", DESKTOP, "light"]] as const;
+    const running = runs.map((_, i) => ({ paneId: `w1:run${i}`, file: join(folder, `6666666${i}-6666-4666-8666-666666666666.jsonl`), at: bridge.now() }));
+    bridge.fake!.addTab("w1:t3", "chat");
+    const pane = (paneId: string, sessionId: string, status: "done" | "working") => bridge.fake!.addPane({ paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude",
+      label: "Checkout flow", sessionId, cwd: bridge.dir, status, lines: ["● The empty cart now shows a single button."] });
+    for (const [key, paneId, repeat] of [["short", panes.short, 1], ["long", panes.long, 20]] as const) {
+      const session = key === "short" ? "44444444-4444-4444-8444-444444444444" : "55555555-5555-4555-8555-555555555555";
+      await writeChatJournal(join(folder, `${session}.jsonl`), bridge.now(), repeat);
+      pane(paneId, session, "done");
+    }
+    for (const run of running) {
+      await writeChatJournal(run.file, run.at, 1, "running");
+      pane(run.paneId, basename(run.file, ".jsonl"), "working");
+    }
+    // The bridge reads Herdr on its own beat; the panes are there once its snapshot names them.
+    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(running.at(-1)!.paneId); tries++) {
+      if (tries > 60) throw new Error("the bridge never listed the chat panes");
+      await sleep(500);
+    }
+    const shots: string[] = [];
+    const thread = (page: Page) => page.evaluate(() => document.querySelector(".chat-thread")?.getElementsByTagName("*").length ?? 0, null);
+    const seen: Record<string, unknown> = {};
+    for (const [deviceName, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      for (const scheme of ["dark", "light"] as const) {
+        const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await page.clock.install({ time: bridge.now() });
+        await page.goto(bridge.url + `/pane/${encodeURIComponent(panes.short)}`);
+        await page.getByText("Three pull requests are open").waitFor({ timeout: 15_000 });
+        await page.waitForTimeout(1500);
+        const shoot = async (name: string) => {
+          const path = join(outDir, `${name}-${deviceName}-${scheme}.png`);
+          await page.screenshot({ path, animations: "disabled" });
+          shots.push(path);
+        };
+        seen[`${deviceName}-${scheme}-thread`] = await thread(page);
+        // What the folds say, from the journal's turn_duration rows through the real bridge.
+        seen[`${deviceName}-${scheme}-worked`] = await page.evaluate(() => Array.from(document.querySelectorAll("[data-work-toggle]")).map((el) => (el as HTMLElement).innerText.trim()), null);
+        await shoot("chat");
+        if (scheme === "dark") {
+          await page.locator("[data-work-toggle]").first().click();
+          await page.waitForTimeout(400);
+          await shoot("chat-open");
+          // Hover lights the first answer's actions, as a pointer resting on it would.
+          if (deviceName === "desktop") {
+            await page.getByText("I recommend merging").hover();
+            await page.waitForTimeout(400);
+            await shoot("chat-hover");
+          }
+        }
+        await context.close();
+      }
+    }
+
+    for (const [i, [deviceName, device, scheme]] of runs.entries()) {
+      const { paneId, file, at } = running[i]!;
+      const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + `/pane/${encodeURIComponent(paneId)}`);
+      await page.getByText("The totals test still covers the coupon").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      const shoot = async (name: string) => {
+        const path = join(outDir, `${name}-${deviceName}-${scheme}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      await shoot("working");
+      await writeChatJournal(file, at, 1, "finished");
+      bridge.fake!.setStatus(paneId, "done");
+      await page.getByText("The cart tests pass, 5 of 5").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      seen[`finished-${deviceName}-${scheme}-worked`] = await page.evaluate(() => Array.from(document.querySelectorAll("[data-work-toggle]")).map((el) => (el as HTMLElement).innerText.trim()), null);
+      await shoot("finished");
+      await context.close();
+    }
+
+    const idle = [];
+    for (let run = 1; run <= 2; run++) {
+      const known = new Set((await webkitProcesses()).keys());
+      const own = await launchWebkit();
+      try {
+        const context = await own.newContext({ ...DESKTOP, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await page.goto(bridge.url + `/pane/${encodeURIComponent(panes.long)}`);
+        await page.getByText("Three pull requests are open").first().waitFor({ timeout: 15_000 });
+        await page.waitForTimeout(10_000);
+        const mine = (procs: Map<number, { rssKb: number; cpuMs: number }>) => [...procs].filter(([pid]) => !known.has(pid));
+        const before = new Map(mine(await webkitProcesses()));
+        await page.waitForTimeout(windowMs);
+        const after = mine(await webkitProcesses());
+        const cpuMs = after.reduce((acc, [pid, p]) => acc + p.cpuMs - (before.get(pid)?.cpuMs ?? 0), 0);
+        const dom = await page.evaluate(() => ({
+          document: document.getElementsByTagName("*").length,
+          thread: document.querySelector(".chat-thread")?.getElementsByTagName("*").length ?? 0,
+          turns: document.querySelectorAll("[data-work-turn]").length,
+        }), null);
+        idle.push({ run, seconds: windowMs / 1000, processes: after.length, cpuMs, cpuPercent: Math.round((cpuMs / windowMs) * 1000) / 10,
+          rssMb: Math.round(after.reduce((acc, [, p]) => acc + p.rssKb, 0) / 1024), dom });
+        await context.close();
+      } finally {
+        await own.close();
+      }
+    }
+    return { shots, seen, idle, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "chat.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
+
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
@@ -2485,8 +2612,9 @@ else if (command === "surface") await surface();
 else if (command === "sidebar") await sidebar(values.before === true);
 else if (command === "idle") await idle();
 else if (command === "chips") await chips(values.before === true);
+else if (command === "chat") await chat();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar|chips|idle [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar|chips|idle|chat [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

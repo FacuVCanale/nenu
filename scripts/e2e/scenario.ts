@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import type { FakeHerdr } from "../../bridge/test-support/fake-herdr.ts";
 
@@ -95,6 +95,81 @@ export async function seedDemoHerd(fake: FakeHerdr, opts: { claudeRoot: string; 
   fake.setDialog(ids.blocked, dialog);
 
   return { ...ids, codex: "w2:codex", shell: "w2:shell", journals, dialog };
+}
+
+/**
+ * A finished Claude conversation shaped as Claude Code 2.1 writes it: tool calls with their results,
+ * an `end_turn` answer and the `turn_duration` row after it. Two turns (1m 52s and 14s) whose answers
+ * name pull requests as Markdown links and as a bare URL; `repeat` copies them for a long thread.
+ * `tail` adds a third turn, still running (a step done, a note, a command waiting for its output) or
+ * finished; written again with the same `at`, the running file only grows into the finished one.
+ * Synthetic content.
+ */
+export async function writeChatJournal(file: string, at: number, repeat = 1, tail: "none" | "running" | "finished" = "none"): Promise<void> {
+  const pr = (n: number) => `https://github.com/acme/shop/pull/${n}`;
+  let body = "";
+  let parent: string | null = null;
+  let clock = at - repeat * 16 * 60_000;
+  let n = 0;
+  const row = (fields: Record<string, unknown>) => {
+    // Its own first uuid per file: the bridge follows a conversation across files by that root.
+    const uuid = `${basename(file).slice(0, 8)}-0000-4000-9000-${String(++n).padStart(12, "0")}`;
+    body += JSON.stringify({ uuid, parentUuid: parent, timestamp: new Date(clock).toISOString(), isSidechain: false, ...fields }) + "\n";
+    parent = uuid;
+  };
+  const user = (content: unknown) => row({ type: "user", message: { role: "user", content } });
+  const assistant = (stop: "tool_use" | "end_turn", content: unknown[]) => row({ type: "assistant", message: { id: `msg_${n + 1}`, role: "assistant", stop_reason: stop, content } });
+  const call = (name: string, input: Record<string, string>, output: string, ms: number) => {
+    const id = `toolu_${n + 1}`;
+    assistant("tool_use", [{ type: "tool_use", id, name, input }]);
+    clock += ms;
+    user([{ type: "tool_result", tool_use_id: id, content: output }]);
+  };
+  const turn = (ask: string, calls: Array<[string, Record<string, string>, string]>, answer: string, ms: number) => {
+    user(ask);
+    const start = clock;
+    for (const [name, input, output] of calls) call(name, input, output, Math.floor(ms / (calls.length + 1)));
+    clock = start + ms;
+    assistant("end_turn", [{ type: "text", text: answer }]);
+    row({ type: "system", subtype: "turn_duration", durationMs: ms, isMeta: false });
+    clock += 60_000;
+  };
+  for (let i = 0; i < repeat; i++) {
+    turn("The coupon field overflows on a phone. Fix it, then tell me where the open pull requests stand.", [
+      ["Read", { file_path: "app/cart.ts" }, "export function cartTotals() {}"],
+      ["Edit", { file_path: "app/cart.ts", old_string: "a", new_string: "b" }, "The file app/cart.ts has been updated."],
+      ["Bash", { command: "bun test app/cart.test.ts" }, "3 pass\n0 fail"],
+    ], [
+      "The coupon field now sits under the total, so nothing overflows at 390 px. The discount is applied in `app/cart.ts` and the totals test covers it.",
+      "",
+      "Three pull requests are open in this project:",
+      "",
+      `1. [#42](${pr(42)}) Checkout flow: 3 files, +44 −16. Checks are running.`,
+      `2. [#41](${pr(41)}) Cart badge: approved, 6 of 6 checks passed. Ready to merge.`,
+      `3. [#38](${pr(38)}) Order history: 2 review comments to answer.`,
+      "",
+      `I recommend merging ${pr(41)} first; it does not touch the checkout.`,
+    ].join("\n"), 112_000);
+    turn("Looks good. Also check the empty-cart state before you push.", [
+      ["Edit", { file_path: "app/cart.tsx", old_string: "a", new_string: "b" }, "The file app/cart.tsx has been updated."],
+    ], `The empty cart now shows a single "Browse products" button. The cart tests pass, and it is pushed to [#42](${pr(42)}).`, 14_000);
+  }
+  if (tail !== "none") {
+    user("Run the cart tests again, then push to the checkout branch.");
+    const start = clock;
+    call("Read", { file_path: "app/cart.test.ts" }, "describe(\"cart\")", 20_000);
+    clock += 15_000;
+    const id = `toolu_${n + 1}`;
+    assistant("tool_use", [{ type: "text", text: "The totals test still covers the coupon, so this run checks both." },
+      { type: "tool_use", id, name: "Bash", input: { command: "bun test app/cart.test.ts" } }]);
+    if (tail === "finished") {
+      clock = start + 75_000;
+      user([{ type: "tool_result", tool_use_id: id, content: "5 pass\n0 fail" }]);
+      assistant("end_turn", [{ type: "text", text: `The cart tests pass, 5 of 5, and the branch is pushed to [#42](${pr(42)}).` }]);
+      row({ type: "system", subtype: "turn_duration", durationMs: 75_000, isMeta: false });
+    }
+  }
+  await writeFile(file, body);
 }
 
 /** Keep the working pane's journal growing, like an agent streaming tool calls. Returns a stop function. */

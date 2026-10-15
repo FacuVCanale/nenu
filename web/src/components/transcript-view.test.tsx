@@ -379,7 +379,7 @@ describe("TranscriptView — work folding", () => {
 
   it("collapses completed work while leaving the answer and measured duration visible", async () => {
     render(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    const fold = screen.getByRole("button", { name: "Worked for 21s", expanded: false });
+    const fold = screen.getByRole("button", { name: "Worked 21s", expanded: false });
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
     expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument();
     await userEvent.click(fold);
@@ -390,12 +390,54 @@ describe("TranscriptView — work folding", () => {
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
   });
 
+  it("says how long the turn worked as Worked 1m 52s, the duration a quieter tone than the word", () => {
+    const long = { ...final, turn: { status: "completed" as const, durationMs: 112_000 } };
+    render(<TranscriptView entries={[activity, long]} activityStatus="done" />);
+    const fold = screen.getByRole("button", { name: "Worked 1m 52s", expanded: false });
+    expect(within(fold).getByText("1m 52s")).toHaveClass("text-subtle-foreground");
+    expect(fold).not.toHaveTextContent("for");
+  });
+
+  it("says a stopped turn stopped, and after how long when the journal measured it", () => {
+    const stopped = (turnState: TranscriptEntry["turn"]) => [activity, { ...final, phase: undefined, turn: turnState }];
+    const { rerender } = render(<TranscriptView entries={stopped({ status: "aborted", durationMs: 9_000 })} activityStatus="idle" />);
+    expect(screen.getByRole("button", { name: "Stopped after 9s" })).toBeInTheDocument();
+    rerender(<TranscriptView entries={stopped({ status: "aborted" })} activityStatus="idle" />);
+    expect(screen.getByRole("button", { name: "Stopped" })).toBeInTheDocument();
+  });
+
+  it("lets running work flow in the conversation, and hangs it from the rail only once finished and reopened", async () => {
+    const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
+    expect(container.querySelector("[data-work-log]")!.parentElement).not.toHaveClass("border-l");
+    expect(container.querySelector("[data-work-log]")!.parentElement).not.toHaveClass("pl-3");
+    rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
+    expect(container.querySelector("[data-work-log]")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
+    expect(container.querySelector("[data-work-log]")!.parentElement).toHaveClass("border-l");
+  });
+
+  it("leaves no empty box under a message that names no media", () => {
+    const { container } = render(<FileMediaContext.Provider value={() => "/api/file"}>
+      <TranscriptView entries={[turn({ uuid: "q" }), turn({ uuid: "a", role: "assistant", parts: [{ kind: "text", text: "Done, nothing to show." }] })]} />
+    </FileMediaContext.Provider>);
+    expect(container.querySelectorAll("[data-speaker] div:empty")).toHaveLength(0);
+  });
+
+  it("animates the work it opens only when you open it, never on its own", async () => {
+    const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
+    // Open by itself while it runs: it draws in place.
+    expect(container.querySelector("[data-work-log]")).not.toHaveClass("animate-in");
+    rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
+    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
+    expect(container.querySelector("[data-work-log]")).toHaveClass("animate-in", "motion-reduce:animate-none");
+  });
+
   it("opens active work, then collapses it automatically on completion", () => {
     const { rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
     expect(screen.getByRole("button", { name: /^Thinking|^Working/, expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked 21s", expanded: false })).toBeInTheDocument();
     expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument();
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
   });
@@ -406,24 +448,24 @@ describe("TranscriptView — work folding", () => {
     await userEvent.click(fold);
     await userEvent.click(fold);
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked 21s", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
   });
 
   it("a query opens completed work and its matching thinking detail, then restores the fold", () => {
     const { rerender } = render(<TranscriptView entries={[activity, final]} activityStatus="done" query="dependency direction" />);
-    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked 21s", expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Thinking: /, expanded: true })).toBeInTheDocument();
     expect(screen.getByText("dependency direction")).toBeVisible();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked 21s", expanded: false })).toBeInTheDocument();
   });
 
   it("a focused tool entry opens all nested disclosures and has one scroll marker", () => {
     const action = turn({ uuid: "tool-entry", role: "assistant", turnId: "native-turn", parts: [{ kind: "tool", name: "Read", summary: "src/app.ts", result: { text: "source contents" } }] });
     const { container } = render(<TranscriptView entries={[action, final]} activityStatus="done" focusedUuid="tool-entry" />);
-    expect(screen.getByRole("button", { name: /^Worked for 21s/, expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Worked 21s/, expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read src/app.ts", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("source contents")).toBeVisible();
     expect(container.querySelectorAll('[data-turn="tool-entry"]')).toHaveLength(1);
@@ -431,10 +473,10 @@ describe("TranscriptView — work folding", () => {
 
   it("preserves an expanded fold when older unrelated turns are prepended", async () => {
     const { rerender } = render(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    await userEvent.click(screen.getByRole("button", { name: "Worked for 21s" }));
+    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
     const old = turn({ uuid: "old-work", role: "assistant", turnId: "old-turn", parts: [{ kind: "tool", name: "Read", summary: "old.ts" }], turn: { status: "completed" } });
     rerender(<TranscriptView entries={[old, activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked 21s", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
   });
 });
@@ -528,18 +570,21 @@ describe("journal media", () => {
         ? { path, state: "missing" }
         : { path, state: "preview", resolved: `/repo/${path}` }))));
     render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; writing `later.html` next." }] })]} />));
-    const later = await screen.findByRole("button", { name: "later.html: file not found" });
+    // Each step is a request and a render; a loaded machine (the pre-push hook beside other suites)
+    // needs more than findBy's default second for them.
+    const slow = { timeout: 5000 };
+    const later = await screen.findByRole("button", { name: "later.html: file not found" }, slow);
     expect(later).toHaveTextContent("Not found");
     await userEvent.click(screen.getByRole("button", { name: "Open canvas.template.html" }));
     // The line under the name is the folder; its tooltip is the whole path the preview opened.
-    expect(await screen.findByTitle("/repo/assets/canvas.template.html")).toHaveTextContent("/repo/assets");
+    expect(await screen.findByTitle("/repo/assets/canvas.template.html", undefined, slow)).toHaveTextContent("/repo/assets");
     await userEvent.click(screen.getByRole("button", { name: "Close document" }));
     // A tap on a missing card asks again, and opens once the agent has written the file.
     await userEvent.click(later);
     expect(screen.queryByTitle("/repo/later.html")).not.toBeInTheDocument();
     written = true;
     await userEvent.click(later);
-    expect(await screen.findByTitle("/repo/later.html")).toBeInTheDocument();
+    expect(await screen.findByTitle("/repo/later.html", undefined, slow)).toBeInTheDocument();
   });
 
   it("renders a local Markdown image in place and keeps it out of the media list below", () => {
@@ -591,7 +636,7 @@ describe("TranscriptView — the work timeline", () => {
 
   it("opens a finished turn onto one row per step, with no fold of tool calls inside it", async () => {
     render(<TranscriptView entries={settled} activityStatus="done" />);
-    const fold = screen.getByRole("button", { name: /^Worked for 4m 12s/, expanded: false });
+    const fold = screen.getByRole("button", { name: /^Worked 4m 12s/, expanded: false });
     // The failure shows on the folded line, before anything is opened.
     expect(fold).toHaveTextContent("1 failed");
     await userEvent.click(fold);
@@ -616,13 +661,24 @@ describe("TranscriptView — the work timeline", () => {
     expect(container.textContent).not.toMatch(/\b0\d:\d\d/);
   });
 
+  it("keeps the finished turn's time beside its answer's Copy, not on its Worked line", () => {
+    const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
+    expect(screen.getByRole("button", { name: /^Worked 4m 12s/ })).not.toHaveTextContent(clock("09:09"));
+    const answer = container.querySelector('[data-work-turn] [data-speaker="assistant"]') as HTMLElement;
+    const copy = within(answer).getByRole("button", { name: "Copy message" });
+    expect(copy.parentElement).toHaveTextContent(clock("09:09"));
+    const times = container.querySelectorAll("[data-work-turn] time");
+    expect(times).toHaveLength(1);
+    expect(answer).toContainElement(times[0] as HTMLElement);
+  });
+
   it("gives a turn that ends in the minute it started no second time, since its question already shows it", () => {
     const { container } = render(<TranscriptView activityStatus="done" entries={[
       ask,
       step("look", "09:05", [{ kind: "tool", name: "Grep", summary: "x", result: { text: "y" } }]),
       step("final", "09:05", [{ kind: "text", text: "Done." }], { phase: "final_answer", turn: { status: "completed", durationMs: 17_000 } }),
     ]} />);
-    expect(screen.getByRole("button", { name: /^Worked for 17s/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Worked 17s/ })).toBeInTheDocument();
     expect(screen.getAllByText(clock("09:05"))).toHaveLength(1);
     expect(container.querySelector("[data-work-turn] time")).toBeNull();
   });
@@ -732,7 +788,7 @@ describe("TranscriptView — the work timeline", () => {
 
   it("draws no text tone from alpha: times, the day, the work line and every step are solid", async () => {
     const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
-    await userEvent.click(screen.getByRole("button", { name: /^Worked for/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Worked / }));
     await userEvent.click(screen.getByRole("button", { name: /^Ran bun run test/ }));
     const faded = [...container.querySelectorAll("[class]")].flatMap((el) => [...el.classList].filter((name) => /^text-(muted-foreground|foreground|destructive)\/\d+$/.test(name)));
     expect(faded).toEqual([]);
@@ -862,6 +918,8 @@ describe("TranscriptView — copying a message", () => {
       />,
     );
     const message = screen.getByText("wins.", { exact: false }).closest("[data-speaker]")!;
+    // A quiet icon under the message: no word beside it until it has something to say.
+    expect(within(message as HTMLElement).getByRole("button", { name: "Copy message" })).toHaveTextContent(/^$/);
     await userEvent.click(within(message as HTMLElement).getByRole("button", { name: "Copy message" }));
     expect(await within(message as HTMLElement).findByRole("button", { name: "Copied" })).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledExactlyOnceWith("**B** wins.\n\n| A | B |\n|---|---|\n| 1 | 2 |");
