@@ -106,6 +106,54 @@ describe("pane project files", () => {
     expect((await paneFileResponse(root, "binary.zip")).status).toBe(415);
   });
 
+  // An agent that cd'd into a repo below the pane's folder names its files relative to that repo.
+  describe("a relative name under a folder the conversation names", () => {
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from("ftypisom"), Buffer.alloc(52)]);
+    let repo: string;
+    beforeEach(async () => {
+      repo = join(root, "code", "film");
+      await mkdir(join(repo, "out"), { recursive: true });
+      await writeFile(join(repo, "out", "cut.mp4"), mp4);
+      await writeFile(join(repo, "notes.md"), "# Notes\n");
+    });
+
+    test("is served from the one folder that holds it, any kind", async () => {
+      const folders = async () => [join(dir, "elsewhere"), repo];
+      const video = await paneFileResponse(root, "out/cut.mp4", { folders, range: "bytes=0-15" });
+      expect(video.status).toBe(206);
+      expect(video.headers.get("content-type")).toBe("video/mp4");
+      const notes = await paneFileResponse(root, "notes.md", { folders });
+      expect(await notes.text()).toBe("# Notes\n");
+      // The pane's own folder still answers first.
+      await writeFile(join(root, "notes.md"), "# Root\n");
+      expect(await (await paneFileResponse(root, "notes.md", { folders })).text()).toBe("# Root\n");
+    });
+
+    test("is not guessed when more than one named folder holds it", async () => {
+      const other = join(root, "code", "other");
+      await mkdir(other, { recursive: true });
+      expect((await paneFileResponse(root, "notes.md", { folders: async () => [repo, other] })).status).toBe(200);
+      await writeFile(join(other, "notes.md"), "# Other\n");
+      const ambiguous = await paneFileResponse(root, "notes.md", { folders: async () => [repo, other] });
+      expect(ambiguous.status).toBe(404);
+    });
+
+    test("never reaches past the pane's folder, by a named folder, traversal or a symlink", async () => {
+      const outside = join(dir, "outside");
+      await mkdir(outside);
+      await writeFile(join(outside, "secret.md"), "secret");
+      await symlink(join(outside, "secret.md"), join(repo, "linked.md"));
+      const folders = async () => [outside, repo];
+      // The same lookup finds a contained file, so the refusals below are the gate and not a miss.
+      expect((await paneFileResponse(root, "notes.md", { folders })).status).toBe(200);
+      for (const name of ["secret.md", "linked.md", "../../../outside/secret.md"]) {
+        const denied = await paneFileResponse(root, name, { folders });
+        expect(denied.status).toBe(404);
+        expect(await denied.text()).not.toContain("secret");
+      }
+    });
+  });
+
   test("previews a file the agent delivered from outside the workspace, and nothing else outside it", async () => {
     const outside = join(dir, "downloads");
     await mkdir(outside);
