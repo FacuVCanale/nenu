@@ -36,7 +36,8 @@ export interface SidebarRequest {
 /**
  * Where the navigation is drawn. The desk's sidebar is Cursor's: New chat, Search, Home (which counts
  * what needs you) and Routines, then its projects as flat rows and its chats by when they last moved;
- * the tree of projects and workspaces is its Search's, under the box until something is typed. A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
+ * the tree of projects and workspaces is its Search's, under the box until something is typed
+ * (ADR 0080). A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
  * something is typed, every project and workspace folded, the sessions and the host. Its drawer
  * (Home's or a chat's Nenu mark) leaves New and Search to its header and leads with what needs you
  * and the chats that moved last.

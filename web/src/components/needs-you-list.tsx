@@ -70,8 +70,9 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
 }
 
 /**
- * One row of Needs you on a quiet card: a small red dot is the only red, then who and where, one line of what it waits on, and its actions
- * at the end. The whole row opens the thread; the actions sit above that link.
+ * One row of Needs you on a quiet card: a small red dot is its only red, then who and where, one line
+ * of what it waits on, and its actions at the end. The whole row opens the thread; the actions sit
+ * above that link.
  */
 function Row({ who, to, opening, line, lineRef, label = line, below, actions }: {
   who: { name: string; where?: string };
